@@ -132,19 +132,19 @@
                     <button type="button" class="mov-tipo-btn" data-tipo="saida" id="btn-tipo-saida">↑ Saída</button>
                 </div>
 
-                <div class="form-group" id="grupo-lote-saida">
+                <div class="form-group action-consumivel" id="grupo-lote-saida">
                     <label>De qual lote? *</label>
                     <select id="mov-lote-saida"></select>
                 </div>
 
-                <div class="form-group" id="grupo-lote-entrada-modo">
+                <div class="form-group action-consumivel" id="grupo-lote-entrada-modo">
                     <label>Destino da entrada</label>
                     <div class="mov-tipo-toggle">
                         <button type="button" class="mov-tipo-btn on" data-modo="novo" id="btn-entrada-novo-lote">Novo lote</button>
                         <button type="button" class="mov-tipo-btn" data-modo="existente" id="btn-entrada-lote-existente">Lote existente</button>
                     </div>
                 </div>
-                <div class="rev-grid2" id="grupo-novo-lote">
+                <div class="rev-grid2 action-consumivel" id="grupo-novo-lote">
                     <div class="form-group">
                         <label>Nome do lote</label>
                         <input type="text" id="mov-lote-nome" placeholder="Opcional">
@@ -154,7 +154,7 @@
                         <input type="date" id="mov-validade">
                     </div>
                 </div>
-                <div class="form-group hidden" id="grupo-lote-entrada-existente">
+                <div class="form-group hidden action-consumivel" id="grupo-lote-entrada-existente">
                     <label>Lote *</label>
                     <select id="mov-lote-entrada"></select>
                 </div>
@@ -180,8 +180,10 @@
             </form>
 
             <div class="mov-historico">
-                <span class="eyebrow">Lotes atuais</span>
-                <div id="mov-lotes-atuais" class="mov-lotes-atuais"></div>
+                <div class="action-consumivel">
+                    <span class="eyebrow">Lotes atuais</span>
+                    <div id="mov-lotes-atuais" class="mov-lotes-atuais"></div>
+                </div>
                 <span class="eyebrow" style="margin-top:14px;">Histórico</span>
                 <div id="mov-lista" class="mov-lista"></div>
             </div>

@@ -311,9 +311,8 @@ function renderItens(lista, hasMore) {
       ${vencimento === 'vencendo' ? '<span class="badge-vencendo">⏳ Vencendo</span>' : ''}
       ${item.categoria === 'Permanente' && item.conferidoEm ? `<div class="item-card-conf">Conferido em ${new Date(item.conferidoEm).toLocaleDateString('pt-BR')}</div>` : ''}
       <div class="item-card-actions action-execute">
-        ${item.categoria === 'Consumível'
-          ? '<button class="btn-mov" data-acao="mov">Movimentar</button>'
-          : '<button class="btn-mov" data-acao="conferir">Conferir</button>'}
+        <button class="btn-mov" data-acao="mov">Movimentar</button>
+        ${item.categoria === 'Permanente' ? '<button data-acao="conferir">Conferir</button>' : ''}
         <button data-acao="editar">Editar</button>
         <button class="btn-excluir" data-acao="excluir">Excluir</button>
       </div>
@@ -515,8 +514,21 @@ async function abrirModalMovimentacao(item) {
 
   const lotesEl = document.getElementById('mov-lotes-atuais');
   const listaEl = document.getElementById('mov-lista');
-  lotesEl.innerHTML = '<p class="mov-vazio">Carregando lotes...</p>';
   listaEl.innerHTML = '<p class="mov-vazio">Carregando histórico...</p>';
+
+  // Patrimônio não usa lote — evita a chamada e o toggle "novo lote"/"lote existente"
+  if (item.categoria === 'Permanente') {
+    lotesAtuais = [];
+    try {
+      historicoAtual = await apiFetch(`/almoxarifado-saude/itens/${item.id}/movimentacoes`);
+      renderHistorico(historicoAtual);
+    } catch (err) {
+      listaEl.innerHTML = `<p class="mov-vazio">Erro ao carregar histórico: ${esc(err.message)}</p>`;
+    }
+    return;
+  }
+
+  lotesEl.innerHTML = '<p class="mov-vazio">Carregando lotes...</p>';
   try {
     const [lotes, historico] = await Promise.all([
       apiFetch(`/almoxarifado-saude/itens/${item.id}/lotes`),
@@ -582,7 +594,14 @@ async function registrarMovimentacao(e) {
   const motivo = document.getElementById('mov-motivo').value.trim();
 
   const body = { tipo: tipoMovAtual, quantidade, motivo };
-  if (tipoMovAtual === 'saida') {
+
+  // Patrimônio não usa lote — só entrada/saída direta
+  if (itemAtual.categoria === 'Permanente') {
+    if (tipoMovAtual === 'saida' && Number(quantidade) > itemAtual.quantidade) {
+      showToast(`Estoque insuficiente: há ${itemAtual.quantidade} ${itemAtual.unidade} disponível(is).`, 'error');
+      return;
+    }
+  } else if (tipoMovAtual === 'saida') {
     body.loteId = document.getElementById('mov-lote-saida').value;
     if (!body.loteId) {
       showToast('Não há lote disponível para dar saída.', 'error');
@@ -618,15 +637,19 @@ async function registrarMovimentacao(e) {
     if (itemNaLista) itemNaLista.quantidade = resp.quantidadeItem;
     renderItens(itens, hasMaisAtual);
 
-    // Recarrega lotes e histórico do item (mudou de verdade, precisa da fonte)
-    const [lotes, historico] = await Promise.all([
-      apiFetch(`/almoxarifado-saude/itens/${itemAtual.id}/lotes`),
-      apiFetch(`/almoxarifado-saude/itens/${itemAtual.id}/movimentacoes`)
-    ]);
-    lotesAtuais = lotes;
-    historicoAtual = historico;
-    renderLotesAtuais(lotesAtuais);
-    preencherSelectsLote(lotesAtuais);
+    // Recarrega lotes (só Consumível) e histórico do item (mudou de verdade, precisa da fonte)
+    if (itemAtual.categoria === 'Permanente') {
+      historicoAtual = await apiFetch(`/almoxarifado-saude/itens/${itemAtual.id}/movimentacoes`);
+    } else {
+      const [lotes, historico] = await Promise.all([
+        apiFetch(`/almoxarifado-saude/itens/${itemAtual.id}/lotes`),
+        apiFetch(`/almoxarifado-saude/itens/${itemAtual.id}/movimentacoes`)
+      ]);
+      lotesAtuais = lotes;
+      historicoAtual = historico;
+      renderLotesAtuais(lotesAtuais);
+      preencherSelectsLote(lotesAtuais);
+    }
     renderHistorico(historicoAtual);
     await loadStats();
   } catch (err) {

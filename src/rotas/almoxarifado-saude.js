@@ -30,13 +30,13 @@ const LOCALIZACOES = [
     'Ambulatório de Feridas',
     'Lab. Morfo Veterinária',
     'Sala 8 - Centro de Distribuição',
-    'Consumíveis - Análises Clínicas',
-    'Consumíveis - Sala de Materiais',
-    'Consumíveis - Habilidades Clínicas',
-    'Consumíveis - Centro de Distribuição',
-    'Consumíveis - Fisioterapia/Estética',
-    'Consumíveis - Ciências/Botânica',
-    'Consumíveis - Anatomia'
+    'Consumíveis - Biomedicina',
+    'Consumíveis - Enfermagem',
+    'Consumíveis - Medicina',
+    'Consumíveis - Sala 8',
+    'Consumíveis - Fisioterapia',
+    'Consumíveis - Agronomia',
+    'Consumíveis - Med. Veterinária'
 ];
 
 // Nº de dias à frente considerados "vencendo" (ainda não vencido, mas perto)
@@ -401,8 +401,9 @@ router.get('/itens/:id/movimentacoes', verifyToken, checkPermission, async (req,
 });
 
 // POST /api/almoxarifado-saude/itens/:id/movimentacoes - Registrar entrada/saída
-// Entrada: informe loteId (soma num lote existente) OU loteNome/validade (cria lote novo).
-// Saída: loteId é obrigatório (de qual lote está saindo).
+// Consumível: entrada informa loteId (soma num lote existente) OU loteNome/validade
+// (cria lote novo); saída exige loteId (de qual lote está saindo).
+// Permanente (Patrimônio): sem lote — só quantidade + motivo.
 router.post('/itens/:id/movimentacoes', verifyToken, checkPermission, async (req, res) => {
     try {
         const { tipo, quantidade, motivo, loteId, loteNome, validade } = req.body;
@@ -417,9 +418,6 @@ router.post('/itens/:id/movimentacoes', verifyToken, checkPermission, async (req
         if (!motivo || !motivo.trim()) {
             return res.status(400).json({ error: 'Informe o motivo da movimentação.' });
         }
-        if (tipo === 'saida' && !loteId) {
-            return res.status(400).json({ error: 'Informe de qual lote a saída deve ser descontada.' });
-        }
         if (tipo === 'entrada' && validade && !/^\d{4}-\d{2}-\d{2}$/.test(validade)) {
             return res.status(400).json({ error: 'Data de validade inválida (use o formato AAAA-MM-DD).' });
         }
@@ -433,8 +431,36 @@ router.post('/itens/:id/movimentacoes', verifyToken, checkPermission, async (req
                 throw Object.assign(new Error('Item não encontrado.'), { status: 404 });
             }
             const item = itemDoc.data();
-            if (item.categoria !== 'Consumível') {
-                throw Object.assign(new Error('Entrada/saída só se aplica a itens Consumível. Patrimônio usa conferência de quantidade.'), { status: 400 });
+
+            // Patrimônio (Permanente) não usa lote/validade — só entrada/saída
+            // direta com motivo, sem afetar almoxarifado_lotes.
+            if (item.categoria === 'Permanente') {
+                if (tipo === 'saida' && qtd > item.quantidade) {
+                    throw Object.assign(new Error(
+                        `Estoque insuficiente: há ${item.quantidade} ${item.unidade || 'unidade(s)'} disponível(is).`
+                    ), { status: 400 });
+                }
+                const novaQuantidadeItem = tipo === 'entrada' ? item.quantidade + qtd : item.quantidade - qtd;
+                t.update(itemRef, { quantidade: novaQuantidadeItem });
+
+                const movRef = db.collection(COL_MOV).doc();
+                t.set(movRef, {
+                    itemId: req.params.id,
+                    itemNome: item.nome,
+                    loteId: null,
+                    lote: null,
+                    tipo,
+                    quantidade: qtd,
+                    motivo: motivo.trim(),
+                    realizadoPor: req.user.uid,
+                    realizadoEm: now
+                });
+
+                return { quantidadeItem: novaQuantidadeItem };
+            }
+
+            if (tipo === 'saida' && !loteId) {
+                throw Object.assign(new Error('Informe de qual lote a saída deve ser descontada.'), { status: 400 });
             }
 
             let loteRef, loteData, loteNomeFinal;
