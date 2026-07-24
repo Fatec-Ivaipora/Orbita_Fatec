@@ -988,7 +988,7 @@ function renderAgendamentos(lista) {
       <div class="item-card-min">Responsável: ${esc(ag.responsavel)}</div>
       ${ag.motivo ? `<div class="item-card-min">${esc(ag.motivo)}</div>` : ''}
       <div class="item-card-actions">
-        <a href="/saude/almoxarifado-saude/termo-emprestimo?id=${encodeURIComponent(ag.id)}" target="_blank" class="btn-mov">Imprimir Termo</a>
+        <a href="/saude/almoxarifado-saude/termo-emprestimo.html?id=${encodeURIComponent(ag.id)}" target="_blank" class="btn-mov">Imprimir Termo</a>
         <button class="action-execute" data-acao="editar">Editar</button>
         <button class="btn-excluir action-execute" data-acao="cancelar">Cancelar</button>
       </div>
