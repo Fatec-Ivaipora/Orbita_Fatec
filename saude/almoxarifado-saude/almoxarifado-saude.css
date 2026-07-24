@@ -102,12 +102,13 @@
 .badge-baixo { color: var(--danger); background: #fbecea; }
 .badge-vencendo { color: var(--alerta); background: #fbf1e2; }
 .item-card-actions { display: flex; gap: 8px; margin-top: 4px; }
-.item-card-actions button {
+.item-card-actions button, .item-card-actions a {
   flex: 1; border: 1px solid var(--linha); background: #fff; border-radius: 8px;
   padding: 7px 0; font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--text-main);
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif; text-align: center; text-decoration: none;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box;
 }
-.item-card-actions button:hover { border-color: var(--turquesa); }
+.item-card-actions button:hover, .item-card-actions a:hover { border-color: var(--turquesa); }
 .item-card-actions .btn-mov { background: var(--turquesa); color: #fff; border-color: var(--turquesa); }
 .item-card-actions .btn-mov:hover { background: var(--turquesa-d); }
 .item-card-actions .btn-excluir:hover { border-color: var(--danger); color: var(--danger); }
@@ -249,6 +250,19 @@ body.categoria-permanente .action-consumivel { display: none !important; }
 /* Filtro de período (relatorio-movimentacoes.html) — não imprime, só controla */
 .rel-filtro { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
 .rel-filtro .form-group { margin-bottom: 0; }
+
+/* Termo de Empréstimo (termo-emprestimo.html) — campos com célula rotulada
+   à esquerda (th) e valor preenchido/em branco à direita (td), pra imitar o
+   formulário físico impresso do setor. */
+.termo-tabela th { width: 1%; white-space: nowrap; border-bottom: 1px solid var(--linha); text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.termo-tabela td { min-width: 140px; }
+.termo-tabela-material th { text-align: center; }
+.termo-tabela-material td { height: 26px; }
+.termo-declaracao { font-size: 12.5px; color: var(--text-main); line-height: 1.5; margin: 12px 0; }
+.termo-checkbox { font-size: 12.5px; color: var(--text-main); margin: 4px 0; }
+.termo-linha { border-bottom: 1px solid var(--linha); height: 20px; }
+.termo-assinaturas td { text-align: center; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 700; border-bottom: none; }
+.termo-assinaturas-linha td { height: 46px; border-bottom: 1px solid var(--text-main); }
 
 /* Telas de relatório: o card pode ficar bem alto, e o shell do app é flex com
    altura travada (.layout-main overflow:hidden + .layout-content flex:1

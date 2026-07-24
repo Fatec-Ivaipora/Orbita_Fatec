@@ -20,8 +20,10 @@ let appInitialized = false;
 let initializedRole = null;
 
 let categoriaAtual = 'Consumível';
+let viewAtual = 'Consumível';
 let itens = [];
 let localizacoes = [];
+let salas = [];
 let proximoCursor = null;
 let hasMaisAtual = false;
 let carregandoMais = false;
@@ -136,6 +138,10 @@ async function initApp(user, role) {
     initPaginaRelatorioMovimentacoes();
     return;
   }
+  if (document.getElementById('termo-emprestimo-conteudo')) {
+    initPaginaTermoEmprestimo();
+    return;
+  }
 
   document.body.classList.toggle('categoria-permanente', categoriaAtual === 'Permanente');
 
@@ -144,6 +150,7 @@ async function initApp(user, role) {
   setupModalItem();
   setupModalMovimentacao();
   setupModalConferencia();
+  setupModalReserva();
 
   await loadLocalizacoes();
   await Promise.all([loadItens(), loadStats()]);
@@ -156,19 +163,36 @@ async function initApp(user, role) {
 function setupTabs() {
   document.getElementById('tab-consumivel').addEventListener('click', () => trocarAba('Consumível'));
   document.getElementById('tab-permanente').addEventListener('click', () => trocarAba('Permanente'));
+  document.getElementById('tab-agendamento').addEventListener('click', () => trocarAba('Agendamento'));
 }
 
-async function trocarAba(categoria) {
-  if (categoria === categoriaAtual) return;
-  categoriaAtual = categoria;
-  document.getElementById('tab-consumivel').classList.toggle('on', categoria === 'Consumível');
-  document.getElementById('tab-permanente').classList.toggle('on', categoria === 'Permanente');
-  document.body.classList.toggle('categoria-permanente', categoria === 'Permanente');
+async function trocarAba(view) {
+  if (view === viewAtual) return;
+  viewAtual = view;
+  document.getElementById('tab-consumivel').classList.toggle('on', view === 'Consumível');
+  document.getElementById('tab-permanente').classList.toggle('on', view === 'Permanente');
+  document.getElementById('tab-agendamento').classList.toggle('on', view === 'Agendamento');
+
+  const isAgendamento = view === 'Agendamento';
+  document.getElementById('painel-itens').classList.toggle('hidden', isAgendamento);
+  document.getElementById('painel-agendamento').classList.toggle('hidden', !isAgendamento);
+  document.getElementById('painel-itens-acoes').classList.toggle('hidden', isAgendamento);
+  document.getElementById('painel-agendamento-acoes').classList.toggle('hidden', !isAgendamento);
+
+  if (isAgendamento) {
+    document.body.classList.remove('categoria-permanente');
+    await Promise.all([loadSalas(), loadAgendamentos()]);
+    return;
+  }
+
+  categoriaAtual = view;
+  document.body.classList.toggle('categoria-permanente', view === 'Permanente');
   document.getElementById('filtro-vencimento').checked = false;
   document.getElementById('filtro-baixo-estoque').checked = false;
   document.getElementById('search-itens').value = '';
   document.getElementById('filtro-localizacao').value = '';
-  document.getElementById('link-relatorio-estoque').href = `/saude/almoxarifado-saude/relatorio-estoque.html?categoria=${encodeURIComponent(categoria)}`;
+  document.getElementById('link-relatorio-estoque').href = `/saude/almoxarifado-saude/relatorio-estoque.html?categoria=${encodeURIComponent(view)}`;
+  await loadLocalizacoes();
   await Promise.all([loadItens(), loadStats()]);
 }
 
@@ -190,9 +214,12 @@ async function loadLocalizacoes() {
   } catch (err) {
     localizacoes = [];
   }
+  // Cada aba só mostra as localizações que fazem sentido pra ela: Consumível
+  // usa as "Consumíveis - X", Permanente usa os laboratórios/setores fixos.
+  const localizacoesAba = localizacoes.filter(l => l.startsWith('Consumíveis - ') === (categoriaAtual === 'Consumível'));
   const selectFiltro = document.getElementById('filtro-localizacao');
   const selectItem = document.getElementById('item-localizacao');
-  const opcoes = localizacoes.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+  const opcoes = localizacoesAba.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   selectFiltro.innerHTML = '<option value="">Todas as localizações</option>' + opcoes;
   selectItem.innerHTML = opcoes;
 }
@@ -742,6 +769,89 @@ function renderRelatorioEstoque(itensTodos, categoria) {
 }
 
 // ==========================================
+// TERMO DE EMPRÉSTIMO (termo-emprestimo.html)
+// ==========================================
+
+async function initPaginaTermoEmprestimo() {
+  const msg = document.getElementById('termo-emprestimo-msg');
+  const btnImprimir = document.getElementById('btn-imprimir-termo');
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+
+  if (!id) {
+    msg.innerHTML = '<p class="hint" style="margin:0; color:#b3453c">Reserva não informada.</p>';
+    return;
+  }
+
+  try {
+    const ag = await apiFetch(`/almoxarifado-saude/agendamentos/${id}`);
+    renderTermoEmprestimo(ag);
+    msg.classList.add('hidden');
+    btnImprimir.disabled = false;
+    btnImprimir.addEventListener('click', () => window.print());
+  } catch (err) {
+    msg.innerHTML = `<p class="hint" style="margin:0; color:#b3453c">Erro ao carregar reserva: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderTermoEmprestimo(ag) {
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  document.getElementById('termo-emprestimo-conteudo').innerHTML = `
+    <div class="rel-cabecalho">
+      <img src="/img/fateclogoazul.png" alt="Fatec Ivaiporã" class="rel-logo">
+      <div class="rel-titulo">
+        <h1>Termo de Responsabilidade para Empréstimo de Materiais</h1>
+        <p>Mantida pela União de Ensino Superior do Vale do Ivaí Ltda - UNESVI</p>
+      </div>
+      <div class="rel-data-emissao">Emitido em ${hoje}</div>
+    </div>
+
+    <table class="rel-tabela termo-tabela">
+      <tr><th>Solicitante</th><td colspan="3">${esc(ag.responsavel)}</td></tr>
+      <tr><th>Curso</th><td>&nbsp;</td><th>Telefone</th><td>&nbsp;</td></tr>
+      <tr><th>Objetivo de uso</th><td colspan="3">${esc(ag.motivo) || '&nbsp;'}</td></tr>
+      <tr><th>Data da retirada</th><td>${fmtDataBr(ag.data)} às ${esc(ag.horaInicio)}</td><th>Data da devolução</th><td>${fmtDataBr(ag.data)} às ${esc(ag.horaFim)}</td></tr>
+      <tr><th>Local de uso</th><td colspan="3">${esc(ag.sala)}</td></tr>
+      <tr><th>Cidade</th><td colspan="3">Ivaiporã / Paraná</td></tr>
+    </table>
+
+    <h2 class="rel-secao">Laboratório de Origem / Material Solicitado</h2>
+    <table class="rel-tabela termo-tabela-material">
+      <thead><tr><th>Laboratório de Origem</th><th>Material Solicitado</th></tr></thead>
+      <tbody>
+        ${Array.from({ length: 6 }).map(() => '<tr><td>&nbsp;</td><td>&nbsp;</td></tr>').join('')}
+      </tbody>
+    </table>
+
+    <p class="termo-declaracao">
+      Declaro utilizar com cuidado e zelo o equipamento solicitado, entregando-o da maneira que foi retirado.
+      Declaro, ainda, que caso haja danos ou avarias no mesmo irei arcar com os gastos para conserto ou para a
+      aquisição de um novo equipamento.
+    </p>
+    <p class="termo-declaracao"><b>Afirmo ter verificado, antes da retirada, que o equipamento se encontrava:</b></p>
+    <p class="termo-checkbox">( &nbsp; ) em perfeitas condições de uso e bom estado de conservação</p>
+    <p class="termo-checkbox">( &nbsp; ) com os seguintes problemas ou danos:</p>
+    <div class="termo-linha"></div>
+    <div class="termo-linha"></div>
+
+    <p class="termo-declaracao" style="text-align:center; margin-top:22px;">Firmo o presente, confirmando com a minha assinatura.</p>
+
+    <table class="rel-tabela termo-assinaturas">
+      <tr class="termo-assinaturas-linha">
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+      </tr>
+      <tr>
+        <td>Solicitante</td>
+        <td>Supervisão Administrativa</td>
+        <td>Responsável Técnico dos Laboratórios</td>
+      </tr>
+    </table>
+  `;
+}
+
+// ==========================================
 // RELATÓRIO: MOVIMENTAÇÕES (relatorio-movimentacoes.html)
 // ==========================================
 
@@ -827,6 +937,135 @@ function renderRelatorioMovimentacoes(movimentacoes, inicio, fim) {
 
 function fmtDataBr(iso) {
   return iso ? iso.split('-').reverse().join('/') : '—';
+}
+
+// ==========================================
+// AGENDAMENTO (aba Agendamento — reserva de salas/laboratórios)
+// ==========================================
+
+async function loadSalas() {
+  try {
+    salas = await apiFetch('/almoxarifado-saude/salas');
+  } catch (err) {
+    salas = [];
+  }
+  const opcoes = salas.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  document.getElementById('filtro-sala').innerHTML = '<option value="">Todas as salas</option>' + opcoes;
+  document.getElementById('reserva-sala').innerHTML = opcoes;
+}
+
+async function loadAgendamentos() {
+  const lista = document.getElementById('agendamentos-list');
+  lista.innerHTML = '<div class="empty-state"><p>Carregando reservas...</p></div>';
+  try {
+    const sala = document.getElementById('filtro-sala').value;
+    const data = document.getElementById('filtro-data-agenda').value;
+    const params = new URLSearchParams();
+    if (sala) params.set('sala', sala);
+    if (data) params.set('data', data);
+    const resp = await apiFetch(`/almoxarifado-saude/agendamentos?${params.toString()}`);
+    renderAgendamentos(resp);
+  } catch (err) {
+    lista.innerHTML = `<div class="empty-state"><p>Erro ao carregar: ${esc(err.message)}</p></div>`;
+  }
+}
+
+function renderAgendamentos(lista) {
+  const container = document.getElementById('agendamentos-list');
+  container.innerHTML = '';
+
+  if (!lista.length) {
+    container.innerHTML = '<div class="empty-state"><p>Nenhuma reserva encontrada.</p></div>';
+    return;
+  }
+
+  lista.forEach(ag => {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = `
+      <div class="item-card-nome">${esc(ag.sala)}</div>
+      <div class="item-card-local">${fmtDataBr(ag.data)} · ${esc(ag.horaInicio)}–${esc(ag.horaFim)}</div>
+      <div class="item-card-min">Responsável: ${esc(ag.responsavel)}</div>
+      ${ag.motivo ? `<div class="item-card-min">${esc(ag.motivo)}</div>` : ''}
+      <div class="item-card-actions">
+        <a href="/saude/almoxarifado-saude/termo-emprestimo?id=${encodeURIComponent(ag.id)}" target="_blank" class="btn-mov">Imprimir Termo</a>
+        <button class="action-execute" data-acao="editar">Editar</button>
+        <button class="btn-excluir action-execute" data-acao="cancelar">Cancelar</button>
+      </div>
+    `;
+    card.querySelector('[data-acao="editar"]').addEventListener('click', () => abrirModalReserva(ag));
+    card.querySelector('[data-acao="cancelar"]').addEventListener('click', () => cancelarReserva(ag));
+    container.appendChild(card);
+  });
+}
+
+function setupModalReserva() {
+  const modal = document.getElementById('modal-reserva');
+  document.getElementById('btn-nova-reserva').addEventListener('click', () => abrirModalReserva(null));
+  document.getElementById('btn-cancelar-reserva').addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+  document.getElementById('form-reserva').addEventListener('submit', salvarReserva);
+  document.getElementById('filtro-sala').addEventListener('change', loadAgendamentos);
+  document.getElementById('filtro-data-agenda').addEventListener('change', loadAgendamentos);
+}
+
+function abrirModalReserva(ag) {
+  document.getElementById('form-reserva').reset();
+  const editando = !!ag;
+  document.getElementById('modal-reserva-title').textContent = editando ? 'Editar Reserva' : 'Nova Reserva';
+  document.getElementById('btn-salvar-reserva').textContent = editando ? 'Salvar alterações' : 'Reservar';
+  document.getElementById('reserva-id').value = editando ? ag.id : '';
+
+  const salaFiltrada = document.getElementById('filtro-sala').value;
+  document.getElementById('reserva-sala').value = editando ? ag.sala : salaFiltrada;
+  document.getElementById('reserva-data').value = editando ? ag.data : '';
+  document.getElementById('reserva-hora-inicio').value = editando ? ag.horaInicio : '';
+  document.getElementById('reserva-hora-fim').value = editando ? ag.horaFim : '';
+  document.getElementById('reserva-responsavel').value = editando ? ag.responsavel : '';
+  document.getElementById('reserva-motivo').value = editando ? (ag.motivo || '') : '';
+
+  document.getElementById('modal-reserva').classList.remove('hidden');
+}
+
+async function salvarReserva(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-salvar-reserva');
+  btn.disabled = true;
+  const id = document.getElementById('reserva-id').value;
+  try {
+    const dados = {
+      sala: document.getElementById('reserva-sala').value,
+      data: document.getElementById('reserva-data').value,
+      horaInicio: document.getElementById('reserva-hora-inicio').value,
+      horaFim: document.getElementById('reserva-hora-fim').value,
+      responsavel: document.getElementById('reserva-responsavel').value,
+      motivo: document.getElementById('reserva-motivo').value
+    };
+    if (id) {
+      await apiFetch(`/almoxarifado-saude/agendamentos/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+      showToast('Reserva atualizada com sucesso!');
+    } else {
+      await apiFetch('/almoxarifado-saude/agendamentos', { method: 'POST', body: JSON.stringify(dados) });
+      showToast('Sala reservada com sucesso!');
+    }
+    document.getElementById('modal-reserva').classList.add('hidden');
+    await loadAgendamentos();
+  } catch (err) {
+    showToast('Erro ao salvar: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function cancelarReserva(ag) {
+  if (!confirm(`Cancelar a reserva de "${ag.sala}" em ${fmtDataBr(ag.data)} (${ag.horaInicio}–${ag.horaFim})?`)) return;
+  try {
+    await apiFetch(`/almoxarifado-saude/agendamentos/${ag.id}`, { method: 'DELETE' });
+    showToast('Reserva cancelada');
+    await loadAgendamentos();
+  } catch (err) {
+    showToast('Erro ao cancelar: ' + err.message, 'error');
+  }
 }
 
 // ==========================================

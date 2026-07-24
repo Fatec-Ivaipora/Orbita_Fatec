@@ -9,6 +9,7 @@ const checkPermission = verifyToken.requireModulePermission('almoxarifado-saude'
 const COL_ITENS = 'almoxarifado_itens';
 const COL_LOTES = 'almoxarifado_lotes';
 const COL_MOV = 'almoxarifado_movimentacoes';
+const COL_AGENDAMENTOS = 'almoxarifado_saude_agendamentos';
 
 const CATEGORIAS = ['Permanente', 'Consumível'];
 
@@ -37,6 +38,20 @@ const LOCALIZACOES = [
     'Consumíveis - Fisioterapia',
     'Consumíveis - Agronomia',
     'Consumíveis - Med. Veterinária'
+];
+
+// Salas/laboratórios agendáveis (aba Agendamento) — os locais físicos da
+// LOCALIZACOES acima, excluindo as entradas "Consumíveis - X" (que são só
+// pontos de estoque, não espaços que se reservam por horário), mais as
+// salas de tutoria (não são localização de estoque, só espaço de reserva).
+const SALAS = [
+    ...LOCALIZACOES.filter(l => !l.startsWith('Consumíveis - ')),
+    'Tutoria 01',
+    'Tutoria 02',
+    'Tutoria 03',
+    'Tutoria 04',
+    'Tutoria 05',
+    'Tutoria 06'
 ];
 
 // Nº de dias à frente considerados "vencendo" (ainda não vencido, mas perto)
@@ -585,6 +600,145 @@ router.get('/relatorio-estoque', verifyToken, checkPermission, async (req, res) 
         }
 
         res.json(itens);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// AGENDAMENTO DE SALAS (aba Agendamento)
+// ==========================================
+
+// GET /api/almoxarifado-saude/salas - Lista fixa de salas/laboratórios agendáveis
+router.get('/salas', verifyToken, checkPermission, (req, res) => {
+    res.json(SALAS);
+});
+
+// GET /api/almoxarifado-saude/agendamentos?sala=&data=
+router.get('/agendamentos', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { sala, data } = req.query;
+        if (sala && !SALAS.includes(sala)) {
+            return res.status(400).json({ error: 'Sala inválida.' });
+        }
+
+        let query = db.collection(COL_AGENDAMENTOS);
+        if (sala) query = query.where('sala', '==', sala);
+        if (data) query = query.where('data', '==', data);
+
+        const snap = await query.get();
+        const agendamentos = snap.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+
+        res.json(agendamentos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/almoxarifado-saude/agendamentos/:id - Usado pelo Termo de Empréstimo (impressão)
+router.get('/agendamentos/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const docSnap = await db.collection(COL_AGENDAMENTOS).doc(req.params.id).get();
+        if (!docSnap.exists) return res.status(404).json({ error: 'Reserva não encontrada.' });
+        res.json({ id: docSnap.id, ...docSnap.data() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Valida os campos de uma reserva e verifica conflito de horário na mesma
+// sala/data. `ignorarId` exclui a própria reserva da checagem (edição).
+function validarDadosReserva({ sala, data, horaInicio, horaFim, responsavel }) {
+    if (!sala || !SALAS.includes(sala)) return 'Selecione uma sala válida.';
+    if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return 'Data inválida (use o formato AAAA-MM-DD).';
+    if (!horaInicio || !horaFim || horaFim <= horaInicio) return 'Informe um horário de início e fim válidos (fim após o início).';
+    if (!responsavel || !responsavel.trim()) return 'Informe o nome do responsável.';
+    return null;
+}
+
+async function existeConflitoReserva(sala, data, horaInicio, horaFim, ignorarId) {
+    const snap = await db.collection(COL_AGENDAMENTOS)
+        .where('sala', '==', sala)
+        .where('data', '==', data)
+        .get();
+
+    return snap.docs.some(doc => {
+        if (ignorarId && doc.id === ignorarId) return false;
+        const ag = doc.data();
+        return horaInicio < ag.horaFim && horaFim > ag.horaInicio;
+    });
+}
+
+// POST /api/almoxarifado-saude/agendamentos - Reservar uma sala num horário
+router.post('/agendamentos', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { sala, data, horaInicio, horaFim, responsavel, motivo } = req.body;
+
+        const erro = validarDadosReserva(req.body);
+        if (erro) return res.status(400).json({ error: erro });
+
+        if (await existeConflitoReserva(sala, data, horaInicio, horaFim)) {
+            return res.status(409).json({ error: 'Já existe uma reserva para esta sala neste horário.' });
+        }
+
+        const novoDoc = db.collection(COL_AGENDAMENTOS).doc();
+        await novoDoc.set({
+            sala,
+            data,
+            horaInicio,
+            horaFim,
+            responsavel: responsavel.trim(),
+            motivo: (motivo || '').trim(),
+            criadoPor: req.user.uid,
+            criadoEm: new Date().toISOString()
+        });
+
+        res.status(201).json({ message: 'Sala reservada com sucesso!', id: novoDoc.id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/almoxarifado-saude/agendamentos/:id - Editar uma reserva existente
+router.put('/agendamentos/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { sala, data, horaInicio, horaFim, responsavel, motivo } = req.body;
+
+        const docRef = db.collection(COL_AGENDAMENTOS).doc(req.params.id);
+        const docSnap = await docRef.get();
+        if (!docSnap.exists) return res.status(404).json({ error: 'Reserva não encontrada.' });
+
+        const erro = validarDadosReserva(req.body);
+        if (erro) return res.status(400).json({ error: erro });
+
+        if (await existeConflitoReserva(sala, data, horaInicio, horaFim, req.params.id)) {
+            return res.status(409).json({ error: 'Já existe uma reserva para esta sala neste horário.' });
+        }
+
+        await docRef.update({
+            sala,
+            data,
+            horaInicio,
+            horaFim,
+            responsavel: responsavel.trim(),
+            motivo: (motivo || '').trim(),
+            atualizadoPor: req.user.uid,
+            atualizadoEm: new Date().toISOString()
+        });
+
+        res.json({ message: 'Reserva atualizada com sucesso!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/almoxarifado-saude/agendamentos/:id - Cancelar reserva
+router.delete('/agendamentos/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        await db.collection(COL_AGENDAMENTOS).doc(req.params.id).delete();
+        res.json({ message: 'Reserva cancelada com sucesso!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

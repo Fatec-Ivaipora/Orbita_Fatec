@@ -25,7 +25,7 @@
                         <h1 class="page-title">Almoxarifado Saúde</h1>
                         <p class="page-subtitle">Consumíveis e patrimônio dos laboratórios e salas do setor de Saúde</p>
                     </div>
-                    <div class="page-header-actions">
+                    <div class="page-header-actions" id="painel-itens-acoes">
                         <a class="btn-import" id="link-relatorio-estoque" href="/saude/almoxarifado-saude/relatorio-estoque.html?categoria=Consumível" target="_blank" style="text-decoration:none;">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
                             Relatório de estoque
@@ -39,35 +39,57 @@
                             Novo Item
                         </button>
                     </div>
+                    <div class="page-header-actions hidden" id="painel-agendamento-acoes">
+                        <button class="btn-primary action-execute" id="btn-nova-reserva">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Nova Reserva
+                        </button>
+                    </div>
                 </div>
 
                 <div class="alx-tabs">
-                    <button class="alx-tab on" data-categoria="Consumível" id="tab-consumivel">Consumíveis</button>
-                    <button class="alx-tab" data-categoria="Permanente" id="tab-permanente">Patrimônio</button>
+                    <button class="alx-tab on" data-view="Consumível" id="tab-consumivel">Consumíveis</button>
+                    <button class="alx-tab" data-view="Permanente" id="tab-permanente">Patrimônio</button>
+                    <button class="alx-tab" data-view="Agendamento" id="tab-agendamento">Agendamento</button>
                 </div>
 
-                <div class="alx-resumo" id="alx-resumo"></div>
+                <div id="painel-itens">
+                    <div class="alx-resumo" id="alx-resumo"></div>
 
-                <div class="filters-bar">
-                    <div class="search-wrap">
-                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" id="search-itens" class="search-input" placeholder="Buscar item...">
+                    <div class="filters-bar">
+                        <div class="search-wrap">
+                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="search-itens" class="search-input" placeholder="Buscar item...">
+                        </div>
+                        <select id="filtro-localizacao" class="select-localizacao">
+                            <option value="">Todas as localizações</option>
+                        </select>
+                        <label class="chk-baixo">
+                            <input type="checkbox" id="filtro-baixo-estoque">
+                            Só estoque baixo
+                        </label>
+                        <label class="chk-baixo action-consumivel">
+                            <input type="checkbox" id="filtro-vencimento">
+                            Só vencendo/vencido
+                        </label>
                     </div>
-                    <select id="filtro-localizacao" class="select-localizacao">
-                        <option value="">Todas as localizações</option>
-                    </select>
-                    <label class="chk-baixo">
-                        <input type="checkbox" id="filtro-baixo-estoque">
-                        Só estoque baixo
-                    </label>
-                    <label class="chk-baixo action-consumivel">
-                        <input type="checkbox" id="filtro-vencimento">
-                        Só vencendo/vencido
-                    </label>
+
+                    <div id="itens-list" class="alx-grid">
+                        <div class="empty-state"><p>Carregando itens...</p></div>
+                    </div>
                 </div>
 
-                <div id="itens-list" class="alx-grid">
-                    <div class="empty-state"><p>Carregando itens...</p></div>
+                <div id="painel-agendamento" class="hidden">
+                    <div class="filters-bar">
+                        <select id="filtro-sala" class="select-localizacao">
+                            <option value="">Todas as salas</option>
+                        </select>
+                        <input type="date" id="filtro-data-agenda" class="search-input" style="max-width:180px;">
+                    </div>
+
+                    <div id="agendamentos-list" class="alx-grid">
+                        <div class="empty-state"><p>Carregando reservas...</p></div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -204,6 +226,46 @@
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" id="btn-cancelar-conferencia">Cancelar</button>
                     <button type="submit" class="btn-primary" id="btn-salvar-conferencia">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Nova Reserva (aba Agendamento) -->
+    <div id="modal-reserva" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-reserva-title">Nova Reserva</h2>
+            <form id="form-reserva">
+                <input type="hidden" id="reserva-id">
+                <div class="form-group">
+                    <label>Sala/Laboratório *</label>
+                    <select id="reserva-sala" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Data *</label>
+                    <input type="date" id="reserva-data" required>
+                </div>
+                <div class="rev-grid2">
+                    <div class="form-group">
+                        <label>Início *</label>
+                        <input type="time" id="reserva-hora-inicio" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Fim *</label>
+                        <input type="time" id="reserva-hora-fim" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Responsável *</label>
+                    <input type="text" id="reserva-responsavel" placeholder="Nome de quem vai usar a sala" required>
+                </div>
+                <div class="form-group">
+                    <label>Motivo</label>
+                    <input type="text" id="reserva-motivo" placeholder="Opcional">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-reserva">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-reserva">Reservar</button>
                 </div>
             </form>
         </div>
