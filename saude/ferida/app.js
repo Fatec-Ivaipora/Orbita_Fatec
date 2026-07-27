@@ -31,7 +31,6 @@ let fichasAntigas = [];   // metadados das fichas de papel digitalizadas do paci
 let fichasPendentes = []; // imagens já comprimidas aguardando o cadastro do novo paciente
 let pinCount = 0;
 let dirty = false;
-let dataAtendimentoImportada = null; // data original da ficha de papel importada via IA
 let iaImagens = { frente: null, verso: null };
 let iaDados = null;
 
@@ -178,6 +177,12 @@ function initPaginaPacientes() {
     buscaPacienteTimer = setTimeout(() => buscarEExibirPacientes(input.value.trim()), 300);
   });
   setupEnfermeirosModal();
+
+  document.getElementById('tabela-pacientes')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pac-lista-excluir');
+    if (!btn) return;
+    excluirPacienteDaLista(btn.dataset.id, btn.dataset.nome);
+  });
 }
 
 // ==========================================
@@ -261,15 +266,29 @@ function renderTabelaPacientes(lista) {
         <td>${esc(p.enfermeiro || '—')}</td>
         <td>${cadastro}</td>
         <td class="pac-lista-acoes">
-          <a href="index.html?paciente=${p.id}" title="Abrir ficha">
+          <a href="/saude/ferida/index.html?paciente=${p.id}" title="Abrir ficha">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
           </a>
-          <a href="relatorio.html?paciente=${p.id}" target="_blank" title="Gerar relatório">
+          <a href="/saude/ferida/relatorio.html?paciente=${p.id}" target="_blank" title="Gerar relatório">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           </a>
+          <button type="button" class="pac-lista-excluir action-execute" data-id="${p.id}" data-nome="${esc(p.nome)}" title="Excluir paciente">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </td>
       </tr>`;
   }).join('');
+}
+
+async function excluirPacienteDaLista(id, nome) {
+  if (!confirm(`Excluir DEFINITIVAMENTE o paciente "${nome}"?\n\nSerão apagados também todo o histórico de atendimentos e fichas antigas. Essa ação NÃO tem volta.`)) return;
+  try {
+    await apiFetch(`/ferida/pacientes/${id}`, { method: 'DELETE' });
+    showToast(`Paciente "${nome}" excluído definitivamente`);
+    buscarEExibirPacientes(document.getElementById('busca-paciente')?.value.trim() || '');
+  } catch (err) {
+    showToast('Erro ao excluir: ' + err.message, 'error');
+  }
 }
 
 // ==========================================
@@ -620,7 +639,7 @@ async function selecionarPaciente(paciente) {
   document.getElementById('meta-tipo-ferida').textContent = pacienteAtual.tipoFerida || '—';
   document.getElementById('meta-enfermeiro').textContent = pacienteAtual.enfermeiro || '—';
   const linkRelatorio = document.getElementById('btn-relatorio-paciente');
-  if (linkRelatorio) linkRelatorio.href = `relatorio.html?paciente=${pacienteAtual.id}`;
+  if (linkRelatorio) linkRelatorio.href = `/saude/ferida/relatorio.html?paciente=${pacienteAtual.id}`;
 
   try {
     [atendimentos, fichasAntigas] = await Promise.all([
@@ -1128,7 +1147,7 @@ async function salvarAtendimento() {
     },
     cobertura: chipsSelecionados('cobertura'),
     conduta: document.getElementById('conduta').value.trim(),
-    dataAtendimento: dataAtendimentoImportada
+    dataAtendimento: document.getElementById('data-atendimento-manual').value || null
   };
 
   const btn = document.getElementById('btn-salvar');
@@ -1161,7 +1180,9 @@ function limparFicha(manterStatus = false) {
   document.getElementById('conduta').value = '';
   document.querySelectorAll('svg[data-region] .pins').forEach(g => g.innerHTML = '');
   pinCount = 0;
-  dataAtendimentoImportada = null;
+  const inputData = document.getElementById('data-atendimento-manual');
+  inputData.max = todayStr();
+  inputData.value = todayStr();
   document.getElementById('loc-hint')?.classList.add('hidden');
   resetEmpty();
   if (!manterStatus) {
@@ -1257,6 +1278,13 @@ const fmtData = (iso) => {
   const [a, m, d] = iso.split('-');
   return `${d}/${m}/${a}`;
 };
+
+// Data local (não UTC) no formato YYYY-MM-DD, pro <input type="date">
+function todayStr() {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d - tz).toISOString().slice(0, 10);
+}
 
 function renderRevisaoIA(d) {
   // Fotos da ficha ao lado dos campos, para conferência visual
@@ -1369,7 +1397,7 @@ async function aplicarFichaIA(e) {
     aplicarChips('biofilme', d.biofilme === true ? ['Sim'] : d.biofilme === false ? ['Não'] : []);
     document.getElementById('conduta').value = conduta;
 
-    dataAtendimentoImportada = dataFicha;
+    if (dataFicha) document.getElementById('data-atendimento-manual').value = dataFicha;
 
     // Localização vem como texto na ficha de papel — a marcação no mapa é manual
     const hint = document.getElementById('loc-hint');
@@ -1381,8 +1409,8 @@ async function aplicarFichaIA(e) {
     }
 
     dirty = true;
-    document.getElementById('status').textContent = dataAtendimentoImportada
-      ? `Preenchido pela leitura (ficha de ${fmtData(dataAtendimentoImportada)}) — revise antes de salvar`
+    document.getElementById('status').textContent = dataFicha
+      ? `Preenchido pela leitura (ficha de ${fmtData(dataFicha)}) — revise antes de salvar`
       : 'Preenchido pela leitura — revise antes de salvar';
 
     document.getElementById('modal-ia').classList.add('hidden');

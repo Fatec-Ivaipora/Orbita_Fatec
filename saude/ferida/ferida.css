@@ -212,7 +212,7 @@
 }
 .pac-lista-msg { text-align: center; color: var(--muted); padding: 24px 12px !important; }
 .pac-lista-acoes { display: flex; gap: 10px; white-space: nowrap; }
-.pac-lista-acoes a {
+.pac-lista-acoes a, .pac-lista-acoes button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -221,9 +221,13 @@
   border: 1px solid var(--linha);
   border-radius: 8px;
   color: var(--petroleo);
-  transition: border-color .15s, color .15s;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color .15s, color .15s, background .15s;
 }
 .pac-lista-acoes a:hover { border-color: var(--turquesa); color: var(--turquesa-d); }
+.pac-lista-acoes .pac-lista-excluir:hover { border-color: var(--ferida-pin); color: var(--ferida-pin); background: #fbeae8; }
 @media (max-width: 700px) {
   .pac-lista-tabela th:nth-child(3), .pac-lista-tabela td:nth-child(3),
   .pac-lista-tabela th:nth-child(4), .pac-lista-tabela td:nth-child(4) { display: none; }
@@ -532,7 +536,18 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
   z-index: 15;
   box-shadow: 0 -6px 18px rgba(27, 58, 75, .06);
 }
+.actionbar-left { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .actionbar .status { font-size: 13px; color: var(--muted); }
+.data-atendimento-field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.data-atendimento-field input[type="date"] {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13.5px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: var(--petroleo);
+  background: #fff;
+}
 .btns { display: flex; gap: 10px; }
 .btn {
   border: none;
