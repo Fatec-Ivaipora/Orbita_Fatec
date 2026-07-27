@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Licitação - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Licitação</h1>
+                        <p class="page-subtitle">Cadastro de itens, fornecedores e cotações de compra por curso</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" id="link-relatorio" href="/financeiro/licitacao/relatorio.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
+                            Relatório
+                        </a>
+                        <button class="btn-secondary action-execute" id="btn-fornecedores">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 21V7M18 21V7M9 7h6M9 11h6M9 15h6M9 19h6"/></svg>
+                            Fornecedores
+                        </button>
+                        <button class="btn-primary action-execute" id="btn-novo-item" disabled>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Novo Item
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select class="select-filter" id="curso-select">
+                        <option value="">Carregando cursos...</option>
+                    </select>
+                    <div class="search-wrap">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" class="search-input" id="busca-item" placeholder="Buscar produto...">
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="tabela-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    <th>Qtd</th>
+                                    <th>Und</th>
+                                    <th>Periodicidade</th>
+                                    <th>Professor</th>
+                                    <th>Cotações</th>
+                                    <th>Menor valor</th>
+                                    <th>Fornecedor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itens-tbody">
+                                <tr><td colspan="9" class="tabela-msg">Selecione um curso para ver os itens.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Novo/Editar Item -->
+    <div id="modal-item" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-item-title">Novo Item</h2>
+            <form id="form-item">
+                <input type="hidden" id="item-id">
+                <div class="form-group">
+                    <label>Produto</label>
+                    <input type="text" id="item-produto" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Quantidade</label>
+                        <input type="number" step="0.01" min="0" id="item-quantidade" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Unidade</label>
+                        <input type="text" id="item-unidade" placeholder="und, kit, cx...">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Periodicidade</label>
+                        <input type="text" id="item-periodicidade" placeholder="Anual, Semestral...">
+                    </div>
+                    <div class="form-group">
+                        <label>Professor</label>
+                        <input type="text" id="item-professor">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Link de referência</label>
+                    <input type="url" id="item-link" placeholder="https://...">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-item">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-item">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Fornecedores -->
+    <div id="modal-fornecedores" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Fornecedores</h2>
+            <div id="lista-fornecedores" class="lista-fornecedores"></div>
+            <form id="form-fornecedor" class="form-inline">
+                <input type="text" id="fornecedor-nome" placeholder="Nome do fornecedor" required>
+                <button type="submit" class="btn-primary">Adicionar</button>
+            </form>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-fechar-fornecedores">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Cotações -->
+    <div id="modal-cotacoes" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="modal-cotacoes-titulo">Cotações</h2>
+            <p id="modal-cotacoes-qtd" class="modal-subtitle"></p>
+            <div id="lista-cotacoes" class="lista-cotacoes"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-cancelar-cotacoes">Cancelar</button>
+                <button type="button" class="btn-primary" id="btn-salvar-cotacoes">Salvar cotações</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/licitacao/app.js"></script>
+</body>
+</html>

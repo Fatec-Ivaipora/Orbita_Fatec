@@ -4,7 +4,8 @@ export const CATEGORIES = {
   admin: "Administrativo",
   docencia: "Docência",
   saude: "Gestão Saúde",
-  secretaria: "Secretaria"
+  secretaria: "Secretaria",
+  financeiro: "Financeiro"
 };
 
 export const MODULES = {
@@ -117,17 +118,24 @@ export const MODULES = {
     title: "Relatório DP",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>`,
     url: "/secretaria/relatorio-dp/index.html"
+  },
+  licitacao: {
+    id: "licitacao",
+    category: "financeiro",
+    title: "Licitação",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    url: "/financeiro/licitacao/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao"]
   },
   ti: {
     label: "T.I.",
@@ -136,6 +144,10 @@ export const ROLE_PERMISSIONS = {
   rh: {
     label: "RH",
     modules: ["dashboard", "fidelidade", "carga-horaria", "funcionarios"]
+  },
+  financeiro: {
+    label: "Financeiro",
+    modules: ["dashboard", "fidelidade", "licitacao"]
   },
   visitante: {
     label: "Visitante",

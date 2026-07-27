@@ -144,7 +144,8 @@ const requireModulePermission = (moduleName) => {
                 'almoxarifado-feridas': 3,
                 'almoxarifado-saude': 3,
                 'relatorio-dp': 3,
-                acessos: 1
+                acessos: 1,
+                licitacao: 3
             },
             ti: {
                 emprestimo: 3,
@@ -157,7 +158,8 @@ const requireModulePermission = (moduleName) => {
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
                 'relatorio-dp': 1,
-                acessos: 3
+                acessos: 3,
+                licitacao: 1
             },
             rh: {
                 emprestimo: 1,
@@ -170,7 +172,22 @@ const requireModulePermission = (moduleName) => {
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
                 'relatorio-dp': 1,
-                acessos: 1
+                acessos: 1,
+                licitacao: 1
+            },
+            financeiro: {
+                emprestimo: 1,
+                usuarios: 1,
+                ensalamento: 1,
+                'carga-horaria': 1,
+                turmas: 1,
+                avaliacoes: 1,
+                ferida: 1,
+                'almoxarifado-feridas': 1,
+                'almoxarifado-saude': 1,
+                'relatorio-dp': 1,
+                acessos: 1,
+                licitacao: 3
             },
             visitante: {
                 emprestimo: 2,
@@ -183,7 +200,8 @@ const requireModulePermission = (moduleName) => {
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
                 'relatorio-dp': 1,
-                acessos: 1
+                acessos: 1,
+                licitacao: 1
             }
         };
 
