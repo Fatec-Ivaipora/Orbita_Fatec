@@ -8,6 +8,49 @@ const checkPermission = verifyToken.requireModulePermission('licitacao');
 const COL_FORNECEDORES = 'financeiro_fornecedores';
 const COL_ITENS = 'financeiro_itens';
 
+// Coordenador tem nível de execução no módulo (cadastra/edita itens), mas não
+// pode ver preços/fornecedores/relatório — isso é restrito ao financeiro/admin.
+// Não dá pra expressar essa granularidade no nível view/execute genérico do
+// RBAC, então bloqueia explicitamente por cargo aqui.
+function bloquearCoordenador(req, res, next) {
+    if (req.user.role === 'coordenador') {
+        return res.status(403).json({ error: 'Coordenadores não têm acesso a preços, fornecedores ou relatórios — apenas ao cadastro de itens.' });
+    }
+    next();
+}
+
+const COL_CONFIG = 'config';
+const DOC_CONFIG_FINANCEIRO = 'financeiro';
+
+async function getSemestreAtivo() {
+    const snap = await db.collection(COL_CONFIG).doc(DOC_CONFIG_FINANCEIRO).get();
+    return (snap.exists && snap.data().semestreAtivoCoordenador) || null;
+}
+
+// ==========================================
+// CONFIGURAÇÃO (semestre que os coordenadores enxergam)
+// ==========================================
+router.get('/config', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestreAtivoCoordenador = await getSemestreAtivo();
+        res.json({ semestreAtivoCoordenador });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/config/semestre-ativo', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const semestre = (req.body.semestre || '').trim();
+        if (!/^\d{4}\.\d$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+
+        await db.collection(COL_CONFIG).doc(DOC_CONFIG_FINANCEIRO).set({ semestreAtivoCoordenador: semestre }, { merge: true });
+        res.json({ message: 'Semestre ativo atualizado.', semestreAtivoCoordenador: semestre });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
 // CURSOS (proxy somente-leitura de `courses`, já usada pelo Planejamento Acadêmico)
 // ==========================================
@@ -29,7 +72,7 @@ router.get('/cursos', verifyToken, checkPermission, async (req, res) => {
 // ==========================================
 // FORNECEDORES
 // ==========================================
-router.get('/fornecedores', verifyToken, checkPermission, async (req, res) => {
+router.get('/fornecedores', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         const snap = await db.collection(COL_FORNECEDORES).orderBy('nome').get();
         res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -38,7 +81,7 @@ router.get('/fornecedores', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
-router.post('/fornecedores', verifyToken, checkPermission, async (req, res) => {
+router.post('/fornecedores', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         const nome = (req.body.nome || '').trim();
         if (!nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
@@ -54,7 +97,7 @@ router.post('/fornecedores', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
-router.put('/fornecedores/:id', verifyToken, checkPermission, async (req, res) => {
+router.put('/fornecedores/:id', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         const nome = (req.body.nome || '').trim();
         if (!nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
@@ -66,7 +109,7 @@ router.put('/fornecedores/:id', verifyToken, checkPermission, async (req, res) =
     }
 });
 
-router.delete('/fornecedores/:id', verifyToken, checkPermission, async (req, res) => {
+router.delete('/fornecedores/:id', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         await db.collection(COL_FORNECEDORES).doc(req.params.id).delete();
         res.json({ message: 'Fornecedor excluído.' });
@@ -101,12 +144,31 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
         const { cursoId } = req.query;
         if (!cursoId) return res.status(400).json({ error: 'Informe o cursoId.' });
 
+        // Coordenador só enxerga o semestre configurado como ativo — travado
+        // aqui no servidor, ignorando qualquer semestre que venha na URL.
+        let semestre = req.query.semestre;
+        if (req.user.role === 'coordenador') {
+            semestre = await getSemestreAtivo();
+            if (!semestre) return res.status(409).json({ error: 'O financeiro ainda não configurou o semestre ativo.' });
+        }
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
         // Ordena em memória em vez de exigir índice composto do Firestore
         // (where + orderBy em campos diferentes) — volume por curso é modesto.
-        const snap = await db.collection(COL_ITENS).where('cursoId', '==', cursoId).get();
-        const itens = snap.docs
+        const snap = await db.collection(COL_ITENS)
+            .where('cursoId', '==', cursoId)
+            .where('semestre', '==', semestre)
+            .get();
+        let itens = snap.docs
             .map(d => ({ id: d.id, ...d.data() }))
             .sort((a, b) => (a.produto || '').localeCompare(b.produto || ''));
+
+        // Coordenador não pode ver preços/fornecedores — remove no servidor, não
+        // só na tela (senão daria pra ver inspecionando a chamada da API).
+        if (req.user.role === 'coordenador') {
+            itens = itens.map(({ cotacoes, ...resto }) => ({ ...resto, temCotacao: (cotacoes || []).length > 0 }));
+        }
+
         res.json(itens);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -119,10 +181,22 @@ router.post('/itens', verifyToken, checkPermission, async (req, res) => {
         if (!cursoId || !curso) return res.status(400).json({ error: 'Informe o curso.' });
         if (!produto || !produto.trim()) return res.status(400).json({ error: 'Informe o produto.' });
 
+        // Coordenador só cadastra no semestre ativo — travado no servidor,
+        // ignorando qualquer semestre que venha do cliente.
+        let semestre;
+        if (req.user.role === 'coordenador') {
+            semestre = await getSemestreAtivo();
+            if (!semestre) return res.status(409).json({ error: 'O financeiro ainda não configurou o semestre ativo.' });
+        } else {
+            semestre = (req.body.semestre || '').trim();
+            if (!/^\d{4}\.\d$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+        }
+
         const qtd = parseFloat(quantidade);
         const docRef = await db.collection(COL_ITENS).add({
             cursoId,
             curso,
+            semestre,
             produto: produto.trim(),
             quantidade: !isNaN(qtd) && qtd > 0 ? qtd : 1,
             unidade: (unidade || '').trim(),
@@ -141,8 +215,24 @@ router.post('/itens', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// Coordenador só mexe em itens do semestre ativo — mesmo que ele tenha o id de
+// um item de outro semestre (ex.: guardado de antes da troca), bloqueia aqui.
+async function bloquearSeForaDoSemestreAtivo(req, itemId) {
+    if (req.user.role !== 'coordenador') return null;
+    const doc = await db.collection(COL_ITENS).doc(itemId).get();
+    if (!doc.exists) return { status: 404, error: 'Item não encontrado.' };
+    const semestreAtivo = await getSemestreAtivo();
+    if (doc.data().semestre !== semestreAtivo) {
+        return { status: 403, error: 'Este item não é do semestre ativo.' };
+    }
+    return null;
+}
+
 router.put('/itens/:id', verifyToken, checkPermission, async (req, res) => {
     try {
+        const bloqueio = await bloquearSeForaDoSemestreAtivo(req, req.params.id);
+        if (bloqueio) return res.status(bloqueio.status).json({ error: bloqueio.error });
+
         const { produto, quantidade, unidade, periodicidade, professor, linkReferencia, status } = req.body;
         const dados = { updatedAt: new Date().toISOString() };
 
@@ -183,6 +273,9 @@ router.put('/itens/:id', verifyToken, checkPermission, async (req, res) => {
 
 router.delete('/itens/:id', verifyToken, checkPermission, async (req, res) => {
     try {
+        const bloqueio = await bloquearSeForaDoSemestreAtivo(req, req.params.id);
+        if (bloqueio) return res.status(bloqueio.status).json({ error: bloqueio.error });
+
         await db.collection(COL_ITENS).doc(req.params.id).delete();
         res.json({ message: 'Item excluído.' });
     } catch (err) {
@@ -193,7 +286,7 @@ router.delete('/itens/:id', verifyToken, checkPermission, async (req, res) => {
 // PUT /itens/:id/cotacoes — substitui o array de cotações inteiro de uma vez
 // (a tela edita todos os fornecedores num modal só e salva junto). valorTotal
 // é sempre recalculado aqui, nunca confiado do cliente.
-router.put('/itens/:id/cotacoes', verifyToken, checkPermission, async (req, res) => {
+router.put('/itens/:id/cotacoes', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         const itemDoc = await db.collection(COL_ITENS).doc(req.params.id).get();
         if (!itemDoc.exists) return res.status(404).json({ error: 'Item não encontrado.' });
@@ -217,11 +310,12 @@ router.put('/itens/:id/cotacoes', verifyToken, checkPermission, async (req, res)
 // ==========================================
 // RELATÓRIO
 // ==========================================
-router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
+router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const { cursoId } = req.query;
+        const { cursoId, semestre } = req.query;
         let query = db.collection(COL_ITENS);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
+        if (semestre) query = query.where('semestre', '==', semestre);
         const snap = await query.get();
 
         const porCurso = {}; // cursoId -> { curso, gastoTotal, economia, pendente, chegou }

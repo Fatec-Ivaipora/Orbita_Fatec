@@ -21,7 +21,12 @@ let cursos = [];
 let fornecedores = [];
 let itens = [];
 let cursoSelecionadoId = null;
+let semestreSelecionado = null;
 let itemEmEdicaoCotacoes = null;
+
+function isCoordenador() {
+  return currentRole === 'coordenador';
+}
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -101,6 +106,8 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     document.body.classList.toggle('hide-execute', level < 3);
+    // Coordenador cadastra/edita itens, mas não vê preços, fornecedores nem relatório.
+    document.body.classList.toggle('modo-coordenador', role === 'coordenador');
 
     if (!appInitialized || initializedRole !== role || (cached && (cached.user.displayName !== user.displayName || cached.user.email !== user.email))) {
       currentRole = role;
@@ -144,19 +151,86 @@ async function initPaginaLicitacao() {
   setupModalFornecedores();
   setupModalItem();
   setupModalCotacoes();
+  setupModalSemestre();
+  await carregarSemestreAtivo();
 
   document.getElementById('curso-select')?.addEventListener('change', async (e) => {
     cursoSelecionadoId = e.target.value || null;
-    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId);
+    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
     atualizarLinkRelatorio();
-    if (cursoSelecionadoId) await carregarItens();
+    if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
     else renderTabelaItens([]);
+  });
+
+  document.getElementById('semestre-input')?.addEventListener('change', async (e) => {
+    semestreSelecionado = e.target.value.trim() || null;
+    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
+    if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
   });
 
   document.getElementById('busca-item')?.addEventListener('input', (e) => {
     const termo = e.target.value.trim().toLowerCase();
     const filtrados = termo ? itens.filter(it => it.produto.toLowerCase().includes(termo)) : itens;
     renderTabelaItens(filtrados);
+  });
+}
+
+// Busca o semestre ativo configurado pelo financeiro. Coordenador fica travado
+// nesse valor (só vê o badge); financeiro/admin veem o campo editável, já
+// preenchido com o semestre ativo, mas podem trocar pra ver outro período.
+async function carregarSemestreAtivo() {
+  try {
+    const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+    const input = document.getElementById('semestre-input');
+    const badge = document.getElementById('semestre-badge');
+
+    if (isCoordenador()) {
+      semestreSelecionado = semestreAtivoCoordenador || null;
+      if (badge) {
+        badge.textContent = semestreAtivoCoordenador ? `Semestre: ${semestreAtivoCoordenador}` : 'Semestre ainda não configurado pelo financeiro';
+        badge.classList.remove('hidden');
+      }
+    } else if (input) {
+      input.value = semestreAtivoCoordenador || '';
+      semestreSelecionado = input.value.trim() || null;
+    }
+    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
+  } catch (err) {
+    showToast('Erro ao carregar semestre ativo: ' + err.message, 'error');
+  }
+}
+
+function setupModalSemestre() {
+  const modal = document.getElementById('modal-semestre');
+  if (!modal) return;
+
+  document.getElementById('btn-config-semestre')?.addEventListener('click', async () => {
+    try {
+      const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+      document.getElementById('semestre-ativo-input').value = semestreAtivoCoordenador || '';
+      modal.classList.remove('hidden');
+    } catch (err) {
+      showToast('Erro ao carregar configuração: ' + err.message, 'error');
+    }
+  });
+  document.getElementById('btn-cancelar-semestre')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('btn-salvar-semestre')?.addEventListener('click', async () => {
+    const semestre = document.getElementById('semestre-ativo-input').value.trim();
+    const btn = document.getElementById('btn-salvar-semestre');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+    try {
+      await apiFetch('/financeiro/config/semestre-ativo', { method: 'PUT', body: JSON.stringify({ semestre }) });
+      modal.classList.add('hidden');
+      showToast('Semestre ativo atualizado');
+    } catch (err) {
+      showToast('Erro ao salvar: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Salvar';
+    }
   });
 }
 
@@ -184,7 +258,8 @@ async function carregarItens() {
   const tbody = document.getElementById('itens-tbody');
   tbody.innerHTML = `<tr><td colspan="9" class="tabela-msg">Carregando...</td></tr>`;
   try {
-    itens = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}`);
+    const qsSemestre = semestreSelecionado ? `&semestre=${encodeURIComponent(semestreSelecionado)}` : '';
+    itens = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}${qsSemestre}`);
     document.getElementById('busca-item').value = '';
     renderTabelaItens(itens);
   } catch (err) {
@@ -198,10 +273,24 @@ function melhorCotacao(item) {
   return cotacoes.reduce((menor, c) => (c.valorTotal < menor.valorTotal ? c : menor), cotacoes[0]);
 }
 
+// O campo aceita tanto um link real quanto uma observação livre (ex.: "Local",
+// pra compras que não são online) — só vira <a> clicável se parecer uma URL de verdade.
+function renderLinkReferencia(valor) {
+  if (!valor) return '';
+  if (/^https?:\/\//i.test(valor.trim())) {
+    return `<a href="${esc(valor)}" target="_blank" title="Link de referência" class="item-link">🔗</a>`;
+  }
+  return `<span class="item-obs" title="${esc(valor)}">📍 ${esc(valor)}</span>`;
+}
+
 function renderTabelaItens(lista) {
   const tbody = document.getElementById('itens-tbody');
   if (!cursoSelecionadoId) {
     tbody.innerHTML = `<tr><td colspan="9" class="tabela-msg">Selecione um curso para ver os itens.</td></tr>`;
+    return;
+  }
+  if (!semestreSelecionado) {
+    tbody.innerHTML = `<tr><td colspan="9" class="tabela-msg">Informe o semestre para ver os itens.</td></tr>`;
     return;
   }
   if (!lista.length) {
@@ -214,22 +303,22 @@ function renderTabelaItens(lista) {
       <tr>
         <td>
           ${esc(item.produto)}
-          ${item.linkReferencia ? `<a href="${esc(item.linkReferencia)}" target="_blank" title="Link de referência" class="item-link">🔗</a>` : ''}
+          ${renderLinkReferencia(item.linkReferencia)}
         </td>
         <td>${item.quantidade}</td>
         <td>${esc(item.unidade || '—')}</td>
         <td>${esc(item.periodicidade || '—')}</td>
         <td>${esc(item.professor || '—')}</td>
-        <td>${(item.cotacoes || []).length}</td>
-        <td class="valor-menor">${melhor ? fmtMoeda(melhor.valorTotal) : '—'}</td>
-        <td>${melhor ? esc(melhor.fornecedorNome) : '—'}</td>
+        <td class="no-coordenador">${(item.cotacoes || []).length}</td>
+        <td class="valor-menor no-coordenador">${melhor ? fmtMoeda(melhor.valorTotal) : '—'}</td>
+        <td class="no-coordenador">${melhor ? esc(melhor.fornecedorNome) : '—'}</td>
         <td>
           <button type="button" class="status-badge status-${item.status} action-execute" data-id="${item.id}" data-status="${item.status}">
             ${item.status === 'chegou' ? 'Chegou' : 'Pendente'}
           </button>
         </td>
         <td class="acoes-col">
-          <button type="button" class="btn-icon acao-cotacoes action-execute" data-id="${item.id}" title="Cotações">💰</button>
+          <button type="button" class="btn-icon acao-cotacoes action-execute no-coordenador" data-id="${item.id}" title="Cotações">💰</button>
           <button type="button" class="btn-icon acao-editar action-execute" data-id="${item.id}" title="Editar">✏️</button>
           <button type="button" class="btn-icon acao-excluir action-execute" data-id="${item.id}" title="Excluir">🗑️</button>
         </td>
@@ -291,6 +380,7 @@ function setupModalItem() {
     if (!id) {
       dados.cursoId = cursoSelecionadoId;
       dados.curso = cursoAtual ? cursoAtual.name : '';
+      dados.semestre = semestreSelecionado; // coordenador é sempre travado no servidor de qualquer forma
     }
 
     btn.disabled = true;

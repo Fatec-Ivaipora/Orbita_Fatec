@@ -149,6 +149,10 @@ export const ROLE_PERMISSIONS = {
     label: "Financeiro",
     modules: ["dashboard", "fidelidade", "licitacao"]
   },
+  coordenador: {
+    label: "Coordenador",
+    modules: ["dashboard", "fidelidade", "licitacao"]
+  },
   visitante: {
     label: "Visitante",
     modules: ["dashboard", "fidelidade"]

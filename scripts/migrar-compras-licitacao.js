@@ -85,6 +85,21 @@ async function obterOuCriarFornecedor(nomeOriginal, batchState) {
     return registro;
 }
 
+// Unidades de peso/volume "puras" (sem embalagem/contagem, ex.: "g", "kg", "ml")
+// indicam que o preço cotado é do PACOTE inteiro, não por grama/ml — senão o
+// total sai inflado (ex.: "500 g" de um reagente virando "500 vezes o preço
+// do pacote"). Detectado empiricamente: casos assim tinham QTD>=10 e o preço
+// batia com o pacote inteiro, não com preço por unidade de peso.
+const UNIDADES_PESO_PURAS = ['g', 'gr', 'grama', 'gramas', 'ml', 'l', 'kg', 'mg'];
+
+function corrigirQuantidadePeso(quantidade, unidade) {
+    const unidadeNorm = (unidade || '').trim().toLowerCase();
+    if (quantidade >= 10 && UNIDADES_PESO_PURAS.includes(unidadeNorm)) {
+        return { quantidade: 1, unidade: `${quantidade} ${unidade.trim()}` };
+    }
+    return { quantidade, unidade };
+}
+
 function processarLinhaGenerica(row, colsFixas, vendorSlots, cursoId, cursoNome, fornecedoresParaCriar) {
     const produtoIdx = colsFixas.produto;
     if (produtoIdx === undefined) return null;
@@ -92,7 +107,9 @@ function processarLinhaGenerica(row, colsFixas, vendorSlots, cursoId, cursoNome,
     if (!produto) return null;
 
     const qtdBruta = colsFixas.qtd !== undefined ? parseNumero(row[colsFixas.qtd]) : NaN;
-    const quantidade = !isNaN(qtdBruta) && qtdBruta > 0 ? qtdBruta : 1;
+    const qtdOriginal = !isNaN(qtdBruta) && qtdBruta > 0 ? qtdBruta : 1;
+    const unidadeOriginal = colsFixas.und !== undefined ? (row[colsFixas.und] || '').toString().trim() : '';
+    const { quantidade, unidade } = corrigirQuantidadePeso(qtdOriginal, unidadeOriginal);
 
     const cotacoesPorFornecedor = new Map(); // fornecedorNomeNorm -> {nome, valorUnitario}
     vendorSlots.forEach(slot => {
@@ -114,7 +131,7 @@ function processarLinhaGenerica(row, colsFixas, vendorSlots, cursoId, cursoNome,
         curso: cursoNome,
         produto,
         quantidade,
-        unidade: colsFixas.und !== undefined ? (row[colsFixas.und] || '').toString().trim() : '',
+        unidade,
         periodicidade: colsFixas.periodicidade !== undefined ? (row[colsFixas.periodicidade] || '').toString().trim() : '',
         professor: colsFixas.professor !== undefined ? (row[colsFixas.professor] || '').toString().trim() : '',
         linkReferencia: colsFixas.link !== undefined ? (row[colsFixas.link] || '').toString().trim() : '',

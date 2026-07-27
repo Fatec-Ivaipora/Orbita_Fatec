@@ -14,6 +14,9 @@
 
 .hidden { display: none !important; }
 
+/* Coordenador cadastra/edita itens, mas não vê preços, fornecedores nem relatório. */
+.modo-coordenador .no-coordenador { display: none !important; }
+
 /* Header de Página */
 .page-header {
   display: flex;
@@ -77,6 +80,11 @@
 }
 .select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
 
+.semestre-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1rem;
+  border-radius: 8px; background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.85rem;
+}
+
 /* Card + Tabela */
 .card {
   background: white;
@@ -103,6 +111,7 @@
 .valor-menor { font-weight: 700; color: var(--green); }
 
 .item-link { margin-left: 0.4rem; text-decoration: none; }
+.item-obs { margin-left: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); }
 
 .status-badge {
   border: none; border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 700;
