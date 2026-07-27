@@ -189,6 +189,20 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 3
             },
+            coordenador: {
+                emprestimo: 1,
+                usuarios: 1,
+                ensalamento: 1,
+                'carga-horaria': 1,
+                turmas: 1,
+                avaliacoes: 1,
+                ferida: 1,
+                'almoxarifado-feridas': 1,
+                'almoxarifado-saude': 1,
+                'relatorio-dp': 1,
+                acessos: 1,
+                licitacao: 3
+            },
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,
