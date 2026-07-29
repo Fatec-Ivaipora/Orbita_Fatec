@@ -211,6 +211,16 @@
   color: var(--tinta);
 }
 .pac-lista-msg { text-align: center; color: var(--muted); padding: 24px 12px !important; }
+.enf-inline-select {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 13.5px;
+  color: var(--tinta);
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: #fff;
+  max-width: 170px;
+}
 .pac-lista-acoes { display: flex; gap: 10px; white-space: nowrap; }
 .pac-lista-acoes a, .pac-lista-acoes button {
   display: inline-flex;
@@ -403,6 +413,9 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
   font-size: 12px;
   color: var(--muted);
 }
+.dim-ferida { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px dashed var(--linha); }
+.dim-ferida:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.dim-ferida-titulo { font-size: 13px; font-weight: 700; color: var(--turquesa-d); margin-bottom: 8px; }
 .ferida-content input:focus,
 .ferida-content select:focus,
 .ferida-content textarea:focus {
@@ -539,7 +552,8 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
 .actionbar-left { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .actionbar .status { font-size: 13px; color: var(--muted); }
 .data-atendimento-field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.data-atendimento-field input[type="date"] {
+.data-atendimento-field input[type="date"],
+.data-atendimento-field select {
   font-family: 'Source Sans 3', sans-serif;
   font-size: 13.5px;
   border: 1px solid var(--linha);
@@ -690,6 +704,33 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
 
 /* Galeria de fichas antigas */
 .modal-content.wide { max-width: 640px; }
+
+/* Solicitações de exclusão */
+#btn-solicitacoes { position: relative; }
+#solicitacoes-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #d64545;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.solicitacao-item {
+  background: #f7faf9;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-size: 13.5px;
+  color: var(--tinta);
+}
+.solicitacao-item .modal-actions { margin-top: 10px; }
 .fichas-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
 .fichas-empty { font-size: 13px; color: var(--muted); font-style: italic; text-align: center; padding: 16px 0; }
 .ficha-row {
@@ -962,7 +1003,7 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
 
 .rel-paciente {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px 18px;
   background: var(--silhueta);
   border-radius: 10px;
