@@ -84,22 +84,22 @@
                     <div class="charts-grid">
                         <div class="chart-card">
                             <h3>Gasto por curso</h3>
-                            <canvas id="chart-curso"></canvas>
+                            <div class="chart-canvas-wrap"><canvas id="chart-curso"></canvas></div>
                         </div>
                         <div class="chart-card">
                             <h3>Pendente x Chegou</h3>
-                            <canvas id="chart-status"></canvas>
+                            <div class="chart-canvas-wrap"><canvas id="chart-status"></canvas></div>
                         </div>
                         <div class="chart-card full">
                             <h3>Ranking de fornecedores (cotações vencidas)</h3>
-                            <canvas id="chart-ranking"></canvas>
+                            <div class="chart-canvas-wrap"><canvas id="chart-ranking"></canvas></div>
                         </div>
                     </div>
 
                     <div class="chart-card full comparativo-card">
                         <h3>Comparativo de valores por fornecedor</h3>
                         <p class="page-subtitle" style="margin-top:-0.5rem;">Valor cotado por cada empresa em cada item — o menor valor de cada linha vem destacado</p>
-                        <div class="tabela-wrap">
+                        <div class="tabela-wrap comparativo-scroll">
                             <table class="data-table" id="tabela-comparativo">
                                 <thead id="comparativo-thead"></thead>
                                 <tbody id="comparativo-tbody"></tbody>

@@ -108,6 +108,34 @@
 
 .tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
 
+/* A tabela comparativa pode ter muitas linhas — sem isso, ao rolar a página
+   o cabeçalho com o nome de cada empresa some e fica dificil lembrar qual
+   coluna é de qual fornecedor. position:sticky só gruda no ancestral mais
+   próximo que realmente rola — e .tabela-wrap (overflow-x:auto) já vira um
+   "scroll container" pro navegador mesmo sem barra visível (overflow-x não
+   visible força overflow-y a virar auto também), então o sticky tentava
+   grudar nele e não em .layout-main, sem nunca funcionar de fato. Solução:
+   dar um scroll vertical próprio e travado (max-height) só nessa tabela,
+   assim o sticky gruda nesse contêiner que realmente rola. */
+.comparativo-scroll {
+  max-height: 520px;
+  overflow-y: auto;
+}
+#tabela-comparativo thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+@media print {
+  /* Na impressão a tabela não pode ficar presa numa caixa de rolagem —
+     precisa aparecer inteira, com o restante do relatório. */
+  .comparativo-scroll {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 .valor-vencedor { color: #10B981; font-weight: 700; }
 .valor-ausente { color: var(--text-secondary); }
 
@@ -206,8 +234,14 @@
 .charts-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; }
 .chart-card { background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02); }
 .chart-card h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--text-main); }
-.chart-card canvas { max-height: 320px; }
 .chart-card.full { grid-column: 1 / -1; }
+
+/* Chart.js com responsive:true precisa de um pai com altura travada — sem
+   isso (canvas direto num grid item sem altura própria) o canvas entra num
+   loop de redimensionamento e "cresce" a cada resize/reflow da página.
+   maintainAspectRatio:false (setado no app.js) + altura fixa aqui resolve. */
+.chart-canvas-wrap { position: relative; height: 280px; }
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
 
 @media (max-width: 900px) {
   .charts-grid { grid-template-columns: 1fr; }
@@ -280,7 +314,7 @@ body.pagina-relatorio .layout-content {
   .charts-grid { grid-template-columns: 1fr; gap: 10px; }
   .chart-card.full { grid-column: 1; }
   .chart-card { padding: 0.75rem 1rem; }
-  .chart-card canvas { max-height: 220px !important; width: 100% !important; height: 220px !important; }
+  .chart-canvas-wrap { height: 220px !important; }
 
   /* A tabela comparativa pode crescer bastante (1 linha por item) — deixa
      ela quebrar entre páginas em vez de forçar tudo numa página só (que é o

@@ -687,7 +687,7 @@ function renderRelatorio(dados) {
       labels: porCurso.map(c => c.curso),
       datasets: [{ label: 'Gasto (menor cotação)', data: porCurso.map(c => c.gastoTotal), backgroundColor: '#0F4EB8', borderRadius: 6 }]
     },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
 
   if (chartRanking) chartRanking.destroy();
@@ -697,7 +697,7 @@ function renderRelatorio(dados) {
       labels: ranking.map(r => r.nome),
       datasets: [{ label: 'Cotações vencidas', data: ranking.map(r => r.vitorias), backgroundColor: cores, borderRadius: 6 }]
     },
-    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
   });
 
   if (chartStatus) chartStatus.destroy();
@@ -707,7 +707,7 @@ function renderRelatorio(dados) {
       labels: ['Pendente', 'Chegou'],
       datasets: [{ data: [dados.geral.pendente, dados.geral.chegou], backgroundColor: ['#F59E0B', '#10B981'] }]
     },
-    options: { responsive: true }
+    options: { responsive: true, maintainAspectRatio: false }
   });
 
   renderComparativo(dados.comparativo);
