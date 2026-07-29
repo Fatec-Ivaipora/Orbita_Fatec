@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -87,7 +88,11 @@ app.use('/api/financeiro', rotasFinanceiro);
 module.exports = app;
 
 // Caso o servidor seja rodado localmente (node api/index.js)
+// Em produção o Vercel serve os arquivos estáticos direto (vercel.json só reescreve /api/*);
+// localmente precisamos servir a pasta do projeto para as telas HTML abrirem.
 if (require.main === module) {
+    app.use(express.static(path.join(__dirname, '..')));
+
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
         console.log(`Servidor rodando na porta ${PORT}`);

@@ -312,7 +312,7 @@ router.put('/itens/:id/cotacoes', verifyToken, checkPermission, bloquearCoordena
 // ==========================================
 router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const { cursoId, semestre } = req.query;
+        const { cursoId, semestre, periodicidade, cotacoesFiltro } = req.query;
         let query = db.collection(COL_ITENS);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
         if (semestre) query = query.where('semestre', '==', semestre);
@@ -322,9 +322,25 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
         const rankingFornecedores = {}; // fornecedorNome -> vitórias
         let gastoTotalGeral = 0, economiaTotalGeral = 0, pendenteGeral = 0, chegouGeral = 0;
 
+        // Mapa comparativo: pra cada item, o valor que CADA fornecedor cotou —
+        // não só quem ganhou. É o "orçamento lado a lado" que o financeiro pediu
+        // pra comparar preço entre empresas, não só ver o vencedor.
+        const fornecedoresColunas = {}; // fornecedorId -> nome (define as colunas da tabela)
+        const comparativoItens = [];
+
         snap.forEach(doc => {
             const item = doc.data();
             const cotacoes = item.cotacoes || [];
+
+            // Filtros pedidos pelo financeiro: por periodicidade do produto (campo
+            // livre, mas usado com "Mensal"/"Semestral"/"Anual") e por quantidade de
+            // cotações — "única" = sem concorrência real (economia sempre zero ali),
+            // "múltipla" = teve disputa entre fornecedores.
+            if (periodicidade && (item.periodicidade || '').trim().toLowerCase() !== periodicidade.trim().toLowerCase()) {
+                return;
+            }
+            if (cotacoesFiltro === 'unica' && cotacoes.length !== 1) return;
+            if (cotacoesFiltro === 'multipla' && cotacoes.length < 2) return;
 
             if (!porCurso[item.cursoId]) {
                 porCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, gastoTotal: 0, economia: 0, pendente: 0, chegou: 0 };
@@ -347,6 +363,21 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 if (vencedor) {
                     rankingFornecedores[vencedor.fornecedorNome] = (rankingFornecedores[vencedor.fornecedorNome] || 0) + 1;
                 }
+
+                const valoresPorFornecedor = {};
+                cotacoes.forEach(cot => {
+                    fornecedoresColunas[cot.fornecedorId] = cot.fornecedorNome;
+                    valoresPorFornecedor[cot.fornecedorId] = cot.valorTotal;
+                });
+                comparativoItens.push({
+                    itemId: doc.id,
+                    curso: item.curso,
+                    produto: item.produto,
+                    quantidade: item.quantidade,
+                    unidade: item.unidade,
+                    valoresPorFornecedor,
+                    vencedorFornecedorId: vencedor ? vencedor.fornecedorId : null
+                });
             }
         });
 
@@ -364,6 +395,14 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 economia: Math.round(economiaTotalGeral * 100) / 100,
                 pendente: pendenteGeral,
                 chegou: chegouGeral
+            },
+            comparativo: {
+                fornecedores: Object.entries(fornecedoresColunas)
+                    .map(([id, nome]) => ({ id, nome }))
+                    .sort((a, b) => a.nome.localeCompare(b.nome)),
+                itens: comparativoItens.sort((a, b) =>
+                    (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || '')
+                )
             }
         });
     } catch (err) {
