@@ -108,6 +108,9 @@
 
 .tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
 
+.valor-vencedor { color: #10B981; font-weight: 700; }
+.valor-ausente { color: var(--text-secondary); }
+
 .valor-menor { font-weight: 700; color: var(--green); }
 
 .item-link { margin-left: 0.4rem; text-decoration: none; }
@@ -278,4 +281,12 @@ body.pagina-relatorio .layout-content {
   .chart-card.full { grid-column: 1; }
   .chart-card { padding: 0.75rem 1rem; }
   .chart-card canvas { max-height: 220px !important; width: 100% !important; height: 220px !important; }
+
+  /* A tabela comparativa pode crescer bastante (1 linha por item) — deixa
+     ela quebrar entre páginas em vez de forçar tudo numa página só (que é o
+     que o resto dos cards faz com break-inside: avoid). */
+  .comparativo-card { break-inside: auto; page-break-inside: auto; }
+  .comparativo-card table { font-size: 0.8rem; }
+  .comparativo-card thead { display: table-header-group; }
+  .comparativo-card tr { break-inside: avoid; page-break-inside: avoid; }
 }

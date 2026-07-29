@@ -40,6 +40,17 @@
                     <select class="select-filter" id="relatorio-curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
+                    <select class="select-filter" id="relatorio-periodicidade-select">
+                        <option value="">Todas as periodicidades</option>
+                        <option value="Mensal">Mensal</option>
+                        <option value="Semestral">Semestral</option>
+                        <option value="Anual">Anual</option>
+                    </select>
+                    <select class="select-filter" id="relatorio-cotacoes-select">
+                        <option value="">Todos os itens</option>
+                        <option value="unica">Apenas 1 cotação (sem concorrência)</option>
+                        <option value="multipla">Mais de 1 cotação (com concorrência)</option>
+                    </select>
                 </div>
 
                 <div class="print-page">
@@ -82,6 +93,17 @@
                         <div class="chart-card full">
                             <h3>Ranking de fornecedores (cotações vencidas)</h3>
                             <canvas id="chart-ranking"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card full comparativo-card">
+                        <h3>Comparativo de valores por fornecedor</h3>
+                        <p class="page-subtitle" style="margin-top:-0.5rem;">Valor cotado por cada empresa em cada item — o menor valor de cada linha vem destacado</p>
+                        <div class="tabela-wrap">
+                            <table class="data-table" id="tabela-comparativo">
+                                <thead id="comparativo-thead"></thead>
+                                <tbody id="comparativo-tbody"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

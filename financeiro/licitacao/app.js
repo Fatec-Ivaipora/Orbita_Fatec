@@ -583,24 +583,44 @@ let relatorioEmAndamento = Promise.resolve(); // promessa da última carga, pra 
 async function initPaginaRelatorio() {
   await carregarCursos();
   const select = document.getElementById('relatorio-curso-select');
+  const selectPeriodicidade = document.getElementById('relatorio-periodicidade-select');
+  const selectCotacoes = document.getElementById('relatorio-cotacoes-select');
   const cursoLabel = document.getElementById('print-curso-label');
   // Se veio de "Licitação" com um curso já selecionado (?cursoId=...), abre o
   // relatório já filtrado nele em vez de "Todos os cursos".
   const cursoIdInicial = new URLSearchParams(window.location.search).get('cursoId') || '';
 
+  function atualizarLabelImpressao() {
+    if (!cursoLabel) return;
+    const curso = cursos.find(c => c.id === select.value);
+    const partes = [curso ? curso.name : 'Todos os cursos'];
+    if (selectPeriodicidade?.value) partes.push(selectPeriodicidade.value);
+    if (selectCotacoes?.value === 'unica') partes.push('apenas 1 cotação');
+    if (selectCotacoes?.value === 'multipla') partes.push('mais de 1 cotação');
+    cursoLabel.textContent = partes.join(' — ');
+  }
+
   if (select) {
     select.innerHTML = '<option value="">Todos os cursos</option>' + cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
     if (cursoIdInicial && cursos.some(c => c.id === cursoIdInicial)) {
       select.value = cursoIdInicial;
-      const curso = cursos.find(c => c.id === cursoIdInicial);
-      if (cursoLabel) cursoLabel.textContent = curso ? curso.name : 'Todos os cursos';
     }
     select.addEventListener('change', () => {
-      const curso = cursos.find(c => c.id === select.value);
-      if (cursoLabel) cursoLabel.textContent = curso ? curso.name : 'Todos os cursos';
-      relatorioEmAndamento = carregarRelatorio(select.value);
+      atualizarLabelImpressao();
+      relatorioEmAndamento = carregarRelatorio();
     });
   }
+
+  selectPeriodicidade?.addEventListener('change', () => {
+    atualizarLabelImpressao();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+  selectCotacoes?.addEventListener('change', () => {
+    atualizarLabelImpressao();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+
+  atualizarLabelImpressao();
 
   const dataEmissao = document.getElementById('print-data-emissao');
   if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
@@ -628,13 +648,20 @@ async function initPaginaRelatorio() {
     [chartCurso, chartRanking, chartStatus].forEach(c => c && c.resize());
   });
 
-  relatorioEmAndamento = carregarRelatorio(select ? select.value : '');
+  relatorioEmAndamento = carregarRelatorio();
   await relatorioEmAndamento;
 }
 
-async function carregarRelatorio(cursoId) {
+async function carregarRelatorio() {
   try {
-    const qs = cursoId ? `?cursoId=${encodeURIComponent(cursoId)}` : '';
+    const cursoId = document.getElementById('relatorio-curso-select')?.value || '';
+    const periodicidade = document.getElementById('relatorio-periodicidade-select')?.value || '';
+    const cotacoesFiltro = document.getElementById('relatorio-cotacoes-select')?.value || '';
+    const params = new URLSearchParams();
+    if (cursoId) params.set('cursoId', cursoId);
+    if (periodicidade) params.set('periodicidade', periodicidade);
+    if (cotacoesFiltro) params.set('cotacoesFiltro', cotacoesFiltro);
+    const qs = params.toString() ? `?${params.toString()}` : '';
     const dados = await apiFetch(`/financeiro/relatorio${qs}`);
     renderRelatorio(dados);
   } catch (err) {
@@ -682,6 +709,45 @@ function renderRelatorio(dados) {
     },
     options: { responsive: true }
   });
+
+  renderComparativo(dados.comparativo);
+}
+
+// Tabela "produto x fornecedor" — mostra o valor que cada empresa cotou pra
+// cada item lado a lado (não só quem ganhou), pra dar a visão de orçamento
+// comparativo que o financeiro pediu.
+function renderComparativo(comparativo) {
+  const thead = document.getElementById('comparativo-thead');
+  const tbody = document.getElementById('comparativo-tbody');
+  if (!thead || !tbody) return;
+
+  const fornecedores = comparativo?.fornecedores || [];
+  const itens = comparativo?.itens || [];
+
+  if (!itens.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td class="tabela-msg">Nenhum item com cotação para os filtros selecionados.</td></tr>';
+    return;
+  }
+
+  thead.innerHTML = `<tr>
+    <th>Curso</th>
+    <th>Produto</th>
+    ${fornecedores.map(f => `<th>${esc(f.nome)}</th>`).join('')}
+  </tr>`;
+
+  tbody.innerHTML = itens.map(item => `
+    <tr>
+      <td>${esc(item.curso)}</td>
+      <td>${esc(item.produto)}</td>
+      ${fornecedores.map(f => {
+        const valor = item.valoresPorFornecedor[f.id];
+        if (valor === undefined) return '<td class="valor-ausente">—</td>';
+        const classe = f.id === item.vencedorFornecedorId ? 'valor-vencedor' : '';
+        return `<td class="${classe}">${fmtMoeda(valor)}</td>`;
+      }).join('')}
+    </tr>
+  `).join('');
 }
 
 function esc(str) {
