@@ -29,9 +29,14 @@
                 <div class="page-header">
                     <div>
                         <h1 class="page-title">Pacientes</h1>
-                        <p class="page-subtitle">Ambulatório · todos os cadastros — busque por nome, município ou nascimento</p>
+                        <p class="page-subtitle">Ambulatório · todos os cadastros — busque por nome, município ou enfermeiro(a)</p>
                     </div>
                     <div class="page-header-actions">
+                        <button class="btn-import action-execute hidden" id="btn-solicitacoes">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                            Solicitações
+                            <span id="solicitacoes-badge" class="hidden"></span>
+                        </button>
                         <button class="btn-import action-execute" id="btn-gerenciar-enfermeiros">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             Enfermeiros
@@ -50,7 +55,7 @@
                 <div class="panel pac-lista-panel">
                     <div class="pac-busca">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" id="busca-paciente" placeholder="Buscar por nome, município ou data de nascimento (ex.: 12/05/1990)..." autocomplete="off">
+                        <input type="text" id="busca-paciente" placeholder="Buscar por nome, município ou enfermeiro(a)..." autocomplete="off">
                     </div>
 
                     <div class="pac-lista-tabela-wrap">
@@ -59,9 +64,9 @@
                                 <tr>
                                     <th>Nome</th>
                                     <th>Tipo de ferida</th>
-                                    <th>Nascimento</th>
                                     <th>Município</th>
                                     <th>Enfermeiro(a)</th>
+                                    <th>Atendimentos</th>
                                     <th>Cadastrado em</th>
                                     <th>Ações</th>
                                 </tr>
@@ -74,6 +79,18 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Modal: Solicitações de exclusão pendentes -->
+    <div id="modal-solicitacoes" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Solicitações de exclusão</h2>
+            <p class="hint">Pedidos de exclusão feitos por outros enfermeiros. Aprovar exclui de fato; recusar mantém tudo como está.</p>
+            <div id="solicitacoes-lista"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" id="btn-fechar-solicitacoes">Fechar</button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal: Gerenciar enfermeiros -->
