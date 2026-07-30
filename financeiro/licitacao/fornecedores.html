@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fornecedores - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="fornecedores-root">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Fornecedores</h1>
+                        <p class="page-subtitle">Cadastro de empresas e consulta das cotações de cada uma</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/licitacao/index.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card action-execute" style="margin-bottom:1.5rem;">
+                    <h3 class="card-secao-titulo">Novo fornecedor</h3>
+                    <form id="form-fornecedor" class="form-inline" style="padding: 0 1.5rem 1.25rem;">
+                        <input type="text" id="fornecedor-nome" placeholder="Nome do fornecedor" required>
+                        <button type="submit" class="btn-primary">Adicionar</button>
+                    </form>
+                </div>
+
+                <div class="card" style="margin-bottom:1.5rem;">
+                    <h3 class="card-secao-titulo">Empresas cadastradas</h3>
+                    <div class="tabela-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Itens cotados</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fornecedores-tbody">
+                                <tr><td colspan="3" class="tabela-msg">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card hidden" id="fornecedor-detalhe">
+                    <h3 class="card-secao-titulo" id="fornecedor-detalhe-titulo">Cotações</h3>
+                    <div class="tabela-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Curso</th>
+                                    <th>Produto</th>
+                                    <th>Qtd/Und</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fornecedor-detalhe-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Editar produto/quantidade/valor a partir do detalhe do fornecedor -->
+    <div id="modal-editar-item" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Editar item</h2>
+            <p class="modal-subtitle">Produto e quantidade valem pra todos os fornecedores desse item; o valor é só desta cotação.</p>
+            <form id="form-editar-item">
+                <input type="hidden" id="edit-item-id">
+                <div class="form-group">
+                    <label>Produto</label>
+                    <input type="text" id="edit-item-produto" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Quantidade</label>
+                        <input type="number" step="0.01" min="0" id="edit-item-quantidade" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Valor cotado (nesta empresa)</label>
+                        <input type="number" step="0.01" min="0" id="edit-item-valor" required>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-editar-item">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-editar-item">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/licitacao/app.js"></script>
+</body>
+</html>
