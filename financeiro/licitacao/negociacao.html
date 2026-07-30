@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Negociação - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="negociacao-root">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Negociação por Fornecedor</h1>
+                        <p class="page-subtitle">O que a empresa está ganhando e os itens que perdeu, para comparar com o valor da concorrência</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/licitacao/relatorio.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select class="select-filter" id="negociacao-curso-select">
+                        <option value="">Todos os cursos</option>
+                    </select>
+                    <select class="select-filter" id="negociacao-fornecedor-select">
+                        <option value="">Selecione um fornecedor...</option>
+                    </select>
+                </div>
+
+                <div id="negociacao-vazio" class="card">
+                    <p class="tabela-msg">Selecione um fornecedor para ver o que ele ganhou e perdeu.</p>
+                </div>
+
+                <div id="negociacao-conteudo" class="hidden">
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Total ganhando com essa empresa</div>
+                            <div class="kpi-value" id="neg-kpi-total">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Itens ganhos</div>
+                            <div class="kpi-value" id="neg-kpi-ganhos">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Itens perdidos</div>
+                            <div class="kpi-value" id="neg-kpi-perdidos">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Quanto ela ganharia a mais se igualar os itens perdidos</div>
+                            <div class="kpi-value" id="neg-kpi-potencial">—</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom:1.5rem;">
+                        <h3 class="card-secao-titulo">Itens que a empresa está ganhando</h3>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Curso</th>
+                                        <th>Produto</th>
+                                        <th>Qtd/Und</th>
+                                        <th>Valor</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="neg-tbody-ganhos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="card-secao-titulo">Itens que a empresa perdeu — oportunidade de negociação</h3>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Curso</th>
+                                        <th>Produto</th>
+                                        <th>Qtd/Und</th>
+                                        <th>Valor dela</th>
+                                        <th>Quem ganhou</th>
+                                        <th>Valor do vencedor</th>
+                                        <th>Diferença</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="neg-tbody-perdidos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/licitacao/app.js"></script>
+</body>
+</html>

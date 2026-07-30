@@ -135,6 +135,10 @@ async function initApp(user, role) {
     initPaginaLicitacao();
   } else if (document.getElementById('relatorio-root')) {
     initPaginaRelatorio();
+  } else if (document.getElementById('negociacao-root')) {
+    initPaginaNegociacao();
+  } else if (document.getElementById('fornecedores-root')) {
+    initPaginaFornecedores();
   }
 }
 
@@ -148,7 +152,6 @@ async function initPaginaLicitacao() {
     selectCurso.innerHTML = '<option value="">Selecione um curso...</option>' +
       cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
-  setupModalFornecedores();
   setupModalItem();
   setupModalCotacoes();
   setupModalSemestre();
@@ -234,14 +237,21 @@ function setupModalSemestre() {
   });
 }
 
-// Mantém o link "Relatório" sempre apontando pro curso selecionado na tela,
-// pra abrir o relatório já filtrado em vez de "Todos os cursos".
+// Mantém os links "Relatório" e "Negociação" sempre apontando pro curso
+// selecionado na tela, pra abrir já filtrados em vez de "Todos os cursos".
 function atualizarLinkRelatorio() {
-  const link = document.getElementById('link-relatorio');
-  if (!link) return;
-  link.href = cursoSelecionadoId
-    ? `/financeiro/licitacao/relatorio.html?cursoId=${encodeURIComponent(cursoSelecionadoId)}`
-    : '/financeiro/licitacao/relatorio.html';
+  const linkRelatorio = document.getElementById('link-relatorio');
+  if (linkRelatorio) {
+    linkRelatorio.href = cursoSelecionadoId
+      ? `/financeiro/licitacao/relatorio.html?cursoId=${encodeURIComponent(cursoSelecionadoId)}`
+      : '/financeiro/licitacao/relatorio.html';
+  }
+  const linkNegociacao = document.getElementById('link-negociacao');
+  if (linkNegociacao) {
+    linkNegociacao.href = cursoSelecionadoId
+      ? `/financeiro/licitacao/negociacao.html?cursoId=${encodeURIComponent(cursoSelecionadoId)}`
+      : '/financeiro/licitacao/negociacao.html';
+  }
 }
 
 // Só busca e guarda a lista de cursos — cada tela (index.html/relatorio.html)
@@ -423,66 +433,14 @@ function abrirModalItem(id) {
 // ==========================================
 // MODAL: FORNECEDORES
 // ==========================================
-function setupModalFornecedores() {
-  const modal = document.getElementById('modal-fornecedores');
-  if (!modal) return;
-
-  document.getElementById('btn-fornecedores')?.addEventListener('click', async () => {
-    modal.classList.remove('hidden');
-    await carregarFornecedores();
-    renderListaFornecedores();
-  });
-  document.getElementById('btn-fechar-fornecedores')?.addEventListener('click', () => modal.classList.add('hidden'));
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
-
-  document.getElementById('form-fornecedor')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = document.getElementById('fornecedor-nome');
-    const nome = input.value.trim();
-    if (!nome) return;
-    try {
-      await apiFetch('/financeiro/fornecedores', { method: 'POST', body: JSON.stringify({ nome }) });
-      input.value = '';
-      await carregarFornecedores();
-      renderListaFornecedores();
-      showToast('Fornecedor cadastrado');
-    } catch (err) {
-      showToast('Erro ao cadastrar: ' + err.message, 'error');
-    }
-  });
-}
-
+// Lista global de fornecedores cadastrados — usada aqui, na tela de
+// Fornecedores e no modal de Cotações (pra montar uma linha por empresa).
 async function carregarFornecedores() {
   try {
     fornecedores = await apiFetch('/financeiro/fornecedores');
   } catch (err) {
     showToast('Erro ao carregar fornecedores: ' + err.message, 'error');
   }
-}
-
-function renderListaFornecedores() {
-  const lista = document.getElementById('lista-fornecedores');
-  if (!lista) return;
-  if (!fornecedores.length) {
-    lista.innerHTML = '<p class="tabela-msg">Nenhum fornecedor cadastrado ainda.</p>';
-    return;
-  }
-  lista.innerHTML = fornecedores.map(f => `
-    <div class="fornecedor-item">
-      <span>${esc(f.nome)}</span>
-      <button type="button" class="btn-icon action-execute" data-id="${f.id}" data-nome="${esc(f.nome)}" title="Excluir">🗑️</button>
-    </div>`).join('');
-
-  lista.querySelectorAll('button').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm(`Excluir o fornecedor "${btn.dataset.nome}"? As cotações já lançadas com ele nos itens não serão apagadas automaticamente.`)) return;
-    try {
-      await apiFetch(`/financeiro/fornecedores/${btn.dataset.id}`, { method: 'DELETE' });
-      await carregarFornecedores();
-      renderListaFornecedores();
-    } catch (err) {
-      showToast('Erro ao excluir: ' + err.message, 'error');
-    }
-  }));
 }
 
 // ==========================================
@@ -586,9 +544,17 @@ async function initPaginaRelatorio() {
   const selectPeriodicidade = document.getElementById('relatorio-periodicidade-select');
   const selectCotacoes = document.getElementById('relatorio-cotacoes-select');
   const cursoLabel = document.getElementById('print-curso-label');
+  const linkNegociacao = document.getElementById('link-negociacao');
   // Se veio de "Licitação" com um curso já selecionado (?cursoId=...), abre o
   // relatório já filtrado nele em vez de "Todos os cursos".
   const cursoIdInicial = new URLSearchParams(window.location.search).get('cursoId') || '';
+
+  function atualizarLinkNegociacao() {
+    if (!linkNegociacao) return;
+    linkNegociacao.href = select?.value
+      ? `/financeiro/licitacao/negociacao.html?cursoId=${encodeURIComponent(select.value)}`
+      : '/financeiro/licitacao/negociacao.html';
+  }
 
   function atualizarLabelImpressao() {
     if (!cursoLabel) return;
@@ -600,16 +566,31 @@ async function initPaginaRelatorio() {
     cursoLabel.textContent = partes.join(' — ');
   }
 
+  // O filtro só deve listar curso que já tem item COM cotação de fornecedor
+  // registrada — item cadastrado sem nenhum preço ainda não dá pra comparar
+  // nem negociar, então não entra na lista.
+  let cursosComItens = [];
+  try {
+    const basedata = await apiFetch('/financeiro/relatorio');
+    const mapaCursos = new Map();
+    basedata.comparativo.itens.forEach(i => { if (!mapaCursos.has(i.cursoId)) mapaCursos.set(i.cursoId, i.curso); });
+    cursosComItens = Array.from(mapaCursos, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    showToast('Erro ao carregar cursos do relatório: ' + err.message, 'error');
+  }
+
   if (select) {
-    select.innerHTML = '<option value="">Todos os cursos</option>' + cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if (cursoIdInicial && cursos.some(c => c.id === cursoIdInicial)) {
+    select.innerHTML = '<option value="">Todos os cursos</option>' + cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    if (cursoIdInicial && cursosComItens.some(c => c.id === cursoIdInicial)) {
       select.value = cursoIdInicial;
     }
     select.addEventListener('change', () => {
       atualizarLabelImpressao();
+      atualizarLinkNegociacao();
       relatorioEmAndamento = carregarRelatorio();
     });
   }
+  atualizarLinkNegociacao();
 
   selectPeriodicidade?.addEventListener('change', () => {
     atualizarLabelImpressao();
@@ -647,6 +628,8 @@ async function initPaginaRelatorio() {
   window.addEventListener('beforeprint', () => {
     [chartCurso, chartRanking, chartStatus].forEach(c => c && c.resize());
   });
+
+  window.addEventListener('resize', atualizarIndicadorScrollComparativo);
 
   relatorioEmAndamento = carregarRelatorio();
   await relatorioEmAndamento;
@@ -727,12 +710,14 @@ function renderComparativo(comparativo) {
   if (!itens.length) {
     thead.innerHTML = '';
     tbody.innerHTML = '<tr><td class="tabela-msg">Nenhum item com cotação para os filtros selecionados.</td></tr>';
+    atualizarIndicadorScrollComparativo();
     return;
   }
 
   thead.innerHTML = `<tr>
     <th>Curso</th>
     <th>Produto</th>
+    <th>Qtd/Und</th>
     ${fornecedores.map(f => `<th>${esc(f.nome)}</th>`).join('')}
   </tr>`;
 
@@ -740,6 +725,7 @@ function renderComparativo(comparativo) {
     <tr>
       <td>${esc(item.curso)}</td>
       <td>${esc(item.produto)}</td>
+      <td>${esc(item.quantidade)}${item.unidade ? ' ' + esc(item.unidade) : ''}</td>
       ${fornecedores.map(f => {
         const valor = item.valoresPorFornecedor[f.id];
         if (valor === undefined) return '<td class="valor-ausente">—</td>';
@@ -748,10 +734,343 @@ function renderComparativo(comparativo) {
       }).join('')}
     </tr>
   `).join('');
+
+  atualizarIndicadorScrollComparativo();
+}
+
+// Só mostra a dica/sombra de rolagem quando a tabela realmente transborda a
+// tela — sem isso, apareceria até quando cabem todos os fornecedores.
+function atualizarIndicadorScrollComparativo() {
+  const wrap = document.getElementById('comparativo-scroll-wrap');
+  const fade = document.getElementById('comparativo-scroll-fade');
+  const dica = document.getElementById('comparativo-scroll-dica');
+  if (!wrap || !fade || !dica) return;
+
+  const temOverflow = wrap.scrollWidth > wrap.clientWidth + 4;
+  dica.classList.toggle('hidden', !temOverflow);
+
+  const atualizarFade = () => {
+    const faltaRolar = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft;
+    fade.classList.toggle('hidden', !temOverflow || faltaRolar < 4);
+  };
+  atualizarFade();
+  wrap.onscroll = atualizarFade;
 }
 
 function esc(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+// ==========================================
+// TELA DE NEGOCIAÇÃO (negociacao.html)
+// ==========================================
+// Por fornecedor: os itens que ele ganhou (pra ver quanto a Fatec gasta com
+// ele) e os que perdeu (pra levar pra mesa de negociação — "o mesmo item na
+// outra empresa é tanto"). Reaproveita o mesmo /financeiro/relatorio que já
+// traz valoresPorFornecedor de cada item, então não precisou de rota nova.
+let negociacaoComparativo = { fornecedores: [], itens: [] };
+
+async function initPaginaNegociacao() {
+  await carregarCursos();
+  const selectCurso = document.getElementById('negociacao-curso-select');
+  const selectFornecedor = document.getElementById('negociacao-fornecedor-select');
+  const params = new URLSearchParams(window.location.search);
+  const cursoIdInicial = params.get('cursoId') || '';
+  const fornecedorIdInicial = params.get('fornecedorId') || '';
+
+  // Só lista curso que já tem item COM cotação de fornecedor registrada —
+  // mesmo critério usado no filtro do relatório.
+  let cursosComItens = [];
+  try {
+    const basedata = await apiFetch('/financeiro/relatorio');
+    const mapaCursos = new Map();
+    basedata.comparativo.itens.forEach(i => { if (!mapaCursos.has(i.cursoId)) mapaCursos.set(i.cursoId, i.curso); });
+    cursosComItens = Array.from(mapaCursos, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    showToast('Erro ao carregar cursos: ' + err.message, 'error');
+  }
+
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    if (cursoIdInicial && cursosComItens.some(c => c.id === cursoIdInicial)) {
+      selectCurso.value = cursoIdInicial;
+    }
+    selectCurso.addEventListener('change', () => carregarNegociacao());
+  }
+
+  selectFornecedor?.addEventListener('change', () => renderNegociacao(selectFornecedor.value));
+
+  await carregarNegociacao(fornecedorIdInicial);
+}
+
+// fornecedorIdForcado só é usado na primeira carga, quando a tela abre a
+// partir do link "Ver itens" do modal de Fornecedores (?fornecedorId=...).
+async function carregarNegociacao(fornecedorIdForcado = '') {
+  const selectFornecedor = document.getElementById('negociacao-fornecedor-select');
+  const fornecedorSelecionado = fornecedorIdForcado || selectFornecedor?.value || '';
+  try {
+    const cursoId = document.getElementById('negociacao-curso-select')?.value || '';
+    const qs = cursoId ? `?cursoId=${encodeURIComponent(cursoId)}` : '';
+    const dados = await apiFetch(`/financeiro/relatorio${qs}`);
+    negociacaoComparativo = dados.comparativo || { fornecedores: [], itens: [] };
+
+    if (selectFornecedor) {
+      selectFornecedor.innerHTML = '<option value="">Selecione um fornecedor...</option>' +
+        negociacaoComparativo.fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+      if (fornecedorSelecionado && negociacaoComparativo.fornecedores.some(f => f.id === fornecedorSelecionado)) {
+        selectFornecedor.value = fornecedorSelecionado;
+      }
+    }
+    renderNegociacao(selectFornecedor?.value || '');
+  } catch (err) {
+    showToast('Erro ao carregar negociação: ' + err.message, 'error');
+  }
+}
+
+function renderNegociacao(fornecedorId) {
+  const vazio = document.getElementById('negociacao-vazio');
+  const conteudo = document.getElementById('negociacao-conteudo');
+  if (!vazio || !conteudo) return;
+
+  if (!fornecedorId) {
+    vazio.classList.remove('hidden');
+    conteudo.classList.add('hidden');
+    return;
+  }
+  vazio.classList.add('hidden');
+  conteudo.classList.remove('hidden');
+
+  const { fornecedores, itens } = negociacaoComparativo;
+  const nomeFornecedor = (id) => fornecedores.find(f => f.id === id)?.nome || '—';
+
+  const ganhos = itens.filter(i => i.vencedorFornecedorId === fornecedorId);
+  const perdidos = itens.filter(i => i.valoresPorFornecedor[fornecedorId] !== undefined && i.vencedorFornecedorId !== fornecedorId);
+
+  const totalGanhando = ganhos.reduce((soma, i) => soma + (i.valoresPorFornecedor[fornecedorId] || 0), 0);
+  // Não é "economia" pro Fatec — nos itens perdidos o Fatec já paga o menor
+  // preço (do vencedor). É quanto a PRÓPRIA EMPRESA passaria a faturar a mais
+  // com o Fatec se topasse igualar o preço do vencedor nesses itens, ou seja,
+  // o argumento pra oferecer na negociação.
+  const potencialAdicional = perdidos.reduce((soma, i) => soma + (i.valoresPorFornecedor[i.vencedorFornecedorId] || 0), 0);
+
+  document.getElementById('neg-kpi-total').textContent = fmtMoeda(totalGanhando);
+  document.getElementById('neg-kpi-ganhos').textContent = ganhos.length;
+  document.getElementById('neg-kpi-perdidos').textContent = perdidos.length;
+  document.getElementById('neg-kpi-potencial').textContent = fmtMoeda(potencialAdicional);
+
+  const tbodyGanhos = document.getElementById('neg-tbody-ganhos');
+  tbodyGanhos.innerHTML = ganhos.length ? ganhos.map(i => `
+    <tr>
+      <td>${esc(i.curso)}</td>
+      <td>${esc(i.produto)}</td>
+      <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
+      <td>${fmtMoeda(i.valoresPorFornecedor[fornecedorId])}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" class="tabela-msg">Essa empresa não está ganhando nenhum item nos filtros atuais.</td></tr>';
+
+  const tbodyPerdidos = document.getElementById('neg-tbody-perdidos');
+  tbodyPerdidos.innerHTML = perdidos.length ? perdidos.map(i => {
+    const valorDela = i.valoresPorFornecedor[fornecedorId] || 0;
+    const valorVencedor = i.valoresPorFornecedor[i.vencedorFornecedorId] || 0;
+    const diferenca = valorDela - valorVencedor;
+    return `
+    <tr>
+      <td>${esc(i.curso)}</td>
+      <td>${esc(i.produto)}</td>
+      <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
+      <td>${fmtMoeda(valorDela)}</td>
+      <td>${esc(nomeFornecedor(i.vencedorFornecedorId))}</td>
+      <td>${fmtMoeda(valorVencedor)}</td>
+      <td class="diferenca-alta">+${fmtMoeda(diferenca)}</td>
+    </tr>
+  `;
+  }).join('') : '<tr><td colspan="7" class="tabela-msg">Essa empresa não perdeu nenhum item nos filtros atuais.</td></tr>';
+}
+
+// ==========================================
+// TELA DE FORNECEDORES (fornecedores.html)
+// ==========================================
+// Cadastro/exclusão de empresas + consulta de todas as cotações de uma
+// empresa específica (todos os cursos de uma vez), com edição rápida de
+// produto/quantidade/valor direto dali — sem precisar ir na tela principal
+// procurar o curso certo pra achar o mesmo item.
+let fornecedorItensGeral = []; // itens com cotação de qualquer fornecedor, de todos os cursos
+let fornecedorDetalheAbertoId = null;
+let itemEmEdicaoFornecedor = null; // { item, fornecedorId } do item aberto no modal de edição
+
+async function initPaginaFornecedores() {
+  await carregarFornecedores();
+  await recarregarItensGeraisFornecedores();
+  renderTabelaFornecedores();
+  setupModalEditarItemFornecedor();
+
+  document.getElementById('form-fornecedor')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('fornecedor-nome');
+    const nome = input.value.trim();
+    if (!nome) return;
+    try {
+      await apiFetch('/financeiro/fornecedores', { method: 'POST', body: JSON.stringify({ nome }) });
+      input.value = '';
+      await carregarFornecedores();
+      renderTabelaFornecedores();
+      showToast('Fornecedor cadastrado');
+    } catch (err) {
+      showToast('Erro ao cadastrar: ' + err.message, 'error');
+    }
+  });
+}
+
+async function recarregarItensGeraisFornecedores() {
+  try {
+    const basedata = await apiFetch('/financeiro/relatorio');
+    fornecedorItensGeral = basedata.comparativo.itens || [];
+  } catch (err) {
+    showToast('Erro ao carregar cotações: ' + err.message, 'error');
+  }
+}
+
+function renderTabelaFornecedores() {
+  const tbody = document.getElementById('fornecedores-tbody');
+  if (!tbody) return;
+  if (!fornecedores.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="tabela-msg">Nenhum fornecedor cadastrado ainda.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = fornecedores.map(f => {
+    const qtdItens = fornecedorItensGeral.filter(i => i.valoresPorFornecedor[f.id] !== undefined).length;
+    return `
+    <tr>
+      <td>${esc(f.nome)}</td>
+      <td>${qtdItens}</td>
+      <td class="acoes-col">
+        <button type="button" class="btn-icon" data-ver="${f.id}" data-nome="${esc(f.nome)}" title="Ver cotações">📋</button>
+        <button type="button" class="btn-icon action-execute" data-excluir="${f.id}" data-nome="${esc(f.nome)}" title="Excluir">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-ver]').forEach(btn => btn.addEventListener('click', () => {
+    abrirDetalheFornecedor(btn.dataset.ver, btn.dataset.nome);
+  }));
+  tbody.querySelectorAll('[data-excluir]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm(`Excluir o fornecedor "${btn.dataset.nome}"? As cotações já lançadas com ele nos itens não serão apagadas automaticamente.`)) return;
+    try {
+      await apiFetch(`/financeiro/fornecedores/${btn.dataset.excluir}`, { method: 'DELETE' });
+      if (fornecedorDetalheAbertoId === btn.dataset.excluir) {
+        document.getElementById('fornecedor-detalhe')?.classList.add('hidden');
+        fornecedorDetalheAbertoId = null;
+      }
+      await carregarFornecedores();
+      renderTabelaFornecedores();
+      showToast('Fornecedor excluído');
+    } catch (err) {
+      showToast('Erro ao excluir: ' + err.message, 'error');
+    }
+  }));
+}
+
+// Mostra todos os itens com cotação dessa empresa, em qualquer curso — curso
+// sem nenhuma cotação dela simplesmente não gera linha, sem poluir a tela.
+function abrirDetalheFornecedor(fornecedorId, nome) {
+  fornecedorDetalheAbertoId = fornecedorId;
+  const painel = document.getElementById('fornecedor-detalhe');
+  const titulo = document.getElementById('fornecedor-detalhe-titulo');
+  const tbody = document.getElementById('fornecedor-detalhe-tbody');
+  if (!painel || !titulo || !tbody) return;
+
+  const itensDela = fornecedorItensGeral.filter(i => i.valoresPorFornecedor[fornecedorId] !== undefined);
+  titulo.textContent = `Cotações — ${nome}`;
+
+  tbody.innerHTML = itensDela.length ? itensDela.map(i => {
+    const venceu = i.vencedorFornecedorId === fornecedorId;
+    return `
+    <tr>
+      <td>${esc(i.curso)}</td>
+      <td>${esc(i.produto)}</td>
+      <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
+      <td>${fmtMoeda(i.valoresPorFornecedor[fornecedorId])}</td>
+      <td><span class="status-badge ${venceu ? 'status-venceu' : 'status-perdeu'}">${venceu ? 'Venceu' : 'Não venceu'}</span></td>
+      <td><button type="button" class="btn-icon action-execute" data-editar-item="${i.itemId}" title="Editar produto/quantidade/valor">✏️</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="tabela-msg">Essa empresa ainda não tem nenhuma cotação registrada.</td></tr>';
+
+  tbody.querySelectorAll('[data-editar-item]').forEach(btn => btn.addEventListener('click', () => {
+    const item = itensDela.find(i => i.itemId === btn.dataset.editarItem);
+    if (item) abrirModalEditarItemFornecedor(item, fornecedorId);
+  }));
+
+  painel.classList.remove('hidden');
+  painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function setupModalEditarItemFornecedor() {
+  const modal = document.getElementById('modal-editar-item');
+  if (!modal) return;
+
+  document.getElementById('btn-cancelar-editar-item')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('form-editar-item')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!itemEmEdicaoFornecedor) return;
+    const { item, fornecedorId } = itemEmEdicaoFornecedor;
+
+    const produto = document.getElementById('edit-item-produto').value.trim();
+    const quantidade = parseFloat(document.getElementById('edit-item-quantidade').value);
+    const novoValorTotal = parseFloat(document.getElementById('edit-item-valor').value);
+    if (!produto || isNaN(quantidade) || quantidade <= 0 || isNaN(novoValorTotal) || novoValorTotal < 0) {
+      showToast('Preencha produto, quantidade e valor corretamente.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-salvar-editar-item');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+    try {
+      // 1) Produto/quantidade valem pro item inteiro (todos os fornecedores).
+      await apiFetch(`/financeiro/itens/${item.itemId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ produto, quantidade })
+      });
+      // 2) Reconstrói a lista de cotações a partir do que já tínhamos: o valor
+      // unitário de cada fornecedor é intrínseco a ele (valorTotal antigo /
+      // quantidade antiga) e não muda; só o valor desta empresa é recalculado
+      // a partir do novo total ÷ nova quantidade. O servidor recalcula o
+      // valorTotal de todo mundo usando a quantidade já atualizada no passo 1.
+      const cotacoes = Object.entries(item.valoresPorFornecedor).map(([fid, valorTotalAntigo]) => ({
+        fornecedorId: fid,
+        valorUnitario: fid === fornecedorId ? (novoValorTotal / quantidade) : (valorTotalAntigo / item.quantidade)
+      }));
+      await apiFetch(`/financeiro/itens/${item.itemId}/cotacoes`, {
+        method: 'PUT',
+        body: JSON.stringify({ cotacoes })
+      });
+
+      modal.classList.add('hidden');
+      showToast('Item atualizado');
+
+      await recarregarItensGeraisFornecedores();
+      renderTabelaFornecedores();
+      const nomeAtual = fornecedores.find(f => f.id === fornecedorDetalheAbertoId)?.nome || '';
+      if (fornecedorDetalheAbertoId) abrirDetalheFornecedor(fornecedorDetalheAbertoId, nomeAtual);
+    } catch (err) {
+      showToast('Erro ao salvar: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Salvar';
+    }
+  });
+}
+
+function abrirModalEditarItemFornecedor(item, fornecedorId) {
+  itemEmEdicaoFornecedor = { item, fornecedorId };
+  document.getElementById('edit-item-id').value = item.itemId;
+  document.getElementById('edit-item-produto').value = item.produto;
+  document.getElementById('edit-item-quantidade').value = item.quantidade;
+  document.getElementById('edit-item-valor').value = item.valoresPorFornecedor[fornecedorId];
+  document.getElementById('modal-editar-item').classList.remove('hidden');
 }
