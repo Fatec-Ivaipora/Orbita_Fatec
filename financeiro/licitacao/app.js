@@ -603,6 +603,17 @@ async function initPaginaRelatorio() {
 
   atualizarLabelImpressao();
 
+  selectPeriodicidade?.addEventListener('change', () => {
+    atualizarLabelImpressao();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+  selectCotacoes?.addEventListener('change', () => {
+    atualizarLabelImpressao();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+
+  atualizarLabelImpressao();
+
   const dataEmissao = document.getElementById('print-data-emissao');
   if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
 

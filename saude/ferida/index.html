@@ -114,13 +114,23 @@
                                 <span>Posterior</span>
                             </div>
                             <div class="figbox">
-                                <svg viewBox="0 0 120 150" width="120" height="150" data-region="Pés" aria-label="Pés">
-                                    <!-- Pé esquerdo (E) — vista de cima, dedão voltado ao centro, dedos no contorno -->
-                                    <path class="sil" d="M54 32 C56 22 55 12 51 9 C47 6 44 10 44 18 C43 11 42 9 40 9.5 C38 10 37 12 37 18 C36 12 35 11 33.5 12 C32 13 31 15 31 19.5 C30 14 29.5 13 28 14.5 C26.5 16 26 18 26 21.5 C25.5 15.5 24.5 16 24 18 C23.5 20 23.5 23 24.5 25 C22.5 33 22.5 44 24 55 C25 66 26 76 27.5 85 C29 96 33 103 41 103 C49 103 52 96 52 87 C52 77 50.5 69 49.5 62 C48.5 52 51 41 54 32 Z"/>
-                                    <!-- Pé direito (D) — vista de cima, dedão voltado ao centro, dedos no contorno -->
-                                    <path class="sil" d="M66 32 C64 22 65 12 69 9 C73 6 76 10 76 18 C77 11 78 9 80 9.5 C82 10 83 12 83 18 C84 12 85 11 86.5 12 C88 13 89 15 89 19.5 C90 14 90.5 13 92 14.5 C93.5 16 94 18 94 21.5 C94.5 15.5 95.5 16 96 18 C96.5 20 96.5 23 95.5 25 C97.5 33 97.5 44 96 55 C95 66 94 76 92.5 85 C91 96 87 103 79 103 C71 103 68 96 68 87 C68 77 69.5 69 70.5 62 C71.5 52 69 41 66 32 Z"/>
-                                    <text x="40" y="122" class="pinnum foot-label">E</text>
-                                    <text x="80" y="122" class="pinnum foot-label">D</text>
+                                <svg viewBox="0 0 120 150" width="120" height="150" data-region="Pés" aria-label="Pés (planta/sola)">
+                                    <!-- Pé esquerdo (E) — planta do pé (sola), calcanhar embaixo, dedão do lado direito (medial, voltado ao centro) -->
+                                    <path class="sil" d="M33 18 C20 18 12 30 10 50 C8 70 9 92 13 110 C16 124 24 134 33 134 C44 134 52 122 53 104 C54 84 53 62 55 44 C56 30 48 18 33 18 Z"/>
+                                    <ellipse class="sil" cx="14" cy="14" rx="4.5" ry="6.5"/>
+                                    <ellipse class="sil" cx="22" cy="10" rx="5" ry="7.5"/>
+                                    <ellipse class="sil" cx="31" cy="8" rx="5.5" ry="8"/>
+                                    <ellipse class="sil" cx="40" cy="9" rx="6" ry="8.5"/>
+                                    <ellipse class="sil" cx="49" cy="13" rx="7" ry="10"/>
+                                    <!-- Pé direito (D) — planta do pé (sola), calcanhar embaixo, dedão do lado esquerdo (medial, voltado ao centro) -->
+                                    <path class="sil" d="M87 18 C100 18 108 30 110 50 C112 70 111 92 107 110 C104 124 96 134 87 134 C76 134 68 122 67 104 C66 84 67 62 65 44 C64 30 72 18 87 18 Z"/>
+                                    <ellipse class="sil" cx="71" cy="13" rx="7" ry="10"/>
+                                    <ellipse class="sil" cx="80" cy="9" rx="6" ry="8.5"/>
+                                    <ellipse class="sil" cx="89" cy="8" rx="5.5" ry="8"/>
+                                    <ellipse class="sil" cx="98" cy="10" rx="5" ry="7.5"/>
+                                    <ellipse class="sil" cx="106" cy="14" rx="4.5" ry="6.5"/>
+                                    <text x="30" y="147" class="pinnum foot-label">E</text>
+                                    <text x="84" y="147" class="pinnum foot-label">D</text>
                                     <g class="pins"></g>
                                 </svg>
                                 <span>Pés</span>
@@ -135,12 +145,9 @@
                     <div>
                         <section class="panel">
                             <div class="fieldset">
-                                <div class="flabel"><span class="n"></span>Dimensões</div>
-                                <div class="dims">
-                                    <div class="u" data-u="cm"><label>Comprimento</label><input type="text" inputmode="decimal" placeholder="0,0" id="dim-comprimento"></div>
-                                    <div class="u" data-u="cm"><label>Largura</label><input type="text" inputmode="decimal" placeholder="0,0" id="dim-largura"></div>
-                                    <div class="u" data-u="cm"><label>Profundidade</label><input type="text" inputmode="decimal" placeholder="0,0" id="dim-profundidade"></div>
-                                    <div class="u" data-u="cm"><label>Descolamento</label><input type="text" inputmode="decimal" placeholder="0,0" id="dim-descolamento"></div>
+                                <div class="flabel"><span class="n"></span>Dimensões (por ferida marcada no boneco)</div>
+                                <div id="dims-por-ferida">
+                                    <p class="hint" id="dims-vazio">Marque uma ferida no boneco pra informar as dimensões dela.</p>
                                 </div>
                             </div>
 
@@ -324,6 +331,12 @@
                             <span>Data do atendimento</span>
                             <input type="date" id="data-atendimento-manual">
                         </label>
+                        <label class="data-atendimento-field" title="Enfermeiro(a) responsável só por este atendimento — não altera o cadastro do paciente">
+                            <span>Enfermeiro(a) neste atendimento</span>
+                            <select id="atendimento-enfermeiro">
+                                <option value="">Não informado</option>
+                            </select>
+                        </label>
                     </div>
                     <div class="btns action-execute">
                         <button class="btn ghost" id="btn-limpar">Limpar</button>
@@ -451,6 +464,7 @@
             <div id="detalhe-atendimento" class="detalhe-atendimento"></div>
             <div class="modal-actions">
                 <button type="button" class="btn ghost" id="btn-fechar-atendimento">Fechar</button>
+                <button type="button" class="btn primary action-execute" id="btn-editar-atendimento">Editar</button>
             </div>
         </div>
     </div>

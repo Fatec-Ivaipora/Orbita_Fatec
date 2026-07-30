@@ -16,6 +16,11 @@ let userLevel = 1;
 let appInitialized = false;
 let initializedRole = null;
 
+// Enfermeira-chefe do ambulatório — só ela (ou o ADM) edita cadastro/atendimento
+// já salvos e exclui de fato; os demais só solicitam a exclusão.
+const UID_AMANDA = 'yvbrbHvSPFMXyA3nLwB68qjch8A2';
+const souAmandaOuAdmin = () => currentUser?.uid === UID_AMANDA || currentRole === 'adm_l1';
+
 // O caminho rápido de auth (getCachedAuth) usa um token salvo em localStorage
 // que pode estar vencido — ele não se autorrenova como o objeto real do
 // Firebase. apiFetch espera a confirmação real (onAuthStateChanged) antes de
@@ -33,6 +38,8 @@ let pinCount = 0;
 let dirty = false;
 let iaImagens = { frente: null, verso: null };
 let iaDados = null;
+let atendimentoEmEdicaoId = null; // preenchido ao editar um atendimento do histórico (PUT em vez de POST)
+let atendimentoDetalheAtual = null; // atendimento atualmente aberto no modal de detalhe do histórico
 
 async function apiFetch(endpoint, options = {}) {
   if (!authConfirmado) await authConfirmadoPromise;
@@ -42,7 +49,7 @@ async function apiFetch(endpoint, options = {}) {
     'Authorization': `Bearer ${token}`,
     ...(options.headers || {})
   };
-  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, cache: 'no-store' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Erro na API: ${res.status}`);
@@ -168,20 +175,35 @@ async function initApp(user, role) {
 // TELA "PACIENTES" (pacientes.html) — lista com busca no servidor
 // ==========================================
 let buscaPacienteTimer = null;
+let pacientesListaAtual = [];
 
-function initPaginaPacientes() {
+async function initPaginaPacientes() {
   const input = document.getElementById('busca-paciente');
+  try {
+    await carregarEnfermeiros();
+  } catch (err) { /* segue com a lista vazia se falhar */ }
   buscarEExibirPacientes('');
   input?.addEventListener('input', () => {
     clearTimeout(buscaPacienteTimer);
     buscaPacienteTimer = setTimeout(() => buscarEExibirPacientes(input.value.trim()), 300);
   });
   setupEnfermeirosModal();
+  if (souAmandaOuAdmin()) {
+    document.getElementById('btn-solicitacoes')?.classList.remove('hidden');
+    setupSolicitacoesModal();
+    atualizarBadgeSolicitacoes();
+  }
 
   document.getElementById('tabela-pacientes')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.pac-lista-excluir');
     if (!btn) return;
     excluirPacienteDaLista(btn.dataset.id, btn.dataset.nome);
+  });
+
+  document.getElementById('tabela-pacientes')?.addEventListener('change', (e) => {
+    const sel = e.target.closest('.enf-inline-select');
+    if (!sel) return;
+    mudarEnfermeiroDaLista(sel.dataset.id, sel.value);
   });
 }
 
@@ -235,15 +257,122 @@ function setupEnfermeirosModal() {
   });
 }
 
+// ==========================================
+// SOLICITAÇÕES DE EXCLUSÃO — só a enfermeira responsável (ou ADM) vê e decide
+// ==========================================
+
+function descreverSolicitacao(s) {
+  if (s.tipo === 'excluir_paciente') return `Excluir paciente <b>${esc(s.pacienteNome)}</b> (com todo o histórico)`;
+  if (s.tipo === 'excluir_ficha_antiga') return `Excluir ficha antiga "${esc(s.fichaNome)}" de <b>${esc(s.pacienteNome)}</b>`;
+  if (s.tipo === 'excluir_atendimento') return `Excluir atendimento de ${s.atendimentoData ? fmtData(s.atendimentoData) : '—'} de <b>${esc(s.pacienteNome)}</b>`;
+  return 'Solicitação';
+}
+
+async function atualizarBadgeSolicitacoes() {
+  const badge = document.getElementById('solicitacoes-badge');
+  try {
+    const pendentes = await apiFetch('/ferida/solicitacoes?status=pendente');
+    if (pendentes.length) {
+      badge.textContent = pendentes.length;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+    return pendentes;
+  } catch (err) {
+    badge.classList.add('hidden');
+    return [];
+  }
+}
+
+function renderListaSolicitacoes(pendentes) {
+  const lista = document.getElementById('solicitacoes-lista');
+  if (!pendentes.length) {
+    lista.innerHTML = '<p class="hint">Nenhuma solicitação pendente.</p>';
+    return;
+  }
+  lista.innerHTML = pendentes.map(s => `
+    <div class="solicitacao-item" data-id="${s.id}">
+      <div>${descreverSolicitacao(s)}</div>
+      <div class="hint">Pedido por ${esc(s.solicitadoPorNome)} em ${new Date(s.solicitadoEm).toLocaleString('pt-BR')}</div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost btn-recusar-solicitacao" data-id="${s.id}">Recusar</button>
+        <button type="button" class="btn primary btn-aprovar-solicitacao" data-id="${s.id}">Aprovar</button>
+      </div>
+    </div>`).join('');
+}
+
+function setupSolicitacoesModal() {
+  const modal = document.getElementById('modal-solicitacoes');
+  if (!modal) return;
+
+  document.getElementById('btn-solicitacoes')?.addEventListener('click', async () => {
+    document.getElementById('solicitacoes-lista').innerHTML = '<p class="hint">Carregando...</p>';
+    modal.classList.remove('hidden');
+    const pendentes = await atualizarBadgeSolicitacoes();
+    renderListaSolicitacoes(pendentes);
+  });
+  document.getElementById('btn-fechar-solicitacoes')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('solicitacoes-lista')?.addEventListener('click', async (e) => {
+    const aprovar = e.target.closest('.btn-aprovar-solicitacao');
+    const recusar = e.target.closest('.btn-recusar-solicitacao');
+    const btn = aprovar || recusar;
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const resp = await apiFetch(`/ferida/solicitacoes/${btn.dataset.id}/${aprovar ? 'aprovar' : 'recusar'}`, { method: 'PUT' });
+      showToast(resp.message);
+      const pendentes = await atualizarBadgeSolicitacoes();
+      renderListaSolicitacoes(pendentes);
+      if (aprovar) buscarEExibirPacientes(document.getElementById('busca-paciente')?.value.trim() || '');
+    } catch (err) {
+      showToast('Erro: ' + err.message, 'error');
+      btn.disabled = false;
+    }
+  });
+}
+
 async function buscarEExibirPacientes(termo) {
   const tbody = document.getElementById('tabela-pacientes');
   tbody.innerHTML = `<tr><td colspan="7" class="pac-lista-msg">Buscando...</td></tr>`;
   try {
     const qs = termo ? `?busca=${encodeURIComponent(termo)}` : '';
     const lista = await apiFetch(`/ferida/pacientes${qs}`);
+    pacientesListaAtual = lista;
     renderTabelaPacientes(lista);
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Select inline pra trocar o enfermeiro direto na lista, sem abrir a ficha —
+// preserva o valor atual mesmo se ele não estiver mais na lista ativa (ex.:
+// estagiário que já saiu do rodízio), mesmo padrão do cadastro do paciente.
+function montarSelectEnfermeiroInline(id, valorAtual) {
+  const alvo = (valorAtual || '').trim();
+  const nomes = enfermeirosCache || [];
+  let opcoes = '<option value="">Não informado</option>' +
+    nomes.map(nome => `<option value="${esc(nome)}"${nome === alvo ? ' selected' : ''}>${esc(nome)}</option>`).join('');
+  if (alvo && !nomes.includes(alvo)) {
+    opcoes += `<option value="${esc(alvo)}" selected>${esc(alvo)}</option>`;
+  }
+  return `<select class="enf-inline-select action-execute" data-id="${id}">${opcoes}</select>`;
+}
+
+async function mudarEnfermeiroDaLista(id, novoValor) {
+  const p = pacientesListaAtual.find(x => x.id === id);
+  if (!p) return;
+  try {
+    await apiFetch(`/ferida/pacientes/${id}/enfermeiro`, {
+      method: 'PUT',
+      body: JSON.stringify({ enfermeiro: novoValor })
+    });
+    p.enfermeiro = novoValor;
+    showToast('Enfermeiro atualizado');
+  } catch (err) {
+    showToast('Erro ao atualizar enfermeiro: ' + err.message, 'error');
   }
 }
 
@@ -254,16 +383,14 @@ function renderTabelaPacientes(lista) {
     return;
   }
   tbody.innerHTML = lista.map(p => {
-    const idade = calcIdade(p.dataNascimento);
-    const nascimento = p.dataNascimento ? new Date(p.dataNascimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
     const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
     return `
       <tr>
         <td>${esc(p.nome)}</td>
         <td>${esc(p.tipoFerida || '—')}</td>
-        <td>${nascimento}${idade !== null ? ` (${idade} anos)` : ''}</td>
         <td>${esc(p.municipio || '—')}</td>
-        <td>${esc(p.enfermeiro || '—')}</td>
+        <td>${montarSelectEnfermeiroInline(p.id, p.enfermeiro)}</td>
+        <td>${p.atendimentosCount ?? 0}</td>
         <td>${cadastro}</td>
         <td class="pac-lista-acoes">
           <a href="/saude/ferida/index.html?paciente=${p.id}" title="Abrir ficha">
@@ -281,10 +408,13 @@ function renderTabelaPacientes(lista) {
 }
 
 async function excluirPacienteDaLista(id, nome) {
-  if (!confirm(`Excluir DEFINITIVAMENTE o paciente "${nome}"?\n\nSerão apagados também todo o histórico de atendimentos e fichas antigas. Essa ação NÃO tem volta.`)) return;
+  const pergunta = souAmandaOuAdmin()
+    ? `Excluir DEFINITIVAMENTE o paciente "${nome}"?\n\nSerão apagados também todo o histórico de atendimentos e fichas antigas. Essa ação NÃO tem volta.`
+    : `Solicitar exclusão definitiva do paciente "${nome}"?\n\nA enfermeira responsável vai receber o pedido e aprovar ou recusar.`;
+  if (!confirm(pergunta)) return;
   try {
-    await apiFetch(`/ferida/pacientes/${id}`, { method: 'DELETE' });
-    showToast(`Paciente "${nome}" excluído definitivamente`);
+    const resp = await apiFetch(`/ferida/pacientes/${id}`, { method: 'DELETE' });
+    showToast(resp.message);
     buscarEExibirPacientes(document.getElementById('busca-paciente')?.value.trim() || '');
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error');
@@ -311,6 +441,11 @@ async function initPaginaRelatorio() {
       apiFetch(`/ferida/pacientes/${id}`),
       apiFetch(`/ferida/pacientes/${id}/atendimentos`)
     ]);
+    // Fichas antigas importadas (ou atendimentos lançados com data retroativa)
+    // têm data clínica diferente da data de criação do registro — ordena pela
+    // data clínica, mesmo critério já usado na timeline da tela principal.
+    atendimentosDoPaciente.sort((a, b) =>
+      String(a.dataAtendimento || a.createdAt).localeCompare(String(b.dataAtendimento || b.createdAt)));
     renderRelatorio(paciente, atendimentosDoPaciente);
     msg.classList.add('hidden');
     btnImprimir.disabled = false;
@@ -321,18 +456,20 @@ async function initPaginaRelatorio() {
 }
 
 function renderRelatorio(p, atendimentosDoPaciente) {
-  const idade = calcIdade(p.dataNascimento);
   const hoje = new Date().toLocaleDateString('pt-BR');
   const listaOuTraco = arr => (Array.isArray(arr) && arr.length) ? esc(arr.join(', ')) : '—';
 
   const blocos = atendimentosDoPaciente.map((at, i) => {
     const quando = at.dataAtendimento ? fmtData(at.dataAtendimento) : new Date(at.createdAt).toLocaleDateString('pt-BR');
-    const dims = [
-      fmtDim(at.dimensoes?.comprimento)  && `Compr. ${fmtDim(at.dimensoes.comprimento)} cm`,
-      fmtDim(at.dimensoes?.largura)      && `Larg. ${fmtDim(at.dimensoes.largura)} cm`,
-      fmtDim(at.dimensoes?.profundidade) && `Prof. ${fmtDim(at.dimensoes.profundidade)} cm`,
-      fmtDim(at.dimensoes?.descolamento) && `Descol. ${fmtDim(at.dimensoes.descolamento)} cm`
-    ].filter(Boolean).join(' · ') || '—';
+    const dims = listaDimensoesPorFerida(at).map(({ rotulo, dimensoes: d }) => {
+      const partes = [
+        fmtDim(d.comprimento)  && `Compr. ${fmtDim(d.comprimento)} cm`,
+        fmtDim(d.largura)      && `Larg. ${fmtDim(d.largura)} cm`,
+        fmtDim(d.profundidade) && `Prof. ${fmtDim(d.profundidade)} cm`,
+        fmtDim(d.descolamento) && `Descol. ${fmtDim(d.descolamento)} cm`
+      ].filter(Boolean).join(' · ') || '—';
+      return rotulo ? `${esc(rotulo)}: ${partes}` : partes;
+    }).join('<br>') || '—';
     const locais = (at.marcacoes || []).map(m => m.rotulo).filter(Boolean);
     const exs = at.exsudato || {};
     const exsudatoTxt = [exs.tipo, exs.cor, exs.consistencia, exs.quantidade].filter(Boolean).join(' · ') || '—';
@@ -340,18 +477,20 @@ function renderRelatorio(p, atendimentosDoPaciente) {
     const dorTxt = at.dor?.presente === true
       ? `Sim${at.dor.escala ? ` (${at.dor.escala}/10)` : ''}`
       : at.dor?.presente === false ? 'Não' : '—';
-    const rotulo = i === 0 ? '1º atendimento' : `${i + 1}º retorno`;
+    const enfermeiroTxt = at.enfermeiro || p.enfermeiro || '—';
+    const rotuloVisita = i === 0 ? '1º atendimento' : `${i + 1}º retorno`;
 
     return `
       <div class="rel-atendimento">
         <div class="rel-atendimento-head">
           <b>${esc(quando)}</b>
-          <span class="rel-num">${rotulo}</span>
+          <span class="rel-num">${rotuloVisita}</span>
           <span class="rel-autor">por ${esc(at.createdByName || '—')}</span>
         </div>
         <div class="rel-atendimento-grid">
           <div><b>Dimensões:</b> ${dims}</div>
           <div><b>Localização:</b> ${listaOuTraco(locais)}</div>
+          <div><b>Enfermeiro(a):</b> ${esc(enfermeiroTxt)}</div>
           <div><b>Tecido:</b> ${listaOuTraco(at.tecido)}</div>
           <div><b>Bordas:</b> ${listaOuTraco(at.bordas)}</div>
           <div><b>Pele adjacente:</b> ${listaOuTraco(at.peleAdjacente)}</div>
@@ -377,7 +516,6 @@ function renderRelatorio(p, atendimentosDoPaciente) {
     </div>
     <div class="rel-paciente">
       <div><span>Paciente</span><b>${esc(p.nome)}</b></div>
-      <div><span>Idade</span><b>${idade !== null ? idade + ' anos' : '—'}</b></div>
       <div><span>Município</span><b>${esc(p.municipio || '—')}</b></div>
       <div><span>Tipo de ferida</span><b>${esc(p.tipoFerida || '—')}</b></div>
     </div>
@@ -638,8 +776,19 @@ async function selecionarPaciente(paciente) {
   document.getElementById('meta-municipio').textContent = pacienteAtual.municipio || '—';
   document.getElementById('meta-tipo-ferida').textContent = pacienteAtual.tipoFerida || '—';
   document.getElementById('meta-enfermeiro').textContent = pacienteAtual.enfermeiro || '—';
+
+  // Editar cadastro de paciente já salvo é só da enfermeira responsável;
+  // os demais podem cadastrar paciente novo e ver a ficha normalmente.
+  document.getElementById('btn-editar-paciente')?.classList.toggle('hidden', !souAmandaOuAdmin());
   const linkRelatorio = document.getElementById('btn-relatorio-paciente');
   if (linkRelatorio) linkRelatorio.href = `/saude/ferida/relatorio.html?paciente=${pacienteAtual.id}`;
+
+  // Enfermeiro deste atendimento começa igual ao padrão do cadastro do
+  // paciente, mas pode ser trocado sem alterar esse padrão.
+  try {
+    await carregarEnfermeiros();
+  } catch (err) { /* segue com a lista vazia se falhar */ }
+  preencherSelectEnfermeiro(pacienteAtual.enfermeiro, 'atendimento-enfermeiro');
 
   try {
     [atendimentos, fichasAntigas] = await Promise.all([
@@ -672,8 +821,8 @@ async function selecionarPaciente(paciente) {
 // Preenche o <select> de enfermeiro com a lista mantida pelo ADM, preservando
 // o valor atual do paciente mesmo se o nome não estiver mais na lista (ex.:
 // estagiário que já saiu do rodízio) — não perde o dado histórico.
-function preencherSelectEnfermeiro(valorAtual) {
-  const sel = document.getElementById('pac-enfermeiro');
+function preencherSelectEnfermeiro(valorAtual, selectId = 'pac-enfermeiro') {
+  const sel = document.getElementById(selectId);
   if (!sel) return;
   const alvo = (valorAtual || '').trim();
   sel.innerHTML = '<option value="">Não informado</option>';
@@ -805,15 +954,20 @@ async function excluirPaciente() {
   const p = pacienteAtual;
   const resumo = `${atendimentos.length} atendimento(s) e ${fichasAntigas.length} ficha(s) antiga(s)`;
 
-  if (!confirm(`Excluir DEFINITIVAMENTE o paciente "${p.nome}"?\n\nSerão apagados também ${resumo}. Essa ação NÃO tem volta.`)) return;
+  const pergunta = souAmandaOuAdmin()
+    ? `Excluir DEFINITIVAMENTE o paciente "${p.nome}"?\n\nSerão apagados também ${resumo}. Essa ação NÃO tem volta.`
+    : `Solicitar exclusão definitiva do paciente "${p.nome}"?\n\nA enfermeira responsável vai receber o pedido e aprovar ou recusar.`;
+  if (!confirm(pergunta)) return;
 
   try {
-    await apiFetch(`/ferida/pacientes/${p.id}`, { method: 'DELETE' });
-    showToast(`Paciente "${p.nome}" excluído definitivamente`);
-    limparFicha();
-    document.getElementById('busca-paciente-ficha').value = '';
-    document.getElementById('sel-paciente').value = '';
-    await selecionarPaciente(null);
+    const resp = await apiFetch(`/ferida/pacientes/${p.id}`, { method: 'DELETE' });
+    showToast(resp.message);
+    if (souAmandaOuAdmin()) {
+      limparFicha();
+      document.getElementById('busca-paciente-ficha').value = '';
+      document.getElementById('sel-paciente').value = '';
+      await selecionarPaciente(null);
+    }
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error');
   }
@@ -976,13 +1130,18 @@ async function verFicha(meta) {
 }
 
 async function excluirFicha(meta) {
-  if (!confirm(`Excluir a imagem "${meta.nome}" do paciente? Essa ação não tem volta.`)) return;
+  const pergunta = souAmandaOuAdmin()
+    ? `Excluir a imagem "${meta.nome}" do paciente? Essa ação não tem volta.`
+    : `Solicitar exclusão da imagem "${meta.nome}"? A enfermeira responsável vai aprovar ou recusar.`;
+  if (!confirm(pergunta)) return;
   try {
-    await apiFetch(`/ferida/pacientes/${pacienteAtual.id}/fichas-antigas/${meta.id}`, { method: 'DELETE' });
-    fichasAntigas = fichasAntigas.filter(f => f.id !== meta.id);
-    document.getElementById('fichas-count').textContent = fichasAntigas.length;
-    renderFichasList();
-    showToast('Ficha antiga removida');
+    const resp = await apiFetch(`/ferida/pacientes/${pacienteAtual.id}/fichas-antigas/${meta.id}`, { method: 'DELETE' });
+    if (souAmandaOuAdmin()) {
+      fichasAntigas = fichasAntigas.filter(f => f.id !== meta.id);
+      document.getElementById('fichas-count').textContent = fichasAntigas.length;
+      renderFichasList();
+    }
+    showToast(resp.message);
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error');
   }
@@ -1005,9 +1164,18 @@ function setupBodyMap() {
   });
 }
 
-function addPin(svg, x, y, region) {
-  pinCount++;
-  const id = pinCount;
+// numeroForcado/rotuloForcado: usados só ao restaurar marcações de um
+// atendimento existente pra edição (restaurarMarcacoes) — preserva o número
+// original em vez de gerar um novo, e não marca a ficha como suja.
+function addPin(svg, x, y, region, numeroForcado, rotuloForcado) {
+  let id;
+  if (numeroForcado) {
+    id = numeroForcado;
+    if (numeroForcado > pinCount) pinCount = numeroForcado;
+  } else {
+    pinCount++;
+    id = pinCount;
+  }
   const list = document.getElementById('pinlist');
   const g = svg.querySelector('.pins');
 
@@ -1027,7 +1195,7 @@ function addPin(svg, x, y, region) {
   li.dataset.x = x.toFixed(2);
   li.dataset.y = y.toFixed(2);
   li.innerHTML = `<span class="dot">${id}</span><span class="reg">${esc(region)}</span>` +
-    `<input type="text" placeholder="Nomear local (ex.: calcâneo D)" aria-label="Nome do local ${id}">` +
+    `<input type="text" placeholder="Nomear local (ex.: calcâneo D)" aria-label="Nome do local ${id}" value="${esc(rotuloForcado || '')}">` +
     `<button type="button" class="rm" title="Remover" aria-label="Remover marcação ${id}">×</button>`;
   list.appendChild(li);
 
@@ -1037,10 +1205,17 @@ function addPin(svg, x, y, region) {
   li.querySelector('.rm').addEventListener('click', () => {
     grp.remove(); li.remove();
     if (!list.children.length) resetEmpty();
+    sincronizarDimensoesPorFerida();
     markDirty();
   });
-  li.querySelector('input').addEventListener('input', markDirty);
-  markDirty();
+  li.querySelector('input').addEventListener('input', () => {
+    sincronizarDimensoesPorFerida();
+    markDirty();
+  });
+  if (!numeroForcado) {
+    sincronizarDimensoesPorFerida();
+    markDirty();
+  }
 }
 
 function resetEmpty() {
@@ -1048,14 +1223,99 @@ function resetEmpty() {
     '<li class="empty">Nenhuma marcação ainda. Toque no corpo pra indicar onde está a ferida.</li>';
 }
 
+// Cada ferida marcada no boneco tem seu próprio cartão de dimensões (só as
+// dimensões são por ferida — o resto da avaliação clínica continua único pro
+// atendimento). Preserva os valores já digitados ao adicionar/remover outras
+// marcações ou redigitar um rótulo.
+function montarLinhaDimensao(numero, rotulo) {
+  return `
+    <div class="dim-ferida" data-numero="${numero}">
+      <div class="dim-ferida-titulo">Ferida ${numero}${rotulo ? ' — ' + esc(rotulo) : ''}</div>
+      <div class="dims">
+        <div class="u" data-u="cm"><label>Comprimento</label><input type="text" inputmode="decimal" placeholder="0,0" data-dim="comprimento"></div>
+        <div class="u" data-u="cm"><label>Largura</label><input type="text" inputmode="decimal" placeholder="0,0" data-dim="largura"></div>
+        <div class="u" data-u="cm"><label>Profundidade</label><input type="text" inputmode="decimal" placeholder="0,0" data-dim="profundidade"></div>
+        <div class="u" data-u="cm"><label>Descolamento</label><input type="text" inputmode="decimal" placeholder="0,0" data-dim="descolamento"></div>
+      </div>
+    </div>`;
+}
+
+function sincronizarDimensoesPorFerida() {
+  const container = document.getElementById('dims-por-ferida');
+  const linhas = [...document.querySelectorAll('#pinlist .pinrow')];
+
+  if (!linhas.length) {
+    container.innerHTML = '<p class="hint" id="dims-vazio">Marque uma ferida no boneco pra informar as dimensões dela.</p>';
+    return;
+  }
+
+  const valoresAtuais = {};
+  container.querySelectorAll('.dim-ferida').forEach(bloco => {
+    valoresAtuais[bloco.dataset.numero] = ['comprimento', 'largura', 'profundidade', 'descolamento']
+      .reduce((acc, campo) => { acc[campo] = bloco.querySelector(`[data-dim="${campo}"]`).value; return acc; }, {});
+  });
+
+  container.innerHTML = linhas.map(li =>
+    montarLinhaDimensao(li.dataset.id, li.querySelector('input').value.trim())
+  ).join('');
+
+  container.querySelectorAll('.dim-ferida').forEach(bloco => {
+    const salvos = valoresAtuais[bloco.dataset.numero];
+    if (!salvos) return;
+    Object.entries(salvos).forEach(([campo, valor]) => {
+      if (valor) bloco.querySelector(`[data-dim="${campo}"]`).value = valor;
+    });
+  });
+}
+
 function coletarMarcacoes() {
-  return [...document.querySelectorAll('#pinlist .pinrow')].map(li => ({
-    numero: parseInt(li.dataset.id),
-    regiao: li.dataset.region,
-    x: parseFloat(li.dataset.x),
-    y: parseFloat(li.dataset.y),
-    rotulo: li.querySelector('input').value.trim()
-  }));
+  return [...document.querySelectorAll('#pinlist .pinrow')].map(li => {
+    const numero = li.dataset.id;
+    const bloco = document.querySelector(`.dim-ferida[data-numero="${numero}"]`);
+    const val = campo => (bloco?.querySelector(`[data-dim="${campo}"]`)?.value.trim() || null);
+    return {
+      numero: parseInt(numero),
+      regiao: li.dataset.region,
+      x: parseFloat(li.dataset.x),
+      y: parseFloat(li.dataset.y),
+      rotulo: li.querySelector('input').value.trim(),
+      dimensoes: {
+        comprimento:  val('comprimento'),
+        largura:      val('largura'),
+        profundidade: val('profundidade'),
+        descolamento: val('descolamento')
+      }
+    };
+  });
+}
+
+// Recria os pinos no boneco a partir das marcações de um atendimento salvo
+// (usado ao editar um atendimento do histórico) — preserva número e rótulo
+// originais e preenche as dimensões de cada ferida.
+function restaurarMarcacoes(marcacoes) {
+  document.querySelectorAll('svg[data-region] .pins').forEach(g => g.innerHTML = '');
+  pinCount = 0;
+  resetEmpty();
+
+  (marcacoes || []).forEach(m => {
+    const svg = document.querySelector(`svg[data-region="${m.regiao}"]`);
+    if (!svg) return;
+    addPin(svg, m.x, m.y, m.regiao, m.numero, m.rotulo);
+  });
+
+  sincronizarDimensoesPorFerida();
+
+  (marcacoes || []).forEach(m => {
+    if (!m.dimensoes) return;
+    const bloco = document.querySelector(`.dim-ferida[data-numero="${m.numero}"]`);
+    if (!bloco) return;
+    Object.entries(m.dimensoes).forEach(([campo, valor]) => {
+      if (valor !== null && valor !== undefined) {
+        const input = bloco.querySelector(`[data-dim="${campo}"]`);
+        if (input) input.value = valor;
+      }
+    });
+  });
 }
 
 // ==========================================
@@ -1110,11 +1370,6 @@ function markDirty() {
   document.getElementById('status').textContent = 'Rascunho não salvo';
 }
 
-function dim(id) {
-  const v = document.getElementById(id).value.trim();
-  return v === '' ? null : v;
-}
-
 async function salvarAtendimento() {
   if (!pacienteAtual) {
     showToast('Selecione o paciente antes de salvar.', 'error');
@@ -1122,12 +1377,6 @@ async function salvarAtendimento() {
   }
 
   const payload = {
-    dimensoes: {
-      comprimento:  dim('dim-comprimento'),
-      largura:      dim('dim-largura'),
-      profundidade: dim('dim-profundidade'),
-      descolamento: dim('dim-descolamento')
-    },
     marcacoes: coletarMarcacoes(),
     tecido: chipsSelecionados('tecido'),
     bordas: chipsSelecionados('bordas'),
@@ -1147,22 +1396,31 @@ async function salvarAtendimento() {
     },
     cobertura: chipsSelecionados('cobertura'),
     conduta: document.getElementById('conduta').value.trim(),
+    enfermeiro: document.getElementById('atendimento-enfermeiro').value.trim(),
     dataAtendimento: document.getElementById('data-atendimento-manual').value || null
   };
 
+  const editando = atendimentoEmEdicaoId;
   const btn = document.getElementById('btn-salvar');
   btn.disabled = true;
-  btn.textContent = 'Salvando...';
+  btn.textContent = editando ? 'Salvando edição...' : 'Salvando...';
 
   try {
-    await apiFetch(`/ferida/pacientes/${pacienteAtual.id}/atendimentos`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    if (editando) {
+      await apiFetch(`/ferida/pacientes/${pacienteAtual.id}/atendimentos/${editando}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    } else {
+      await apiFetch(`/ferida/pacientes/${pacienteAtual.id}/atendimentos`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
     dirty = false;
     document.getElementById('status').textContent =
       'Salvo às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    showToast('Atendimento salvo');
+    showToast(editando ? 'Atendimento atualizado' : 'Atendimento salvo');
     limparFicha(true);
     await selecionarPaciente(pacienteAtual);
   } catch (err) {
@@ -1175,8 +1433,6 @@ async function salvarAtendimento() {
 
 function limparFicha(manterStatus = false) {
   document.querySelectorAll('.chip.on').forEach(c => c.classList.remove('on'));
-  ['dim-comprimento', 'dim-largura', 'dim-profundidade', 'dim-descolamento']
-    .forEach(id => document.getElementById(id).value = '');
   document.getElementById('conduta').value = '';
   document.querySelectorAll('svg[data-region] .pins').forEach(g => g.innerHTML = '');
   pinCount = 0;
@@ -1185,6 +1441,11 @@ function limparFicha(manterStatus = false) {
   inputData.value = todayStr();
   document.getElementById('loc-hint')?.classList.add('hidden');
   resetEmpty();
+  sincronizarDimensoesPorFerida();
+  preencherSelectEnfermeiro(pacienteAtual?.enfermeiro, 'atendimento-enfermeiro');
+  atendimentoEmEdicaoId = null;
+  document.getElementById('btn-salvar').textContent = 'Salvar atendimento';
+  document.getElementById('btn-limpar').textContent = 'Limpar';
   if (!manterStatus) {
     dirty = false;
     document.getElementById('status').textContent = 'Rascunho não salvo';
@@ -1380,11 +1641,9 @@ async function aplicarFichaIA(e) {
     await escolherPacienteFicha(pacienteSelecionado);
     limparFicha();
 
-    document.getElementById('dim-comprimento').value = val('rev-comprimento');
-    document.getElementById('dim-largura').value = val('rev-largura');
-    document.getElementById('dim-profundidade').value = val('rev-profundidade');
-    document.getElementById('dim-descolamento').value = val('rev-descolamento');
-
+    // Dimensões agora são por ferida marcada no boneco — a leitura da ficha
+    // de papel não sabe a qual marcação associar, então não pré-preenche mais
+    // aqui (o enfermeiro marca a ferida e digita as dimensões manualmente).
     aplicarChips('tecido', d.tecido);
     aplicarChips('bordas', d.bordas);
     aplicarChips('peleAdjacente', d.peleAdjacente || []);
@@ -1434,9 +1693,27 @@ function aplicarChips(field, valores) {
 // HISTÓRICO / EVOLUÇÃO
 // ==========================================
 
+// Lista de { rotulo, dimensoes } — uma entrada por ferida marcada (formato
+// atual, dimensões dentro de cada marcação) ou uma entrada única sem rótulo
+// com as dimensões do nível de cima do atendimento (formato antigo, de antes
+// da separação por ferida — sem precisar migrar dado nenhum).
+function listaDimensoesPorFerida(at) {
+  const marcacoesComDim = (at.marcacoes || [])
+    .filter(m => m.dimensoes && Object.values(m.dimensoes).some(v => typeof v === 'number'));
+  if (marcacoesComDim.length) {
+    return marcacoesComDim.map(m => ({ rotulo: m.rotulo || `Ferida ${m.numero}`, dimensoes: m.dimensoes }));
+  }
+  if (at.dimensoes && Object.values(at.dimensoes).some(v => typeof v === 'number')) {
+    return [{ rotulo: null, dimensoes: at.dimensoes }];
+  }
+  return [];
+}
+
 function areaDe(at) {
-  const c = at?.dimensoes?.comprimento, l = at?.dimensoes?.largura;
-  return (typeof c === 'number' && typeof l === 'number') ? c * l : null;
+  const areas = listaDimensoesPorFerida(at)
+    .map(({ dimensoes: d }) => (typeof d.comprimento === 'number' && typeof d.largura === 'number') ? d.comprimento * d.largura : null)
+    .filter(a => a !== null);
+  return areas.length ? Math.max(...areas) : null;
 }
 
 function fmtDim(v) {
@@ -1456,8 +1733,14 @@ function renderTimeline(temPaciente) {
     const quando = at.dataAtendimento
       ? fmtData(at.dataAtendimento)
       : new Date(at.createdAt).toLocaleDateString('pt-BR');
-    const c = fmtDim(at.dimensoes?.comprimento), l = fmtDim(at.dimensoes?.largura);
-    const dims = (c && l) ? `${c} × ${l} cm` : 'sem medidas';
+    const listaDims = listaDimensoesPorFerida(at);
+    const dims = listaDims.length
+      ? listaDims.map(({ rotulo, dimensoes: d }) => {
+          const c = fmtDim(d.comprimento), l = fmtDim(d.largura);
+          const medida = (c && l) ? `${c}×${l}cm` : 'sem medidas';
+          return rotulo ? `${rotulo}: ${medida}` : medida;
+        }).join(' · ')
+      : 'sem medidas';
 
     const resumoPartes = [];
     if (at.tecido?.length) resumoPartes.push(at.tecido[0].toLowerCase());
@@ -1497,6 +1780,9 @@ function renderTimeline(temPaciente) {
 function setupDetalheAtendimento() {
   const modal = document.getElementById('modal-atendimento');
   document.getElementById('btn-fechar-atendimento')?.addEventListener('click', () => modal.classList.add('hidden'));
+  document.getElementById('btn-editar-atendimento')?.addEventListener('click', () => {
+    if (atendimentoDetalheAtual) iniciarEdicaoAtendimento(atendimentoDetalheAtual);
+  });
   modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 }
 
@@ -1508,6 +1794,10 @@ function setupHistoricoModal() {
 }
 
 function abrirDetalheAtendimento(at) {
+  atendimentoDetalheAtual = at;
+  // Corrigir um atendimento já salvo é só da enfermeira responsável (LGPD).
+  document.getElementById('btn-editar-atendimento')?.classList.toggle('hidden', !souAmandaOuAdmin());
+
   const quando = at.dataAtendimento
     ? fmtData(at.dataAtendimento)
     : new Date(at.createdAt).toLocaleDateString('pt-BR');
@@ -1516,12 +1806,15 @@ function abrirDetalheAtendimento(at) {
   const linha = (label, valor) => `<div class="det-linha"><b>${esc(label)}:</b> ${valor}</div>`;
   const listaOuTraco = arr => (Array.isArray(arr) && arr.length) ? esc(arr.join(', ')) : '—';
 
-  const dims = [
-    fmtDim(at.dimensoes?.comprimento)  && `Compr. ${fmtDim(at.dimensoes.comprimento)} cm`,
-    fmtDim(at.dimensoes?.largura)      && `Larg. ${fmtDim(at.dimensoes.largura)} cm`,
-    fmtDim(at.dimensoes?.profundidade) && `Prof. ${fmtDim(at.dimensoes.profundidade)} cm`,
-    fmtDim(at.dimensoes?.descolamento) && `Descol. ${fmtDim(at.dimensoes.descolamento)} cm`
-  ].filter(Boolean).join(' · ') || '—';
+  const dimsHtml = listaDimensoesPorFerida(at).map(({ rotulo, dimensoes: d }) => {
+    const partes = [
+      fmtDim(d.comprimento)  && `Compr. ${fmtDim(d.comprimento)} cm`,
+      fmtDim(d.largura)      && `Larg. ${fmtDim(d.largura)} cm`,
+      fmtDim(d.profundidade) && `Prof. ${fmtDim(d.profundidade)} cm`,
+      fmtDim(d.descolamento) && `Descol. ${fmtDim(d.descolamento)} cm`
+    ].filter(Boolean).join(' · ') || '—';
+    return rotulo ? `<div>${esc(rotulo)}: ${partes}</div>` : `<div>${partes}</div>`;
+  }).join('') || '—';
 
   const locais = (at.marcacoes || []).map(m => m.rotulo).filter(Boolean);
   const exs = at.exsudato || {};
@@ -1530,11 +1823,13 @@ function abrirDetalheAtendimento(at) {
   const dorTxt = at.dor?.presente === true
     ? `Sim${at.dor.escala ? ` (${at.dor.escala}/10)` : ''}`
     : at.dor?.presente === false ? 'Não' : '—';
+  const enfermeiroTxt = at.enfermeiro || pacienteAtual?.enfermeiro || '—';
 
   document.getElementById('detalhe-atendimento').innerHTML = `
     <div class="det-grid">
-      ${linha('Dimensões', dims)}
+      ${linha('Dimensões', dimsHtml)}
       ${linha('Localização', listaOuTraco(locais))}
+      ${linha('Enfermeiro(a)', esc(enfermeiroTxt))}
       ${linha('Tecido', listaOuTraco(at.tecido))}
       ${linha('Bordas', listaOuTraco(at.bordas))}
       ${linha('Pele adjacente', listaOuTraco(at.peleAdjacente))}
@@ -1547,8 +1842,47 @@ function abrirDetalheAtendimento(at) {
     </div>
     <div class="det-conduta"><b>Conduta:</b><p>${esc(at.conduta || '—')}</p></div>
     <div class="det-autor">Registrado por ${esc(at.createdByName || '—')} em ${new Date(at.createdAt).toLocaleString('pt-BR')}</div>
+    ${at.updatedAt ? `<div class="det-autor">Editado por ${esc(at.updatedByName || '—')} em ${new Date(at.updatedAt).toLocaleString('pt-BR')}</div>` : ''}
   `;
   document.getElementById('modal-atendimento').classList.remove('hidden');
+}
+
+// Carrega um atendimento salvo de volta na ficha principal pra corrigir algo
+// (formato antigo, sem dimensão por ferida, cai no fallback de listaDimensoesPorFerida
+// já usado na exibição — ao salvar, essa marcação passa a ter dimensão própria).
+function iniciarEdicaoAtendimento(at) {
+  document.getElementById('modal-atendimento').classList.add('hidden');
+  document.getElementById('modal-historico')?.classList.add('hidden');
+  limparFicha(true);
+
+  restaurarMarcacoes(at.marcacoes);
+  aplicarChips('tecido', at.tecido);
+  aplicarChips('bordas', at.bordas);
+  aplicarChips('peleAdjacente', at.peleAdjacente);
+  aplicarChips('exsudatoTipo', at.exsudato?.tipo ? [at.exsudato.tipo] : []);
+  aplicarChips('exsudatoCor', at.exsudato?.cor ? [at.exsudato.cor] : []);
+  aplicarChips('exsudatoConsistencia', at.exsudato?.consistencia ? [at.exsudato.consistencia] : []);
+  aplicarChips('exsudatoQuantidade', at.exsudato?.quantidade ? [at.exsudato.quantidade] : []);
+  aplicarChips('infeccaoSuperficial', at.infeccaoSuperficial);
+  aplicarChips('infeccaoProfunda', at.infeccaoProfunda);
+  aplicarChips('biofilme', at.biofilme === true ? ['Sim'] : at.biofilme === false ? ['Não'] : []);
+  aplicarChips('dorPresente', at.dor?.presente === true ? ['Sim'] : at.dor?.presente === false ? ['Não'] : []);
+  aplicarChips('dorEscala', at.dor?.escala ? [String(at.dor.escala)] : []);
+  aplicarChips('cobertura', at.cobertura);
+
+  document.getElementById('conduta').value = at.conduta || '';
+  document.getElementById('data-atendimento-manual').value = at.dataAtendimento || todayStr();
+  preencherSelectEnfermeiro(at.enfermeiro || pacienteAtual?.enfermeiro, 'atendimento-enfermeiro');
+
+  atendimentoEmEdicaoId = at.id;
+  document.getElementById('btn-salvar').textContent = 'Salvar edição';
+  document.getElementById('btn-limpar').textContent = 'Cancelar edição';
+  const quando = at.dataAtendimento ? fmtData(at.dataAtendimento) : new Date(at.createdAt).toLocaleDateString('pt-BR');
+  document.getElementById('status').textContent = `Editando atendimento de ${quando}`;
+  dirty = true;
+
+  document.querySelector('.ferida-content')?.scrollIntoView({ behavior: 'smooth' });
+  showToast('Edite os campos e clique em "Salvar edição"');
 }
 
 // ==========================================
