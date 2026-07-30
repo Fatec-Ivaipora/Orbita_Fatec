@@ -371,6 +371,7 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 });
                 comparativoItens.push({
                     itemId: doc.id,
+                    cursoId: item.cursoId,
                     curso: item.curso,
                     produto: item.produto,
                     quantidade: item.quantidade,
