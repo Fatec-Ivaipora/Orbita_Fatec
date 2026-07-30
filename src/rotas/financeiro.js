@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 const checkPermission = verifyToken.requireModulePermission('licitacao');
@@ -139,9 +139,11 @@ function calcularCotacoes(cotacoesInput, quantidade, fornecedoresPorId) {
         .filter(c => !isNaN(c.valorUnitario) && c.valorUnitario >= 0);
 }
 
+const ITENS_PAGE_SIZE_PADRAO = 30;
+
 router.get('/itens', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { cursoId } = req.query;
+        const { cursoId, cursorProduto, cursorId } = req.query;
         if (!cursoId) return res.status(400).json({ error: 'Informe o cursoId.' });
 
         // Coordenador só enxerga o semestre configurado como ativo — travado
@@ -153,15 +155,28 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
         }
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
 
-        // Ordena em memória em vez de exigir índice composto do Firestore
-        // (where + orderBy em campos diferentes) — volume por curso é modesto.
-        const snap = await db.collection(COL_ITENS)
+        const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ITENS_PAGE_SIZE_PADRAO, 200);
+
+        // Pagina de verdade no Firestore (limit + startAfter) em vez de trazer o
+        // curso inteiro numa tarada só — turmas com 150-200+ itens (ex.: Biomedicina,
+        // Medicina) estavam gastando uma cota de leitura enorme só pra abrir a tela.
+        // orderBy(produto) + orderBy(__name__) garante ordenação estável mesmo com
+        // produtos de nome repetido (existem casos assim cadastrados).
+        let query = db.collection(COL_ITENS)
             .where('cursoId', '==', cursoId)
             .where('semestre', '==', semestre)
-            .get();
-        let itens = snap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => (a.produto || '').localeCompare(b.produto || ''));
+            .orderBy('produto')
+            .orderBy(admin.firestore.FieldPath.documentId());
+
+        if (cursorProduto && cursorId) {
+            query = query.startAfter(cursorProduto, cursorId);
+        }
+
+        const snap = await query.limit(pageSize + 1).get();
+        const hasMore = snap.docs.length > pageSize;
+        const docsPagina = snap.docs.slice(0, pageSize);
+
+        let itens = docsPagina.map(d => ({ id: d.id, ...d.data() }));
 
         // Coordenador não pode ver preços/fornecedores — remove no servidor, não
         // só na tela (senão daria pra ver inspecionando a chamada da API).
@@ -169,7 +184,30 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
             itens = itens.map(({ cotacoes, ...resto }) => ({ ...resto, temCotacao: (cotacoes || []).length > 0 }));
         }
 
-        res.json(itens);
+        const ultimo = docsPagina[docsPagina.length - 1];
+        res.json({
+            itens,
+            hasMore,
+            nextCursor: hasMore && ultimo ? { produto: ultimo.data().produto, id: ultimo.id } : null
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Busca um item só — usado depois de salvar cotações, pra atualizar só aquele
+// item na tela sem recarregar a lista inteira do curso de novo.
+router.get('/itens/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const doc = await db.collection(COL_ITENS).doc(req.params.id).get();
+        if (!doc.exists) return res.status(404).json({ error: 'Item não encontrado.' });
+
+        let item = { id: doc.id, ...doc.data() };
+        if (req.user.role === 'coordenador') {
+            const { cotacoes, ...resto } = item;
+            item = { ...resto, temCotacao: (cotacoes || []).length > 0 };
+        }
+        res.json(item);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
