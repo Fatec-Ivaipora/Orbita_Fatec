@@ -87,6 +87,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "financeiro_itens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cursoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "semestre",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "produto",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

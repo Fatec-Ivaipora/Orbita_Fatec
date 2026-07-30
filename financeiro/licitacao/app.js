@@ -23,6 +23,9 @@ let itens = [];
 let cursoSelecionadoId = null;
 let semestreSelecionado = null;
 let itemEmEdicaoCotacoes = null;
+let itensNextCursor = null;
+let itensHasMore = false;
+let itensCarregandoTodas = false;
 
 function isCoordenador() {
   return currentRole === 'coordenador';
@@ -171,11 +174,58 @@ async function initPaginaLicitacao() {
     if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
   });
 
-  document.getElementById('busca-item')?.addEventListener('input', (e) => {
+  document.getElementById('busca-item')?.addEventListener('input', async (e) => {
     const termo = e.target.value.trim().toLowerCase();
+    // Busca precisa ver o curso inteiro, não só a página já carregada — só
+    // busca o restante na primeira vez que alguém digita (autolimitado: depois
+    // disso itensHasMore já fica false e não busca de novo).
+    if (termo && itensHasMore) {
+      await carregarTodasPaginasRestantes();
+    }
     const filtrados = termo ? itens.filter(it => it.produto.toLowerCase().includes(termo)) : itens;
     renderTabelaItens(filtrados);
+    atualizarBotaoCarregarMais();
   });
+
+  document.getElementById('btn-carregar-mais-itens')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-carregar-mais-itens');
+    btn.disabled = true;
+    btn.textContent = 'Carregando...';
+    try {
+      await buscarProximaPaginaItens(false);
+      renderTabelaItens(itens);
+    } catch (err) {
+      showToast('Erro ao carregar mais itens: ' + err.message, 'error');
+    } finally {
+      atualizarBotaoCarregarMais();
+    }
+  });
+}
+
+// Busca o restante das páginas de uma vez só — usado quando a busca por texto
+// precisa enxergar itens que ainda não foram carregados.
+async function carregarTodasPaginasRestantes() {
+  if (itensCarregandoTodas) return;
+  itensCarregandoTodas = true;
+  const btn = document.getElementById('btn-carregar-mais-itens');
+  if (btn) { btn.disabled = true; btn.textContent = 'Carregando tudo pra buscar...'; }
+  try {
+    while (itensHasMore) {
+      await buscarProximaPaginaItens(false);
+    }
+  } finally {
+    itensCarregandoTodas = false;
+  }
+}
+
+function atualizarBotaoCarregarMais() {
+  const wrap = document.getElementById('carregar-mais-wrap');
+  const btn = document.getElementById('btn-carregar-mais-itens');
+  if (!wrap || !btn) return;
+  const buscando = !!document.getElementById('busca-item')?.value.trim();
+  wrap.classList.toggle('hidden', !itensHasMore || buscando);
+  btn.disabled = false;
+  btn.textContent = 'Carregar mais itens';
 }
 
 // Busca o semestre ativo configurado pelo financeiro. Coordenador fica travado
@@ -264,14 +314,32 @@ async function carregarCursos() {
   }
 }
 
+// Traz só a próxima página do curso/semestre selecionado (30 itens por vez
+// por padrão) em vez do curso inteiro de uma tarada só — turmas grandes
+// (Biomedicina, Medicina) chegam a ter 150-200+ itens, o que gastava uma
+// cota de leitura enorme só pra abrir a tela.
+async function buscarProximaPaginaItens(primeira) {
+  const qsSemestre = semestreSelecionado ? `&semestre=${encodeURIComponent(semestreSelecionado)}` : '';
+  const qsCursor = itensNextCursor
+    ? `&cursorProduto=${encodeURIComponent(itensNextCursor.produto)}&cursorId=${encodeURIComponent(itensNextCursor.id)}`
+    : '';
+  const resp = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}${qsSemestre}${qsCursor}`);
+  itens = primeira ? resp.itens : [...itens, ...resp.itens];
+  itensHasMore = resp.hasMore;
+  itensNextCursor = resp.nextCursor;
+}
+
 async function carregarItens() {
   const tbody = document.getElementById('itens-tbody');
   tbody.innerHTML = `<tr><td colspan="9" class="tabela-msg">Carregando...</td></tr>`;
+  itens = [];
+  itensNextCursor = null;
+  itensHasMore = false;
   try {
-    const qsSemestre = semestreSelecionado ? `&semestre=${encodeURIComponent(semestreSelecionado)}` : '';
-    itens = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}${qsSemestre}`);
+    await buscarProximaPaginaItens(true);
     document.getElementById('busca-item').value = '';
     renderTabelaItens(itens);
+    atualizarBotaoCarregarMais();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="9" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
   }
@@ -345,7 +413,11 @@ async function toggleStatus(id, statusAtual) {
   const novo = statusAtual === 'chegou' ? 'pendente' : 'chegou';
   try {
     await apiFetch(`/financeiro/itens/${id}`, { method: 'PUT', body: JSON.stringify({ status: novo }) });
-    await carregarItens();
+    // Atualiza só o item local — não precisa reler o curso inteiro do Firestore
+    // de novo pra mudar um status que a gente já sabe qual é.
+    const item = itens.find(it => it.id === id);
+    if (item) item.status = novo;
+    renderTabelaItens(itens);
   } catch (err) {
     showToast('Erro ao atualizar status: ' + err.message, 'error');
   }
@@ -357,7 +429,8 @@ async function excluirItem(id) {
   try {
     await apiFetch(`/financeiro/itens/${id}`, { method: 'DELETE' });
     showToast('Item excluído');
-    await carregarItens();
+    itens = itens.filter(it => it.id !== id);
+    renderTabelaItens(itens);
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error');
   }
@@ -379,9 +452,13 @@ function setupModalItem() {
     const btn = document.getElementById('btn-salvar-item');
     const id = document.getElementById('item-id').value;
     const cursoAtual = cursos.find(c => c.id === cursoSelecionadoId);
+    const qtdInformada = parseFloat(document.getElementById('item-quantidade').value);
     const dados = {
       produto: document.getElementById('item-produto').value.trim(),
-      quantidade: document.getElementById('item-quantidade').value,
+      // Mesma normalização que o servidor faz — importante porque agora
+      // atualizamos o item local direto (sem reler do Firestore) e precisa
+      // bater com o que ficou salvo de verdade.
+      quantidade: !isNaN(qtdInformada) && qtdInformada > 0 ? qtdInformada : 1,
       unidade: document.getElementById('item-unidade').value.trim(),
       periodicidade: document.getElementById('item-periodicidade').value.trim(),
       professor: document.getElementById('item-professor').value.trim(),
@@ -398,12 +475,27 @@ function setupModalItem() {
     try {
       if (id) {
         await apiFetch(`/financeiro/itens/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
+        // Atualiza o item local em vez de recarregar o curso inteiro. Se a
+        // quantidade mudou, o servidor recalcula o valorTotal das cotações já
+        // lançadas — replica a mesma conta aqui pra não mostrar total velho.
+        const item = itens.find(it => it.id === id);
+        if (item) {
+          const qtdMudou = item.quantidade !== dados.quantidade;
+          Object.assign(item, dados);
+          if (qtdMudou && item.cotacoes?.length) {
+            item.cotacoes = item.cotacoes.map(c => ({ ...c, valorTotal: Math.round(c.valorUnitario * dados.quantidade * 100) / 100 }));
+          }
+        }
       } else {
-        await apiFetch('/financeiro/itens', { method: 'POST', body: JSON.stringify(dados) });
+        const { id: novoId } = await apiFetch('/financeiro/itens', { method: 'POST', body: JSON.stringify(dados) });
+        // Insere localmente na posição alfabética certa — evita reler o curso
+        // inteiro só pra mostrar o item que a gente acabou de criar.
+        itens.push({ ...dados, id: novoId, status: 'pendente', cotacoes: [] });
+        itens.sort((a, b) => (a.produto || '').localeCompare(b.produto || ''));
       }
       modal.classList.add('hidden');
       showToast(id ? 'Item atualizado' : 'Item cadastrado');
-      await carregarItens();
+      renderTabelaItens(itens);
     } catch (err) {
       showToast('Erro ao salvar: ' + err.message, 'error');
     } finally {
@@ -469,7 +561,12 @@ function setupModalCotacoes() {
       });
       modal.classList.add('hidden');
       showToast('Cotações salvas');
-      await carregarItens();
+      // Busca só esse item de novo (1 leitura) pra pegar o valorTotal
+      // recalculado no servidor — não precisa reler o curso inteiro.
+      const itemAtualizado = await apiFetch(`/financeiro/itens/${itemEmEdicaoCotacoes.id}`);
+      const idx = itens.findIndex(it => it.id === itemEmEdicaoCotacoes.id);
+      if (idx !== -1) itens[idx] = itemAtualizado;
+      renderTabelaItens(itens);
     } catch (err) {
       showToast('Erro ao salvar cotações: ' + err.message, 'error');
     } finally {
