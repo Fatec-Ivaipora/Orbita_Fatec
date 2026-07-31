@@ -142,6 +142,8 @@ async function initApp(user, role) {
     initPaginaNegociacao();
   } else if (document.getElementById('fornecedores-root')) {
     initPaginaFornecedores();
+  } else if (document.getElementById('fechamento-root')) {
+    initPaginaFechamento();
   }
 }
 
@@ -391,9 +393,11 @@ function renderTabelaItens(lista) {
         <td class="valor-menor no-coordenador">${melhor ? fmtMoeda(melhor.valorTotal) : '—'}</td>
         <td class="no-coordenador">${melhor ? esc(melhor.fornecedorNome) : '—'}</td>
         <td>
-          <button type="button" class="status-badge status-${item.status} action-execute" data-id="${item.id}" data-status="${item.status}">
-            ${item.status === 'chegou' ? 'Chegou' : 'Pendente'}
-          </button>
+          ${item.status === 'fechado'
+            ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>`
+            : `<button type="button" class="status-badge status-${item.status} action-execute" data-id="${item.id}" data-status="${item.status}">
+                ${item.status === 'chegou' ? 'Chegou' : 'Pendente'}
+              </button>`}
         </td>
         <td class="acoes-col">
           <button type="button" class="btn-icon acao-cotacoes action-execute no-coordenador" data-id="${item.id}" title="Cotações">💰</button>
@@ -1351,4 +1355,300 @@ function abrirModalEditarItemFornecedor(item, fornecedorId) {
   document.getElementById('edit-item-quantidade').value = item.quantidade;
   document.getElementById('edit-item-valor').value = item.valoresPorFornecedor[fornecedorId];
   document.getElementById('modal-editar-item').classList.remove('hidden');
+}
+
+// ==========================================
+// TELA DE FECHAMENTO (fechamento.html)
+// ==========================================
+// Fecha um lote de itens com uma empresa a partir do orçamento final
+// negociado (que pode incluir itens que ela não venceu por preço — a
+// negociação do financeiro vale mais que o menor preço "de tabela").
+let fechaCandidatos = []; // resultado cru da busca, 1 entrada por linha colada
+
+async function initPaginaFechamento() {
+  await carregarFornecedores();
+  const selectFornecedor = document.getElementById('fecha-fornecedor-select');
+  if (selectFornecedor) {
+    selectFornecedor.innerHTML = '<option value="">Selecione a empresa...</option>' +
+      fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  }
+
+  let cursosParaFiltro = [];
+  try {
+    cursosParaFiltro = await apiFetch('/financeiro/cursos');
+  } catch (err) {
+    showToast('Erro ao carregar cursos: ' + err.message, 'error');
+  }
+  const selectCursoPendentes = document.getElementById('fecha-pendentes-curso-select');
+  if (selectCursoPendentes) {
+    selectCursoPendentes.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosParaFiltro.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  const selectCursoGeral = document.getElementById('fecha-geral-curso-select');
+  if (selectCursoGeral) {
+    selectCursoGeral.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosParaFiltro.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+
+  document.getElementById('btn-buscar-candidatos')?.addEventListener('click', buscarCandidatosFechamento);
+  document.getElementById('btn-confirmar-fechamento')?.addEventListener('click', confirmarFechamento);
+  document.getElementById('btn-ver-pendentes')?.addEventListener('click', carregarPendentesFechamento);
+  document.getElementById('fecha-pendentes-curso-select')?.addEventListener('change', carregarPendentesFechamento);
+  document.getElementById('btn-ver-fechados-geral')?.addEventListener('click', carregarFechadosGeral);
+  document.getElementById('fecha-geral-curso-select')?.addEventListener('change', carregarFechadosGeral);
+  document.getElementById('btn-ver-fechados')?.addEventListener('click', carregarFechadosFechamento);
+  document.getElementById('btn-desfazer-lote')?.addEventListener('click', desfazerLoteFechamento);
+}
+
+// Aceita linhas separadas por ; (produto;quantidade;valorUnitario;valorTotal)
+// ou por tab (colado direto de planilha/Excel).
+function parseLinhasOrcamento(texto) {
+  return texto.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(linha => {
+      const partes = linha.includes(';') ? linha.split(';') : linha.split('\t');
+      const [produto, quantidade, valorUnitario, valorTotal] = partes.map(p => (p || '').trim());
+      return {
+        produto,
+        quantidade: parseFloat((quantidade || '').replace(',', '.')) || 1,
+        valorUnitario: parseFloat((valorUnitario || '').replace(',', '.')) || 0,
+        valorTotal: parseFloat((valorTotal || '').replace(',', '.')) || 0
+      };
+    })
+    .filter(i => i.produto);
+}
+
+async function buscarCandidatosFechamento() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  const texto = document.getElementById('fecha-textarea')?.value || '';
+
+  if (!fornecedorId) return showToast('Selecione o fornecedor.', 'error');
+  if (!semestre) return showToast('Informe o semestre.', 'error');
+
+  const itens = parseLinhasOrcamento(texto);
+  if (!itens.length) return showToast('Cole os itens do orçamento (1 por linha).', 'error');
+
+  const btn = document.getElementById('btn-buscar-candidatos');
+  btn.disabled = true;
+  btn.textContent = 'Buscando...';
+  try {
+    const resp = await apiFetch('/financeiro/fechamento/candidatos', {
+      method: 'POST',
+      body: JSON.stringify({ itens, fornecedorId, semestre })
+    });
+    fechaCandidatos = resp.itens;
+    renderRevisaoFechamento();
+    document.getElementById('fecha-revisao-card').classList.remove('hidden');
+  } catch (err) {
+    showToast('Erro ao buscar candidatos: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Buscar correspondências no sistema';
+  }
+}
+
+function renderRevisaoFechamento() {
+  const tbody = document.getElementById('fecha-tbody');
+  tbody.innerHTML = fechaCandidatos.map((item, idx) => {
+    const semCorrespondencia = !item.candidatos.length;
+    const melhorScore = semCorrespondencia ? 0 : item.candidatos[0].score;
+    // Só marca automático quando o nome bate EXATO (score 1.0) — um caso real
+    // já mostrou que marcar tudo acima de 0.5 sozinho deixa passar item
+    // errado sem ninguém perceber. Tudo que não é exato fica sem marcar e
+    // destacado, pra obrigar a conferência manual antes de fechar.
+    const marcarPorPadrao = melhorScore === 1;
+    const precisaAtencao = !semCorrespondencia && melhorScore < 1;
+    return `
+    <tr class="${precisaAtencao ? 'linha-fechamento-atencao' : ''}">
+      <td><input type="checkbox" class="fecha-item-check" data-idx="${idx}" ${marcarPorPadrao ? 'checked' : ''} ${semCorrespondencia ? 'disabled' : ''}></td>
+      <td>${esc(item.produto)}</td>
+      <td>${item.quantidade} — ${fmtMoeda(item.valorTotal)}</td>
+      <td>
+        ${precisaAtencao ? '<div class="fechamento-aviso">⚠️ Confira — não é match exato</div>' : ''}
+        <select class="select-filter fecha-candidato-select" data-idx="${idx}" style="min-width:280px;" ${semCorrespondencia ? 'disabled' : ''}>
+          ${semCorrespondencia ? '<option value="">Nenhuma correspondência encontrada</option>' : ''}
+          <option value="">— nenhuma dessas, deixar de fora —</option>
+          ${item.candidatos.map((c, i) => `<option value="${c.id}" ${i === 0 ? 'selected' : ''}>${esc(c.produto)} — ${esc(c.curso)} (${Math.round(c.score * 100)}%)</option>`).join('')}
+        </select>
+      </td>
+      <td>${semCorrespondencia ? '—' : (item.candidatos[0].temCotacaoDesteFornecedor ? 'Sim' : 'Não')}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.fecha-item-check, .fecha-candidato-select').forEach(el => {
+    el.addEventListener('change', atualizarResumoFechamento);
+  });
+  atualizarResumoFechamento();
+}
+
+function atualizarResumoFechamento() {
+  const marcados = [...document.querySelectorAll('.fecha-item-check')]
+    .filter(chk => chk.checked && document.querySelector(`.fecha-candidato-select[data-idx="${chk.dataset.idx}"]`)?.value);
+  document.getElementById('fecha-resumo-selecionados').textContent =
+    `${marcados.length} ${marcados.length === 1 ? 'item selecionado' : 'itens selecionados'} pra fechar`;
+}
+
+async function confirmarFechamento() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const linhas = [...document.querySelectorAll('.fecha-item-check')].filter(chk => chk.checked);
+
+  const fechamentos = linhas.map(chk => {
+    const idx = chk.dataset.idx;
+    const select = document.querySelector(`.fecha-candidato-select[data-idx="${idx}"]`);
+    const itemId = select?.value;
+    if (!itemId) return null;
+    const item = fechaCandidatos[idx];
+    return { itemId, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal };
+  }).filter(Boolean);
+
+  if (!fechamentos.length) return showToast('Marque pelo menos 1 item pra fechar.', 'error');
+  if (!confirm(`Fechar ${fechamentos.length} ite${fechamentos.length === 1 ? 'm' : 'ns'} com essa empresa? Isso substitui a cotação dela nesses itens pelo valor final negociado.`)) return;
+
+  const btn = document.getElementById('btn-confirmar-fechamento');
+  btn.disabled = true;
+  btn.textContent = 'Fechando...';
+  try {
+    const resp = await apiFetch('/financeiro/fechamento/confirmar', {
+      method: 'POST',
+      body: JSON.stringify({ fornecedorId, fechamentos })
+    });
+    showToast(resp.message);
+    document.getElementById('fecha-revisao-card').classList.add('hidden');
+    document.getElementById('fecha-textarea').value = '';
+    fechaCandidatos = [];
+    // Atualiza na hora as duas listas de baixo — assim, conforme ela vai
+    // lançando cada empresa, dá pra ver ao vivo o que já saiu da lista do
+    // que falta comprar e o que já está fechado com essa empresa.
+    await Promise.all([carregarPendentesFechamento(), carregarFechadosFechamento(), carregarFechadosGeral()]);
+  } catch (err) {
+    showToast('Erro ao confirmar fechamento: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar fechamento';
+  }
+}
+
+async function carregarPendentesFechamento() {
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  const tbody = document.getElementById('fecha-pendentes-tbody');
+  if (!semestre) {
+    tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Informe o semestre no campo acima primeiro.</td></tr>';
+    return;
+  }
+  const cursoId = document.getElementById('fecha-pendentes-curso-select')?.value || '';
+  tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    const qs = new URLSearchParams({ semestre });
+    if (cursoId) qs.set('cursoId', cursoId);
+    const pendentes = await apiFetch(`/financeiro/fechamento/pendentes?${qs.toString()}`);
+    tbody.innerHTML = pendentes.length ? pendentes.map(p => `
+      <tr>
+        <td>${esc(p.curso)}</td>
+        <td>${esc(p.produto)}</td>
+        <td>${p.quantidade}${p.unidade ? ' ' + esc(p.unidade) : ''}</td>
+        <td>${p.totalCotacoes}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="tabela-msg">Tudo fechado — nenhum item pendente nesse filtro.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Lista o que já foi fechado com a empresa selecionada, pra conferir contra
+// o orçamento que ela mandou antes de confiar no resultado.
+async function carregarFechadosFechamento() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  const tbody = document.getElementById('fecha-fechados-tbody');
+  if (!fornecedorId || !semestre) {
+    showToast('Selecione a empresa e o semestre.', 'error');
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    const qs = new URLSearchParams({ fornecedorId, semestre });
+    const resp = await apiFetch(`/financeiro/fechamento/fechados?${qs.toString()}`);
+    tbody.innerHTML = resp.itens.length ? resp.itens.map(it => `
+      <tr>
+        <td>${esc(it.curso)}</td>
+        <td>${esc(it.produto)}</td>
+        <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
+        <td>${fmtMoeda(it.valorFechado)}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="tabela-msg">Nenhum item fechado com essa empresa ainda.</td></tr>';
+    document.getElementById('fecha-fechados-total').textContent =
+      `${resp.itens.length} itens — total fechado: ${fmtMoeda(resp.total)}`;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Relatório geral: tudo que já foi fechado no semestre, com QUALQUER
+// empresa — pra ter uma visão completa do que já está decidido, não só de
+// uma empresa por vez.
+async function carregarFechadosGeral() {
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  const tbody = document.getElementById('fecha-geral-tbody');
+  const resumoDiv = document.getElementById('fecha-geral-resumo');
+  if (!semestre) {
+    showToast('Informe o semestre no campo acima primeiro.', 'error');
+    return;
+  }
+  const cursoId = document.getElementById('fecha-geral-curso-select')?.value || '';
+  tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
+  resumoDiv.innerHTML = '';
+  try {
+    const qs = new URLSearchParams({ semestre });
+    if (cursoId) qs.set('cursoId', cursoId);
+    const resp = await apiFetch(`/financeiro/fechamento/fechados-geral?${qs.toString()}`);
+
+    resumoDiv.innerHTML = resp.resumoPorFornecedor.map(r => `
+      <div class="kpi-card" style="min-width:180px;">
+        <div class="kpi-label">${esc(r.fornecedor)}</div>
+        <div class="kpi-value" style="font-size:1.1rem;">${r.itens} itens — ${fmtMoeda(r.total)}</div>
+      </div>`).join('');
+
+    tbody.innerHTML = resp.itens.length ? resp.itens.map(it => `
+      <tr>
+        <td>${esc(it.fornecedor)}</td>
+        <td>${esc(it.curso)}</td>
+        <td>${esc(it.produto)}</td>
+        <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
+        <td>${fmtMoeda(it.valorFechado)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="tabela-msg">Nenhum item fechado ainda nesse filtro.</td></tr>';
+    document.getElementById('fecha-geral-total').textContent =
+      `${resp.itens.length} itens fechados no total — ${fmtMoeda(resp.totalGeral)}`;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Desfaz de uma vez todos os fechamentos dessa empresa nesse semestre — pra
+// corrigir rápido um lote que saiu errado (sem precisar item por item).
+async function desfazerLoteFechamento() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  if (!fornecedorId || !semestre) {
+    showToast('Selecione a empresa e o semestre.', 'error');
+    return;
+  }
+  const nomeEmpresa = fornecedores.find(f => f.id === fornecedorId)?.nome || '';
+  if (!confirm(`Desfazer TODOS os fechamentos de "${nomeEmpresa}" nesse semestre? Cada item volta pro estado de antes do fechamento dele.`)) return;
+
+  const btn = document.getElementById('btn-desfazer-lote');
+  btn.disabled = true;
+  btn.textContent = 'Desfazendo...';
+  try {
+    const resp = await apiFetch('/financeiro/fechamento/reabrir-lote', {
+      method: 'POST',
+      body: JSON.stringify({ fornecedorId, semestre })
+    });
+    showToast(resp.message);
+    await carregarFechadosFechamento();
+  } catch (err) {
+    showToast('Erro ao desfazer: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Desfazer todos os fechamentos dessa empresa';
+  }
 }
