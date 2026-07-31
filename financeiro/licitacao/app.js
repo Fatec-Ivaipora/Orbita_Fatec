@@ -663,15 +663,13 @@ async function initPaginaRelatorio() {
     cursoLabel.textContent = partes.join(' — ');
   }
 
-  // O filtro só deve listar curso que já tem item COM cotação de fornecedor
-  // registrada — item cadastrado sem nenhum preço ainda não dá pra comparar
-  // nem negociar, então não entra na lista.
+  // Lista de cursos pro filtro — usa o endpoint leve (~16 docs) em vez de
+  // buscar o /relatorio inteiro (que lê TODOS os itens) só pra montar um
+  // dropdown. Efeito colateral aceitável: pode listar curso sem nenhum item
+  // ainda, que simplesmente mostra "sem dados" se selecionado.
   let cursosComItens = [];
   try {
-    const basedata = await apiFetch('/financeiro/relatorio');
-    const mapaCursos = new Map();
-    basedata.comparativo.itens.forEach(i => { if (!mapaCursos.has(i.cursoId)) mapaCursos.set(i.cursoId, i.curso); });
-    cursosComItens = Array.from(mapaCursos, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    cursosComItens = (await apiFetch('/financeiro/cursos')).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     showToast('Erro ao carregar cursos do relatório: ' + err.message, 'error');
   }
@@ -888,14 +886,11 @@ async function initPaginaNegociacao() {
   const cursoIdInicial = params.get('cursoId') || '';
   const fornecedorIdInicial = params.get('fornecedorId') || '';
 
-  // Só lista curso que já tem item COM cotação de fornecedor registrada —
-  // mesmo critério usado no filtro do relatório.
+  // Lista de cursos pro filtro — endpoint leve, em vez do /relatorio inteiro
+  // (ver mesma correção em initPaginaRelatorio).
   let cursosComItens = [];
   try {
-    const basedata = await apiFetch('/financeiro/relatorio');
-    const mapaCursos = new Map();
-    basedata.comparativo.itens.forEach(i => { if (!mapaCursos.has(i.cursoId)) mapaCursos.set(i.cursoId, i.curso); });
-    cursosComItens = Array.from(mapaCursos, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    cursosComItens = (await apiFetch('/financeiro/cursos')).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     showToast('Erro ao carregar cursos: ' + err.message, 'error');
   }
@@ -1161,7 +1156,20 @@ function setupModalEditarItemFornecedor() {
       modal.classList.add('hidden');
       showToast('Item atualizado');
 
-      await recarregarItensGeraisFornecedores();
+      // Atualiza o item local (fornecedorItensGeral) em vez de reler a
+      // coleção inteira de novo — replica a mesma conta que o servidor faz.
+      const itemGeral = fornecedorItensGeral.find(i => i.itemId === item.itemId);
+      if (itemGeral) {
+        itemGeral.produto = produto;
+        itemGeral.quantidade = quantidade;
+        const novosValores = {};
+        cotacoes.forEach(c => { novosValores[c.fornecedorId] = Math.round(c.valorUnitario * quantidade * 100) / 100; });
+        itemGeral.valoresPorFornecedor = novosValores;
+        let menorId = null, menorValor = Infinity;
+        Object.entries(novosValores).forEach(([fid, v]) => { if (v < menorValor) { menorValor = v; menorId = fid; } });
+        itemGeral.vencedorFornecedorId = menorId;
+      }
+
       renderTabelaFornecedores();
       const nomeAtual = fornecedores.find(f => f.id === fornecedorDetalheAbertoId)?.nome || '';
       if (fornecedorDetalheAbertoId) abrirDetalheFornecedor(fornecedorDetalheAbertoId, nomeAtual);
