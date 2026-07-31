@@ -301,6 +301,18 @@
 
 /* Relatório */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
+
+/* Negociação: os KPIs (valor total, ganhos/perdidos...) ficam fixos no topo
+   ao rolar a tela pelas tabelas — senão, na hora de negociar por telefone,
+   perde de vista o valor total só de descer a página pra ver os itens. */
+#negociacao-conteudo .kpi-grid,
+#comparar-conteudo .kpi-grid {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-color);
+  padding: 1rem 0;
+}
 .kpi-card {
   background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
