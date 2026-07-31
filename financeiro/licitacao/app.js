@@ -879,6 +879,8 @@ function esc(str) {
 // outra empresa é tanto"). Reaproveita o mesmo /financeiro/relatorio que já
 // traz valoresPorFornecedor de cada item, então não precisou de rota nova.
 let negociacaoComparativo = { fornecedores: [], itens: [] };
+let itensComparacaoAtual = []; // itens em comum entre as 2 empresas selecionadas na "calculadora"
+let selecionadosComparacao = new Set(); // itemId dos itens marcados na calculadora
 
 async function initPaginaNegociacao() {
   await carregarCursos();
@@ -911,6 +913,20 @@ async function initPaginaNegociacao() {
 
   selectFornecedor?.addEventListener('change', () => renderNegociacao(selectFornecedor.value));
 
+  document.getElementById('comparar-empresa-a')?.addEventListener('change', renderComparacaoDuasEmpresas);
+  document.getElementById('comparar-empresa-b')?.addEventListener('change', renderComparacaoDuasEmpresas);
+
+  document.getElementById('btn-comp-marcar-todos')?.addEventListener('click', () => {
+    itensComparacaoAtual.forEach(i => selecionadosComparacao.add(i.itemId));
+    document.querySelectorAll('.comp-item-check').forEach(chk => { chk.checked = true; });
+    atualizarCalculadoraComparacao();
+  });
+  document.getElementById('btn-comp-limpar')?.addEventListener('click', () => {
+    selecionadosComparacao.clear();
+    document.querySelectorAll('.comp-item-check').forEach(chk => { chk.checked = false; });
+    atualizarCalculadoraComparacao();
+  });
+
   await carregarNegociacao(fornecedorIdInicial);
 }
 
@@ -933,9 +949,140 @@ async function carregarNegociacao(fornecedorIdForcado = '') {
       }
     }
     renderNegociacao(selectFornecedor?.value || '');
+    popularSelectsComparacao();
   } catch (err) {
     showToast('Erro ao carregar negociação: ' + err.message, 'error');
   }
+}
+
+// Popula os dois selects de "comparar duas empresas" preservando a seleção
+// atual, se a empresa ainda existir na lista (ex.: depois de trocar o curso).
+function popularSelectsComparacao() {
+  const selectA = document.getElementById('comparar-empresa-a');
+  const selectB = document.getElementById('comparar-empresa-b');
+  if (!selectA || !selectB) return;
+
+  const { fornecedores } = negociacaoComparativo;
+  const valorAtualA = selectA.value;
+  const valorAtualB = selectB.value;
+
+  const opcoes = fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  selectA.innerHTML = '<option value="">Empresa A...</option>' + opcoes;
+  selectB.innerHTML = '<option value="">Empresa B...</option>' + opcoes;
+
+  if (fornecedores.some(f => f.id === valorAtualA)) selectA.value = valorAtualA;
+  if (fornecedores.some(f => f.id === valorAtualB)) selectB.value = valorAtualB;
+
+  renderComparacaoDuasEmpresas();
+}
+
+// Comparação direta entre duas empresas — só os itens onde AS DUAS cotaram,
+// pra ver visualmente a disputa quando fica concentrada entre um par de
+// fornecedores (o resto do comparativo geral mostra todo mundo, o que fica
+// poluído quando o que importa é só essas duas).
+function renderComparacaoDuasEmpresas() {
+  const vazio = document.getElementById('comparar-vazio');
+  const conteudo = document.getElementById('comparar-conteudo');
+  if (!vazio || !conteudo) return;
+
+  const idA = document.getElementById('comparar-empresa-a')?.value || '';
+  const idB = document.getElementById('comparar-empresa-b')?.value || '';
+
+  if (!idA || !idB) {
+    vazio.textContent = 'Selecione as duas empresas para comparar.';
+    vazio.classList.remove('hidden');
+    conteudo.classList.add('hidden');
+    return;
+  }
+  if (idA === idB) {
+    vazio.textContent = 'Escolha duas empresas diferentes.';
+    vazio.classList.remove('hidden');
+    conteudo.classList.add('hidden');
+    return;
+  }
+
+  const { fornecedores, itens } = negociacaoComparativo;
+  const nomeA = fornecedores.find(f => f.id === idA)?.nome || '—';
+  const nomeB = fornecedores.find(f => f.id === idB)?.nome || '—';
+
+  const itensEmComum = itens.filter(i =>
+    i.valoresPorFornecedor[idA] !== undefined && i.valoresPorFornecedor[idB] !== undefined
+  );
+  itensComparacaoAtual = itensEmComum;
+  selecionadosComparacao = new Set(); // troca de empresa/curso zera a seleção da calculadora
+
+  vazio.classList.add('hidden');
+  conteudo.classList.remove('hidden');
+
+  document.getElementById('comp-th-a').textContent = nomeA;
+  document.getElementById('comp-th-b').textContent = nomeB;
+  document.getElementById('comp-kpi-a-label').textContent = `Vitórias de ${nomeA}`;
+  document.getElementById('comp-kpi-b-label').textContent = `Vitórias de ${nomeB}`;
+  document.getElementById('comp-calc-a-label').textContent = nomeA;
+  document.getElementById('comp-calc-b-label').textContent = nomeB;
+
+  let vitoriasA = 0, vitoriasB = 0, empates = 0;
+
+  const linhas = itensEmComum.map(i => {
+    const valorA = i.valoresPorFornecedor[idA];
+    const valorB = i.valoresPorFornecedor[idB];
+    const diferenca = valorA - valorB;
+    let classeA = '', classeB = '';
+    if (valorA < valorB) { vitoriasA++; classeA = 'valor-vencedor'; }
+    else if (valorB < valorA) { vitoriasB++; classeB = 'valor-vencedor'; }
+    else { empates++; }
+
+    return `
+    <tr>
+      <td><input type="checkbox" class="comp-item-check" data-item-id="${i.itemId}"></td>
+      <td>${esc(i.curso)}</td>
+      <td>${esc(i.produto)}</td>
+      <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
+      <td class="${classeA}">${fmtMoeda(valorA)}</td>
+      <td class="${classeB}">${fmtMoeda(valorB)}</td>
+      <td>${diferenca === 0 ? '—' : (diferenca > 0 ? '+' : '') + fmtMoeda(diferenca)}</td>
+    </tr>`;
+  });
+
+  const tbody = document.getElementById('comp-tbody');
+  tbody.innerHTML = linhas.length
+    ? linhas.join('')
+    : `<tr><td colspan="7" class="tabela-msg">${esc(nomeA)} e ${esc(nomeB)} não cotaram nenhum item em comum nos filtros atuais.</td></tr>`;
+
+  tbody.querySelectorAll('.comp-item-check').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if (chk.checked) selecionadosComparacao.add(chk.dataset.itemId);
+      else selecionadosComparacao.delete(chk.dataset.itemId);
+      atualizarCalculadoraComparacao();
+    });
+  });
+
+  document.getElementById('comp-kpi-total').textContent = itensEmComum.length;
+  document.getElementById('comp-kpi-a').textContent = vitoriasA;
+  document.getElementById('comp-kpi-b').textContent = vitoriasB;
+  document.getElementById('comp-kpi-empate').textContent = empates;
+
+  atualizarCalculadoraComparacao();
+}
+
+// Soma ao vivo dos itens marcados na calculadora — não precisa re-renderizar
+// a tabela inteira a cada clique, só recalcula os totais.
+function atualizarCalculadoraComparacao() {
+  const idA = document.getElementById('comparar-empresa-a')?.value || '';
+  const idB = document.getElementById('comparar-empresa-b')?.value || '';
+
+  let somaA = 0, somaB = 0;
+  itensComparacaoAtual.forEach(i => {
+    if (!selecionadosComparacao.has(i.itemId)) return;
+    somaA += i.valoresPorFornecedor[idA] || 0;
+    somaB += i.valoresPorFornecedor[idB] || 0;
+  });
+
+  document.getElementById('comp-calc-qtd').textContent = `${selecionadosComparacao.size} ${selecionadosComparacao.size === 1 ? 'item selecionado' : 'itens selecionados'}`;
+  document.getElementById('comp-calc-a').textContent = fmtMoeda(somaA);
+  document.getElementById('comp-calc-b').textContent = fmtMoeda(somaB);
+  const diferenca = somaA - somaB;
+  document.getElementById('comp-calc-diferenca').textContent = (diferenca === 0 ? '' : (diferenca > 0 ? '+' : '')) + fmtMoeda(diferenca);
 }
 
 function renderNegociacao(fornecedorId) {
@@ -1015,6 +1162,8 @@ async function initPaginaFornecedores() {
   renderTabelaFornecedores();
   setupModalEditarItemFornecedor();
 
+  document.getElementById('btn-imprimir-fornecedor')?.addEventListener('click', () => window.print());
+
   document.getElementById('form-fornecedor')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = document.getElementById('fornecedor-nome');
@@ -1093,6 +1242,14 @@ function abrirDetalheFornecedor(fornecedorId, nome) {
   const itensDela = fornecedorItensGeral.filter(i => i.valoresPorFornecedor[fornecedorId] !== undefined);
   titulo.textContent = `Cotações — ${nome}`;
 
+  // Cabeçalho que só aparece na impressão — é o relatório que sai impresso
+  // pro próprio fornecedor, então não mostra status de venceu/perdeu (é
+  // informação interna, não deveria ir pra mão da empresa concorrente).
+  const printNome = document.getElementById('fornecedor-print-nome');
+  const printData = document.getElementById('fornecedor-print-data');
+  if (printNome) printNome.textContent = nome;
+  if (printData) printData.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
   tbody.innerHTML = itensDela.length ? itensDela.map(i => {
     const venceu = i.vencedorFornecedorId === fornecedorId;
     return `
@@ -1101,8 +1258,8 @@ function abrirDetalheFornecedor(fornecedorId, nome) {
       <td>${esc(i.produto)}</td>
       <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
       <td>${fmtMoeda(i.valoresPorFornecedor[fornecedorId])}</td>
-      <td><span class="status-badge ${venceu ? 'status-venceu' : 'status-perdeu'}">${venceu ? 'Venceu' : 'Não venceu'}</span></td>
-      <td><button type="button" class="btn-icon action-execute" data-editar-item="${i.itemId}" title="Editar produto/quantidade/valor">✏️</button></td>
+      <td class="no-print"><span class="status-badge ${venceu ? 'status-venceu' : 'status-perdeu'}">${venceu ? 'Venceu' : 'Não venceu'}</span></td>
+      <td class="no-print"><button type="button" class="btn-icon action-execute" data-editar-item="${i.itemId}" title="Editar produto/quantidade/valor">✏️</button></td>
     </tr>`;
   }).join('') : '<tr><td colspan="6" class="tabela-msg">Essa empresa ainda não tem nenhuma cotação registrada.</td></tr>';
 

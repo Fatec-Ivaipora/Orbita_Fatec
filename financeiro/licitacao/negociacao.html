@@ -66,7 +66,7 @@
 
                     <div class="card" style="margin-bottom:1.5rem;">
                         <h3 class="card-secao-titulo">Itens que a empresa está ganhando</h3>
-                        <div class="tabela-wrap">
+                        <div class="tabela-wrap tabela-scroll">
                             <table class="data-table">
                                 <thead>
                                     <tr>
@@ -83,7 +83,7 @@
 
                     <div class="card">
                         <h3 class="card-secao-titulo">Itens que a empresa perdeu — oportunidade de negociação</h3>
-                        <div class="tabela-wrap">
+                        <div class="tabela-wrap tabela-scroll">
                             <table class="data-table">
                                 <thead>
                                     <tr>
@@ -98,6 +98,82 @@
                                 </thead>
                                 <tbody id="neg-tbody-perdidos"></tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:1.5rem;">
+                    <h3 class="card-secao-titulo">Comparar duas empresas</h3>
+                    <p class="page-subtitle" style="padding:0 1.5rem;">Quando a disputa fica entre duas empresas específicas — mostra só os itens onde as duas cotaram, lado a lado</p>
+                    <div class="filters-bar" style="padding:0 1.5rem 1.25rem;">
+                        <select class="select-filter" id="comparar-empresa-a">
+                            <option value="">Empresa A...</option>
+                        </select>
+                        <select class="select-filter" id="comparar-empresa-b">
+                            <option value="">Empresa B...</option>
+                        </select>
+                    </div>
+
+                    <div id="comparar-vazio" class="tabela-msg" style="padding:0 1.5rem 1.5rem;">Selecione as duas empresas para comparar.</div>
+
+                    <div id="comparar-conteudo" class="hidden">
+                        <div class="kpi-grid" style="padding:0 1.5rem 1.25rem;">
+                            <div class="kpi-card">
+                                <div class="kpi-label">Itens onde as duas competem</div>
+                                <div class="kpi-value" id="comp-kpi-total">—</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-label" id="comp-kpi-a-label">Vitórias de A</div>
+                                <div class="kpi-value" id="comp-kpi-a">—</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-label" id="comp-kpi-b-label">Vitórias de B</div>
+                                <div class="kpi-value" id="comp-kpi-b">—</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-label">Empates (mesmo valor)</div>
+                                <div class="kpi-value" id="comp-kpi-empate">—</div>
+                            </div>
+                        </div>
+
+                        <div class="tabela-wrap tabela-scroll">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:2rem;"></th>
+                                        <th>Curso</th>
+                                        <th>Produto</th>
+                                        <th>Qtd/Und</th>
+                                        <th id="comp-th-a">Empresa A</th>
+                                        <th id="comp-th-b">Empresa B</th>
+                                        <th>Diferença</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comp-tbody"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- "Calculadora" da negociação: soma ao vivo dos itens marcados -->
+                        <div class="calculadora-negociacao">
+                            <div class="calculadora-acoes">
+                                <button type="button" class="btn-secondary" id="btn-comp-marcar-todos">Marcar todos</button>
+                                <button type="button" class="btn-secondary" id="btn-comp-limpar">Limpar seleção</button>
+                                <span id="comp-calc-qtd">0 itens selecionados</span>
+                            </div>
+                            <div class="calculadora-totais">
+                                <div>
+                                    <span class="calculadora-label" id="comp-calc-a-label">Empresa A</span>
+                                    <strong id="comp-calc-a">R$ 0,00</strong>
+                                </div>
+                                <div>
+                                    <span class="calculadora-label" id="comp-calc-b-label">Empresa B</span>
+                                    <strong id="comp-calc-b">R$ 0,00</strong>
+                                </div>
+                                <div>
+                                    <span class="calculadora-label">Diferença</span>
+                                    <strong id="comp-calc-diferenca">R$ 0,00</strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
