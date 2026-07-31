@@ -231,6 +231,13 @@
 }
 .status-pendente { background: #fef3c7; color: #d97706; }
 .status-chegou { background: #d1fae5; color: #047857; }
+.status-fechado { background: #dbeafe; color: #1d4ed8; cursor: default; }
+
+/* Linhas da tela de Fechamento cujo casamento de nome não foi exato — pede
+   conferência manual antes de confiar (já rolou de dar errado sem ninguém
+   perceber quando isso ficava só marcado por padrão sem destaque nenhum). */
+.linha-fechamento-atencao td { background: #fffbeb; }
+.fechamento-aviso { color: #b45309; font-size: 0.78rem; font-weight: 700; margin-bottom: 0.3rem; }
 .status-venceu { background: #d1fae5; color: #047857; }
 .status-perdeu { background: #f1f5f9; color: #64748b; }
 

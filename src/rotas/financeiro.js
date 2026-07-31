@@ -162,19 +162,45 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
         // Medicina) estavam gastando uma cota de leitura enorme só pra abrir a tela.
         // orderBy(produto) + orderBy(__name__) garante ordenação estável mesmo com
         // produtos de nome repetido (existem casos assim cadastrados).
-        let query = db.collection(COL_ITENS)
-            .where('cursoId', '==', cursoId)
-            .where('semestre', '==', semestre)
-            .orderBy('produto')
-            .orderBy(admin.firestore.FieldPath.documentId());
+        //
+        // Item "fechado" não aparece nessa tela (já foi decidido, só atrapalha a
+        // gestão do que ainda tá em cotação) — como isso exigiria mais um índice
+        // composto pra filtrar direto no Firestore, busca em lotes e pula os
+        // fechados até completar a página (ou acabar os dados do curso).
+        let cursor = (cursorProduto && cursorId) ? { produto: cursorProduto, id: cursorId } : null;
+        const docsPagina = [];
+        let hasMore = false;
 
-        if (cursorProduto && cursorId) {
-            query = query.startAfter(cursorProduto, cursorId);
+        while (docsPagina.length < pageSize) {
+            let query = db.collection(COL_ITENS)
+                .where('cursoId', '==', cursoId)
+                .where('semestre', '==', semestre)
+                .orderBy('produto')
+                .orderBy(admin.firestore.FieldPath.documentId());
+
+            if (cursor) query = query.startAfter(cursor.produto, cursor.id);
+
+            const lote = await query.limit(pageSize + 1).get();
+            if (lote.empty) break;
+
+            const docsLote = lote.docs.slice(0, pageSize);
+            hasMore = lote.docs.length > pageSize;
+
+            // Percorre o lote parando exatamente no doc onde a página encheu — o
+            // cursor tem que apontar pra esse doc (mesmo que tenha sido pulado
+            // por ser "fechado"), nunca pro último do lote inteiro. Senão, os
+            // docs que sobravam depois de a página encher no MEIO do lote
+            // ficavam perdidos pra sempre (cursor pulava eles sem nunca voltar).
+            let paradaNoMeio = false;
+            for (const d of docsLote) {
+                if (docsPagina.length >= pageSize) { paradaNoMeio = true; break; }
+                if (d.data().status !== 'fechado') docsPagina.push(d);
+                cursor = { produto: d.data().produto, id: d.id };
+            }
+
+            if (paradaNoMeio) { hasMore = true; break; }
+            if (!hasMore) break;
         }
-
-        const snap = await query.limit(pageSize + 1).get();
-        const hasMore = snap.docs.length > pageSize;
-        const docsPagina = snap.docs.slice(0, pageSize);
 
         let itens = docsPagina.map(d => ({ id: d.id, ...d.data() }));
 
@@ -184,11 +210,10 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
             itens = itens.map(({ cotacoes, ...resto }) => ({ ...resto, temCotacao: (cotacoes || []).length > 0 }));
         }
 
-        const ultimo = docsPagina[docsPagina.length - 1];
         res.json({
             itens,
             hasMore,
-            nextCursor: hasMore && ultimo ? { produto: ultimo.data().produto, id: ultimo.id } : null
+            nextCursor: hasMore ? cursor : null
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -443,6 +468,292 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                     (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || '')
                 )
             }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// FECHAMENTO (fechar itens com um fornecedor a partir de um orçamento final
+// negociado, mesmo que ele não seja o vencedor por preço em algum item)
+// ==========================================
+
+const PARADAS_MATCH = new Set(['p', 'c', 'de', 'da', 'do', 'com', 'para', 'uso', 'geral',
+    'uni', 'und', 'unid', 'kit', 'pc', 'cx', 'mc', 'st', 'un']);
+
+function normalizarTextoMatch(s) {
+    return (s || '')
+        .toString()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/(\d)[.,](\d)/g, '$1_$2')
+        .replace(/[^a-z0-9_\s]/g, ' ')
+        .replace(/(\d)([a-z])/g, '$1 $2')
+        .replace(/([a-z])(\d)/g, '$1 $2')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function tokensMatch(s) {
+    return new Set(normalizarTextoMatch(s).split(' ').filter(t => t && !PARADAS_MATCH.has(t)));
+}
+
+// Coeficiente de sobreposição (Szymkiewicz-Simpson): quanto das palavras do
+// nome MAIS CURTO aparece no mais longo. Nomes de orçamento de fornecedor
+// costumam ser bem mais técnicos/longos (código, marca, medida) que os nomes
+// simples cadastrados no sistema — Jaccard penaliza isso demais; aqui só
+// importa se o nome curto está "contido" no longo.
+function overlapMatch(a, b) {
+    const ta = tokensMatch(a), tb = tokensMatch(b);
+    if (!ta.size || !tb.size) return 0;
+    let inter = 0;
+    ta.forEach(t => { if (tb.has(t)) inter++; });
+    const menor = Math.min(ta.size, tb.size);
+    return menor ? inter / menor : 0;
+}
+
+// GET /fechamento/pendentes — itens que ainda não têm nenhuma empresa
+// fechada (status diferente de "fechado"), pra saber o que falta negociar.
+router.get('/fechamento/pendentes', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { semestre, cursoId } = req.query;
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        let query = db.collection(COL_ITENS).where('semestre', '==', semestre);
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        const snap = await query.get();
+
+        const pendentes = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(it => it.status !== 'fechado')
+            .sort((a, b) => (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
+
+        res.json(pendentes.map(it => ({
+            id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
+            unidade: it.unidade, totalCotacoes: (it.cotacoes || []).length
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /fechamento/candidatos — recebe os itens de um orçamento final (nome,
+// qtd, valor) e sugere, pra cada um, os itens já cadastrados no sistema mais
+// parecidos (qualquer curso/semestre ativo), pra revisão visual na tela.
+router.post('/fechamento/candidatos', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { itens, fornecedorId, semestre } = req.body;
+        if (!Array.isArray(itens) || !itens.length) return res.status(400).json({ error: 'Informe os itens do orçamento.' });
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        const snap = await db.collection(COL_ITENS).where('semestre', '==', semestre).get();
+        // Item já fechado com outra empresa não entra como candidato — já foi
+        // decidido, não faz sentido oferecer de novo num fechamento diferente
+        // (se precisar mudar quem fechou, primeiro reabre na lista de fechados).
+        const itensSistema = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(it => it.status !== 'fechado');
+
+        const resultado = itens.map(itemOrcamento => {
+            const candidatos = itensSistema
+                .map(it => ({
+                    id: it.id,
+                    produto: it.produto,
+                    curso: it.curso,
+                    quantidade: it.quantidade,
+                    unidade: it.unidade,
+                    status: it.status,
+                    temCotacaoDesteFornecedor: fornecedorId ? (it.cotacoes || []).some(c => c.fornecedorId === fornecedorId) : false,
+                    score: normalizarTextoMatch(it.produto) === normalizarTextoMatch(itemOrcamento.produto)
+                        ? 1 : overlapMatch(it.produto, itemOrcamento.produto)
+                }))
+                .filter(c => c.score >= 0.3)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+            return { ...itemOrcamento, candidatos };
+        });
+
+        res.json({ itens: resultado });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /fechamento/confirmar — aplica o fechamento: define o item como
+// "fechado" com esse fornecedor e grava o valor final negociado na cotação
+// dela (substitui/insere, mantendo as cotações das outras empresas intactas).
+router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { fornecedorId, fechamentos } = req.body;
+        if (!fornecedorId) return res.status(400).json({ error: 'Informe o fornecedor.' });
+        if (!Array.isArray(fechamentos) || !fechamentos.length) return res.status(400).json({ error: 'Informe os itens a fechar.' });
+
+        const fornDoc = await db.collection(COL_FORNECEDORES).doc(fornecedorId).get();
+        if (!fornDoc.exists) return res.status(404).json({ error: 'Fornecedor não encontrado.' });
+        const fornecedorNome = fornDoc.data().nome;
+
+        let atualizados = 0;
+        const erros = [];
+        for (const f of fechamentos) {
+            const doc = await db.collection(COL_ITENS).doc(f.itemId).get();
+            if (!doc.exists) { erros.push({ itemId: f.itemId, error: 'Item não encontrado.' }); continue; }
+            const item = doc.data();
+
+            const valorUnitario = parseFloat(f.valorUnitario);
+            const valorTotal = parseFloat(f.valorTotal);
+            if (isNaN(valorUnitario) || isNaN(valorTotal)) { erros.push({ itemId: f.itemId, error: 'Valor inválido.' }); continue; }
+
+            const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== fornecedorId);
+            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario, valorTotal });
+
+            // Guarda o estado de ANTES do fechamento (cotações e status originais)
+            // pra "reabrir" conseguir desfazer de verdade — sem isso, reabrir só
+            // limpava os campos de fechado mas deixava a cotação nova (errada,
+            // se o casamento automático tivesse acertado o item errado) intacta.
+            await db.collection(COL_ITENS).doc(f.itemId).update({
+                cotacoes,
+                status: 'fechado',
+                fornecedorFechadoId: fornecedorId,
+                fornecedorFechadoNome: fornecedorNome,
+                valorFechado: valorTotal,
+                fechadoEm: new Date().toISOString(),
+                estadoAntesDoFechamento: { cotacoes: item.cotacoes || [], status: item.status || 'pendente' },
+                updatedAt: new Date().toISOString()
+            });
+            atualizados++;
+        }
+
+        res.json({ message: `${atualizados} item(ns) fechado(s) com ${fornecedorNome}.`, atualizados, erros });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /fechamento/:id/reabrir — desfaz um fechamento, restaurando as
+// cotações e o status exatamente como estavam antes (guardado em
+// estadoAntesDoFechamento no momento da confirmação) — não só limpa o status.
+router.post('/fechamento/:id/reabrir', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const doc = await db.collection(COL_ITENS).doc(req.params.id).get();
+        if (!doc.exists) return res.status(404).json({ error: 'Item não encontrado.' });
+        const anterior = doc.data().estadoAntesDoFechamento;
+
+        await db.collection(COL_ITENS).doc(req.params.id).update({
+            status: anterior ? anterior.status : 'pendente',
+            cotacoes: anterior ? anterior.cotacoes : (doc.data().cotacoes || []),
+            fornecedorFechadoId: admin.firestore.FieldValue.delete(),
+            fornecedorFechadoNome: admin.firestore.FieldValue.delete(),
+            valorFechado: admin.firestore.FieldValue.delete(),
+            fechadoEm: admin.firestore.FieldValue.delete(),
+            estadoAntesDoFechamento: admin.firestore.FieldValue.delete(),
+            updatedAt: new Date().toISOString()
+        });
+        res.json({ message: 'Fechamento desfeito — item voltou ao estado de antes.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /fechamento/reabrir-lote — desfaz de uma vez todos os fechamentos de
+// um fornecedor num semestre. Útil pra corrigir um lote inteiro que saiu
+// errado (ex.: casamento automático ruim), sem precisar reabrir item por item.
+router.post('/fechamento/reabrir-lote', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { fornecedorId, semestre } = req.body;
+        if (!fornecedorId) return res.status(400).json({ error: 'Informe o fornecedor.' });
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        const snap = await db.collection(COL_ITENS)
+            .where('semestre', '==', semestre)
+            .where('fornecedorFechadoId', '==', fornecedorId)
+            .get();
+
+        let desfeitos = 0;
+        for (const doc of snap.docs) {
+            const item = doc.data();
+            const anterior = item.estadoAntesDoFechamento;
+            await doc.ref.update({
+                status: anterior ? anterior.status : 'pendente',
+                cotacoes: anterior ? anterior.cotacoes : (item.cotacoes || []),
+                fornecedorFechadoId: admin.firestore.FieldValue.delete(),
+                fornecedorFechadoNome: admin.firestore.FieldValue.delete(),
+                valorFechado: admin.firestore.FieldValue.delete(),
+                fechadoEm: admin.firestore.FieldValue.delete(),
+                estadoAntesDoFechamento: admin.firestore.FieldValue.delete(),
+                updatedAt: new Date().toISOString()
+            });
+            desfeitos++;
+        }
+        res.json({ message: `${desfeitos} fechamento(s) desfeito(s).`, desfeitos });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /fechamento/fechados — lista o que já foi fechado com um fornecedor,
+// com o valor, pra conferir contra o orçamento que a empresa mandou.
+router.get('/fechamento/fechados', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { fornecedorId, semestre } = req.query;
+        if (!fornecedorId) return res.status(400).json({ error: 'Informe o fornecedor.' });
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        const snap = await db.collection(COL_ITENS)
+            .where('semestre', '==', semestre)
+            .where('fornecedorFechadoId', '==', fornecedorId)
+            .get();
+
+        const fechados = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
+
+        res.json({
+            itens: fechados.map(it => ({
+                id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
+                unidade: it.unidade, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm
+            })),
+            total: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /fechamento/fechados-geral — tudo que já foi fechado no semestre, com
+// QUALQUER empresa — visão geral pra saber o que já está decidido no total,
+// agrupado por fornecedor.
+router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { semestre, cursoId } = req.query;
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        let query = db.collection(COL_ITENS).where('semestre', '==', semestre);
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        const snap = await query.get();
+
+        const fechados = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(it => it.status === 'fechado')
+            .sort((a, b) => (a.fornecedorFechadoNome || '').localeCompare(b.fornecedorFechadoNome || '') ||
+                (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
+
+        const porFornecedor = {};
+        fechados.forEach(it => {
+            const nome = it.fornecedorFechadoNome || '—';
+            if (!porFornecedor[nome]) porFornecedor[nome] = { fornecedor: nome, itens: 0, total: 0 };
+            porFornecedor[nome].itens++;
+            porFornecedor[nome].total += it.valorFechado || 0;
+        });
+
+        res.json({
+            itens: fechados.map(it => ({
+                id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
+                unidade: it.unidade, fornecedor: it.fornecedorFechadoNome, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm
+            })),
+            resumoPorFornecedor: Object.values(porFornecedor).sort((a, b) => b.total - a.total),
+            totalGeral: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
