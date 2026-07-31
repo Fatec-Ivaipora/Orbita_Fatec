@@ -1105,7 +1105,12 @@ function renderNegociacao(fornecedorId) {
   // com o Fatec se topasse igualar o preço do vencedor nesses itens, ou seja,
   // o argumento pra oferecer na negociação.
   const potencialAdicional = perdidos.reduce((soma, i) => soma + (i.valoresPorFornecedor[i.vencedorFornecedorId] || 0), 0);
+  // Valor total que ela cotou no processo inteiro (ganhando + perdendo) — o
+  // tamanho da licitação pra essa empresa, não só o que ela já garantiu.
+  const valorTotalEmpresa = ganhos.reduce((soma, i) => soma + (i.valoresPorFornecedor[fornecedorId] || 0), 0)
+    + perdidos.reduce((soma, i) => soma + (i.valoresPorFornecedor[fornecedorId] || 0), 0);
 
+  document.getElementById('neg-kpi-valor-total-empresa').textContent = fmtMoeda(valorTotalEmpresa);
   document.getElementById('neg-kpi-total').textContent = fmtMoeda(totalGanhando);
   document.getElementById('neg-kpi-ganhos').textContent = ganhos.length;
   document.getElementById('neg-kpi-perdidos').textContent = perdidos.length;
