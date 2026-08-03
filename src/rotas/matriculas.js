@@ -196,14 +196,15 @@ router.delete('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
 // ==========================================
 router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { modulo, semestre } = req.query;
+        const { modulo, semestre, cursoId } = req.query;
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
-        const snap = await db.collection(COL_ALUNOS)
+        let query = db.collection(COL_ALUNOS)
             .where('modulo', '==', modulo)
-            .where('semestre', '==', semestre)
-            .get();
+            .where('semestre', '==', semestre);
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        const snap = await query.get();
 
         const porCursoSituacao = {}; // curso -> situacao -> contagem
         const porSituacaoTotal = {};

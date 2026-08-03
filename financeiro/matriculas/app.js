@@ -150,12 +150,15 @@ async function initPaginaLancamento() {
     document.getElementById('curso-select').value = '';
     atualizarVisibilidadeCurso();
     atualizarBotaoNovoAluno();
-    renderTabelaAlunos([]);
+    atualizarLabelImpressaoLista();
+    if (podeCarregar()) carregarAlunos();
+    else renderTabelaAlunos([]);
   });
 
   document.getElementById('semestre-select')?.addEventListener('change', (e) => {
     semestreSelecionado = e.target.value;
     atualizarBotaoNovoAluno();
+    atualizarLabelImpressaoLista();
     if (podeCarregar()) carregarAlunos();
     else renderTabelaAlunos([]);
   });
@@ -165,6 +168,7 @@ async function initPaginaLancamento() {
     const curso = cursosFatec.find(c => c.id === cursoSelecionadoId);
     cursoSelecionadoNome = curso ? curso.name : null;
     atualizarBotaoNovoAluno();
+    atualizarLabelImpressaoLista();
     if (podeCarregar()) carregarAlunos();
     else renderTabelaAlunos([]);
   });
@@ -195,6 +199,25 @@ async function initPaginaLancamento() {
     } finally {
       atualizarBotaoCarregarMais();
     }
+  });
+
+  document.getElementById('btn-imprimir-lista')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Preparando...';
+    try {
+      // Impressão precisa ver a lista inteira filtrada, não só a página já
+      // carregada na tela — busca o restante antes de abrir o diálogo.
+      if (alunosHasMore) await carregarTodasPaginasRestantes();
+      renderTabelaAlunos(alunos);
+    } catch (err) {
+      showToast('Erro ao preparar impressão: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = textoOriginal;
+    }
+    window.print();
   });
 
   setupModalAluno();
@@ -301,7 +324,7 @@ async function buscarProximaPaginaAlunos(primeira) {
   const params = new URLSearchParams();
   params.set('modulo', moduloSelecionado);
   params.set('semestre', semestreSelecionado);
-  if (moduloSelecionado === 'fatec') params.set('cursoId', cursoSelecionadoId);
+  if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
   const periodo = document.getElementById('periodo-filtro')?.value;
   const situacao = document.getElementById('situacao-filtro')?.value;
   const plano = document.getElementById('plano-filtro')?.value;
@@ -468,21 +491,89 @@ function abrirModalAluno(aluno) {
 // ==========================================
 // TELA DE RELATÓRIO (relatorio.html)
 // ==========================================
+let relatorioEmAndamento = Promise.resolve(); // promessa da última carga, pra "Imprimir" nunca pegar dado desatualizado
+
 async function initPaginaRelatorio() {
   const selectModulo = document.getElementById('rel-modulo-select');
   const selectSemestre = document.getElementById('rel-semestre-select');
+  const selectCurso = document.getElementById('rel-curso-select');
 
-  selectModulo?.addEventListener('change', () => carregarRelatorio());
-  selectSemestre?.addEventListener('change', () => carregarRelatorio());
+  await carregarCursosFatec();
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  atualizarVisibilidadeCursoRelatorio();
 
-  await carregarRelatorio();
+  selectModulo?.addEventListener('change', () => {
+    if (selectCurso) selectCurso.value = '';
+    atualizarVisibilidadeCursoRelatorio();
+    atualizarLabelImpressaoRelatorio();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+  selectSemestre?.addEventListener('change', () => {
+    atualizarLabelImpressaoRelatorio();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+  selectCurso?.addEventListener('change', () => {
+    atualizarLabelImpressaoRelatorio();
+    relatorioEmAndamento = carregarRelatorio();
+  });
+
+  atualizarLabelImpressaoRelatorio();
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  document.getElementById('btn-imprimir-relatorio')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Preparando...';
+    try {
+      // Espera a busca em andamento (troca de módulo/semestre, por ex.)
+      // terminar antes de imprimir — senão a impressão podia sair com os
+      // dados da seleção anterior.
+      await relatorioEmAndamento;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = textoOriginal;
+    }
+    window.print();
+  });
+
+  relatorioEmAndamento = carregarRelatorio();
+  await relatorioEmAndamento;
+}
+
+function atualizarVisibilidadeCursoRelatorio() {
+  const isFatec = document.getElementById('rel-modulo-select')?.value !== 'medicina';
+  document.getElementById('rel-curso-select')?.classList.toggle('hidden', !isFatec);
+}
+
+function atualizarLabelImpressaoRelatorio() {
+  const label = document.getElementById('print-filtro-label');
+  if (!label) return;
+  const moduloValor = document.getElementById('rel-modulo-select')?.value;
+  const modulo = moduloValor === 'medicina' ? 'Medicina' : 'Fatec';
+  const semestre = document.getElementById('rel-semestre-select')?.value || '';
+  const partes = [modulo];
+  if (moduloValor !== 'medicina') {
+    const cursoSelect = document.getElementById('rel-curso-select');
+    const cursoNome = cursoSelect?.value ? cursoSelect.selectedOptions[0]?.textContent : 'Todos os cursos';
+    partes.push(cursoNome);
+  }
+  partes.push(semestre);
+  label.textContent = partes.filter(Boolean).join(' — ');
 }
 
 async function carregarRelatorio() {
   const modulo = document.getElementById('rel-modulo-select')?.value || 'fatec';
   const semestre = document.getElementById('rel-semestre-select')?.value || '2026.2';
+  const cursoId = document.getElementById('rel-curso-select')?.value;
   try {
-    const dados = await apiFetch(`/matriculas/relatorio?modulo=${encodeURIComponent(modulo)}&semestre=${encodeURIComponent(semestre)}`);
+    const params = new URLSearchParams({ modulo, semestre });
+    if (cursoId) params.set('cursoId', cursoId);
+    const dados = await apiFetch(`/matriculas/relatorio?${params.toString()}`);
     renderRelatorio(dados);
   } catch (err) {
     showToast('Erro ao carregar relatório: ' + err.message, 'error');
@@ -499,12 +590,38 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
 function renderRelatorio(dados) {
   const { total, pendentesRevisao, cursos, porCursoSituacao, porSituacaoTotal, porPlano, situacoes, planosConfissao } = dados;
 
+  // Definições do jeito que a coordenação/financeiro já usa (mesmo conceito
+  // da planilha antiga): Veterano = rematrícula; Calouro = matrícula nova do
+  // semestre; Ativos = quem ainda está no jogo (assinou, tá pendente, não
+  // assinou ainda ou é matrícula nova) — 1ª Evasão e Cancelou são coisas
+  // diferentes (saiu antes x depois das aulas começarem/1ª mensalidade).
   document.getElementById('kpi-total').textContent = total;
-  document.getElementById('kpi-rematricula').textContent = porSituacaoTotal['Rematrícula Assinada'] || 0;
+  document.getElementById('kpi-veteranos').textContent = porSituacaoTotal['Rematrícula Assinada'] || 0;
+  document.getElementById('kpi-calouros').textContent = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  document.getElementById('kpi-ativos').textContent = somaSituacoes(porSituacaoTotal, 'Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Matrícula Nova', 'Matrícula Nova - Assinada');
   document.getElementById('kpi-pendencia').textContent = porSituacaoTotal['Pendência Financeira'] || 0;
   document.getElementById('kpi-nao-assinou').textContent = porSituacaoTotal['Não Assinou'] || 0;
-  document.getElementById('kpi-cancelou-trancou').textContent = somaSituacoes(porSituacaoTotal, 'Cancelou', 'Trancou');
-  document.getElementById('kpi-evasao').textContent = somaSituacoes(porSituacaoTotal, '1ª Evasão', '2ª Evasão');
+  document.getElementById('kpi-1-evasao').textContent = porSituacaoTotal['1ª Evasão'] || 0;
+  document.getElementById('kpi-cancelou').textContent = porSituacaoTotal['Cancelou'] || 0;
+  document.getElementById('kpi-trancou').textContent = porSituacaoTotal['Trancou'] || 0;
+
+  const card2Evasao = document.getElementById('kpi-2-evasao-card');
+  if ((porSituacaoTotal['2ª Evasão'] || 0) > 0) {
+    card2Evasao.classList.remove('hidden');
+    document.getElementById('kpi-2-evasao').textContent = porSituacaoTotal['2ª Evasão'];
+  } else {
+    card2Evasao.classList.add('hidden');
+  }
+
+  // "Perda" = todo mundo que saiu de qualquer jeito (cancelou, trancou,
+  // evadiu). Captação = calouros (matrícula nova) do semestre — a métrica
+  // olha "de cada 100 que a gente captou, quantos a gente perdeu".
+  const totalCalouros = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  const totalPerdas = somaSituacoes(porSituacaoTotal, 'Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão');
+  const formatarPercentual = (numerador, denominador) =>
+    denominador > 0 ? `${((numerador / denominador) * 100).toFixed(1)}%` : '—';
+  document.getElementById('kpi-perda-captacao').textContent = formatarPercentual(totalPerdas, totalCalouros);
+  document.getElementById('kpi-perda-total').textContent = formatarPercentual(totalPerdas, total);
 
   const cardRevisar = document.getElementById('kpi-revisar-card');
   if (pendentesRevisao > 0) {
