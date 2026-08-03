@@ -223,10 +223,6 @@ async function initPaginaLancamento() {
   setupModalAluno();
   atualizarVisibilidadeCurso();
   atualizarBotaoNovoAluno();
-  atualizarLabelImpressaoLista();
-  const dataEmissaoLista = document.getElementById('print-data-emissao-lista');
-  if (dataEmissaoLista) dataEmissaoLista.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
-
   if (podeCarregar()) carregarAlunos();
 }
 
@@ -248,16 +244,6 @@ function atualizarVisibilidadeCurso() {
 
 function atualizarBotaoNovoAluno() {
   document.getElementById('btn-novo-aluno')?.toggleAttribute('disabled', !podeCriarAluno());
-}
-
-function atualizarLabelImpressaoLista() {
-  const label = document.getElementById('print-filtro-label-lista');
-  if (!label) return;
-  const modulo = moduloSelecionado === 'medicina' ? 'Medicina' : 'Fatec';
-  const partes = [modulo];
-  if (moduloSelecionado === 'fatec') partes.push(cursoSelecionadoNome || 'Todos os cursos');
-  partes.push(semestreSelecionado || '');
-  label.textContent = partes.filter(Boolean).join(' — ');
 }
 
 async function carregarOpcoes() {
