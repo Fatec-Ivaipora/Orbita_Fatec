@@ -200,9 +200,16 @@ async function initPaginaLancamento() {
   setupModalAluno();
   atualizarVisibilidadeCurso();
   atualizarBotaoNovoAluno();
+  if (podeCarregar()) carregarAlunos();
 }
 
+// Curso é opcional pra LISTAR (dá pra ver "todos os cursos" e filtrar por
+// período/situação através do módulo inteiro), mas é obrigatório pra CRIAR
+// um aluno novo em Fatec (não existe aluno sem curso).
 function podeCarregar() {
+  return !!semestreSelecionado;
+}
+function podeCriarAluno() {
   return !!semestreSelecionado && (moduloSelecionado === 'medicina' || !!cursoSelecionadoId);
 }
 
@@ -213,7 +220,7 @@ function atualizarVisibilidadeCurso() {
 }
 
 function atualizarBotaoNovoAluno() {
-  document.getElementById('btn-novo-aluno')?.toggleAttribute('disabled', !podeCarregar());
+  document.getElementById('btn-novo-aluno')?.toggleAttribute('disabled', !podeCriarAluno());
 }
 
 async function carregarOpcoes() {
@@ -238,7 +245,7 @@ async function carregarCursosFatec() {
 function popularSelectsOpcoes() {
   const selectCurso = document.getElementById('curso-select');
   if (selectCurso) {
-    selectCurso.innerHTML = '<option value="">Selecione um curso...</option>' +
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
       cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
