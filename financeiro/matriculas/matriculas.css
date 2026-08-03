@@ -207,7 +207,82 @@
 }
 .kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
 .kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
+.kpi-hint { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.3rem; line-height: 1.3; }
 
 @media (max-width: 900px) {
   .form-row { grid-template-columns: 1fr; }
+}
+
+/* ==========================================
+   Impressão do relatório (relatorio.html) — mesmo padrão já usado em
+   Licitação: o shell do app é flex com altura travada (.layout-main
+   overflow:hidden + .layout-content flex:1 overflow-y:auto), sem esse
+   reset a impressão corta conteúdo fora da 1ª página.
+   ========================================== */
+.print-page { background: transparent; }
+.rel-cabecalho-print {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 2px solid var(--primary-blue);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+.rel-cabecalho-print h1 { margin: 0; font-size: 17px; color: var(--primary-blue); }
+.rel-cabecalho-print p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.rel-data-emissao { font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
+
+body.pagina-relatorio .layout-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
+}
+body.pagina-relatorio .layout-content {
+  flex: none;
+  overflow: visible;
+}
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+
+  body.pagina-relatorio .no-print,
+  body.pagina-relatorio .layout-sidebar,
+  body.pagina-relatorio .layout-header { display: none !important; }
+
+  body.pagina-relatorio,
+  body.pagina-relatorio .layout-wrapper,
+  body.pagina-relatorio .layout-main,
+  body.pagina-relatorio .layout-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.pagina-relatorio .print-page {
+    max-width: none;
+    width: auto;
+    margin: 0;
+    padding: 8mm 10mm;
+  }
+
+  .rel-cabecalho-print { display: flex; }
+
+  /* Lista de alunos (index.html): coluna de Ações e o rótulo "revisar" não
+     fazem sentido no papel. */
+  .acoes-col, .revisar-badge { display: none !important; }
+  .alunos-scroll { max-height: none !important; overflow: visible !important; }
+
+  .print-page, .kpi-grid, .kpi-card { width: 100% !important; box-sizing: border-box; }
+
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kpi-card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; padding: 0.75rem 1rem; }
+  .kpi-value { font-size: 1.15rem; }
+  .kpi-label { font-size: 0.68rem; }
+  .kpi-hint { font-size: 0.62rem; }
+
+  .card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px !important; }
+  .data-table { font-size: 0.78rem; }
+  .data-table th, .data-table td { padding: 0.4rem 0.6rem; }
 }

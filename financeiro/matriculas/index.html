@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css">
 </head>
-<body>
+<body class="pagina-relatorio">
     <!-- Auth Guard Padrão -->
     <div id="auth-guard" class="layout-auth-guard">
         <div class="layout-spinner"></div>
@@ -18,7 +18,7 @@
     <div id="app" class="layout-wrapper hidden">
         <main class="layout-main">
             <div class="layout-content" id="matriculas-root">
-                <div class="page-header">
+                <div class="page-header no-print">
                     <div>
                         <h1 class="page-title">Relatório Matrículas</h1>
                         <p class="page-subtitle">Cadastro de situação de matrícula/rematrícula por curso e semestre</p>
@@ -28,6 +28,10 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
                             Relatório
                         </a>
+                        <button type="button" class="btn-secondary" id="btn-imprimir-lista">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir
+                        </button>
                         <button class="btn-primary" id="btn-novo-aluno" disabled>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Novo Aluno
@@ -35,7 +39,7 @@
                     </div>
                 </div>
 
-                <div class="filters-bar">
+                <div class="filters-bar no-print">
                     <select class="select-filter" id="modulo-select">
                         <option value="fatec">Fatec (16 cursos)</option>
                         <option value="medicina">Medicina</option>
@@ -45,7 +49,7 @@
                         <option value="2026.2" selected>2026.2</option>
                     </select>
                     <select class="select-filter" id="curso-select">
-                        <option value="">Selecione um curso...</option>
+                        <option value="">Todos os cursos</option>
                     </select>
                     <select class="select-filter" id="periodo-filtro">
                         <option value="">Todos os períodos</option>
@@ -62,6 +66,14 @@
                     </div>
                 </div>
 
+                <div class="print-page">
+                <div class="rel-cabecalho-print">
+                    <div>
+                        <h1>Lista de Alunos — Matrículas</h1>
+                        <p id="print-filtro-label-lista">Fatec — 2026.2</p>
+                    </div>
+                    <div class="rel-data-emissao" id="print-data-emissao-lista"></div>
+                </div>
                 <div class="card">
                     <div class="tabela-wrap alunos-scroll">
                         <table class="data-table">
@@ -74,7 +86,7 @@
                                     <th>Situação</th>
                                     <th>Plano/Confissão</th>
                                     <th>Telefone</th>
-                                    <th>Ações</th>
+                                    <th class="no-print">Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="alunos-tbody">
@@ -82,9 +94,10 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="carregar-mais-wrap hidden" id="carregar-mais-wrap">
+                    <div class="carregar-mais-wrap hidden no-print" id="carregar-mais-wrap">
                         <button type="button" class="btn-secondary" id="btn-carregar-mais">Carregar mais</button>
                     </div>
+                </div>
                 </div>
             </div>
         </main>
