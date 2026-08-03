@@ -470,3 +470,29 @@ body.pagina-relatorio .layout-content {
   .comparativo-card thead { display: table-header-group; }
   .comparativo-card tr { break-inside: avoid; page-break-inside: avoid; }
 }
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+
+  body.pagina-fechamento .no-print,
+  body.pagina-fechamento .layout-sidebar,
+  body.pagina-fechamento .layout-header { display: none !important; }
+
+  body.pagina-fechamento,
+  body.pagina-fechamento .layout-wrapper,
+  body.pagina-fechamento .layout-main,
+  body.pagina-fechamento .layout-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Só a seção "O que ainda falta fechar" interessa impressa — o resto
+     (formulário de fechamento, relatórios já vistos na tela) fica de fora. */
+  body.pagina-fechamento .card { display: none !important; }
+  body.pagina-fechamento .card:has(#fecha-pendentes-lista) { display: block !important; }
+
+  #fecha-pendentes-lista .card { display: block !important; break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px !important; }
+  #fecha-pendentes-lista thead { display: table-header-group; }
+}

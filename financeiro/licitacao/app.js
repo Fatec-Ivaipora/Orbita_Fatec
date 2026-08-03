@@ -1394,6 +1394,8 @@ async function initPaginaFechamento() {
   document.getElementById('btn-confirmar-fechamento')?.addEventListener('click', confirmarFechamento);
   document.getElementById('btn-ver-pendentes')?.addEventListener('click', carregarPendentesFechamento);
   document.getElementById('fecha-pendentes-curso-select')?.addEventListener('change', carregarPendentesFechamento);
+  document.getElementById('fecha-pendentes-empresa-select')?.addEventListener('change', renderPendentesEmpresaSelecionada);
+  document.getElementById('btn-imprimir-pendentes')?.addEventListener('click', () => window.print());
   document.getElementById('btn-ver-fechados-geral')?.addEventListener('click', carregarFechadosGeral);
   document.getElementById('fecha-geral-curso-select')?.addEventListener('change', carregarFechadosGeral);
   document.getElementById('btn-ver-fechados')?.addEventListener('click', carregarFechadosFechamento);
@@ -1530,29 +1532,98 @@ async function confirmarFechamento() {
   }
 }
 
+// Guarda o agrupamento por empresa da última busca, só em memória — a
+// pessoa escolhe a empresa no seletor e a gente monta a tabela na hora, sem
+// precisar buscar de novo no Firestore a cada troca (ver
+// feedback_economizar_leituras_firestore).
+const SEM_COTACAO_KEY = '__sem_cotacao__';
+let pendentesFechamentoPorEmpresa = {};
+
 async function carregarPendentesFechamento() {
   const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
-  const tbody = document.getElementById('fecha-pendentes-tbody');
+  const container = document.getElementById('fecha-pendentes-lista');
+  const empresaBar = document.getElementById('fecha-pendentes-empresa-bar');
+  const empresaSelect = document.getElementById('fecha-pendentes-empresa-select');
+  empresaBar.classList.add('hidden');
+  empresaSelect.innerHTML = '<option value="">Selecione a empresa...</option>';
+  pendentesFechamentoPorEmpresa = {};
+
   if (!semestre) {
-    tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Informe o semestre no campo acima primeiro.</td></tr>';
+    container.innerHTML = '<p class="tabela-msg">Informe o semestre no campo acima primeiro.</p>';
     return;
   }
   const cursoId = document.getElementById('fecha-pendentes-curso-select')?.value || '';
-  tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Carregando...</td></tr>';
+  container.innerHTML = '<p class="tabela-msg">Carregando...</p>';
   try {
     const qs = new URLSearchParams({ semestre });
     if (cursoId) qs.set('cursoId', cursoId);
     const pendentes = await apiFetch(`/financeiro/fechamento/pendentes?${qs.toString()}`);
-    tbody.innerHTML = pendentes.length ? pendentes.map(p => `
-      <tr>
-        <td>${esc(p.curso)}</td>
-        <td>${esc(p.produto)}</td>
-        <td>${p.quantidade}${p.unidade ? ' ' + esc(p.unidade) : ''}</td>
-        <td>${p.totalCotacoes}</td>
-      </tr>`).join('') : '<tr><td colspan="4" class="tabela-msg">Tudo fechado — nenhum item pendente nesse filtro.</td></tr>';
+
+    if (!pendentes.length) {
+      container.innerHTML = '<p class="tabela-msg">Tudo fechado — nenhum item pendente nesse filtro.</p>';
+      return;
+    }
+
+    // Agrupa por empresa mais barata — a pessoa escolhe qual empresa ligar
+    // no seletor abaixo, em vez de já jogar tudo na tela de uma vez.
+    pendentesFechamentoPorEmpresa[SEM_COTACAO_KEY] = [];
+    pendentes.forEach(p => {
+      const chave = p.vencedorNome || SEM_COTACAO_KEY;
+      if (!pendentesFechamentoPorEmpresa[chave]) pendentesFechamentoPorEmpresa[chave] = [];
+      pendentesFechamentoPorEmpresa[chave].push(p);
+    });
+
+    const semCotacao = pendentesFechamentoPorEmpresa[SEM_COTACAO_KEY];
+    const opcoesEmpresas = Object.keys(pendentesFechamentoPorEmpresa)
+      .filter(k => k !== SEM_COTACAO_KEY)
+      .sort((a, b) => a.localeCompare(b))
+      .map(empresa => `<option value="${esc(empresa)}">${esc(empresa)} (${pendentesFechamentoPorEmpresa[empresa].length})</option>`)
+      .join('');
+    const opcaoSemCotacao = semCotacao.length
+      ? `<option value="${SEM_COTACAO_KEY}">Sem cotação lançada ainda (${semCotacao.length})</option>` : '';
+
+    empresaSelect.innerHTML = '<option value="">Selecione a empresa...</option>' + opcoesEmpresas + opcaoSemCotacao;
+    empresaBar.classList.remove('hidden');
+    container.innerHTML = '<p class="tabela-msg">Selecione a empresa acima pra ver a lista dela.</p>';
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    container.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
   }
+}
+
+// Renderiza só a empresa escolhida no seletor — usa o que já foi buscado em
+// carregarPendentesFechamento, sem nova leitura no Firestore.
+function renderPendentesEmpresaSelecionada() {
+  const container = document.getElementById('fecha-pendentes-lista');
+  const chave = document.getElementById('fecha-pendentes-empresa-select')?.value;
+  if (!chave) {
+    container.innerHTML = '<p class="tabela-msg">Selecione a empresa acima pra ver a lista dela.</p>';
+    return;
+  }
+  const itens = pendentesFechamentoPorEmpresa[chave] || [];
+  const ehSemCotacao = chave === SEM_COTACAO_KEY;
+  const total = itens.reduce((s, p) => s + (p.vencedorValor || 0), 0);
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="fornecedor-detalhe-header">
+        <h4 class="card-secao-titulo" style="font-size:1rem;">${ehSemCotacao ? 'Sem cotação lançada ainda' : esc(chave) + ' — ligar'} (${itens.length} ${itens.length === 1 ? 'item' : 'itens'})</h4>
+        ${ehSemCotacao ? '' : `<span>${fmtMoeda(total)}</span>`}
+      </div>
+      <div class="tabela-wrap">
+        <table class="data-table">
+          <thead><tr><th>Curso</th><th>Produto</th><th>Qtd/Und</th>${ehSemCotacao ? '' : '<th>Valor</th>'}</tr></thead>
+          <tbody>
+            ${itens.map(p => `
+              <tr>
+                <td>${esc(p.curso)}</td>
+                <td>${esc(p.produto)}</td>
+                <td>${p.quantidade}${p.unidade ? ' ' + esc(p.unidade) : ''}</td>
+                ${ehSemCotacao ? '' : `<td>${fmtMoeda(p.vencedorValor)}</td>`}
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 // Lista o que já foi fechado com a empresa selecionada, pra conferir contra
@@ -1588,38 +1659,30 @@ async function carregarFechadosFechamento() {
 // uma empresa por vez.
 async function carregarFechadosGeral() {
   const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
-  const tbody = document.getElementById('fecha-geral-tbody');
   const resumoDiv = document.getElementById('fecha-geral-resumo');
   if (!semestre) {
     showToast('Informe o semestre no campo acima primeiro.', 'error');
     return;
   }
   const cursoId = document.getElementById('fecha-geral-curso-select')?.value || '';
-  tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
-  resumoDiv.innerHTML = '';
+  resumoDiv.innerHTML = '<p class="tabela-msg">Carregando...</p>';
+  document.getElementById('fecha-geral-total').textContent = '—';
   try {
     const qs = new URLSearchParams({ semestre });
     if (cursoId) qs.set('cursoId', cursoId);
     const resp = await apiFetch(`/financeiro/fechamento/fechados-geral?${qs.toString()}`);
 
-    resumoDiv.innerHTML = resp.resumoPorFornecedor.map(r => `
+    resumoDiv.innerHTML = resp.resumoPorFornecedor.length ? resp.resumoPorFornecedor.map(r => `
       <div class="kpi-card" style="min-width:180px;">
         <div class="kpi-label">${esc(r.fornecedor)}</div>
         <div class="kpi-value" style="font-size:1.1rem;">${r.itens} itens — ${fmtMoeda(r.total)}</div>
-      </div>`).join('');
+      </div>`).join('') : '<p class="tabela-msg">Nenhum item fechado ainda nesse filtro.</p>';
 
-    tbody.innerHTML = resp.itens.length ? resp.itens.map(it => `
-      <tr>
-        <td>${esc(it.fornecedor)}</td>
-        <td>${esc(it.curso)}</td>
-        <td>${esc(it.produto)}</td>
-        <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
-        <td>${fmtMoeda(it.valorFechado)}</td>
-      </tr>`).join('') : '<tr><td colspan="5" class="tabela-msg">Nenhum item fechado ainda nesse filtro.</td></tr>';
+    const totalItens = resp.resumoPorFornecedor.reduce((s, r) => s + r.itens, 0);
     document.getElementById('fecha-geral-total').textContent =
-      `${resp.itens.length} itens fechados no total — ${fmtMoeda(resp.totalGeral)}`;
+      `${totalItens} itens fechados no total — ${fmtMoeda(resp.totalGeral)}`;
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    resumoDiv.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
   }
 }
 

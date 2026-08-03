@@ -529,10 +529,19 @@ router.get('/fechamento/pendentes', verifyToken, checkPermission, bloquearCoorde
             .filter(it => it.status !== 'fechado')
             .sort((a, b) => (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
 
-        res.json(pendentes.map(it => ({
-            id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
-            unidade: it.unidade, totalCotacoes: (it.cotacoes || []).length
-        })));
+        res.json(pendentes.map(it => {
+            const cotacoes = it.cotacoes || [];
+            let vencedorNome = null, vencedorValor = null;
+            if (cotacoes.length) {
+                const vencedor = cotacoes.reduce((menor, cot) => (cot.valorTotal < menor.valorTotal ? cot : menor));
+                vencedorNome = vencedor.fornecedorNome;
+                vencedorValor = vencedor.valorTotal;
+            }
+            return {
+                id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
+                unidade: it.unidade, totalCotacoes: cotacoes.length, vencedorNome, vencedorValor
+            };
+        }));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
