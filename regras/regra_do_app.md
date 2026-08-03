@@ -10,7 +10,7 @@ O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a F
 - `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
 - `/auth`: Tela de login e fluxo de redefinição de senha institucional.
 - `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança, permissões).
-- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/turmas`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
+- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/cpa`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
 - `/regras`: Documentação técnica e logs de alteração.
 
 ## 3. Fluxo de autenticação e Arquitetura REST
@@ -83,9 +83,10 @@ Além das permissões por cargo, o ADM N1 pode conceder **acessos personalizados
 - **Finalidade**: Módulo mobile-first (PWA) que disponibiliza a carteirinha digital do funcionário (FATEC Card) com QR Code auto-regenerativo a cada 30 segundos e acesso rápido às empresas parceiras conveniadas no Clube de Vantagens.
 - **Estrutura**: Localizado em `/fidelidade`, inclui a página do usuário (`index.html`) e a interface de validação (`validar.html`) para lojistas verificarem o status e vigência em tempo real.
 
-### Turmas
-- **Finalidade**: Listagem e gestão de turmas e disciplinas acadêmicas para os docentes.
-- **Backend API**: `/api/rotas/turmas.js` (Lida com coleção `turmas`).
+### CPA (Comissão Própria de Avaliação)
+- **Finalidade**: Relatório enxuto dos resultados da CPA (Edubox) para coordenadores de curso — um gráfico por dimensão do SINAES, comentários filtrados (remove vazios e respostas com menos de 2 palavras), em vez do PDF único de dezenas de páginas gerado pelo sistema acadêmico.
+- **Backend API**: `/api/rotas/cpa.js` — consulta direta e **somente leitura** ao Postgres externo do Edubox (`src/db-edubox.js`), banco `edubox_old` (réplica de consulta), schema `ivp`. Não usa Firestore.
+- **Escopo institucional**: o banco do Edubox é compartilhado com outras ~32 instituições da região — todas as queries filtram explicitamente pelos cursos da Fatec (`tac_curso`), nunca dados de outra instituição.
 
 ## 6. Padrão visual
 O sistema segue uma identidade visual institucional "Light Theme" moderna:
@@ -114,6 +115,23 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como reverter:
 
 ## 8. Histórico de alterações
+
+### [2026-08-03] Remoção dos módulos Turmas e Avaliações (sem uso) — abre espaço para o CPA
+- Autor: Claude Code
+- Branch: feature/cpa-relatorio
+- Arquivos removidos:
+  - `/turmas/` (`index.html`, `app.js`, `turmas.css`)
+  - `/avaliacoes/` (`index.html`, `app.js`, `avaliacoes.css`)
+  - `/src/rotas/turmas.js`, `/src/rotas/avaliacoes.js`
+- Arquivos alterados:
+  - `/api/index.js` (remove import/registro das rotas `/api/turmas` e `/api/avaliacoes`)
+  - `/core/permissions.js` (remove `MODULES.turmas` e `MODULES.avaliacoes`; remove `"turmas"`/`"avaliacoes"` dos arrays de módulos de `adm_l1` e `adm_l2`)
+  - `/src/middlewares/auth.js` (remove as chaves `turmas`/`avaliacoes` do `defaultPermissions` de todos os cargos)
+- Tipo: Remoção / Limpeza
+- Motivo: Confirmado com o usuário (dono/dev do Órbita) que os dois módulos da categoria "Docência" não têm uso real — nenhuma coleção do Firestore fora desses próprios arquivos referenciava `turmas`/`avaliacoes`, e nenhum dos dois tinha entrada no changelog original de criação (avaliações nunca chegou a ser documentada). A categoria "Docência" foi esvaziada de propósito para receber o módulo CPA no lugar.
+- Impacto: Usuários com os cargos `adm_l1`/`adm_l2` deixam de ver "Turmas" e "Avaliações" no menu lateral. Nenhum dado do Firestore foi apagado (as coleções `turmas`/`avaliacoes`, se existirem, ficam órfãs no banco, sem UI/API pra acessá-las).
+- Como testar: Logar como `adm_l1`; confirmar que a categoria "Docência" não mostra mais "Turmas"/"Avaliações"; confirmar que `GET /api/turmas` e `GET /api/avaliacoes` retornam 404 (rota não existe mais).
+- Como reverter: `git revert` deste commit restaura os arquivos e registros removidos.
 
 ### [2026-07-22] Almoxarifado Saúde: relatórios de estoque e movimentações
 - Autor: Claude Code
