@@ -208,7 +208,9 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 3,
                 matriculas: 1
             },
-            secretaria: {
+            // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
+            // (não `secretaria`) — chave aqui tem que bater com o id real.
+            sec: {
                 emprestimo: 1,
                 usuarios: 1,
                 ensalamento: 1,

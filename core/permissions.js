@@ -160,7 +160,12 @@ export const ROLE_PERMISSIONS = {
     label: "Coordenador",
     modules: ["dashboard", "fidelidade", "licitacao"]
   },
-  secretaria: {
+  // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
+  // (não `secretaria`) — a chave aqui precisa bater com o id real da
+  // coleção `roles`, senão o guard de 1º acesso (sem cache ainda no
+  // navegador) cai no fallback de "visitante" e bloqueia sem nunca chegar
+  // a ler a permissão real do Firestore.
+  sec: {
     label: "Secretaria",
     modules: ["dashboard", "fidelidade", "matriculas"]
   },
