@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
 </head>
-<body>
+<body class="pagina-fechamento">
     <!-- Auth Guard Padrão -->
     <div id="auth-guard" class="layout-auth-guard">
         <div class="layout-spinner"></div>
@@ -111,47 +111,34 @@
                         </select>
                         <button type="button" class="btn-secondary" id="btn-ver-fechados-geral">Ver relatório geral</button>
                     </div>
-                    <div id="fecha-geral-resumo" style="padding:0 1.5rem 1rem; display:flex; gap:1rem; flex-wrap:wrap;"></div>
-                    <div class="tabela-wrap tabela-scroll">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Empresa</th>
-                                    <th>Curso</th>
-                                    <th>Produto</th>
-                                    <th>Qtd/Und</th>
-                                    <th>Valor fechado</th>
-                                </tr>
-                            </thead>
-                            <tbody id="fecha-geral-tbody"><tr><td colspan="5" class="tabela-msg">Selecione o semestre acima e clique em "Ver relatório geral".</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div id="fecha-geral-resumo" style="padding:0 1.5rem 1rem; display:flex; gap:1rem; flex-wrap:wrap;"><p class="tabela-msg">Selecione o semestre acima e clique em "Ver relatório geral".</p></div>
                     <div class="calculadora-negociacao">
                         <span id="fecha-geral-total">—</span>
                     </div>
                 </div>
 
                 <div class="card" style="margin-top:1.5rem;">
-                    <h3 class="card-secao-titulo">O que ainda falta fechar</h3>
-                    <p class="page-subtitle" style="padding:0 1.5rem;">Itens sem nenhuma empresa definida ainda — precisam ser fechados com algum fornecedor</p>
-                    <div class="filters-bar" style="padding:0 1.5rem 1rem;">
+                    <div class="fornecedor-detalhe-header">
+                        <h3 class="card-secao-titulo">O que ainda falta fechar, agrupado por empresa pra ligar</h3>
+                        <button type="button" class="btn-secondary no-print" id="btn-imprimir-pendentes">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir lista de contatos
+                        </button>
+                    </div>
+                    <p class="page-subtitle" style="padding:0 1.5rem;">Itens sem nenhuma empresa definida ainda — escolha a empresa mais barata pra ver só a lista dela e imprimir</p>
+                    <div class="filters-bar no-print" style="padding:0 1.5rem 1rem;">
                         <select class="select-filter" id="fecha-pendentes-curso-select">
                             <option value="">Todos os cursos</option>
                         </select>
                         <button type="button" class="btn-secondary" id="btn-ver-pendentes">Ver o que falta (usa o semestre acima)</button>
                     </div>
-                    <div class="tabela-wrap tabela-scroll">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Curso</th>
-                                    <th>Produto</th>
-                                    <th>Qtd/Und</th>
-                                    <th>Cotações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="fecha-pendentes-tbody"><tr><td colspan="4" class="tabela-msg">Selecione o semestre acima e clique em "Ver o que falta".</td></tr></tbody>
-                        </table>
+                    <div class="filters-bar no-print hidden" id="fecha-pendentes-empresa-bar" style="padding:0 1.5rem 1rem;">
+                        <select class="select-filter" id="fecha-pendentes-empresa-select" style="min-width:280px;">
+                            <option value="">Selecione a empresa...</option>
+                        </select>
+                    </div>
+                    <div id="fecha-pendentes-lista" style="padding:0 1.5rem 1.5rem;">
+                        <p class="tabela-msg">Selecione o semestre acima e clique em "Ver o que falta".</p>
                     </div>
                 </div>
             </div>
