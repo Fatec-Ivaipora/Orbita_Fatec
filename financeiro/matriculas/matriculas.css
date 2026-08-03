@@ -1,0 +1,213 @@
+/* matriculas.css - Módulo Financeiro / Relatório Matrículas */
+:root {
+  --primary-blue: #0F4EB8;
+  --secondary-blue: #1E63D6;
+  --bg-color: #F4F7FB;
+  --card-bg: #FFFFFF;
+  --text-main: #0B1F33;
+  --text-secondary: #64748B;
+  --border-color: #E5E7EB;
+  --accent-orange: #EB7025;
+  --green: #10B981;
+  --red: #EF4444;
+}
+
+.hidden { display: none !important; }
+
+/* Header de Página */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border-color);
+}
+
+.page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.25rem; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+.page-header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* Botões */
+.btn-primary, .btn-secondary {
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--primary-blue);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25);
+}
+.btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-secondary { background: white; color: var(--text-main); border: 1px solid var(--border-color); }
+.btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-color); background: white; border-radius: 8px; width: 32px; height: 32px;
+  cursor: pointer; font-size: 0.9rem; margin-right: 0.35rem; text-decoration: none; color: inherit;
+}
+.btn-icon:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+/* Filtros */
+.filters-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+
+.search-wrap { position: relative; flex: 1; min-width: 240px; }
+.search-icon { position: absolute; left: 0.875rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
+.search-input {
+  width: 100%; padding: 0.7rem 1rem 0.7rem 2.75rem; border: 1px solid var(--border-color);
+  border-radius: 8px; font-size: 0.9rem; color: var(--text-main); background: white; font-family: inherit;
+}
+.search-input:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+
+.select-filter {
+  padding: 0.7rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;
+  color: var(--text-main); background: white; font-family: inherit; cursor: pointer; min-width: 200px;
+}
+.select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+
+.semestre-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1rem;
+  border-radius: 8px; background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.85rem;
+}
+
+/* Card + Tabela */
+.card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.card-secao-titulo { padding: 1.25rem 1.5rem 0; margin: 0 0 -0.25rem; font-size: 1rem; font-weight: 700; color: var(--text-main); }
+
+.tabela-wrap { overflow-x: auto; }
+
+/* Barra de rolagem horizontal mais grossa e colorida — o padrão do navegador
+   é fino demais e passa despercebido que dá pra arrastar a tabela pro lado. */
+.tabela-wrap { scrollbar-width: thin; scrollbar-color: var(--primary-blue) #eef2f7; }
+.tabela-wrap::-webkit-scrollbar { height: 11px; }
+.tabela-wrap::-webkit-scrollbar-track { background: #eef2f7; border-radius: 10px; }
+.tabela-wrap::-webkit-scrollbar-thumb { background: var(--primary-blue); border-radius: 10px; }
+.tabela-wrap::-webkit-scrollbar-thumb:hover { background: var(--secondary-blue); }
+
+/* Lista de alunos pode ter dezenas/centenas de linhas por curso — dá um
+   scroll vertical próprio e travado (max-height) pra virar o container que
+   o sticky do cabeçalho realmente gruda (mesmo padrão do módulo Licitação). */
+.alunos-scroll {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+.alunos-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.data-table th {
+  text-align: left; padding: 0.9rem 1rem; background: #f8fafc; color: var(--text-secondary);
+  font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color); white-space: nowrap;
+}
+.data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #fafbfd; }
+
+.tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
+
+.carregar-mais-wrap { display: flex; justify-content: center; padding: 1rem; border-top: 1px solid var(--border-color); }
+
+.acoes-col { white-space: nowrap; }
+
+/* Situação — cor por grupo, não por valor individual (senão vira uma cor por
+   badge sem padrão nenhum): verde = matrícula/rematrícula em dia; amarelo =
+   pendente de ação (financeiro ou assinatura); vermelho = saída do aluno;
+   azul = movimentação neutra (retorno, mudança, formando). */
+.status-badge {
+  border: none; border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 700;
+  font-family: inherit; white-space: nowrap;
+}
+.situacao-ok { background: #d1fae5; color: #047857; }
+.situacao-alerta { background: #fef3c7; color: #d97706; }
+.situacao-critica { background: #fee2e2; color: #b91c1c; }
+.situacao-neutra { background: #dbeafe; color: #1d4ed8; }
+
+.revisar-badge {
+  display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.4rem;
+  background: #fef3c7; color: #92400e; border-radius: 20px; padding: 0.25rem 0.6rem;
+  font-size: 0.72rem; font-weight: 700;
+}
+
+/* Modais */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.modal-overlay.hidden { display: none; }
+
+.modal-content {
+  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+.modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 1.25rem; }
+.modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: -0.75rem 0 1rem; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.form-group { margin-bottom: 1.1rem; }
+.form-group label {
+  display: block; margin-bottom: 0.4rem; color: var(--text-secondary); font-weight: 600;
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 0.7rem 0.9rem; border: 1px solid var(--border-color); border-radius: 8px;
+  box-sizing: border-box; font-size: 0.95rem; color: var(--text-main); background: #f8fafc; font-family: inherit;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+.form-group textarea { resize: vertical; min-height: 70px; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 2rem; right: 2rem; background: #333; color: white; padding: 1rem 1.5rem;
+  border-radius: 8px; z-index: 10000; box-shadow: 0 5px 15px rgba(0,0,0,0.15); font-weight: 600;
+}
+.toast.hidden { display: none; }
+.toast-success { background: var(--green); }
+.toast-error { background: var(--red); }
+
+/* Relatório */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
+.kpi-card {
+  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+.kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+.kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
+
+@media (max-width: 900px) {
+  .form-row { grid-template-columns: 1fr; }
+}
