@@ -38,16 +38,16 @@ function validarSemestre(semestre) {
 // ALUNOS (matrículas)
 // ==========================================
 
-// Sempre exige módulo+semestre (e curso, quando módulo = fatec) antes de
-// buscar — mesma regra de economia de leitura já usada em Licitação: nunca
-// listar sem filtro, e paginar de verdade no Firestore (limit + startAfter)
-// em vez de trazer o módulo inteiro de uma vez (Fatec tem ~2000 alunos/semestre).
+// Sempre exige módulo+semestre antes de buscar — nunca lista sem filtro
+// nenhum. Curso é opcional (permite ver "todos os cursos" pra filtrar por
+// período/situação através do módulo inteiro) — mesmo com curso vazio, a
+// paginação real no Firestore (limit + startAfter) evita trazer o módulo
+// inteiro de uma vez (Fatec tem ~1500-1800 alunos/semestre).
 router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
         const { modulo, semestre, cursoId, situacao, planoConfissao, periodo } = req.query;
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
-        if (modulo === 'fatec' && !cursoId) return res.status(400).json({ error: 'Informe o curso.' });
 
         const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ALUNOS_PAGE_SIZE_PADRAO, 200);
 
@@ -70,7 +70,7 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
             let query = db.collection(COL_ALUNOS)
                 .where('modulo', '==', modulo)
                 .where('semestre', '==', semestre);
-            if (modulo === 'fatec') query = query.where('cursoId', '==', cursoId);
+            if (cursoId) query = query.where('cursoId', '==', cursoId);
             query = query.orderBy('nome').orderBy(admin.firestore.FieldPath.documentId());
 
             if (cursor) query = query.startAfter(cursor.nome, cursor.id);
