@@ -26,6 +26,7 @@ let itemEmEdicaoCotacoes = null;
 let itensNextCursor = null;
 let itensHasMore = false;
 let itensCarregandoTodas = false;
+let statusFiltroSelecionado = 'pendentes';
 
 function isCoordenador() {
   return currentRole === 'coordenador';
@@ -176,6 +177,11 @@ async function initPaginaLicitacao() {
     if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
   });
 
+  document.getElementById('status-filtro-select')?.addEventListener('change', async (e) => {
+    statusFiltroSelecionado = e.target.value || 'pendentes';
+    if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
+  });
+
   document.getElementById('busca-item')?.addEventListener('input', async (e) => {
     const termo = e.target.value.trim().toLowerCase();
     // Busca precisa ver o curso inteiro, não só a página já carregada — só
@@ -322,10 +328,11 @@ async function carregarCursos() {
 // cota de leitura enorme só pra abrir a tela.
 async function buscarProximaPaginaItens(primeira) {
   const qsSemestre = semestreSelecionado ? `&semestre=${encodeURIComponent(semestreSelecionado)}` : '';
+  const qsStatus = statusFiltroSelecionado !== 'pendentes' ? `&statusFiltro=${encodeURIComponent(statusFiltroSelecionado)}` : '';
   const qsCursor = itensNextCursor
     ? `&cursorProduto=${encodeURIComponent(itensNextCursor.produto)}&cursorId=${encodeURIComponent(itensNextCursor.id)}`
     : '';
-  const resp = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}${qsSemestre}${qsCursor}`);
+  const resp = await apiFetch(`/financeiro/itens?cursoId=${encodeURIComponent(cursoSelecionadoId)}${qsSemestre}${qsStatus}${qsCursor}`);
   itens = primeira ? resp.itens : [...itens, ...resp.itens];
   itensHasMore = resp.hasMore;
   itensNextCursor = resp.nextCursor;
@@ -912,6 +919,9 @@ async function initPaginaNegociacao() {
 
   selectFornecedor?.addEventListener('change', () => renderNegociacao(selectFornecedor.value));
 
+  document.getElementById('btn-imprimir-ganhos')?.addEventListener('click', () => imprimirNegociacao('ganhos'));
+  document.getElementById('btn-imprimir-perdidos')?.addEventListener('click', () => imprimirNegociacao('perdidos'));
+
   document.getElementById('comparar-empresa-a')?.addEventListener('change', renderComparacaoDuasEmpresas);
   document.getElementById('comparar-empresa-b')?.addEventListener('change', renderComparacaoDuasEmpresas);
 
@@ -1100,15 +1110,24 @@ function renderNegociacao(fornecedorId) {
   const { fornecedores, itens } = negociacaoComparativo;
   const nomeFornecedor = (id) => fornecedores.find(f => f.id === id)?.nome || '—';
 
-  const ganhos = itens.filter(i => i.vencedorFornecedorId === fornecedorId);
-  const perdidos = itens.filter(i => i.valoresPorFornecedor[fornecedorId] !== undefined && i.vencedorFornecedorId !== fornecedorId);
+  // Ganhou/perdeu de verdade é quem FECHOU o item no Fechamento — não quem
+  // tinha o menor preço na cotação (vencedorFornecedorId). Uma empresa pode
+  // fechar um item negociando desconto mesmo sem ser a mais barata (caso já
+  // visto na prática), e o inverso também: ser a mais barata mas o item
+  // ainda não ter sido fechado com ninguém. Só o que já está decidido no
+  // Fechamento entra aqui, pra ninguém achar que já garantiu um item que na
+  // verdade ainda vai ter que comprar de outra empresa (ou que perdeu um
+  // item que na verdade fechou).
+  const ganhos = itens.filter(i => i.status === 'fechado' && i.fornecedorFechadoId === fornecedorId);
+  const perdidos = itens.filter(i => i.valoresPorFornecedor[fornecedorId] !== undefined
+    && i.status === 'fechado' && i.fornecedorFechadoId && i.fornecedorFechadoId !== fornecedorId);
 
   const totalGanhando = ganhos.reduce((soma, i) => soma + (i.valoresPorFornecedor[fornecedorId] || 0), 0);
-  // Não é "economia" pro Fatec — nos itens perdidos o Fatec já paga o menor
-  // preço (do vencedor). É quanto a PRÓPRIA EMPRESA passaria a faturar a mais
-  // com o Fatec se topasse igualar o preço do vencedor nesses itens, ou seja,
-  // o argumento pra oferecer na negociação.
-  const potencialAdicional = perdidos.reduce((soma, i) => soma + (i.valoresPorFornecedor[i.vencedorFornecedorId] || 0), 0);
+  // Não é "economia" pro Fatec — nos itens perdidos o Fatec já paga o valor
+  // fechado com a outra empresa. É quanto a PRÓPRIA EMPRESA passaria a
+  // faturar a mais com o Fatec se topasse igualar esse valor nesses itens,
+  // ou seja, o argumento pra oferecer na negociação.
+  const potencialAdicional = perdidos.reduce((soma, i) => soma + (i.valorFechado || 0), 0);
   // Valor total que ela cotou no processo inteiro (ganhando + perdendo) — o
   // tamanho da licitação pra essa empresa, não só o que ela já garantiu.
   const valorTotalEmpresa = ganhos.reduce((soma, i) => soma + (i.valoresPorFornecedor[fornecedorId] || 0), 0)
@@ -1133,20 +1152,37 @@ function renderNegociacao(fornecedorId) {
   const tbodyPerdidos = document.getElementById('neg-tbody-perdidos');
   tbodyPerdidos.innerHTML = perdidos.length ? perdidos.map(i => {
     const valorDela = i.valoresPorFornecedor[fornecedorId] || 0;
-    const valorVencedor = i.valoresPorFornecedor[i.vencedorFornecedorId] || 0;
-    const diferenca = valorDela - valorVencedor;
+    const valorFechado = i.valorFechado || 0;
+    const diferenca = valorDela - valorFechado;
     return `
     <tr>
       <td>${esc(i.curso)}</td>
       <td>${esc(i.produto)}</td>
       <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
       <td>${fmtMoeda(valorDela)}</td>
-      <td>${esc(nomeFornecedor(i.vencedorFornecedorId))}</td>
-      <td>${fmtMoeda(valorVencedor)}</td>
-      <td class="diferenca-alta">+${fmtMoeda(diferenca)}</td>
+      <td>${esc(i.fornecedorFechadoNome || '—')}</td>
+      <td>${fmtMoeda(valorFechado)}</td>
+      <td class="${diferenca >= 0 ? 'diferenca-alta' : ''}">${diferenca > 0 ? '+' : ''}${fmtMoeda(diferenca)}</td>
     </tr>
   `;
   }).join('') : '<tr><td colspan="7" class="tabela-msg">Essa empresa não perdeu nenhum item nos filtros atuais.</td></tr>';
+
+  const nomeAtual = nomeFornecedor(fornecedorId);
+  const dataEmissao = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+  document.getElementById('negociacao-print-nome-ganhos').textContent = nomeAtual;
+  document.getElementById('negociacao-print-nome-perdidos').textContent = nomeAtual;
+  document.getElementById('negociacao-print-data-ganhos').textContent = dataEmissao;
+  document.getElementById('negociacao-print-data-perdidos').textContent = dataEmissao;
+}
+
+// Imprime só o card de "ganhos" ou só o de "perdidos" — marca no body qual
+// dos dois é pra mostrar (ver CSS @media print em licitacao.css) e desfaz
+// depois de imprimir, senão a tela fica com o outro card escondido.
+function imprimirNegociacao(tipo) {
+  document.body.dataset.imprimindo = tipo;
+  const limpar = () => { delete document.body.dataset.imprimindo; window.removeEventListener('afterprint', limpar); };
+  window.addEventListener('afterprint', limpar);
+  window.print();
 }
 
 // ==========================================
@@ -1255,14 +1291,22 @@ function abrirDetalheFornecedor(fornecedorId, nome) {
   if (printData) printData.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
 
   tbody.innerHTML = itensDela.length ? itensDela.map(i => {
-    const venceu = i.vencedorFornecedorId === fornecedorId;
+    // Venceu/perdeu de verdade é quem FECHOU o item no Fechamento — não quem
+    // tinha o menor preço na cotação. Mesma correção aplicada na Negociação:
+    // ver comentário em renderNegociacao.
+    const fechado = i.status === 'fechado';
+    const venceu = fechado && i.fornecedorFechadoId === fornecedorId;
+    const perdeu = fechado && !!i.fornecedorFechadoId && i.fornecedorFechadoId !== fornecedorId;
+    const statusClasse = venceu ? 'status-venceu' : (perdeu ? 'status-perdeu' : 'status-pendente');
+    const statusTexto = venceu ? 'Venceu' : (perdeu ? 'Perdeu' : 'Em aberto');
+    const statusTitle = perdeu ? `title="Fechado com ${esc(i.fornecedorFechadoNome || 'outra empresa')}"` : '';
     return `
     <tr>
       <td>${esc(i.curso)}</td>
       <td>${esc(i.produto)}</td>
       <td>${esc(i.quantidade)}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
       <td>${fmtMoeda(i.valoresPorFornecedor[fornecedorId])}</td>
-      <td class="no-print"><span class="status-badge ${venceu ? 'status-venceu' : 'status-perdeu'}">${venceu ? 'Venceu' : 'Não venceu'}</span></td>
+      <td class="no-print"><span class="status-badge ${statusClasse}" ${statusTitle}>${statusTexto}</span></td>
       <td class="no-print"><button type="button" class="btn-icon action-execute" data-editar-item="${i.itemId}" title="Editar produto/quantidade/valor">✏️</button></td>
     </tr>`;
   }).join('') : '<tr><td colspan="6" class="tabela-msg">Essa empresa ainda não tem nenhuma cotação registrada.</td></tr>';
@@ -1456,19 +1500,27 @@ function renderRevisaoFechamento() {
   tbody.innerHTML = fechaCandidatos.map((item, idx) => {
     const semCorrespondencia = !item.candidatos.length;
     const melhorScore = semCorrespondencia ? 0 : item.candidatos[0].score;
-    // Só marca automático quando o nome bate EXATO (score 1.0) — um caso real
-    // já mostrou que marcar tudo acima de 0.5 sozinho deixa passar item
-    // errado sem ninguém perceber. Tudo que não é exato fica sem marcar e
-    // destacado, pra obrigar a conferência manual antes de fechar.
-    const marcarPorPadrao = melhorScore === 1;
-    const precisaAtencao = !semCorrespondencia && melhorScore < 1;
+    // Valor zerado geralmente é linha do orçamento que não tinha os 4 campos
+    // completos (produto;quantidade;valor unitário;valor total) — já
+    // aconteceu de passar batido e fechar item com R$0,00 sem ninguém notar,
+    // porque só o nome não-exato era avisado. Trata como "precisa atenção"
+    // igual ao match ruim, e nunca marca sozinho.
+    const valorZerado = !(item.valorTotal > 0);
+    // Só marca automático quando o nome bate EXATO (score 1.0) e o valor não
+    // é zero — um caso real já mostrou que marcar tudo acima de 0.5 sozinho
+    // deixa passar item errado sem ninguém perceber. Tudo que não é exato
+    // fica sem marcar e destacado, pra obrigar a conferência manual antes de
+    // fechar.
+    const marcarPorPadrao = melhorScore === 1 && !valorZerado;
+    const precisaAtencao = (!semCorrespondencia && melhorScore < 1) || valorZerado;
     return `
     <tr class="${precisaAtencao ? 'linha-fechamento-atencao' : ''}">
       <td><input type="checkbox" class="fecha-item-check" data-idx="${idx}" ${marcarPorPadrao ? 'checked' : ''} ${semCorrespondencia ? 'disabled' : ''}></td>
       <td>${esc(item.produto)}</td>
       <td>${item.quantidade} — ${fmtMoeda(item.valorTotal)}</td>
       <td>
-        ${precisaAtencao ? '<div class="fechamento-aviso">⚠️ Confira — não é match exato</div>' : ''}
+        ${valorZerado ? '<div class="fechamento-aviso">⚠️ Valor R$0,00 — confira o orçamento colado, falta produto;quantidade;unitário;total</div>' : ''}
+        ${!valorZerado && precisaAtencao ? '<div class="fechamento-aviso">⚠️ Confira — não é match exato</div>' : ''}
         <select class="select-filter fecha-candidato-select" data-idx="${idx}" style="min-width:280px;" ${semCorrespondencia ? 'disabled' : ''}>
           ${semCorrespondencia ? '<option value="">Nenhuma correspondência encontrada</option>' : ''}
           <option value="">— nenhuma dessas, deixar de fora —</option>
@@ -1628,6 +1680,9 @@ function renderPendentesEmpresaSelecionada() {
 
 // Lista o que já foi fechado com a empresa selecionada, pra conferir contra
 // o orçamento que ela mandou antes de confiar no resultado.
+let fechaFechadosAtuais = [];
+let fechaFechadosEditandoId = null;
+
 async function carregarFechadosFechamento() {
   const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
   const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
@@ -1640,17 +1695,76 @@ async function carregarFechadosFechamento() {
   try {
     const qs = new URLSearchParams({ fornecedorId, semestre });
     const resp = await apiFetch(`/financeiro/fechamento/fechados?${qs.toString()}`);
-    tbody.innerHTML = resp.itens.length ? resp.itens.map(it => `
-      <tr>
-        <td>${esc(it.curso)}</td>
-        <td>${esc(it.produto)}</td>
-        <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
-        <td>${fmtMoeda(it.valorFechado)}</td>
-      </tr>`).join('') : '<tr><td colspan="4" class="tabela-msg">Nenhum item fechado com essa empresa ainda.</td></tr>';
-    document.getElementById('fecha-fechados-total').textContent =
-      `${resp.itens.length} itens — total fechado: ${fmtMoeda(resp.total)}`;
+    fechaFechadosAtuais = resp.itens;
+    fechaFechadosEditandoId = null;
+    renderFechadosFechamento();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderFechadosFechamento() {
+  const tbody = document.getElementById('fecha-fechados-tbody');
+  tbody.innerHTML = fechaFechadosAtuais.length ? fechaFechadosAtuais.map(it => {
+    const editando = fechaFechadosEditandoId === it.id;
+    return `
+      <tr class="${it.pendenciaValorFechamento ? 'linha-fechamento-atencao' : ''}">
+        <td>${esc(it.curso)}</td>
+        <td>
+          ${esc(it.produto)}
+          ${it.pendenciaValorFechamento ? `<div class="fechamento-aviso">⚠️ ${esc(it.pendenciaValorFechamento)}</div>` : ''}
+        </td>
+        <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
+        <td>
+          ${editando ? `
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              <input type="number" step="0.01" min="0" class="select-filter fecha-valor-input" data-id="${it.id}" value="${it.valorUnitario ?? ''}" placeholder="Valor unitário" style="width:110px; min-width:0; padding:0.4rem 0.6rem;">
+              <button type="button" class="btn-primary btn-salvar-valor-fechado" data-id="${it.id}" style="padding:0.4rem 0.7rem;">Salvar</button>
+              <button type="button" class="btn-secondary btn-cancelar-valor-fechado" style="padding:0.4rem 0.7rem;">Cancelar</button>
+            </div>` : `
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              ${fmtMoeda(it.valorFechado)}
+              <button type="button" class="btn-secondary btn-editar-valor-fechado" data-id="${it.id}" style="padding:0.3rem 0.6rem;">Editar</button>
+            </div>`}
+        </td>
+      </tr>`;
+  }).join('') : '<tr><td colspan="4" class="tabela-msg">Nenhum item fechado com essa empresa ainda.</td></tr>';
+
+  document.getElementById('fecha-fechados-total').textContent =
+    `${fechaFechadosAtuais.length} itens — total fechado: ${fmtMoeda(fechaFechadosAtuais.reduce((s, it) => s + (it.valorFechado || 0), 0))}`;
+
+  tbody.querySelectorAll('.btn-editar-valor-fechado').forEach(btn => btn.addEventListener('click', () => {
+    fechaFechadosEditandoId = btn.dataset.id;
+    renderFechadosFechamento();
+  }));
+  tbody.querySelectorAll('.btn-cancelar-valor-fechado').forEach(btn => btn.addEventListener('click', () => {
+    fechaFechadosEditandoId = null;
+    renderFechadosFechamento();
+  }));
+  tbody.querySelectorAll('.btn-salvar-valor-fechado').forEach(btn => btn.addEventListener('click', () => salvarValorFechado(btn.dataset.id)));
+}
+
+async function salvarValorFechado(id) {
+  const input = document.querySelector(`.fecha-valor-input[data-id="${id}"]`);
+  const valorUnitario = parseFloat(input.value);
+  if (isNaN(valorUnitario) || valorUnitario < 0) return showToast('Informe um valor unitário válido.', 'error');
+
+  try {
+    const resp = await apiFetch(`/financeiro/fechamento/${id}/valor`, {
+      method: 'PUT',
+      body: JSON.stringify({ valorUnitario })
+    });
+    const item = fechaFechadosAtuais.find(it => it.id === id);
+    if (item) {
+      item.valorUnitario = valorUnitario;
+      item.valorFechado = resp.valorFechado;
+      item.pendenciaValorFechamento = null;
+    }
+    fechaFechadosEditandoId = null;
+    renderFechadosFechamento();
+    showToast('Valor atualizado.');
+  } catch (err) {
+    showToast('Erro ao atualizar valor: ' + err.message, 'error');
   }
 }
 

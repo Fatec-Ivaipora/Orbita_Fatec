@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
 </head>
-<body>
+<body class="pagina-negociacao">
     <!-- Auth Guard Padrão -->
     <div id="auth-guard" class="layout-auth-guard">
         <div class="layout-spinner"></div>
@@ -18,7 +18,7 @@
     <div id="app" class="layout-wrapper hidden">
         <main class="layout-main">
             <div class="layout-content" id="negociacao-root">
-                <div class="page-header">
+                <div class="page-header no-print">
                     <div>
                         <h1 class="page-title">Negociação por Fornecedor</h1>
                         <p class="page-subtitle">O que a empresa está ganhando e os itens que perdeu, para comparar com o valor da concorrência</p>
@@ -31,7 +31,7 @@
                     </div>
                 </div>
 
-                <div class="filters-bar">
+                <div class="filters-bar no-print">
                     <select class="select-filter" id="negociacao-curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
@@ -40,12 +40,12 @@
                     </select>
                 </div>
 
-                <div id="negociacao-vazio" class="card">
+                <div id="negociacao-vazio" class="card no-print">
                     <p class="tabela-msg">Selecione um fornecedor para ver o que ele ganhou e perdeu.</p>
                 </div>
 
                 <div id="negociacao-conteudo" class="hidden">
-                    <div class="kpi-grid">
+                    <div class="kpi-grid no-print">
                         <div class="kpi-card">
                             <div class="kpi-label">Valor total da licitação da empresa</div>
                             <div class="kpi-value" id="neg-kpi-valor-total-empresa">—</div>
@@ -68,8 +68,22 @@
                         </div>
                     </div>
 
-                    <div class="card" style="margin-bottom:1.5rem;">
-                        <h3 class="card-secao-titulo">Itens que a empresa está ganhando</h3>
+                    <div class="card" id="negociacao-card-ganhos" style="margin-bottom:1.5rem;">
+                        <div class="fornecedor-detalhe-header">
+                            <h3 class="card-secao-titulo">Itens que a empresa está ganhando</h3>
+                            <button type="button" class="btn-secondary no-print" id="btn-imprimir-ganhos">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                Imprimir
+                            </button>
+                        </div>
+                        <div class="rel-cabecalho-print" id="negociacao-cabecalho-print-ganhos">
+                            <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                            <div>
+                                <h1>Itens Ganhos</h1>
+                                <p id="negociacao-print-nome-ganhos"></p>
+                            </div>
+                            <div class="rel-data-emissao" id="negociacao-print-data-ganhos"></div>
+                        </div>
                         <div class="tabela-wrap tabela-scroll">
                             <table class="data-table">
                                 <thead>
@@ -85,8 +99,22 @@
                         </div>
                     </div>
 
-                    <div class="card">
-                        <h3 class="card-secao-titulo">Itens que a empresa perdeu — oportunidade de negociação</h3>
+                    <div class="card" id="negociacao-card-perdidos">
+                        <div class="fornecedor-detalhe-header">
+                            <h3 class="card-secao-titulo">Itens que a empresa perdeu — oportunidade de negociação</h3>
+                            <button type="button" class="btn-secondary no-print" id="btn-imprimir-perdidos">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                Imprimir
+                            </button>
+                        </div>
+                        <div class="rel-cabecalho-print" id="negociacao-cabecalho-print-perdidos">
+                            <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                            <div>
+                                <h1>Itens Perdidos</h1>
+                                <p id="negociacao-print-nome-perdidos"></p>
+                            </div>
+                            <div class="rel-data-emissao" id="negociacao-print-data-perdidos"></div>
+                        </div>
                         <div class="tabela-wrap tabela-scroll">
                             <table class="data-table">
                                 <thead>
@@ -106,7 +134,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-top:1.5rem;">
+                <div class="card no-print" style="margin-top:1.5rem;">
                     <h3 class="card-secao-titulo">Comparar duas empresas</h3>
                     <p class="page-subtitle" style="padding:0 1.5rem;">Quando a disputa fica entre duas empresas específicas — mostra só os itens onde as duas cotaram, lado a lado</p>
                     <div class="filters-bar" style="padding:0 1.5rem 1.25rem;">

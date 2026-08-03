@@ -157,16 +157,29 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
 
         const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ITENS_PAGE_SIZE_PADRAO, 200);
 
+        // Coordenador nunca vê fechados/fornecedor (bloqueado no front por
+        // "no-coordenador", mas também trava aqui pra não dar pra pedir direto
+        // pela API). 'pendentes' (padrão) = comportamento de sempre, esconde
+        // fechado pra não atrapalhar quem ainda tá cotando. 'fechados' = só os
+        // decididos, pra ver com qual empresa cada um fechou. 'todos' = os dois
+        // juntos.
+        const statusFiltro = req.user.role === 'coordenador' ? 'pendentes' : (req.query.statusFiltro || 'pendentes');
+        const incluiItem = (dados) => {
+            if (statusFiltro === 'fechados') return dados.status === 'fechado';
+            if (statusFiltro === 'todos') return true;
+            return dados.status !== 'fechado';
+        };
+
         // Pagina de verdade no Firestore (limit + startAfter) em vez de trazer o
         // curso inteiro numa tarada só — turmas com 150-200+ itens (ex.: Biomedicina,
         // Medicina) estavam gastando uma cota de leitura enorme só pra abrir a tela.
         // orderBy(produto) + orderBy(__name__) garante ordenação estável mesmo com
         // produtos de nome repetido (existem casos assim cadastrados).
         //
-        // Item "fechado" não aparece nessa tela (já foi decidido, só atrapalha a
-        // gestão do que ainda tá em cotação) — como isso exigiria mais um índice
-        // composto pra filtrar direto no Firestore, busca em lotes e pula os
-        // fechados até completar a página (ou acabar os dados do curso).
+        // Itens fora do filtro de status pedido não entram na página — como isso
+        // exigiria mais um índice composto pra filtrar direto no Firestore, busca
+        // em lotes e pula os que não servem até completar a página (ou acabar os
+        // dados do curso).
         let cursor = (cursorProduto && cursorId) ? { produto: cursorProduto, id: cursorId } : null;
         const docsPagina = [];
         let hasMore = false;
@@ -188,13 +201,13 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
 
             // Percorre o lote parando exatamente no doc onde a página encheu — o
             // cursor tem que apontar pra esse doc (mesmo que tenha sido pulado
-            // por ser "fechado"), nunca pro último do lote inteiro. Senão, os
+            // por não servir o filtro), nunca pro último do lote inteiro. Senão, os
             // docs que sobravam depois de a página encher no MEIO do lote
             // ficavam perdidos pra sempre (cursor pulava eles sem nunca voltar).
             let paradaNoMeio = false;
             for (const d of docsLote) {
                 if (docsPagina.length >= pageSize) { paradaNoMeio = true; break; }
-                if (d.data().status !== 'fechado') docsPagina.push(d);
+                if (incluiItem(d.data())) docsPagina.push(d);
                 cursor = { produto: d.data().produto, id: d.id };
             }
 
@@ -440,7 +453,14 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                     quantidade: item.quantidade,
                     unidade: item.unidade,
                     valoresPorFornecedor,
-                    vencedorFornecedorId: vencedor ? vencedor.fornecedorId : null
+                    vencedorFornecedorId: vencedor ? vencedor.fornecedorId : null,
+                    // Quem realmente fechou o item (pode não ser o vencedor por preço
+                    // acima, ex.: negociação/desconto) — é isso que define "ganhou"/
+                    // "perdeu" de verdade na tela de Negociação, não o menor preço.
+                    status: item.status || 'pendente',
+                    fornecedorFechadoId: item.fornecedorFechadoId || null,
+                    fornecedorFechadoNome: item.fornecedorFechadoNome || null,
+                    valorFechado: item.valorFechado || null
                 });
             }
         });
@@ -640,6 +660,37 @@ router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoord
     }
 });
 
+// PUT /fechamento/:id/valor — corrige o valor final de um item já fechado
+// (ex.: fechou com valor errado/zerado), sem precisar reabrir e refazer o
+// fechamento inteiro. Só funciona em item com status 'fechado'.
+router.put('/fechamento/:id/valor', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const doc = await db.collection(COL_ITENS).doc(req.params.id).get();
+        if (!doc.exists) return res.status(404).json({ error: 'Item não encontrado.' });
+        const item = doc.data();
+        if (item.status !== 'fechado' || !item.fornecedorFechadoId) {
+            return res.status(400).json({ error: 'Esse item não está fechado com nenhuma empresa.' });
+        }
+
+        const valorUnitario = parseFloat(req.body.valorUnitario);
+        if (isNaN(valorUnitario) || valorUnitario < 0) return res.status(400).json({ error: 'Informe um valor unitário válido.' });
+        const valorTotal = Math.round(valorUnitario * item.quantidade * 100) / 100;
+
+        const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== item.fornecedorFechadoId);
+        cotacoes.push({ fornecedorId: item.fornecedorFechadoId, fornecedorNome: item.fornecedorFechadoNome, valorUnitario, valorTotal });
+
+        await db.collection(COL_ITENS).doc(req.params.id).update({
+            cotacoes,
+            valorFechado: valorTotal,
+            pendenciaValorFechamento: admin.firestore.FieldValue.delete(),
+            updatedAt: new Date().toISOString()
+        });
+        res.json({ message: 'Valor atualizado.', valorFechado: valorTotal });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // POST /fechamento/:id/reabrir — desfaz um fechamento, restaurando as
 // cotações e o status exatamente como estavam antes (guardado em
 // estadoAntesDoFechamento no momento da confirmação) — não só limpa o status.
@@ -721,7 +772,9 @@ router.get('/fechamento/fechados', verifyToken, checkPermission, bloquearCoorden
         res.json({
             itens: fechados.map(it => ({
                 id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
-                unidade: it.unidade, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm
+                unidade: it.unidade, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm,
+                pendenciaValorFechamento: it.pendenciaValorFechamento || null,
+                valorUnitario: (it.cotacoes || []).find(c => c.fornecedorId === it.fornecedorFechadoId)?.valorUnitario ?? null
             })),
             total: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
         });
