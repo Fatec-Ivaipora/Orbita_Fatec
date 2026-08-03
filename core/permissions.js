@@ -125,17 +125,24 @@ export const MODULES = {
     title: "Licitação",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
     url: "/financeiro/licitacao/index.html"
+  },
+  matriculas: {
+    id: "matriculas",
+    category: "financeiro",
+    title: "Relatório Matrículas",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>`,
+    url: "/financeiro/matriculas/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas"]
   },
   ti: {
     label: "T.I.",
@@ -147,11 +154,15 @@ export const ROLE_PERMISSIONS = {
   },
   financeiro: {
     label: "Financeiro",
-    modules: ["dashboard", "fidelidade", "licitacao"]
+    modules: ["dashboard", "fidelidade", "licitacao", "matriculas"]
   },
   coordenador: {
     label: "Coordenador",
     modules: ["dashboard", "fidelidade", "licitacao"]
+  },
+  secretaria: {
+    label: "Secretaria",
+    modules: ["dashboard", "fidelidade", "matriculas"]
   },
   visitante: {
     label: "Visitante",

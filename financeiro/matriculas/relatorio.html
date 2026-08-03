@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Matrículas - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="matriculas-relatorio-root">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Relatório de Matrículas</h1>
+                        <p class="page-subtitle">Calculado a partir do que foi lançado — sem contagem manual</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/matriculas/index.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select class="select-filter" id="rel-modulo-select">
+                        <option value="fatec">Fatec (16 cursos)</option>
+                        <option value="medicina">Medicina</option>
+                    </select>
+                    <select class="select-filter" id="rel-semestre-select">
+                        <option value="2026.1">2026.1</option>
+                        <option value="2026.2" selected>2026.2</option>
+                    </select>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total de alunos</div>
+                        <div class="kpi-value" id="kpi-total">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Rematrícula Assinada</div>
+                        <div class="kpi-value" id="kpi-rematricula">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Pendência Financeira</div>
+                        <div class="kpi-value" id="kpi-pendencia">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Não Assinou</div>
+                        <div class="kpi-value" id="kpi-nao-assinou">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Cancelou / Trancou</div>
+                        <div class="kpi-value" id="kpi-cancelou-trancou">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">1ª / 2ª Evasão</div>
+                        <div class="kpi-value" id="kpi-evasao">—</div>
+                    </div>
+                    <div class="kpi-card hidden" id="kpi-revisar-card">
+                        <div class="kpi-label">Pendentes de revisão (migração)</div>
+                        <div class="kpi-value" id="kpi-revisar">—</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom:1.5rem;">
+                    <h3 class="card-secao-titulo">Situação por curso</h3>
+                    <div class="tabela-wrap">
+                        <table class="data-table" id="tabela-situacao-curso">
+                            <thead id="situacao-curso-thead"></thead>
+                            <tbody id="situacao-curso-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-secao-titulo">Plano/Confissão (PROUNI/Pravaler)</h3>
+                    <div class="tabela-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Plano/Confissão</th>
+                                    <th>Quantidade</th>
+                                </tr>
+                            </thead>
+                            <tbody id="plano-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/matriculas/app.js"></script>
+</body>
+</html>

@@ -105,6 +105,46 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "matriculas_alunos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "modulo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "semestre",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cursoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "matriculas_alunos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "modulo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "semestre",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
