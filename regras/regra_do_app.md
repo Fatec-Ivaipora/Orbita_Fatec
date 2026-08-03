@@ -116,6 +116,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-08-03] Novo módulo: CPA (Comissão Própria de Avaliação)
+- Autor: Claude Code
+- Branch: feature/cpa-relatorio
+- Arquivos criados:
+  - `/src/db-edubox.js` (primeiro cliente Postgres do projeto — `Pool` somente leitura pro banco externo do Edubox, `search_path=ivp,public` e `default_transaction_read_only=on` fixados na conexão; credenciais via `EDUBOX_HOST`/`EDUBOX_PORT`/`EDUBOX_DATABASE`/`EDUBOX_USER`/`EDUBOX_PASSWORD` no `.env`)
+  - `/src/rotas/cpa.js` (`GET /campanhas` lista as avaliações do segmento Alunos; `GET /cursos?codava=` lista só cursos com resposta na campanha; `GET /relatorio/:codava?curso=` agrega por dimensão: média por pergunta — parseando o número que abre `tav_resp_grupo_aluno.desres` —, nota geral da dimensão (`tav_nota_grupo_aluno.notnot`) e comentários (`obsnot`) filtrados removendo vazios e respostas com menos de 2 palavras)
+  - `/cpa/index.html`, `/cpa/app.js`, `/cpa/cpa.css` (segue o padrão visual de `financeiro/licitacao/relatorio.html`: um gráfico Chart.js de barras por dimensão — uma barra por pergunta —, botão Imprimir com `window.print()`)
+- Arquivos alterados:
+  - `/package.json` (nova dependência `pg`)
+  - `/core/permissions.js`, `/src/middlewares/auth.js`, `/api/index.js` (registro do módulo `cpa`, categoria "Docência", liberado pros cargos `adm_l1`, `adm_l2`, `ti` e `coordenador`)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário (TI) — hoje o relatório da CPA sai só do sistema acadêmico (Edubox) como um PDF de dezenas de páginas, sem filtro, um gráfico genérico só, e é sempre a TI quem precisa gerar isso pros coordenadores de curso a cada semestre. O módulo dá ao coordenador um relatório direto, limpo, focado no curso dele.
+- Impacto/riscos a observar:
+  - **Banco compartilhado entre instituições**: o Postgres do Edubox (banco `edubox_old`) é usado por ~32 outras instituições da região (colégios estaduais, IFPR, etc.), não só a Fatec. Toda query em `cpa.js` faz `INNER JOIN` até `tac_curso` (que só lista cursos da Fatec) — isso é o que garante que nenhuma resposta de aluno de outra instituição apareça no relatório, mesmo sem curso selecionado. Não remover esse join achando que é redundante.
+  - **Escala das perguntas varia por pergunta**: `tav_questao.resque` tem casos com "1=Péssimo...5=Ótimo" e outros invertidos "1=Ótimo...5=Não sei" — o backend expõe `opcoes` e um heurístico `escalaInvertida` por pergunta; o frontend usa isso pra colorir as barras (verde/amarelo/vermelho) na direção certa. Não assumir uma escala fixa.
+  - **Filtro de comentários é client-agnostic**: comentário "vazio ou com menos de 2 palavras" é decidido em `cpa.js` (contagem de palavras via split por espaço), não no Postgres — mais fácil de ajustar o limiar depois.
+  - **Sem trava de curso por usuário**: seguindo o mesmo padrão já existente em `financeiro/licitacao` (cargo `coordenador` só tem uma dropdown de curso, sem amarração usuário↔curso no backend) — qualquer coordenador logado tecnicamente pode escolher outro curso na dropdown. Se decidirem endurecer isso, fazer nos dois módulos juntos (adicionar `cursoId` ao cadastro do usuário).
+- Como testar: Logar como `coordenador`, `ti` ou `adm_l1`; abrir "CPA" na categoria Docência; escolher uma campanha "Alunos" e um curso; conferir um gráfico por dimensão (uma barra por pergunta) e a lista de comentários (sem vazios/genéricos de 1 palavra); testar "Imprimir".
+- Como reverter: `git revert` deste commit remove os arquivos criados e desfaz os registros em `permissions.js`/`auth.js`/`api/index.js`; remover a dependência `pg` do `package.json` se não for mais usada em nenhum outro módulo.
+
 ### [2026-08-03] Remoção dos módulos Turmas e Avaliações (sem uso) — abre espaço para o CPA
 - Autor: Claude Code
 - Branch: feature/cpa-relatorio

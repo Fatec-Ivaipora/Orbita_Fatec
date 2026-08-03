@@ -1,0 +1,112 @@
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.25rem; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+.page-header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--primary-blue);
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.filters-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.select-filter {
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  min-width: 260px;
+  background: white;
+  color: var(--text-main);
+}
+.select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+.select-filter:disabled { opacity: 0.5; }
+
+.empty-state { color: var(--text-secondary); font-size: 0.95rem; padding: 2rem 0; text-align: center; }
+
+.chart-card { background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02); margin-bottom: 1.25rem; }
+.chart-card.full { grid-column: 1 / -1; }
+.chart-canvas-wrap { position: relative; height: 260px; margin-bottom: 1rem; }
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+
+.dimensao-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.dimensao-header h3 { margin: 0; font-size: 1.05rem; color: var(--text-main); }
+.dimensao-nota { font-size: 0.9rem; color: var(--text-main); white-space: nowrap; }
+.dimensao-total { color: var(--text-secondary); font-weight: 500; }
+
+.comentarios-bloco { border-top: 1px solid var(--border-color); padding-top: 1rem; }
+.comentarios-titulo { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 0.6rem; }
+.comentarios-vazio { color: var(--text-secondary); font-size: 0.85rem; font-style: italic; margin: 0; }
+.comentarios-lista { margin: 0; padding-left: 1.2rem; max-height: 260px; overflow-y: auto; }
+.comentarios-lista li { font-size: 0.87rem; color: var(--text-main); margin-bottom: 0.5rem; line-height: 1.4; }
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.9rem 1.4rem;
+  border-radius: 10px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.toast.hidden { display: none; }
+.toast-success { background: var(--green, #10B981); }
+.toast-error { background: var(--red, #EF4444); }
+
+.rel-cabecalho-print {
+  display: none;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--primary-blue);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.rel-cabecalho-print h1 { margin: 0; font-size: 17px; color: var(--primary-blue); }
+.rel-cabecalho-print p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.rel-data-emissao { font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
+
+.print-page.hidden { display: none; }
+
+body.pagina-cpa .layout-main { background: var(--bg-page, #F4F7FB); }
+
+@media print {
+  body.pagina-cpa .no-print,
+  body.pagina-cpa .layout-sidebar,
+  body.pagina-cpa .layout-header { display: none !important; }
+
+  body.pagina-cpa,
+  body.pagina-cpa .layout-wrapper,
+  body.pagina-cpa .layout-main,
+  body.pagina-cpa .layout-content {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .rel-cabecalho-print { display: flex; }
+  .print-page, .chart-card { width: 100% !important; box-sizing: border-box; }
+  .chart-card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; }
+  .chart-canvas-wrap { height: 200px !important; }
+  .comentarios-lista { max-height: none; overflow: visible; }
+}
