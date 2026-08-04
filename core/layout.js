@@ -70,8 +70,10 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   nav.className = 'layout-nav';
   
   // 1. Renderizar Módulos sem Categoria (Top-level)
+  // "fidelidade" (Cartão FATEC) fica fora do menu por hora — não está em uso
+  // no momento. O módulo/rota continuam existindo, só não aparece no menu.
   const topLevelModules = Object.values(MODULES).filter(mod =>
-    !mod.category && podeVerModulo(mod.id));
+    !mod.category && mod.id !== 'fidelidade' && podeVerModulo(mod.id));
 
   topLevelModules.forEach(mod => {
     const link = document.createElement('a');
