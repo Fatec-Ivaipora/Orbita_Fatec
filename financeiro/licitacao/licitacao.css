@@ -411,6 +411,60 @@ body.pagina-fornecedores .layout-content {
   }
 }
 
+/* ==========================================
+   Impressão da Negociação (negociacao.html) — imprime só "ganhos" OU só
+   "perdidos" por vez, conforme o botão clicado (ver JS: body[data-imprimindo]).
+   ========================================== */
+body.pagina-negociacao .layout-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
+}
+body.pagina-negociacao .layout-content {
+  flex: none;
+  overflow: visible;
+}
+
+@media print {
+  body.pagina-negociacao .no-print,
+  body.pagina-negociacao .layout-sidebar,
+  body.pagina-negociacao .layout-header { display: none !important; }
+
+  body.pagina-negociacao,
+  body.pagina-negociacao .layout-wrapper,
+  body.pagina-negociacao .layout-main,
+  body.pagina-negociacao .layout-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.pagina-negociacao #negociacao-card-ganhos,
+  body.pagina-negociacao #negociacao-card-perdidos {
+    box-shadow: none;
+    border: none;
+  }
+
+  body.pagina-negociacao .tabela-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body.pagina-negociacao .tabela-scroll thead th {
+    position: static;
+  }
+
+  /* Sem o atributo (impressão manual, ex.: Ctrl+P sem clicar em nenhum
+     botão de Imprimir), não mostra nenhum dos dois — evita imprimir os
+     dois juntos sem querer. */
+  body.pagina-negociacao:not([data-imprimindo]) #negociacao-card-ganhos,
+  body.pagina-negociacao:not([data-imprimindo]) #negociacao-card-perdidos {
+    display: none !important;
+  }
+  body.pagina-negociacao[data-imprimindo="ganhos"] #negociacao-card-perdidos { display: none !important; }
+  body.pagina-negociacao[data-imprimindo="perdidos"] #negociacao-card-ganhos { display: none !important; }
+}
+
 /* Telas de relatório: o shell do app é flex com altura travada
    (.layout-main overflow:hidden + .layout-content flex:1 overflow-y:auto) —
    sem isso a página inteira não rola corretamente e a impressão corta
