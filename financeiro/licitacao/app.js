@@ -1725,6 +1725,7 @@ function renderFechadosFechamento() {
             <div style="display:flex; align-items:center; gap:0.5rem;">
               ${fmtMoeda(it.valorFechado)}
               <button type="button" class="btn-secondary btn-editar-valor-fechado" data-id="${it.id}" style="padding:0.3rem 0.6rem;">Editar</button>
+              <button type="button" class="btn-secondary btn-remover-item-fechado" data-id="${it.id}" data-produto="${esc(it.produto)}" style="padding:0.3rem 0.6rem;">Remover</button>
             </div>`}
         </td>
       </tr>`;
@@ -1742,6 +1743,23 @@ function renderFechadosFechamento() {
     renderFechadosFechamento();
   }));
   tbody.querySelectorAll('.btn-salvar-valor-fechado').forEach(btn => btn.addEventListener('click', () => salvarValorFechado(btn.dataset.id)));
+  tbody.querySelectorAll('.btn-remover-item-fechado').forEach(btn => btn.addEventListener('click', () => removerItemFechado(btn.dataset.id, btn.dataset.produto)));
+}
+
+// Desfaz o fechamento de UM item só (item entrou errado no lote) — sem
+// precisar desfazer tudo da empresa. Restaura o estado de antes do
+// fechamento (mesma lógica do "Desfazer todos", só que num item por vez).
+async function removerItemFechado(id, produto) {
+  if (!confirm(`Remover "${produto}" do fechamento dessa empresa? O item volta a ficar pendente.`)) return;
+  try {
+    await apiFetch(`/financeiro/fechamento/${id}/reabrir`, { method: 'POST' });
+    fechaFechadosAtuais = fechaFechadosAtuais.filter(it => it.id !== id);
+    if (fechaFechadosEditandoId === id) fechaFechadosEditandoId = null;
+    renderFechadosFechamento();
+    showToast('Item removido do fechamento.');
+  } catch (err) {
+    showToast('Erro ao remover item: ' + err.message, 'error');
+  }
 }
 
 async function salvarValorFechado(id) {
