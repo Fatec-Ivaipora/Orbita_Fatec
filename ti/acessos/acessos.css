@@ -53,22 +53,22 @@
 .acs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .empty-state { grid-column: 1 / -1; text-align: center; padding: 40px 0; color: var(--text-secondary); }
 
-.acs-card { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.acs-card { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow: hidden; }
 .acs-card-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .acs-card-nome { font-size: 15px; font-weight: 700; color: var(--text-main); }
 .acs-card-cat {
   font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   color: var(--primary-blue); background: #eaf1fb; border-radius: 999px; padding: 3px 9px; white-space: nowrap;
 }
-.acs-card-linha { font-size: 13px; color: var(--text-secondary); display: flex; gap: 6px; }
-.acs-card-linha b { color: var(--text-main); font-weight: 600; }
+.acs-card-linha { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; word-break: break-word; }
+.acs-card-linha b { color: var(--text-main); font-weight: 600; margin-right: 6px; }
 .acs-card-senha { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .acs-senha-valor {
   font-family: Consolas, monospace; font-size: 13.5px; color: var(--text-main);
   background: #f4f7fb; border-radius: 7px; padding: 5px 10px; flex: 1; word-break: break-all;
 }
-.acs-card-obs { font-size: 12.5px; color: var(--text-secondary); font-style: italic; }
-.acs-card-link { font-size: 12.5px; }
+.acs-card-obs { font-size: 12.5px; color: var(--text-secondary); font-style: italic; overflow-wrap: anywhere; word-break: break-word; }
+.acs-card-link { font-size: 12.5px; overflow-wrap: anywhere; word-break: break-word; }
 .acs-card-link a { color: var(--primary-blue); }
 .acs-card-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .acs-card-actions button {

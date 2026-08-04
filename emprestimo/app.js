@@ -1318,6 +1318,25 @@ function initMovimentar() {
 
     document.getElementById('success-modal').classList.add('active');
   });
+
+  // Excluir equipamento (remove o registro inteiro do banco de dados)
+  const btnExcluir = document.getElementById('btn-excluir-emprestimo');
+  if (btnExcluir) {
+    btnExcluir.addEventListener('click', async () => {
+      if (!confirm(`Excluir definitivamente o equipamento "${noteObj.id}"?\nIsso remove o registro e todo o histórico. Essa ação não tem volta.`)) return;
+
+      btnExcluir.textContent = 'Excluindo...';
+      btnExcluir.disabled = true;
+      try {
+        await apiFetch(`/emprestimos/${noteObj.id}`, { method: 'DELETE' });
+        window.location.href = '/emprestimo/index.html';
+      } catch (err) {
+        alert('Erro ao excluir: ' + err.message);
+        btnExcluir.textContent = 'Excluir Equipamento';
+        btnExcluir.disabled = false;
+      }
+    });
+  }
 }
 
 // ----------------------------------------------------------------

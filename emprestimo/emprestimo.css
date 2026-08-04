@@ -364,6 +364,17 @@ body {
   border-color: var(--text-secondary);
 }
 
+.btn-danger-outline {
+  background: #fff;
+  color: #C0554A;
+  border: 1.5px solid #C0554A;
+  width: 100%;
+}
+
+.btn-danger-outline:hover {
+  background: #fdf5f4;
+}
+
 /* ---- AUTH GUARD (Bloqueio de Acesso) ---- */
 .auth-guard {
   position: fixed;

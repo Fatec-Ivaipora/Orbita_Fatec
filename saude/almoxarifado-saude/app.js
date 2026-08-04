@@ -1001,6 +1001,7 @@ function renderAgendamentos(lista) {
 
 function setupModalReserva() {
   const modal = document.getElementById('modal-reserva');
+  document.getElementById('filtro-data-agenda').value = new Date().toISOString().slice(0, 10);
   document.getElementById('btn-nova-reserva').addEventListener('click', () => abrirModalReserva(null));
   document.getElementById('btn-cancelar-reserva').addEventListener('click', () => modal.classList.add('hidden'));
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
@@ -1018,7 +1019,7 @@ function abrirModalReserva(ag) {
 
   const salaFiltrada = document.getElementById('filtro-sala').value;
   document.getElementById('reserva-sala').value = editando ? ag.sala : salaFiltrada;
-  document.getElementById('reserva-data').value = editando ? ag.data : '';
+  document.getElementById('reserva-data').value = editando ? ag.data : new Date().toISOString().slice(0, 10);
   document.getElementById('reserva-hora-inicio').value = editando ? ag.horaInicio : '';
   document.getElementById('reserva-hora-fim').value = editando ? ag.horaFim : '';
   document.getElementById('reserva-responsavel').value = editando ? ag.responsavel : '';
