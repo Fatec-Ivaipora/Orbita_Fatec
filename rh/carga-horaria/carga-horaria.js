@@ -653,6 +653,17 @@ const TIPO_BADGE = {
   evento:  ['badge-evento', 'Evento']
 };
 
+// Data "de referência" do registro: `dataEvento` é o dia que o RH
+// selecionou na tela (o dia em que a hora extra/falta realmente aconteceu)
+// — é isso que deve aparecer no relatório e no agrupamento por mês, não
+// `lancadoEm` (só o timestamp de quando o registro foi criado no sistema,
+// que pode ser um dia bem diferente do evento em si). `lancadoEm` só entra
+// como fallback pra lançamentos antigos/manuais que não têm `dataEvento`.
+function dataDoRegistro(r) {
+  if (r.dataEvento) return new Date(r.dataEvento + 'T12:00:00');
+  return r.lancadoEm ? new Date(r.lancadoEm) : new Date();
+}
+
 function renderExtrato(registros) {
   const lista = document.getElementById('extrato-lista');
   if (!registros.length) {
@@ -660,10 +671,15 @@ function renderExtrato(registros) {
     return;
   }
 
+  // Ordena pela data do evento (não da criação do registro) antes de
+  // agrupar, senão um lançamento retroativo aparece fora de ordem dentro
+  // do próprio mês a que pertence.
+  const registrosOrdenados = [...registros].sort((a, b) => dataDoRegistro(b) - dataDoRegistro(a));
+
   // Agrupar por mês/ano
   const grupos = {};
-  registros.forEach(r => {
-    const dataObj = r.lancadoEm ? new Date(r.lancadoEm) : new Date();
+  registrosOrdenados.forEach(r => {
+    const dataObj = dataDoRegistro(r);
     const mesAno = dataObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     if (!grupos[mesAno]) grupos[mesAno] = [];
     grupos[mesAno].push(r);
@@ -675,9 +691,11 @@ function renderExtrato(registros) {
     html += `<div class="ch-mes-header">${mesCapitalizado}</div>`;
 
     html += items.map(r => {
-      const data = r.lancadoEm
-        ? new Date(r.lancadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : '—';
+      const data = r.dataEvento
+        ? new Date(r.dataEvento + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : (r.lancadoEm
+          ? new Date(r.lancadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '—');
       const [tipoClass, tipoLabel] = TIPO_BADGE[r.tipo] || ['badge-evento', r.tipo || '—'];
 
       const valor = Number(r.horasExtras || 0);
@@ -764,8 +782,10 @@ async function exportarPDF() {
     startY: 62,
     theme: 'grid',
     head: [['Data', 'Tipo', 'Motivo', 'Horas']],
-    body: extratoRegistros.map(r => [
-      r.lancadoEm ? new Date(r.lancadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+    body: [...extratoRegistros].sort((a, b) => dataDoRegistro(b) - dataDoRegistro(a)).map(r => [
+      r.dataEvento
+        ? new Date(r.dataEvento + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : (r.lancadoEm ? new Date(r.lancadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'),
       TIPO_LABEL_PDF[r.tipo] || r.tipo || '—',
       r.descricao || '',
       (Number(r.horasExtras || 0) >= 0 ? '+' : '') + fmtHoras(Number(r.horasExtras || 0))

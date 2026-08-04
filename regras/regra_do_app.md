@@ -10,7 +10,7 @@ O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a F
 - `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
 - `/auth`: Tela de login e fluxo de redefinição de senha institucional.
 - `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança, permissões).
-- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/turmas`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
+- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/cpa`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
 - `/regras`: Documentação técnica e logs de alteração.
 
 ## 3. Fluxo de autenticação e Arquitetura REST
@@ -83,9 +83,10 @@ Além das permissões por cargo, o ADM N1 pode conceder **acessos personalizados
 - **Finalidade**: Módulo mobile-first (PWA) que disponibiliza a carteirinha digital do funcionário (FATEC Card) com QR Code auto-regenerativo a cada 30 segundos e acesso rápido às empresas parceiras conveniadas no Clube de Vantagens.
 - **Estrutura**: Localizado em `/fidelidade`, inclui a página do usuário (`index.html`) e a interface de validação (`validar.html`) para lojistas verificarem o status e vigência em tempo real.
 
-### Turmas
-- **Finalidade**: Listagem e gestão de turmas e disciplinas acadêmicas para os docentes.
-- **Backend API**: `/api/rotas/turmas.js` (Lida com coleção `turmas`).
+### CPA (Comissão Própria de Avaliação)
+- **Finalidade**: Relatório enxuto dos resultados da CPA (Edubox) para coordenadores de curso — um gráfico por dimensão do SINAES, comentários filtrados (remove vazios e respostas com menos de 2 palavras), em vez do PDF único de dezenas de páginas gerado pelo sistema acadêmico.
+- **Backend API**: `/api/rotas/cpa.js` — consulta direta e **somente leitura** ao Postgres externo do Edubox (`src/db-edubox.js`), banco `edubox_old` (réplica de consulta), schema `ivp`. Não usa Firestore.
+- **Escopo institucional**: o banco do Edubox é compartilhado com outras ~32 instituições da região — todas as queries filtram explicitamente pelos cursos da Fatec (`tac_curso`), nunca dados de outra instituição.
 
 ## 6. Padrão visual
 O sistema segue uma identidade visual institucional "Light Theme" moderna:
@@ -114,6 +115,43 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como reverter:
 
 ## 8. Histórico de alterações
+
+### [2026-08-03] Novo módulo: CPA (Comissão Própria de Avaliação)
+- Autor: Claude Code
+- Branch: feature/cpa-relatorio
+- Arquivos criados:
+  - `/src/db-edubox.js` (primeiro cliente Postgres do projeto — `Pool` somente leitura pro banco externo do Edubox, `search_path=ivp,public` e `default_transaction_read_only=on` fixados na conexão; credenciais via `EDUBOX_HOST`/`EDUBOX_PORT`/`EDUBOX_DATABASE`/`EDUBOX_USER`/`EDUBOX_PASSWORD` no `.env`)
+  - `/src/rotas/cpa.js` (`GET /campanhas` lista as avaliações do segmento Alunos; `GET /cursos?codava=` lista só cursos com resposta na campanha; `GET /relatorio/:codava?curso=` agrega por dimensão: média por pergunta — parseando o número que abre `tav_resp_grupo_aluno.desres` —, nota geral da dimensão (`tav_nota_grupo_aluno.notnot`) e comentários (`obsnot`) filtrados removendo vazios e respostas com menos de 2 palavras)
+  - `/cpa/index.html`, `/cpa/app.js`, `/cpa/cpa.css` (segue o padrão visual de `financeiro/licitacao/relatorio.html`: um gráfico Chart.js de barras por dimensão — uma barra por pergunta —, botão Imprimir com `window.print()`)
+- Arquivos alterados:
+  - `/package.json` (nova dependência `pg`)
+  - `/core/permissions.js`, `/src/middlewares/auth.js`, `/api/index.js` (registro do módulo `cpa`, categoria "Docência", liberado pros cargos `adm_l1`, `adm_l2`, `ti` e `coordenador`)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário (TI) — hoje o relatório da CPA sai só do sistema acadêmico (Edubox) como um PDF de dezenas de páginas, sem filtro, um gráfico genérico só, e é sempre a TI quem precisa gerar isso pros coordenadores de curso a cada semestre. O módulo dá ao coordenador um relatório direto, limpo, focado no curso dele.
+- Impacto/riscos a observar:
+  - **Banco compartilhado entre instituições**: o Postgres do Edubox (banco `edubox_old`) é usado por ~32 outras instituições da região (colégios estaduais, IFPR, etc.), não só a Fatec. Toda query em `cpa.js` faz `INNER JOIN` até `tac_curso` (que só lista cursos da Fatec) — isso é o que garante que nenhuma resposta de aluno de outra instituição apareça no relatório, mesmo sem curso selecionado. Não remover esse join achando que é redundante.
+  - **Escala das perguntas varia por pergunta**: `tav_questao.resque` tem casos com "1=Péssimo...5=Ótimo" e outros invertidos "1=Ótimo...5=Não sei" — o backend expõe `opcoes` e um heurístico `escalaInvertida` por pergunta; o frontend usa isso pra colorir as barras (verde/amarelo/vermelho) na direção certa. Não assumir uma escala fixa.
+  - **Filtro de comentários é client-agnostic**: comentário "vazio ou com menos de 2 palavras" é decidido em `cpa.js` (contagem de palavras via split por espaço), não no Postgres — mais fácil de ajustar o limiar depois.
+  - **Sem trava de curso por usuário**: seguindo o mesmo padrão já existente em `financeiro/licitacao` (cargo `coordenador` só tem uma dropdown de curso, sem amarração usuário↔curso no backend) — qualquer coordenador logado tecnicamente pode escolher outro curso na dropdown. Se decidirem endurecer isso, fazer nos dois módulos juntos (adicionar `cursoId` ao cadastro do usuário).
+- Como testar: Logar como `coordenador`, `ti` ou `adm_l1`; abrir "CPA" na categoria Docência; escolher uma campanha "Alunos" e um curso; conferir um gráfico por dimensão (uma barra por pergunta) e a lista de comentários (sem vazios/genéricos de 1 palavra); testar "Imprimir".
+- Como reverter: `git revert` deste commit remove os arquivos criados e desfaz os registros em `permissions.js`/`auth.js`/`api/index.js`; remover a dependência `pg` do `package.json` se não for mais usada em nenhum outro módulo.
+
+### [2026-08-03] Remoção dos módulos Turmas e Avaliações (sem uso) — abre espaço para o CPA
+- Autor: Claude Code
+- Branch: feature/cpa-relatorio
+- Arquivos removidos:
+  - `/turmas/` (`index.html`, `app.js`, `turmas.css`)
+  - `/avaliacoes/` (`index.html`, `app.js`, `avaliacoes.css`)
+  - `/src/rotas/turmas.js`, `/src/rotas/avaliacoes.js`
+- Arquivos alterados:
+  - `/api/index.js` (remove import/registro das rotas `/api/turmas` e `/api/avaliacoes`)
+  - `/core/permissions.js` (remove `MODULES.turmas` e `MODULES.avaliacoes`; remove `"turmas"`/`"avaliacoes"` dos arrays de módulos de `adm_l1` e `adm_l2`)
+  - `/src/middlewares/auth.js` (remove as chaves `turmas`/`avaliacoes` do `defaultPermissions` de todos os cargos)
+- Tipo: Remoção / Limpeza
+- Motivo: Confirmado com o usuário (dono/dev do Órbita) que os dois módulos da categoria "Docência" não têm uso real — nenhuma coleção do Firestore fora desses próprios arquivos referenciava `turmas`/`avaliacoes`, e nenhum dos dois tinha entrada no changelog original de criação (avaliações nunca chegou a ser documentada). A categoria "Docência" foi esvaziada de propósito para receber o módulo CPA no lugar.
+- Impacto: Usuários com os cargos `adm_l1`/`adm_l2` deixam de ver "Turmas" e "Avaliações" no menu lateral. Nenhum dado do Firestore foi apagado (as coleções `turmas`/`avaliacoes`, se existirem, ficam órfãs no banco, sem UI/API pra acessá-las).
+- Como testar: Logar como `adm_l1`; confirmar que a categoria "Docência" não mostra mais "Turmas"/"Avaliações"; confirmar que `GET /api/turmas` e `GET /api/avaliacoes` retornam 404 (rota não existe mais).
+- Como reverter: `git revert` deste commit restaura os arquivos e registros removidos.
 
 ### [2026-07-22] Almoxarifado Saúde: relatórios de estoque e movimentações
 - Autor: Claude Code
