@@ -27,6 +27,23 @@
 .btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .filters-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .select-filter {
   padding: 0.65rem 1rem;
@@ -44,6 +61,11 @@
 
 .chart-card { background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02); margin-bottom: 1.25rem; }
 .chart-card.full { grid-column: 1 / -1; }
+.chart-escopo-aviso {
+  font-size: 0.8rem; color: var(--text-secondary); font-style: italic;
+  margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; background: #f8fafc;
+  border-left: 3px solid var(--primary-blue); border-radius: 4px;
+}
 .chart-canvas-wrap { position: relative; height: 260px; margin-bottom: 1rem; }
 .chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
 
@@ -52,11 +74,62 @@
 .dimensao-nota { font-size: 0.9rem; color: var(--text-main); white-space: nowrap; }
 .dimensao-total { color: var(--text-secondary); font-weight: 500; }
 
-.comentarios-bloco { border-top: 1px solid var(--border-color); padding-top: 1rem; }
+.comentarios-resumo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-top: 1px solid var(--border-color); padding-top: 1rem; }
+.comentarios-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.badge-classificacao {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700;
+  background: color-mix(in srgb, var(--cor) 12%, white); color: var(--cor);
+}
+.badge-classificacao::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--cor); }
+
+.disciplinas-bloco { border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; }
+.disciplinas-lista { display: flex; flex-direction: column; gap: 0.5rem; max-height: 320px; overflow-y: auto; }
+.disciplina-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+  padding: 0.6rem 0.8rem; border: 1px solid var(--border-color); border-radius: 10px; background: #fafbfd;
+}
+.disciplina-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.disciplina-nome { font-size: 0.87rem; font-weight: 600; color: var(--text-main); }
+.disciplina-professor { font-size: 0.78rem; color: var(--text-secondary); }
+.disciplina-stats { display: flex; align-items: center; gap: 0.75rem; white-space: nowrap; }
+.disciplina-nota { font-size: 0.87rem; font-weight: 700; color: var(--text-main); }
+.disciplina-total { font-size: 0.78rem; color: var(--text-secondary); }
+.btn-sm { padding: 0.4rem 0.75rem; font-size: 0.78rem; }
+
 .comentarios-titulo { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 0.6rem; }
 .comentarios-vazio { color: var(--text-secondary); font-size: 0.85rem; font-style: italic; margin: 0; }
-.comentarios-lista { margin: 0; padding-left: 1.2rem; max-height: 260px; overflow-y: auto; }
-.comentarios-lista li { font-size: 0.87rem; color: var(--text-main); margin-bottom: 0.5rem; line-height: 1.4; }
+.comentarios-lista { margin: 0; padding-left: 0; list-style: none; }
+.comentarios-lista li { font-size: 0.87rem; color: var(--text-main); margin-bottom: 0.6rem; line-height: 1.4; padding-bottom: 0.6rem; border-bottom: 1px dashed var(--border-color); }
+.comentarios-lista li:last-child { border-bottom: none; }
+.comentario-tag {
+  display: inline-block; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 0.15rem 0.5rem; border-radius: 6px; margin-right: 0.5rem;
+  background: color-mix(in srgb, var(--cor) 15%, white); color: var(--cor);
+}
+
+.only-print { display: none; }
+
+.comentarios-lista-modal { max-height: 55vh; overflow-y: auto; margin-top: 0.75rem; }
+.comentarios-filtro-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.filtro-tab {
+  padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid var(--border-color);
+  background: white; color: var(--text-secondary); font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.filtro-tab.ativo { background: var(--primary-blue); border-color: var(--primary-blue); color: white; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.modal-overlay.hidden { display: none; }
+.modal-content {
+  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+.modal-content-lg { max-width: 640px; }
+.modal-content h2 { font-size: 1.3rem; font-weight: 800; color: var(--text-main); margin: 0 0 1rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
 
 .toast {
   position: fixed;
@@ -93,7 +166,8 @@ body.pagina-cpa .layout-main { background: var(--bg-page, #F4F7FB); }
 @media print {
   body.pagina-cpa .no-print,
   body.pagina-cpa .layout-sidebar,
-  body.pagina-cpa .layout-header { display: none !important; }
+  body.pagina-cpa .layout-header,
+  .modal-overlay { display: none !important; }
 
   body.pagina-cpa,
   body.pagina-cpa .layout-wrapper,
@@ -107,6 +181,7 @@ body.pagina-cpa .layout-main { background: var(--bg-page, #F4F7FB); }
   .rel-cabecalho-print { display: flex; }
   .print-page, .chart-card { width: 100% !important; box-sizing: border-box; }
   .chart-card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; }
-  .chart-canvas-wrap { height: 200px !important; }
+  .chart-canvas-wrap { height: 220px !important; }
+  .only-print { display: block; }
   .comentarios-lista { max-height: none; overflow: visible; }
 }

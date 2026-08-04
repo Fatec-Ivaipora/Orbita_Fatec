@@ -6,7 +6,7 @@
     <title>CPA - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/cpa/cpa.css">
+    <link rel="stylesheet" href="/cpa/cpa.css?v=11">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body class="pagina-cpa">
@@ -60,6 +60,17 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/cpa/app.js"></script>
+    <div id="modal-comentarios" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="modal-comentarios-titulo">Comentários</h2>
+            <div class="comentarios-filtro-tabs" id="comentarios-filtro-tabs"></div>
+            <div class="comentarios-lista-modal" id="comentarios-lista-modal"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-fechar-modal-comentarios">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/cpa/app.js?v=11"></script>
 </body>
 </html>
