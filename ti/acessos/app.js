@@ -152,6 +152,10 @@ function aplicarFiltros() {
   renderAcessos(filtrados);
 }
 
+// Mesma ordem das categorias no formulário (não alfabética) — deixa Órbita
+// (a maioria dos cadastros) logo no topo, e "Outro" sempre por último.
+const ORDEM_CATEGORIAS = ['Órbita', 'Sistema', 'E-mail', 'Servidor', 'Outro'];
+
 function renderAcessos(lista) {
   const container = document.getElementById('acessos-list');
   container.innerHTML = '';
@@ -161,33 +165,54 @@ function renderAcessos(lista) {
     return;
   }
 
+  const porCategoria = {};
   lista.forEach(a => {
-    const card = document.createElement('div');
-    card.className = 'acs-card';
-    card.innerHTML = `
-      <div class="acs-card-topo">
-        <div class="acs-card-nome">${esc(a.sistema)}</div>
-        <span class="acs-card-cat">${esc(a.categoria || 'Outro')}</span>
-      </div>
-      ${a.titular ? `<div class="acs-card-linha"><b>Titular:</b> ${esc(a.titular)}</div>` : ''}
-      ${a.usuario ? `<div class="acs-card-linha"><b>Usuário:</b> ${esc(a.usuario)}</div>` : ''}
-      <div class="acs-card-senha">
-        <span class="acs-senha-valor" data-senha-oculta>••••••••</span>
-      </div>
-      ${a.url ? `<div class="acs-card-link"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a></div>` : ''}
-      ${a.observacoes ? `<div class="acs-card-obs">${esc(a.observacoes)}</div>` : ''}
-      <div class="acs-card-actions action-execute">
-        <button class="btn-mostrar" data-acao="mostrar">👁 Mostrar</button>
-        <button data-acao="historico">Histórico</button>
-        <button data-acao="editar">Editar</button>
-        <button class="btn-excluir" data-acao="excluir">Excluir</button>
-      </div>
-    `;
-    card.querySelector('[data-acao="mostrar"]').addEventListener('click', (e) => revelarSenha(a, e.currentTarget, card));
-    card.querySelector('[data-acao="historico"]').addEventListener('click', () => abrirAuditoria(a));
-    card.querySelector('[data-acao="editar"]').addEventListener('click', () => abrirModalAcesso(a));
-    card.querySelector('[data-acao="excluir"]').addEventListener('click', () => excluirAcesso(a));
-    container.appendChild(card);
+    const cat = a.categoria || 'Outro';
+    (porCategoria[cat] = porCategoria[cat] || []).push(a);
+  });
+  const categoriasPresentes = Object.keys(porCategoria).sort((a, b) => {
+    const ia = ORDEM_CATEGORIAS.indexOf(a), ib = ORDEM_CATEGORIAS.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  categoriasPresentes.forEach(cat => {
+    const itens = porCategoria[cat];
+    const secao = document.createElement('div');
+    secao.className = 'acs-secao';
+    secao.innerHTML = `<h2 class="acs-secao-titulo">${esc(cat)} <span class="acs-secao-contagem">${itens.length}</span></h2>`;
+    container.appendChild(secao);
+
+    const grid = document.createElement('div');
+    grid.className = 'acs-grid';
+    itens.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'acs-card';
+      card.innerHTML = `
+        <div class="acs-card-topo">
+          <div class="acs-card-nome">${esc(a.sistema)}</div>
+          <span class="acs-card-cat">${esc(a.categoria || 'Outro')}</span>
+        </div>
+        ${a.titular ? `<div class="acs-card-linha"><b>Titular:</b> ${esc(a.titular)}</div>` : ''}
+        ${a.usuario ? `<div class="acs-card-linha"><b>Usuário:</b> ${esc(a.usuario)}</div>` : ''}
+        <div class="acs-card-senha">
+          <span class="acs-senha-valor" data-senha-oculta>••••••••</span>
+        </div>
+        ${a.url ? `<div class="acs-card-link"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a></div>` : ''}
+        ${a.observacoes ? `<div class="acs-card-obs">${esc(a.observacoes)}</div>` : ''}
+        <div class="acs-card-actions action-execute">
+          <button class="btn-mostrar" data-acao="mostrar">👁 Mostrar</button>
+          <button data-acao="historico">Histórico</button>
+          <button data-acao="editar">Editar</button>
+          <button class="btn-excluir" data-acao="excluir">Excluir</button>
+        </div>
+      `;
+      card.querySelector('[data-acao="mostrar"]').addEventListener('click', (e) => revelarSenha(a, e.currentTarget, card));
+      card.querySelector('[data-acao="historico"]').addEventListener('click', () => abrirAuditoria(a));
+      card.querySelector('[data-acao="editar"]').addEventListener('click', () => abrirModalAcesso(a));
+      card.querySelector('[data-acao="excluir"]').addEventListener('click', () => excluirAcesso(a));
+      grid.appendChild(card);
+    });
+    container.appendChild(grid);
   });
 }
 
