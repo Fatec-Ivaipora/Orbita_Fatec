@@ -145,6 +145,8 @@ async function initApp(user, role) {
     initPaginaFornecedores();
   } else if (document.getElementById('fechamento-root')) {
     initPaginaFechamento();
+  } else if (document.getElementById('entregas-root')) {
+    initPaginaEntregas();
   }
 }
 
@@ -402,9 +404,7 @@ function renderTabelaItens(lista) {
         <td>
           ${item.status === 'fechado'
             ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>`
-            : `<button type="button" class="status-badge status-${item.status} action-execute" data-id="${item.id}" data-status="${item.status}">
-                ${item.status === 'chegou' ? 'Chegou' : 'Pendente'}
-              </button>`}
+            : `<span class="status-badge status-pendente">Pendente</span>`}
         </td>
         <td class="acoes-col">
           <button type="button" class="btn-icon acao-cotacoes action-execute no-coordenador" data-id="${item.id}" title="Cotações">💰</button>
@@ -414,24 +414,9 @@ function renderTabelaItens(lista) {
       </tr>`;
   }).join('');
 
-  tbody.querySelectorAll('.status-badge').forEach(btn => btn.addEventListener('click', () => toggleStatus(btn.dataset.id, btn.dataset.status)));
   tbody.querySelectorAll('.acao-cotacoes').forEach(btn => btn.addEventListener('click', () => abrirModalCotacoes(btn.dataset.id)));
   tbody.querySelectorAll('.acao-editar').forEach(btn => btn.addEventListener('click', () => abrirModalItem(btn.dataset.id)));
   tbody.querySelectorAll('.acao-excluir').forEach(btn => btn.addEventListener('click', () => excluirItem(btn.dataset.id)));
-}
-
-async function toggleStatus(id, statusAtual) {
-  const novo = statusAtual === 'chegou' ? 'pendente' : 'chegou';
-  try {
-    await apiFetch(`/financeiro/itens/${id}`, { method: 'PUT', body: JSON.stringify({ status: novo }) });
-    // Atualiza só o item local — não precisa reler o curso inteiro do Firestore
-    // de novo pra mudar um status que a gente já sabe qual é.
-    const item = itens.find(it => it.id === id);
-    if (item) item.status = novo;
-    renderTabelaItens(itens);
-  } catch (err) {
-    showToast('Erro ao atualizar status: ' + err.message, 'error');
-  }
 }
 
 async function excluirItem(id) {
@@ -1417,6 +1402,20 @@ async function initPaginaFechamento() {
       fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
   }
 
+  // Pré-preenche com o semestre ativo que o financeiro já configurou (mesmo
+  // valor que os coordenadores enxergam) — continua editável pra fechar um
+  // semestre diferente se precisar.
+  const semestreInput = document.getElementById('fecha-semestre-input');
+  if (semestreInput) {
+    try {
+      const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+      if (semestreAtivoCoordenador) semestreInput.value = semestreAtivoCoordenador;
+    } catch (err) {
+      // Sem semestre ativo configurado ainda — deixa o campo em branco pra
+      // preencher na mão, sem travar o resto da tela.
+    }
+  }
+
   let cursosParaFiltro = [];
   try {
     cursosParaFiltro = await apiFetch('/financeiro/cursos');
@@ -1433,6 +1432,16 @@ async function initPaginaFechamento() {
     selectCursoGeral.innerHTML = '<option value="">Todos os cursos</option>' +
       cursosParaFiltro.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
+  const selectCursoDesconto = document.getElementById('fecha-desconto-curso-select');
+  if (selectCursoDesconto) {
+    selectCursoDesconto.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosParaFiltro.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+
+  document.getElementById('btn-ver-itens-desconto')?.addEventListener('click', carregarItensDesconto);
+  document.getElementById('fecha-desconto-valor')?.addEventListener('input', atualizarCalculadoraDesconto);
+  document.getElementById('fecha-desconto-tipo')?.addEventListener('change', atualizarCalculadoraDesconto);
+  document.getElementById('btn-confirmar-fechamento-desconto')?.addEventListener('click', confirmarFechamentoComDesconto);
 
   document.getElementById('btn-buscar-candidatos')?.addEventListener('click', buscarCandidatosFechamento);
   document.getElementById('btn-confirmar-fechamento')?.addEventListener('click', confirmarFechamento);
@@ -1584,6 +1593,141 @@ async function confirmarFechamento() {
   }
 }
 
+// Fecha vários itens de uma vez aplicando UM desconto sobre a cotação que a
+// empresa já tinha lançado em cada um — pra quando ela manda "essa cotação,
+// com X% de desconto", sem precisar redigitar valor item por item.
+let itensDescontoAtuais = [];
+
+async function carregarItensDesconto() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
+  const container = document.getElementById('fecha-desconto-lista');
+  const calculadora = document.getElementById('fecha-desconto-calculadora');
+  calculadora.classList.add('hidden');
+  itensDescontoAtuais = [];
+
+  if (!fornecedorId) { container.innerHTML = '<p class="tabela-msg">Selecione a empresa acima primeiro.</p>'; return; }
+  if (!semestre) { container.innerHTML = '<p class="tabela-msg">Informe o semestre acima primeiro.</p>'; return; }
+
+  const cursoId = document.getElementById('fecha-desconto-curso-select')?.value || '';
+  container.innerHTML = '<p class="tabela-msg">Carregando...</p>';
+  try {
+    const qs = new URLSearchParams({ semestre });
+    if (cursoId) qs.set('cursoId', cursoId);
+    const resp = await apiFetch(`/financeiro/relatorio?${qs.toString()}`);
+    const todosItens = resp.comparativo?.itens || [];
+    itensDescontoAtuais = todosItens
+      .filter(i => i.status !== 'fechado' && i.valoresPorFornecedor[fornecedorId] !== undefined)
+      .map(i => ({
+        itemId: i.itemId, curso: i.curso, produto: i.produto, quantidade: i.quantidade, unidade: i.unidade,
+        valorTotal: i.valoresPorFornecedor[fornecedorId]
+      }))
+      .sort((a, b) => a.curso.localeCompare(b.curso) || a.produto.localeCompare(b.produto));
+
+    if (!itensDescontoAtuais.length) {
+      container.innerHTML = '<p class="tabela-msg">Essa empresa não tem cotação em nenhum item em aberto nesse filtro.</p>';
+      return;
+    }
+
+    renderItensDesconto();
+    calculadora.classList.remove('hidden');
+  } catch (err) {
+    container.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderItensDesconto() {
+  const container = document.getElementById('fecha-desconto-lista');
+  container.innerHTML = `
+    <div class="tabela-wrap tabela-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:2rem;"><input type="checkbox" id="fecha-desconto-marcar-todos" checked></th>
+            <th>Curso</th>
+            <th>Produto</th>
+            <th>Qtd/Und</th>
+            <th>Valor cotado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itensDescontoAtuais.map(i => `
+            <tr>
+              <td><input type="checkbox" class="fecha-desconto-item-check" data-item-id="${i.itemId}" checked></td>
+              <td>${esc(i.curso)}</td>
+              <td>${esc(i.produto)}</td>
+              <td>${i.quantidade}${i.unidade ? ' ' + esc(i.unidade) : ''}</td>
+              <td>${fmtMoeda(i.valorTotal)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('fecha-desconto-marcar-todos')?.addEventListener('change', (e) => {
+    container.querySelectorAll('.fecha-desconto-item-check').forEach(chk => { chk.checked = e.target.checked; });
+    atualizarCalculadoraDesconto();
+  });
+  container.querySelectorAll('.fecha-desconto-item-check').forEach(chk => chk.addEventListener('change', atualizarCalculadoraDesconto));
+
+  atualizarCalculadoraDesconto();
+}
+
+function itensDescontoSelecionados() {
+  const idsMarcados = new Set([...document.querySelectorAll('.fecha-desconto-item-check')].filter(c => c.checked).map(c => c.dataset.itemId));
+  return itensDescontoAtuais.filter(i => idsMarcados.has(i.itemId));
+}
+
+function atualizarCalculadoraDesconto() {
+  const selecionados = itensDescontoSelecionados();
+  const totalOriginal = selecionados.reduce((s, i) => s + (i.valorTotal || 0), 0);
+  const tipo = document.getElementById('fecha-desconto-tipo')?.value || 'percentual';
+  const valorDesconto = parseFloat(document.getElementById('fecha-desconto-valor')?.value) || 0;
+  const totalDesconto = tipo === 'percentual' ? totalOriginal * (valorDesconto / 100) : Math.min(valorDesconto, totalOriginal);
+  const totalFinal = totalOriginal - totalDesconto;
+
+  document.getElementById('fecha-desconto-selecionados').textContent =
+    `${selecionados.length} ${selecionados.length === 1 ? 'item selecionado' : 'itens selecionados'}`;
+  document.getElementById('fecha-desconto-total-original').textContent = fmtMoeda(totalOriginal);
+  document.getElementById('fecha-desconto-total-final').textContent = fmtMoeda(totalFinal);
+  document.getElementById('fecha-desconto-total-economia').textContent = fmtMoeda(totalDesconto);
+}
+
+async function confirmarFechamentoComDesconto() {
+  const fornecedorId = document.getElementById('fecha-fornecedor-select')?.value;
+  const selecionados = itensDescontoSelecionados();
+  if (!selecionados.length) return showToast('Marque pelo menos 1 item pra fechar.', 'error');
+
+  const tipo = document.getElementById('fecha-desconto-tipo')?.value || 'percentual';
+  const valorDesconto = parseFloat(document.getElementById('fecha-desconto-valor')?.value) || 0;
+  const descricaoDesconto = tipo === 'percentual' ? `${valorDesconto}% de desconto` : `${fmtMoeda(valorDesconto)} de desconto no total`;
+  if (!confirm(`Fechar ${selecionados.length} ite${selecionados.length === 1 ? 'm' : 'ns'} com essa empresa aplicando ${descricaoDesconto}?`)) return;
+
+  const btn = document.getElementById('btn-confirmar-fechamento-desconto');
+  btn.disabled = true;
+  btn.textContent = 'Fechando...';
+  try {
+    const resp = await apiFetch('/financeiro/fechamento/confirmar-com-desconto', {
+      method: 'POST',
+      body: JSON.stringify({
+        fornecedorId,
+        itemIds: selecionados.map(i => i.itemId),
+        desconto: { tipo, valor: valorDesconto }
+      })
+    });
+    showToast(resp.message);
+    document.getElementById('fecha-desconto-calculadora').classList.add('hidden');
+    document.getElementById('fecha-desconto-lista').innerHTML =
+      '<p class="tabela-msg">Selecione a empresa e o semestre acima e clique em "Ver itens cotados por essa empresa".</p>';
+    itensDescontoAtuais = [];
+    await Promise.all([carregarPendentesFechamento(), carregarFechadosFechamento(), carregarFechadosGeral()]);
+  } catch (err) {
+    showToast('Erro ao confirmar fechamento: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar fechamento com desconto';
+  }
+}
+
 // Guarda o agrupamento por empresa da última busca, só em memória — a
 // pessoa escolhe a empresa no seletor e a gente monta a tabela na hora, sem
 // precisar buscar de novo no Firestore a cada troca (ver
@@ -1722,8 +1866,11 @@ function renderFechadosFechamento() {
               <button type="button" class="btn-primary btn-salvar-valor-fechado" data-id="${it.id}" style="padding:0.4rem 0.7rem;">Salvar</button>
               <button type="button" class="btn-secondary btn-cancelar-valor-fechado" style="padding:0.4rem 0.7rem;">Cancelar</button>
             </div>` : `
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-              ${fmtMoeda(it.valorFechado)}
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <div>
+                ${fmtMoeda(it.valorFechado)}
+                ${it.percentualDescontoFechamento ? `<div style="font-size:0.78rem; color:var(--text-secondary);">Original ${fmtMoeda(it.valorOriginalAntesDoDesconto)} (-${it.percentualDescontoFechamento}%)</div>` : ''}
+              </div>
               <button type="button" class="btn-secondary btn-editar-valor-fechado" data-id="${it.id}" style="padding:0.3rem 0.6rem;">Editar</button>
               <button type="button" class="btn-secondary btn-remover-item-fechado" data-id="${it.id}" data-produto="${esc(it.produto)}" style="padding:0.3rem 0.6rem;">Remover</button>
             </div>`}
@@ -1845,5 +1992,238 @@ async function desfazerLoteFechamento() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Desfazer todos os fechamentos dessa empresa';
+  }
+}
+
+// ==========================================
+// TELA DE ENTREGAS (entregas.html)
+// ==========================================
+// Acompanhamento do que já foi comprado (item com status "fechado"): prazo
+// previsto e baixa de recebimento. Separado do fluxo de negociação de
+// propósito — aqui só interessa o que já foi decidido/comprado.
+async function initPaginaEntregas() {
+  await carregarFornecedores();
+  const selectFornecedor = document.getElementById('entregas-fornecedor-select');
+  if (selectFornecedor) {
+    selectFornecedor.innerHTML = '<option value="">Todas as empresas</option>' +
+      fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  }
+
+  await carregarCursos();
+  const selectCurso = document.getElementById('entregas-curso-select');
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+
+  const semestreInput = document.getElementById('entregas-semestre-input');
+  if (semestreInput) {
+    try {
+      const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+      if (semestreAtivoCoordenador) semestreInput.value = semestreAtivoCoordenador;
+    } catch (err) {
+      // Sem semestre ativo configurado ainda — deixa em branco, sem travar a tela.
+    }
+  }
+
+  document.getElementById('btn-ver-entregas')?.addEventListener('click', carregarEntregas);
+  document.getElementById('entregas-status-select')?.addEventListener('change', renderEntregas);
+}
+
+let entregasAtuais = [];
+let entregasTruncado = false;
+
+async function carregarEntregas() {
+  const semestre = document.getElementById('entregas-semestre-input')?.value.trim();
+  const container = document.getElementById('entregas-lista');
+  const resumo = document.getElementById('entregas-resumo');
+  if (!semestre) { container.innerHTML = '<p class="tabela-msg">Informe o semestre primeiro.</p>'; return; }
+
+  const fornecedorId = document.getElementById('entregas-fornecedor-select')?.value || '';
+  const cursoId = document.getElementById('entregas-curso-select')?.value || '';
+  container.innerHTML = '<p class="tabela-msg">Carregando...</p>';
+  resumo.innerHTML = '';
+  try {
+    const qs = new URLSearchParams({ semestre });
+    if (fornecedorId) qs.set('fornecedorId', fornecedorId);
+    if (cursoId) qs.set('cursoId', cursoId);
+    const resp = await apiFetch(`/financeiro/entregas?${qs.toString()}`);
+    entregasAtuais = resp.itens;
+    entregasTruncado = !!resp.truncado;
+    renderEntregas();
+  } catch (err) {
+    container.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
+  }
+}
+
+function statusEntregaDoItem(it) {
+  if (it.recebidoEm) return 'recebido';
+  if (it.prazoEntrega && it.prazoEntrega < new Date().toISOString().slice(0, 10)) return 'atrasado';
+  return 'aguardando';
+}
+
+let chartEntregasStatus = null;
+
+function renderEntregas() {
+  const container = document.getElementById('entregas-lista');
+  const resumo = document.getElementById('entregas-resumo');
+  const resumoWrap = document.getElementById('entregas-resumo-wrap');
+
+  if (!entregasAtuais.length) {
+    container.innerHTML = '<p class="tabela-msg">Nenhum item fechado nesse filtro.</p>';
+    resumo.innerHTML = '';
+    resumoWrap.classList.add('hidden');
+    return;
+  }
+  resumoWrap.classList.remove('hidden');
+
+  const totalAguardando = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'aguardando').length;
+  const totalAtrasado = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'atrasado').length;
+  const totalRecebido = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'recebido').length;
+  resumo.innerHTML = `
+    <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Aguardando</div><div class="kpi-value" style="font-size:1.1rem;">${totalAguardando}</div></div>
+    <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Atrasado</div><div class="kpi-value" style="font-size:1.1rem; color:var(--red);">${totalAtrasado}</div></div>
+    <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Recebido</div><div class="kpi-value" style="font-size:1.1rem; color:var(--green);">${totalRecebido}</div></div>
+    ${entregasTruncado ? `<div class="fechamento-aviso" style="align-self:center;">⚠️ Mais de ${entregasAtuais.length} itens nesse filtro — mostrando só os ${entregasAtuais.length} primeiros. Filtre por empresa ou curso pra ver o restante.</div>` : ''}`;
+
+  if (chartEntregasStatus) chartEntregasStatus.destroy();
+  chartEntregasStatus = new Chart(document.getElementById('chart-entregas-status'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Aguardando', 'Atrasado', 'Recebido'],
+      datasets: [{ data: [totalAguardando, totalAtrasado, totalRecebido], backgroundColor: ['#F59E0B', '#EF4444', '#10B981'] }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+
+  const filtroStatus = document.getElementById('entregas-status-select')?.value || '';
+  const itensFiltrados = filtroStatus ? entregasAtuais.filter(it => statusEntregaDoItem(it) === filtroStatus) : entregasAtuais;
+
+  if (!itensFiltrados.length) {
+    container.innerHTML = '<p class="tabela-msg">Nenhum item com esse status de entrega.</p>';
+    return;
+  }
+
+  // Agrupa por empresa e, dentro dela, por produto — o mesmo produto cotado
+  // por vários cursos costuma virar 1 compra física só, então junta num
+  // grupo só (1 prazo, 1 baixa pro grupo inteiro).
+  const porEmpresa = {};
+  itensFiltrados.forEach(it => {
+    const empresa = it.fornecedorFechadoNome || '—';
+    const chaveProduto = (it.produto || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!porEmpresa[empresa]) porEmpresa[empresa] = {};
+    if (!porEmpresa[empresa][chaveProduto]) porEmpresa[empresa][chaveProduto] = [];
+    porEmpresa[empresa][chaveProduto].push(it);
+  });
+
+  container.innerHTML = Object.keys(porEmpresa).sort((a, b) => a.localeCompare(b)).map(empresa => {
+    const grupos = Object.values(porEmpresa[empresa]).sort((a, b) => a[0].produto.localeCompare(b[0].produto));
+    return `
+      <div class="card" style="margin-bottom:1rem;">
+        <h4 class="card-secao-titulo" style="font-size:1rem;">${esc(empresa)}</h4>
+        <div class="tabela-wrap">
+          <table class="data-table">
+            <thead><tr><th>Produto</th><th>Qtd total</th><th>Valor total</th><th>Prazo</th><th>Status</th><th>Ação</th></tr></thead>
+            <tbody>${grupos.map(renderLinhaGrupoEntrega).join('')}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+
+  wireAcoesEntrega();
+}
+
+function renderLinhaGrupoEntrega(grupo) {
+  const produto = grupo[0].produto;
+  const cursos = grupo.map(it => `${it.curso} (${it.quantidade}${it.unidade ? ' ' + it.unidade : ''})`).join(', ');
+  const qtdTotal = grupo.reduce((s, it) => s + (it.quantidade || 0), 0);
+  const valorTotal = grupo.reduce((s, it) => s + (it.valorFechado || 0), 0);
+  const itemIds = grupo.map(it => it.id).join(',');
+  const todosRecebidos = grupo.every(it => it.recebidoEm);
+  const statusGrupo = todosRecebidos ? 'recebido' : (grupo.some(it => statusEntregaDoItem(it) === 'atrasado') ? 'atrasado' : 'aguardando');
+  const prazoAtual = grupo[0].prazoEntrega || '';
+
+  const statusBadge = {
+    recebido: '<span class="status-badge status-fechado">Recebido</span>',
+    atrasado: '<span class="status-badge" style="background:#fee2e2; color:#dc2626;">Atrasado</span>',
+    aguardando: '<span class="status-badge status-pendente">Aguardando</span>'
+  }[statusGrupo];
+
+  return `
+    <tr>
+      <td title="${esc(cursos)}">${esc(produto)}</td>
+      <td>${qtdTotal}${grupo[0].unidade ? ' ' + esc(grupo[0].unidade) : ''}</td>
+      <td>${fmtMoeda(valorTotal)}</td>
+      <td>
+        ${todosRecebidos
+          ? (prazoAtual ? new Date(prazoAtual + 'T00:00:00').toLocaleDateString('pt-BR') : '—')
+          : `<input type="date" class="select-filter entrega-prazo-input" data-ids="${itemIds}" value="${prazoAtual}" style="padding:0.4rem 0.6rem;">`}
+      </td>
+      <td>
+        ${statusBadge}
+        ${todosRecebidos ? `<div style="font-size:0.75rem; color:var(--text-secondary);">${esc(grupo[0].recebidoPor || '')} — ${new Date(grupo[0].recebidoEm).toLocaleDateString('pt-BR')}</div>` : ''}
+      </td>
+      <td>
+        ${todosRecebidos
+          ? `<button type="button" class="btn-secondary btn-desfazer-recebimento" data-ids="${itemIds}" style="padding:0.3rem 0.6rem;">Desfazer</button>`
+          : `<button type="button" class="btn-primary btn-dar-baixa" data-ids="${itemIds}" style="padding:0.4rem 0.7rem;">Dar baixa</button>`}
+      </td>
+    </tr>`;
+}
+
+function wireAcoesEntrega() {
+  const container = document.getElementById('entregas-lista');
+  container.querySelectorAll('.entrega-prazo-input').forEach(input => {
+    input.addEventListener('change', () => salvarPrazoEntrega(input.dataset.ids.split(','), input.value));
+  });
+  container.querySelectorAll('.btn-dar-baixa').forEach(btn => {
+    btn.addEventListener('click', () => darBaixaEntrega(btn.dataset.ids.split(',')));
+  });
+  container.querySelectorAll('.btn-desfazer-recebimento').forEach(btn => {
+    btn.addEventListener('click', () => desfazerRecebimentoEntrega(btn.dataset.ids.split(',')));
+  });
+}
+
+async function salvarPrazoEntrega(itemIds, prazoEntrega) {
+  try {
+    await apiFetch('/financeiro/entregas/prazo', { method: 'PUT', body: JSON.stringify({ itemIds, prazoEntrega }) });
+    itemIds.forEach(id => {
+      const item = entregasAtuais.find(it => it.id === id);
+      if (item) item.prazoEntrega = prazoEntrega || null;
+    });
+    renderEntregas();
+    showToast('Prazo atualizado.');
+  } catch (err) {
+    showToast('Erro ao salvar prazo: ' + err.message, 'error');
+  }
+}
+
+async function darBaixaEntrega(itemIds) {
+  if (!confirm(`Confirmar recebimento de ${itemIds.length > 1 ? `todos os ${itemIds.length} itens desse grupo` : 'desse item'}?`)) return;
+  try {
+    const resp = await apiFetch('/financeiro/entregas/receber', { method: 'POST', body: JSON.stringify({ itemIds }) });
+    itemIds.forEach(id => {
+      const item = entregasAtuais.find(it => it.id === id);
+      if (item) { item.recebidoEm = resp.recebidoEm; item.recebidoPor = resp.recebidoPor; }
+    });
+    renderEntregas();
+    showToast(resp.message);
+  } catch (err) {
+    showToast('Erro ao dar baixa: ' + err.message, 'error');
+  }
+}
+
+async function desfazerRecebimentoEntrega(itemIds) {
+  if (!confirm('Desfazer o recebimento desse(s) item(ns)?')) return;
+  try {
+    const resp = await apiFetch('/financeiro/entregas/desfazer-recebimento', { method: 'POST', body: JSON.stringify({ itemIds }) });
+    itemIds.forEach(id => {
+      const item = entregasAtuais.find(it => it.id === id);
+      if (item) { item.recebidoEm = null; item.recebidoPor = null; }
+    });
+    renderEntregas();
+    showToast(resp.message);
+  } catch (err) {
+    showToast('Erro ao desfazer: ' + err.message, 'error');
   }
 }

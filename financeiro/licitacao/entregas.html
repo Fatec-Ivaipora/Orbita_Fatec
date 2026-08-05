@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entregas - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/licitacao/licitacao.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="entregas-root">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Entregas</h1>
+                        <p class="page-subtitle">Prazo previsto e baixa de recebimento dos itens já fechados — agrupado por empresa, e por produto quando o mesmo item foi comprado junto pra atender mais de um curso</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/licitacao/index.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="filters-bar" style="padding:1.5rem 1.5rem 0;">
+                        <input type="text" class="select-filter" id="entregas-semestre-input" placeholder="Semestre (ex.: 2026.2)" style="max-width:180px;">
+                        <select class="select-filter" id="entregas-fornecedor-select">
+                            <option value="">Todas as empresas</option>
+                        </select>
+                        <select class="select-filter" id="entregas-curso-select">
+                            <option value="">Todos os cursos</option>
+                        </select>
+                        <select class="select-filter" id="entregas-status-select">
+                            <option value="">Todos os status</option>
+                            <option value="aguardando">Aguardando</option>
+                            <option value="atrasado">Atrasado</option>
+                            <option value="recebido">Recebido</option>
+                        </select>
+                        <button type="button" class="btn-secondary" id="btn-ver-entregas">Ver entregas</button>
+                    </div>
+                    <div id="entregas-resumo-wrap" class="hidden" style="padding:1rem 1.5rem 0; display:flex; gap:1.5rem; flex-wrap:wrap; align-items:stretch;">
+                        <div id="entregas-resumo" style="display:flex; gap:1rem; flex-wrap:wrap; align-content:flex-start;"></div>
+                        <div class="chart-card" style="min-width:220px; max-width:280px;">
+                            <h3 style="margin:0 0 0.5rem;">Situação geral</h3>
+                            <div class="chart-canvas-wrap" style="height:180px;"><canvas id="chart-entregas-status"></canvas></div>
+                        </div>
+                    </div>
+                    <div id="entregas-lista" style="padding:1rem 1.5rem 1.5rem;">
+                        <p class="tabela-msg">Informe o semestre acima e clique em "Ver entregas".</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/licitacao/app.js"></script>
+</body>
+</html>

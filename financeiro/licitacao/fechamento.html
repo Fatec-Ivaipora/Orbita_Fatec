@@ -54,6 +54,50 @@
                     </div>
                 </div>
 
+                <div class="card" style="margin-bottom:1.5rem;">
+                    <h3 class="card-secao-titulo">Fechar em lote aplicando desconto (itens que essa empresa já cotou)</h3>
+                    <p class="page-subtitle" style="padding:0 1.5rem;">Pra quando a empresa manda um desconto único sobre o total, em vez de repassar valor item por item — usa a empresa e o semestre selecionados acima</p>
+                    <div class="filters-bar" style="padding:0 1.5rem 1rem;">
+                        <select class="select-filter" id="fecha-desconto-curso-select">
+                            <option value="">Todos os cursos</option>
+                        </select>
+                        <button type="button" class="btn-secondary" id="btn-ver-itens-desconto">Ver itens cotados por essa empresa</button>
+                    </div>
+                    <div id="fecha-desconto-lista" style="padding:0 1.5rem;">
+                        <p class="tabela-msg">Selecione a empresa e o semestre acima e clique em "Ver itens cotados por essa empresa".</p>
+                    </div>
+                    <div class="calculadora-negociacao hidden" id="fecha-desconto-calculadora">
+                        <div class="calculadora-acoes">
+                            <span id="fecha-desconto-selecionados">0 itens selecionados</span>
+                        </div>
+                        <div class="calculadora-totais" style="align-items:flex-end;">
+                            <div>
+                                <span class="calculadora-label">Total original</span>
+                                <strong id="fecha-desconto-total-original">R$ 0,00</strong>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">Desconto</label>
+                                <div style="display:flex; gap:0.4rem;">
+                                    <input type="number" step="0.01" min="0" class="select-filter" id="fecha-desconto-valor" value="0" style="width:110px; padding:0.5rem 0.7rem;">
+                                    <select class="select-filter" id="fecha-desconto-tipo" style="min-width:90px; padding:0.5rem 0.7rem;">
+                                        <option value="percentual">%</option>
+                                        <option value="valor">R$</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="calculadora-label">Total com desconto</span>
+                                <strong id="fecha-desconto-total-final">R$ 0,00</strong>
+                            </div>
+                            <div>
+                                <span class="calculadora-label">Economia</span>
+                                <strong id="fecha-desconto-total-economia">R$ 0,00</strong>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-primary" id="btn-confirmar-fechamento-desconto">Confirmar fechamento com desconto</button>
+                    </div>
+                </div>
+
                 <div class="card hidden" id="fecha-revisao-card">
                     <h3 class="card-secao-titulo">2. Confira e ajuste cada item antes de fechar</h3>
                     <p class="page-subtitle" style="padding:0 1.5rem;">O item já vem marcado com o melhor candidato encontrado — troque no seletor se não for o certo, ou desmarque o checkbox pra deixar esse item de fora do fechamento.</p>
