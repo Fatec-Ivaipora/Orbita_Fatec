@@ -660,6 +660,87 @@ router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoord
     }
 });
 
+// POST /fechamento/confirmar-com-desconto — fecha vários itens de uma vez
+// aplicando UM desconto (%) sobre a cotação que essa empresa JÁ tinha
+// lançado em cada item (sem precisar digitar valor item por item — é pra
+// quando a empresa manda "cotação inteira A, com X% de desconto no total").
+// O valor unitário/total ORIGINAL (antes do desconto) fica gravado no item
+// (valorOriginalAntesDoDesconto) — serve de referência histórica pra
+// próxima licitação, além do que já é preservado em estadoAntesDoFechamento.
+router.post('/fechamento/confirmar-com-desconto', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { fornecedorId, itemIds, desconto } = req.body;
+        if (!fornecedorId) return res.status(400).json({ error: 'Informe o fornecedor.' });
+        if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens a fechar.' });
+        const descontoValor = parseFloat(desconto?.valor);
+        if (isNaN(descontoValor) || descontoValor < 0) return res.status(400).json({ error: 'Informe um desconto válido.' });
+        if (!['percentual', 'valor'].includes(desconto?.tipo)) return res.status(400).json({ error: 'Tipo de desconto inválido.' });
+
+        const fornDoc = await db.collection(COL_FORNECEDORES).doc(fornecedorId).get();
+        if (!fornDoc.exists) return res.status(404).json({ error: 'Fornecedor não encontrado.' });
+        const fornecedorNome = fornDoc.data().nome;
+
+        // 1ª passada: busca os itens e a cotação ORIGINAL dessa empresa em cada
+        // um (precisa existir — esse fluxo só serve pra itens que ela já cotou).
+        const docs = [];
+        const erros = [];
+        for (const itemId of itemIds) {
+            const doc = await db.collection(COL_ITENS).doc(itemId).get();
+            if (!doc.exists) { erros.push({ itemId, error: 'Item não encontrado.' }); continue; }
+            const item = doc.data();
+            const cotacaoOriginal = (item.cotacoes || []).find(c => c.fornecedorId === fornecedorId);
+            if (!cotacaoOriginal) { erros.push({ itemId, error: 'Essa empresa não tem cotação nesse item.' }); continue; }
+            docs.push({ doc, item, cotacaoOriginal });
+        }
+
+        const totalOriginal = docs.reduce((s, d) => s + (d.cotacaoOriginal.valorTotal || 0), 0);
+        // Desconto em R$ vira um percentual equivalente sobre o total, aplicado
+        // proporcionalmente em cada item — evita ter que decidir arbitrariamente
+        // "de qual item sai o desconto".
+        const percentual = desconto.tipo === 'percentual'
+            ? descontoValor
+            : (totalOriginal > 0 ? (descontoValor / totalOriginal) * 100 : 0);
+        if (percentual > 100) return res.status(400).json({ error: 'O desconto informado é maior que o total dos itens selecionados.' });
+
+        let atualizados = 0;
+        let totalFinal = 0;
+        for (const { doc, item, cotacaoOriginal } of docs) {
+            const valorUnitarioFinal = Math.round(cotacaoOriginal.valorUnitario * (1 - percentual / 100) * 10000) / 10000;
+            const valorTotalFinal = Math.round(valorUnitarioFinal * item.quantidade * 100) / 100;
+            totalFinal += valorTotalFinal;
+
+            const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== fornecedorId);
+            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario: valorUnitarioFinal, valorTotal: valorTotalFinal });
+
+            await doc.ref.update({
+                cotacoes,
+                status: 'fechado',
+                fornecedorFechadoId: fornecedorId,
+                fornecedorFechadoNome: fornecedorNome,
+                valorFechado: valorTotalFinal,
+                valorOriginalAntesDoDesconto: cotacaoOriginal.valorTotal,
+                percentualDescontoFechamento: Math.round(percentual * 100) / 100,
+                fechadoEm: new Date().toISOString(),
+                estadoAntesDoFechamento: { cotacoes: item.cotacoes || [], status: item.status || 'pendente' },
+                updatedAt: new Date().toISOString()
+            });
+            atualizados++;
+        }
+
+        res.json({
+            message: `${atualizados} item(ns) fechado(s) com ${fornecedorNome} — desconto de ${percentual.toFixed(2)}%.`,
+            atualizados,
+            erros,
+            totalOriginal: Math.round(totalOriginal * 100) / 100,
+            totalFinal: Math.round(totalFinal * 100) / 100,
+            totalDesconto: Math.round((totalOriginal - totalFinal) * 100) / 100,
+            percentual: Math.round(percentual * 100) / 100
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // PUT /fechamento/:id/valor — corrige o valor final de um item já fechado
 // (ex.: fechou com valor errado/zerado), sem precisar reabrir e refazer o
 // fechamento inteiro. Só funciona em item com status 'fechado'.
@@ -774,7 +855,9 @@ router.get('/fechamento/fechados', verifyToken, checkPermission, bloquearCoorden
                 id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
                 unidade: it.unidade, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm,
                 pendenciaValorFechamento: it.pendenciaValorFechamento || null,
-                valorUnitario: (it.cotacoes || []).find(c => c.fornecedorId === it.fornecedorFechadoId)?.valorUnitario ?? null
+                valorUnitario: (it.cotacoes || []).find(c => c.fornecedorId === it.fornecedorFechadoId)?.valorUnitario ?? null,
+                valorOriginalAntesDoDesconto: it.valorOriginalAntesDoDesconto ?? null,
+                percentualDescontoFechamento: it.percentualDescontoFechamento ?? null
             })),
             total: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
         });
@@ -817,6 +900,116 @@ router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearC
             resumoPorFornecedor: Object.values(porFornecedor).sort((a, b) => b.total - a.total),
             totalGeral: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// ENTREGAS — acompanhamento do que já foi comprado (status "fechado"):
+// prazo previsto e baixa de recebimento. Separado do fluxo de negociação —
+// aqui só interessa item já decidido/comprado, não cotação em aberto.
+// ==========================================
+
+// Sem isso, um filtro largo demais (ex.: semestre inteiro, sem empresa nem
+// curso) puxaria TODOS os itens fechados numa leitura só — trava um teto
+// duro e avisa quando corta, em vez de deixar a leitura crescer sem limite
+// (ver feedback_economizar_leituras_firestore).
+const LIMITE_ITENS_ENTREGAS = 500;
+
+// GET /entregas — lista itens fechados no semestre, com prazo/recebimento,
+// pra tela de acompanhamento (agrupamento por empresa/produto é feito no
+// cliente).
+router.get('/entregas', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { semestre, cursoId, fornecedorId } = req.query;
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+
+        let query = db.collection(COL_ITENS).where('semestre', '==', semestre).where('status', '==', 'fechado');
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        if (fornecedorId) query = query.where('fornecedorFechadoId', '==', fornecedorId);
+        const snap = await query.limit(LIMITE_ITENS_ENTREGAS + 1).get();
+
+        const truncado = snap.docs.length > LIMITE_ITENS_ENTREGAS;
+        const itens = snap.docs
+            .slice(0, LIMITE_ITENS_ENTREGAS)
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (a.fornecedorFechadoNome || '').localeCompare(b.fornecedorFechadoNome || '')
+                || (a.produto || '').localeCompare(b.produto || '') || (a.curso || '').localeCompare(b.curso || ''));
+
+        res.json({
+            itens: itens.map(it => ({
+                id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade, unidade: it.unidade,
+                fornecedorFechadoId: it.fornecedorFechadoId, fornecedorFechadoNome: it.fornecedorFechadoNome,
+                valorFechado: it.valorFechado, prazoEntrega: it.prazoEntrega || null,
+                recebidoEm: it.recebidoEm || null, recebidoPor: it.recebidoPor || null
+            })),
+            truncado
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /entregas/prazo — define o prazo previsto pra um ou mais itens de uma
+// vez (o mesmo produto pode ter sido comprado junto pra atender vários
+// cursos — nesse caso é 1 entrega física só, com 1 prazo só).
+router.put('/entregas/prazo', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { itemIds, prazoEntrega } = req.body;
+        if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens.' });
+        if (prazoEntrega && !/^\d{4}-\d{2}-\d{2}$/.test(prazoEntrega)) return res.status(400).json({ error: 'Data inválida.' });
+
+        const batch = db.batch();
+        itemIds.forEach(id => {
+            batch.update(db.collection(COL_ITENS).doc(id), {
+                prazoEntrega: prazoEntrega || admin.firestore.FieldValue.delete(),
+                updatedAt: new Date().toISOString()
+            });
+        });
+        await batch.commit();
+        res.json({ message: 'Prazo atualizado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /entregas/receber — dá baixa (marca como recebido) num ou mais itens
+// de uma vez, registrando quem e quando pra rastreabilidade.
+router.post('/entregas/receber', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { itemIds } = req.body;
+        if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens.' });
+
+        const recebidoPor = req.user.name || req.user.email || req.user.uid;
+        const recebidoEm = new Date().toISOString();
+        const batch = db.batch();
+        itemIds.forEach(id => {
+            batch.update(db.collection(COL_ITENS).doc(id), { recebidoEm, recebidoPor, updatedAt: recebidoEm });
+        });
+        await batch.commit();
+        res.json({ message: `${itemIds.length} item(ns) marcado(s) como recebido(s).`, recebidoEm, recebidoPor });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /entregas/desfazer-recebimento — desfaz uma baixa dada por engano.
+router.post('/entregas/desfazer-recebimento', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { itemIds } = req.body;
+        if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens.' });
+
+        const batch = db.batch();
+        itemIds.forEach(id => {
+            batch.update(db.collection(COL_ITENS).doc(id), {
+                recebidoEm: admin.firestore.FieldValue.delete(),
+                recebidoPor: admin.firestore.FieldValue.delete(),
+                updatedAt: new Date().toISOString()
+            });
+        });
+        await batch.commit();
+        res.json({ message: `${itemIds.length} item(ns) com recebimento desfeito.` });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
