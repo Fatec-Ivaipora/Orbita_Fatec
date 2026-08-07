@@ -273,7 +273,7 @@ router.post('/itens', verifyToken, checkPermission, async (req, res) => {
             cursoId,
             curso,
             semestre,
-            produto: produto.trim(),
+            produto: produto.trim().toUpperCase(),
             quantidade: !isNaN(qtd) && qtd > 0 ? qtd : 1,
             unidade: (unidade || '').trim(),
             periodicidade: (periodicidade || '').trim(),
@@ -314,7 +314,7 @@ router.put('/itens/:id', verifyToken, checkPermission, async (req, res) => {
 
         if (produto !== undefined) {
             if (!produto.trim()) return res.status(400).json({ error: 'Informe o produto.' });
-            dados.produto = produto.trim();
+            dados.produto = produto.trim().toUpperCase();
         }
         if (quantidade !== undefined) {
             const qtd = parseFloat(quantidade);
@@ -942,7 +942,9 @@ router.get('/entregas', verifyToken, checkPermission, bloquearCoordenador, async
                 id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade, unidade: it.unidade,
                 fornecedorFechadoId: it.fornecedorFechadoId, fornecedorFechadoNome: it.fornecedorFechadoNome,
                 valorFechado: it.valorFechado, prazoEntrega: it.prazoEntrega || null,
-                recebidoEm: it.recebidoEm || null, recebidoPor: it.recebidoPor || null
+                recebidoEm: it.recebidoEm || null, recebidoPor: it.recebidoPor || null,
+                observacaoRecebimento: it.observacaoRecebimento || null,
+                statusRecebimento: it.statusRecebimento || null, trocaResolvidaEm: it.trocaResolvidaEm || null
             })),
             truncado
         });
@@ -975,26 +977,62 @@ router.put('/entregas/prazo', verifyToken, checkPermission, bloquearCoordenador,
 });
 
 // POST /entregas/receber — dá baixa (marca como recebido) num ou mais itens
-// de uma vez, registrando quem e quando pra rastreabilidade.
+// de uma vez, registrando quem, quando, uma observação livre e se chegou OK
+// ou com problema (defeito/faltante/errado — nesse caso vira "em troca" em
+// vez de "recebido", só fecha de vez quando a troca voltar resolvida). Segue
+// o padrão de recebimento + RMA separado usado em sistemas de compras.
 router.post('/entregas/receber', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const { itemIds } = req.body;
+        const { itemIds, observacao, statusRecebimento } = req.body;
         if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens.' });
+        const status = statusRecebimento === 'problema' ? 'problema' : 'ok';
 
         const recebidoPor = req.user.name || req.user.email || req.user.uid;
         const recebidoEm = new Date().toISOString();
+        const observacaoRecebimento = (observacao || '').trim();
         const batch = db.batch();
         itemIds.forEach(id => {
-            batch.update(db.collection(COL_ITENS).doc(id), { recebidoEm, recebidoPor, updatedAt: recebidoEm });
+            batch.update(db.collection(COL_ITENS).doc(id), {
+                recebidoEm, recebidoPor, statusRecebimento: status,
+                observacaoRecebimento: observacaoRecebimento || admin.firestore.FieldValue.delete(),
+                trocaResolvidaEm: admin.firestore.FieldValue.delete(),
+                updatedAt: recebidoEm
+            });
         });
         await batch.commit();
-        res.json({ message: `${itemIds.length} item(ns) marcado(s) como recebido(s).`, recebidoEm, recebidoPor });
+        res.json({
+            message: status === 'problema'
+                ? `${itemIds.length} item(ns) recebido(s) com problema — marcado(s) como "em troca".`
+                : `${itemIds.length} item(ns) marcado(s) como recebido(s).`,
+            recebidoEm, recebidoPor, observacaoRecebimento, statusRecebimento: status
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// POST /entregas/desfazer-recebimento — desfaz uma baixa dada por engano.
+// POST /entregas/resolver-troca — fecha um item que estava "em troca" (a
+// substituição/crédito já voltou do fornecedor), sem apagar o histórico do
+// que aconteceu (observação e status "problema" continuam registrados).
+router.post('/entregas/resolver-troca', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const { itemIds } = req.body;
+        if (!Array.isArray(itemIds) || !itemIds.length) return res.status(400).json({ error: 'Informe os itens.' });
+
+        const trocaResolvidaEm = new Date().toISOString();
+        const batch = db.batch();
+        itemIds.forEach(id => {
+            batch.update(db.collection(COL_ITENS).doc(id), { trocaResolvidaEm, updatedAt: trocaResolvidaEm });
+        });
+        await batch.commit();
+        res.json({ message: `${itemIds.length} item(ns) com troca resolvida.`, trocaResolvidaEm });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /entregas/desfazer-recebimento — desfaz uma baixa dada por engano
+// (volta pro estado "aguardando", inclusive se estava "em troca").
 router.post('/entregas/desfazer-recebimento', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
         const { itemIds } = req.body;
@@ -1005,6 +1043,9 @@ router.post('/entregas/desfazer-recebimento', verifyToken, checkPermission, bloq
             batch.update(db.collection(COL_ITENS).doc(id), {
                 recebidoEm: admin.firestore.FieldValue.delete(),
                 recebidoPor: admin.firestore.FieldValue.delete(),
+                observacaoRecebimento: admin.firestore.FieldValue.delete(),
+                statusRecebimento: admin.firestore.FieldValue.delete(),
+                trocaResolvidaEm: admin.firestore.FieldValue.delete(),
                 updatedAt: new Date().toISOString()
             });
         });

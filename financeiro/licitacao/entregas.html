@@ -45,15 +45,17 @@
                             <option value="">Todos os status</option>
                             <option value="aguardando">Aguardando</option>
                             <option value="atrasado">Atrasado</option>
+                            <option value="em_troca">Em troca</option>
                             <option value="recebido">Recebido</option>
                         </select>
                         <button type="button" class="btn-secondary" id="btn-ver-entregas">Ver entregas</button>
                     </div>
-                    <div id="entregas-resumo-wrap" class="hidden" style="padding:1rem 1.5rem 0; display:flex; gap:1.5rem; flex-wrap:wrap; align-items:stretch;">
-                        <div id="entregas-resumo" style="display:flex; gap:1rem; flex-wrap:wrap; align-content:flex-start;"></div>
-                        <div class="chart-card" style="min-width:220px; max-width:280px;">
-                            <h3 style="margin:0 0 0.5rem;">Situação geral</h3>
-                            <div class="chart-canvas-wrap" style="height:180px;"><canvas id="chart-entregas-status"></canvas></div>
+                    <div id="entregas-resumo-wrap" class="hidden" style="padding:1rem 1.5rem 0;">
+                        <div id="entregas-resumo" style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;"></div>
+                        <div class="chart-card">
+                            <h3 style="margin:0 0 0.25rem;">Situação geral das entregas</h3>
+                            <p class="page-subtitle" style="margin:0 0 1rem; font-size:0.85rem;">Quantidade de itens fechados nesse filtro, por status de entrega</p>
+                            <div class="chart-canvas-wrap" style="height:320px; max-width:480px; margin:0 auto;"><canvas id="chart-entregas-status"></canvas></div>
                         </div>
                     </div>
                     <div id="entregas-lista" style="padding:1rem 1.5rem 1.5rem;">
