@@ -2057,7 +2057,13 @@ async function carregarEntregas() {
 }
 
 function statusEntregaDoItem(it) {
-  if (it.recebidoEm) return 'recebido';
+  if (it.recebidoEm) {
+    // "Em troca" = chegou com problema e a troca ainda não voltou resolvida.
+    // Continua em aberto de propósito, não conta como "recebido" de verdade
+    // até fechar o ciclo (padrão de recebimento + RMA separado).
+    if (it.statusRecebimento === 'problema' && !it.trocaResolvidaEm) return 'em_troca';
+    return 'recebido';
+  }
   if (it.prazoEntrega && it.prazoEntrega < new Date().toISOString().slice(0, 10)) return 'atrasado';
   return 'aguardando';
 }
@@ -2079,21 +2085,48 @@ function renderEntregas() {
 
   const totalAguardando = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'aguardando').length;
   const totalAtrasado = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'atrasado').length;
+  const totalEmTroca = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'em_troca').length;
   const totalRecebido = entregasAtuais.filter(it => statusEntregaDoItem(it) === 'recebido').length;
   resumo.innerHTML = `
     <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Aguardando</div><div class="kpi-value" style="font-size:1.1rem;">${totalAguardando}</div></div>
     <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Atrasado</div><div class="kpi-value" style="font-size:1.1rem; color:var(--red);">${totalAtrasado}</div></div>
+    <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Em troca</div><div class="kpi-value" style="font-size:1.1rem; color:var(--accent-orange);">${totalEmTroca}</div></div>
     <div class="kpi-card" style="min-width:150px;"><div class="kpi-label">Recebido</div><div class="kpi-value" style="font-size:1.1rem; color:var(--green);">${totalRecebido}</div></div>
     ${entregasTruncado ? `<div class="fechamento-aviso" style="align-self:center;">⚠️ Mais de ${entregasAtuais.length} itens nesse filtro — mostrando só os ${entregasAtuais.length} primeiros. Filtre por empresa ou curso pra ver o restante.</div>` : ''}`;
 
+  const totalGeralEntregas = totalAguardando + totalAtrasado + totalEmTroca + totalRecebido;
   if (chartEntregasStatus) chartEntregasStatus.destroy();
   chartEntregasStatus = new Chart(document.getElementById('chart-entregas-status'), {
     type: 'doughnut',
     data: {
-      labels: ['Aguardando', 'Atrasado', 'Recebido'],
-      datasets: [{ data: [totalAguardando, totalAtrasado, totalRecebido], backgroundColor: ['#F59E0B', '#EF4444', '#10B981'] }]
+      labels: ['Aguardando', 'Atrasado', 'Em troca', 'Recebido'],
+      datasets: [{ data: [totalAguardando, totalAtrasado, totalEmTroca, totalRecebido], backgroundColor: ['#F59E0B', '#EF4444', '#EB7025', '#10B981'] }]
     },
-    options: { responsive: true, maintainAspectRatio: false }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            font: { size: 14 },
+            padding: 16,
+            // Mostra a quantidade e o % junto do nome — só a cor não deixa
+            // claro o suficiente qual fatia é qual nem o peso de cada uma.
+            generateLabels: (chart) => chart.data.labels.map((label, i) => {
+              const valor = chart.data.datasets[0].data[i];
+              const pct = totalGeralEntregas ? Math.round((valor / totalGeralEntregas) * 100) : 0;
+              return {
+                text: `${label}: ${valor} (${pct}%)`,
+                fillStyle: chart.data.datasets[0].backgroundColor[i],
+                index: i
+              };
+            })
+          }
+        },
+        tooltip: { bodyFont: { size: 14 } }
+      }
+    }
   });
 
   const filtroStatus = document.getElementById('entregas-status-select')?.value || '';
@@ -2133,21 +2166,48 @@ function renderEntregas() {
   wireAcoesEntrega();
 }
 
+// itemIds (chave "id1,id2,...") do grupo que está com o formulário de
+// "dar baixa" aberto no momento — só um por vez, guardado em memória (não
+// precisa de leitura nova, é só estado de tela).
+let entregaRecebendoIds = null;
+
 function renderLinhaGrupoEntrega(grupo) {
   const produto = grupo[0].produto;
   const cursos = grupo.map(it => `${it.curso} (${it.quantidade}${it.unidade ? ' ' + it.unidade : ''})`).join(', ');
   const qtdTotal = grupo.reduce((s, it) => s + (it.quantidade || 0), 0);
   const valorTotal = grupo.reduce((s, it) => s + (it.valorFechado || 0), 0);
   const itemIds = grupo.map(it => it.id).join(',');
-  const todosRecebidos = grupo.every(it => it.recebidoEm);
-  const statusGrupo = todosRecebidos ? 'recebido' : (grupo.some(it => statusEntregaDoItem(it) === 'atrasado') ? 'atrasado' : 'aguardando');
+  const todosComRecebidoEm = grupo.every(it => it.recebidoEm);
+  const statusGrupo = !todosComRecebidoEm
+    ? (grupo.some(it => statusEntregaDoItem(it) === 'atrasado') ? 'atrasado' : 'aguardando')
+    : (grupo.some(it => statusEntregaDoItem(it) === 'em_troca') ? 'em_troca' : 'recebido');
   const prazoAtual = grupo[0].prazoEntrega || '';
+  const recebendoAgora = entregaRecebendoIds === itemIds;
 
   const statusBadge = {
     recebido: '<span class="status-badge status-fechado">Recebido</span>',
     atrasado: '<span class="status-badge" style="background:#fee2e2; color:#dc2626;">Atrasado</span>',
+    em_troca: '<span class="status-badge" style="background:#ffedd5; color:#c2410c;">Em troca</span>',
     aguardando: '<span class="status-badge status-pendente">Aguardando</span>'
   }[statusGrupo];
+
+  if (recebendoAgora) {
+    return `
+      <tr>
+        <td colspan="6">
+          <div style="display:flex; align-items:flex-end; gap:0.6rem; flex-wrap:wrap; padding:0.5rem 0;">
+            <strong>${esc(produto)}</strong>
+            <div class="form-group" style="margin:0; flex:1; min-width:220px;">
+              <label style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-secondary);">Descrição (opcional) — obrigatória se tiver problema</label>
+              <input type="text" class="select-filter entrega-observacao-input" data-ids="${itemIds}" placeholder="Ex.: faltaram 2 unidades, resto ok" style="width:100%; padding:0.5rem 0.7rem;">
+            </div>
+            <button type="button" class="btn-primary btn-confirmar-baixa" data-ids="${itemIds}" style="padding:0.5rem 0.8rem;">Recebido OK</button>
+            <button type="button" class="btn-secondary btn-confirmar-baixa-problema" data-ids="${itemIds}" style="padding:0.5rem 0.8rem; background:#ffedd5; color:#c2410c; border-color:#fed7aa;">Recebido com problema</button>
+            <button type="button" class="btn-secondary btn-cancelar-baixa" style="padding:0.5rem 0.8rem;">Cancelar</button>
+          </div>
+        </td>
+      </tr>`;
+  }
 
   return `
     <tr>
@@ -2155,18 +2215,21 @@ function renderLinhaGrupoEntrega(grupo) {
       <td>${qtdTotal}${grupo[0].unidade ? ' ' + esc(grupo[0].unidade) : ''}</td>
       <td>${fmtMoeda(valorTotal)}</td>
       <td>
-        ${todosRecebidos
+        ${todosComRecebidoEm
           ? (prazoAtual ? new Date(prazoAtual + 'T00:00:00').toLocaleDateString('pt-BR') : '—')
           : `<input type="date" class="select-filter entrega-prazo-input" data-ids="${itemIds}" value="${prazoAtual}" style="padding:0.4rem 0.6rem;">`}
       </td>
       <td>
         ${statusBadge}
-        ${todosRecebidos ? `<div style="font-size:0.75rem; color:var(--text-secondary);">${esc(grupo[0].recebidoPor || '')} — ${new Date(grupo[0].recebidoEm).toLocaleDateString('pt-BR')}</div>` : ''}
+        ${todosComRecebidoEm ? `
+          <div style="font-size:0.75rem; color:var(--text-secondary);">${esc(grupo[0].recebidoPor || '')} — ${new Date(grupo[0].recebidoEm).toLocaleDateString('pt-BR')}</div>
+          ${grupo[0].observacaoRecebimento ? `<div class="fechamento-aviso" style="margin-top:0.2rem;">${esc(grupo[0].observacaoRecebimento)}</div>` : ''}
+        ` : ''}
       </td>
-      <td>
-        ${todosRecebidos
-          ? `<button type="button" class="btn-secondary btn-desfazer-recebimento" data-ids="${itemIds}" style="padding:0.3rem 0.6rem;">Desfazer</button>`
-          : `<button type="button" class="btn-primary btn-dar-baixa" data-ids="${itemIds}" style="padding:0.4rem 0.7rem;">Dar baixa</button>`}
+      <td style="display:flex; flex-direction:column; gap:0.3rem; align-items:flex-start;">
+        ${!todosComRecebidoEm ? `<button type="button" class="btn-primary btn-dar-baixa" data-ids="${itemIds}" style="padding:0.4rem 0.7rem;">Dar baixa</button>` : ''}
+        ${statusGrupo === 'em_troca' ? `<button type="button" class="btn-primary btn-resolver-troca" data-ids="${itemIds}" style="padding:0.4rem 0.7rem;">Marcar troca resolvida</button>` : ''}
+        ${todosComRecebidoEm ? `<button type="button" class="btn-secondary btn-desfazer-recebimento" data-ids="${itemIds}" style="padding:0.3rem 0.6rem;">Desfazer recebimento</button>` : ''}
       </td>
     </tr>`;
 }
@@ -2177,7 +2240,27 @@ function wireAcoesEntrega() {
     input.addEventListener('change', () => salvarPrazoEntrega(input.dataset.ids.split(','), input.value));
   });
   container.querySelectorAll('.btn-dar-baixa').forEach(btn => {
-    btn.addEventListener('click', () => darBaixaEntrega(btn.dataset.ids.split(',')));
+    btn.addEventListener('click', () => { entregaRecebendoIds = btn.dataset.ids; renderEntregas(); });
+  });
+  container.querySelectorAll('.btn-cancelar-baixa').forEach(btn => {
+    btn.addEventListener('click', () => { entregaRecebendoIds = null; renderEntregas(); });
+  });
+  container.querySelectorAll('.btn-confirmar-baixa').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const observacao = document.querySelector(`.entrega-observacao-input[data-ids="${btn.dataset.ids}"]`)?.value || '';
+      darBaixaEntrega(btn.dataset.ids.split(','), observacao, 'ok');
+    });
+  });
+  container.querySelectorAll('.btn-confirmar-baixa-problema').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.querySelector(`.entrega-observacao-input[data-ids="${btn.dataset.ids}"]`);
+      const observacao = input?.value || '';
+      if (!observacao.trim()) { showToast('Descreve o que aconteceu (defeito, faltante...) antes de marcar como problema.', 'error'); input?.focus(); return; }
+      darBaixaEntrega(btn.dataset.ids.split(','), observacao, 'problema');
+    });
+  });
+  container.querySelectorAll('.btn-resolver-troca').forEach(btn => {
+    btn.addEventListener('click', () => resolverTrocaEntrega(btn.dataset.ids.split(',')));
   });
   container.querySelectorAll('.btn-desfazer-recebimento').forEach(btn => {
     btn.addEventListener('click', () => desfazerRecebimentoEntrega(btn.dataset.ids.split(',')));
@@ -2198,18 +2281,37 @@ async function salvarPrazoEntrega(itemIds, prazoEntrega) {
   }
 }
 
-async function darBaixaEntrega(itemIds) {
-  if (!confirm(`Confirmar recebimento de ${itemIds.length > 1 ? `todos os ${itemIds.length} itens desse grupo` : 'desse item'}?`)) return;
+async function darBaixaEntrega(itemIds, observacao, statusRecebimento) {
   try {
-    const resp = await apiFetch('/financeiro/entregas/receber', { method: 'POST', body: JSON.stringify({ itemIds }) });
+    const resp = await apiFetch('/financeiro/entregas/receber', { method: 'POST', body: JSON.stringify({ itemIds, observacao, statusRecebimento }) });
     itemIds.forEach(id => {
       const item = entregasAtuais.find(it => it.id === id);
-      if (item) { item.recebidoEm = resp.recebidoEm; item.recebidoPor = resp.recebidoPor; }
+      if (item) {
+        item.recebidoEm = resp.recebidoEm; item.recebidoPor = resp.recebidoPor;
+        item.observacaoRecebimento = resp.observacaoRecebimento || null;
+        item.statusRecebimento = resp.statusRecebimento; item.trocaResolvidaEm = null;
+      }
     });
+    entregaRecebendoIds = null;
     renderEntregas();
     showToast(resp.message);
   } catch (err) {
     showToast('Erro ao dar baixa: ' + err.message, 'error');
+  }
+}
+
+async function resolverTrocaEntrega(itemIds) {
+  if (!confirm('Marcar essa troca como resolvida (a substituição/crédito já voltou do fornecedor)?')) return;
+  try {
+    const resp = await apiFetch('/financeiro/entregas/resolver-troca', { method: 'POST', body: JSON.stringify({ itemIds }) });
+    itemIds.forEach(id => {
+      const item = entregasAtuais.find(it => it.id === id);
+      if (item) item.trocaResolvidaEm = resp.trocaResolvidaEm;
+    });
+    renderEntregas();
+    showToast(resp.message);
+  } catch (err) {
+    showToast('Erro ao marcar troca resolvida: ' + err.message, 'error');
   }
 }
 
@@ -2219,7 +2321,7 @@ async function desfazerRecebimentoEntrega(itemIds) {
     const resp = await apiFetch('/financeiro/entregas/desfazer-recebimento', { method: 'POST', body: JSON.stringify({ itemIds }) });
     itemIds.forEach(id => {
       const item = entregasAtuais.find(it => it.id === id);
-      if (item) { item.recebidoEm = null; item.recebidoPor = null; }
+      if (item) { item.recebidoEm = null; item.recebidoPor = null; item.observacaoRecebimento = null; item.statusRecebimento = null; item.trocaResolvidaEm = null; }
     });
     renderEntregas();
     showToast(resp.message);
