@@ -79,9 +79,6 @@
           <button class="perm-mode-btn" data-perm-mode="usuario">Por Usuário</button>
         </div>
 
-        <!-- Filtro por tópico/categoria (populado via JS a partir de CATEGORIES) -->
-        <div class="perm-cat-filter" id="perm-cat-filter"></div>
-
         <!-- ===== MODO: POR CARGO ===== -->
         <div id="perms-modo-cargo">
           <div class="search-bar" style="margin-bottom: 2rem;">
@@ -110,11 +107,11 @@
 
         <!-- ===== MODO: POR USUÁRIO ===== -->
         <div id="perms-modo-usuario" class="hidden">
-          <div class="search-bar" style="margin-bottom: 1rem;">
+          <div class="search-bar" id="perm-user-searchbar" style="margin-bottom: 1rem; position: relative;">
             <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-            <select id="perm-user-select" class="form-input" style="padding-left: 3rem; appearance: none; cursor: pointer; height: 50px;">
-              <option value="">Selecione um usuário...</option>
-            </select>
+            <input type="text" id="perm-user-search" class="form-input" placeholder="Buscar usuário por nome ou e-mail..." autocomplete="off" style="padding-left: 3rem; height: 50px;">
+            <input type="hidden" id="perm-user-select">
+            <div id="perm-user-dropdown" class="user-search-dropdown hidden"></div>
           </div>
 
           <div id="perm-user-info" class="perm-user-info hidden"></div>

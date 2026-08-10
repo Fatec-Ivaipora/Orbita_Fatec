@@ -49,7 +49,6 @@ app.get('/api', (req, res) => {
 // Importação das rotas
 const rotasEmprestimo = require('../src/rotas/emprestimos');
 const rotasUsuarios = require('../src/rotas/usuarios');
-const rotasEnsalamento = require('../src/rotas/ensalamento');
 const rotasMeuEspaco = require('../src/rotas/meu-espaco');
 const rotasCargaHoraria = require('../src/rotas/carga-horaria');
 const rotasEmpresas = require('../src/rotas/empresas');
@@ -67,7 +66,6 @@ const rotasMatriculas = require('../src/rotas/matriculas');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
-app.use('/api/ensalamento', rotasEnsalamento);
 app.use('/api/meu-espaco', rotasMeuEspaco);
 app.use('/api/carga-horaria', rotasCargaHoraria);
 app.use('/api/empresas', rotasEmpresas);

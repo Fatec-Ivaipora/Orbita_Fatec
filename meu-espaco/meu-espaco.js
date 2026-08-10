@@ -138,12 +138,6 @@ async function renderWidgets(role) {
     } catch(e) { card.querySelector('.widget-value').textContent = '-'; }
   }
 
-  // Widget Ensalamento
-  if (modules.includes('ensalamento') && canView('ensalamento')) {
-    const card = createWidgetCard('🏫', 'Salas em Uso', '0', 'ensalamento');
-    container.appendChild(card);
-  }
-
   // Widget Carga Horária
   if (modules.includes('carga-horaria') && canView('carga-horaria')) {
     const card = createWidgetCard('⏰', 'Eventos do Mês', '0', 'carga-horaria');
