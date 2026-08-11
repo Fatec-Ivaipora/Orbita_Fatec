@@ -2,7 +2,6 @@ export const CATEGORIES = {
   ti: "Gestão de T.I.",
   rh: "Recursos Humanos",
   admin: "Administrativo",
-  docencia: "Docência",
   saude: "Gestão Saúde",
   secretaria: "Secretaria",
   financeiro: "Financeiro"
@@ -70,13 +69,6 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 21V7M18 21V7M9 7h6M9 11h6M9 15h6M9 19h6"/></svg>`,
     url: "/empresas/index.html"
   },
-  cpa: {
-    id: "cpa",
-    category: "docencia",
-    title: "CPA",
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>`,
-    url: "/cpa/index.html"
-  },
   ferida: {
     id: "ferida",
     category: "saude",
@@ -124,15 +116,15 @@ export const MODULES = {
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "cpa", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "cpa", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas"]
   },
   ti: {
     label: "T.I.",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "acessos", "cpa"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "acessos"]
   },
   rh: {
     label: "RH",
@@ -144,7 +136,7 @@ export const ROLE_PERMISSIONS = {
   },
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "licitacao", "cpa"]
+    modules: ["dashboard", "fidelidade", "licitacao"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da
