@@ -1155,7 +1155,24 @@ function renderGrid(list) {
   });
 }
 
-function abrirQR(id) {
+// Carrega uma lib externa sob demanda (só quando o recurso é realmente usado,
+// em vez de bloquear o carregamento inicial da página com <script> no <head>).
+function loadScriptOnce(src) {
+  if (document.querySelector(`script[src="${src}"]`)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Falha ao carregar ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+async function abrirQR(id) {
+  if (typeof QRCode === 'undefined') {
+    await loadScriptOnce('https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js');
+  }
+
   const label = document.getElementById('qr-label-name');
   if (label) label.textContent = id;
   const container = document.getElementById('qr-code-canvas');
@@ -1342,10 +1359,14 @@ function initMovimentar() {
 // ----------------------------------------------------------------
 let scannerInstance = null;
 
-window.abrirScanner = function() {
+window.abrirScanner = async function() {
   document.getElementById('success-modal')?.classList.remove('active');
   document.getElementById('reserved-locked-modal')?.classList.remove('active');
   document.getElementById('scanner-modal').classList.add('active');
+
+  if (typeof Html5Qrcode === 'undefined') {
+    await loadScriptOnce('https://unpkg.com/html5-qrcode');
+  }
 
   scannerInstance = new Html5Qrcode('reader');
   scannerInstance.start(

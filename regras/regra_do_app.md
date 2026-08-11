@@ -10,7 +10,7 @@ O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a F
 - `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
 - `/auth`: Tela de login e fluxo de redefinição de senha institucional.
 - `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança, permissões).
-- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/cpa`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
+- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
 - `/regras`: Documentação técnica e logs de alteração.
 
 ## 3. Fluxo de autenticação e Arquitetura REST
@@ -83,11 +83,6 @@ Além das permissões por cargo, o ADM N1 pode conceder **acessos personalizados
 - **Finalidade**: Módulo mobile-first (PWA) que disponibiliza a carteirinha digital do funcionário (FATEC Card) com QR Code auto-regenerativo a cada 30 segundos e acesso rápido às empresas parceiras conveniadas no Clube de Vantagens.
 - **Estrutura**: Localizado em `/fidelidade`, inclui a página do usuário (`index.html`) e a interface de validação (`validar.html`) para lojistas verificarem o status e vigência em tempo real.
 
-### CPA (Comissão Própria de Avaliação)
-- **Finalidade**: Relatório enxuto dos resultados da CPA (Edubox) para coordenadores de curso — um gráfico por dimensão do SINAES, comentários filtrados (remove vazios e respostas com menos de 2 palavras), em vez do PDF único de dezenas de páginas gerado pelo sistema acadêmico.
-- **Backend API**: `/api/rotas/cpa.js` — consulta direta e **somente leitura** ao Postgres externo do Edubox (`src/db-edubox.js`), banco `edubox_old` (réplica de consulta), schema `ivp`. Não usa Firestore.
-- **Escopo institucional**: o banco do Edubox é compartilhado com outras ~32 instituições da região — todas as queries filtram explicitamente pelos cursos da Fatec (`tac_curso`), nunca dados de outra instituição.
-
 ## 6. Padrão visual
 O sistema segue uma identidade visual institucional "Light Theme" moderna:
 - **Cores Principais**:
@@ -115,6 +110,44 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como reverter:
 
 ## 8. Histórico de alterações
+
+### [2026-08-10] Otimizações de performance para mobile (compressão, cache, assets)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/package.json` (nova dependência `compression`)
+  - `/api/index.js` (adicionado `app.use(compression())` — gzip nas respostas da API e dos estáticos servidos localmente)
+  - `/firebase.json` (headers de `Cache-Control` diferenciados por tipo de arquivo: JS/CSS com `max-age=3600`, imagens/fontes com `max-age=604800, immutable`, HTML continua `no-cache` para refletir permissões/menu na hora; removido `https://cdn.rawgit.com` do CSP, não é mais usado)
+  - `/emprestimo/index.html`, `/emprestimo/movimentar.html` (removidos os `<script>` bloqueantes de QRCode/scanner do `<head>`)
+  - `/emprestimo/app.js` (`abrirQR`/`abrirScanner` agora carregam as libs de QR sob demanda via `loadScriptOnce`, só quando o usuário realmente abre o QR ou o scanner)
+  - `/fidelidade/index.html` (`width`/`height` explícitos na tag do logo, evita layout shift)
+  - `/img/logoFatec.png` (redimensionado de 8001×3639px para 900×409px, mantendo transparência — era decodificado como ~116MB de bitmap em memória para ser exibido a 38px de altura)
+- Tipo: Otimização / Performance
+- Motivo: Relatos de usuários de que o app "trava" no celular. Auditoria (2 agentes, front-end e back-end) identificou: ausência de compressão gzip nas respostas, cache zerado em produção forçando redownload de tudo a cada navegação, um script de QR carregado via `cdn.rawgit.com` (domínio desativado desde 2018, que redireciona via hop extra até o jsDelivr) bloqueando o carregamento da tela de Empréstimo, e um logo de 29 milhões de pixels sendo decodificado só para aparecer em 38px no cartão do Fidelidade (o módulo PWA voltado justamente para celular).
+- Impacto: `emprestimo/app.js` cai de 56KB para ~14,5KB transferidos (gzip); `logoFatec.png` cai de 207KB/8001×3639px para ~15KB/900×409px; tela de Empréstimo não depende mais de um domínio fora do ar. Nenhuma mudança de comportamento visível para o usuário — mesma UI, mesmas funcionalidades.
+- Como testar: Abrir `/emprestimo/index.html` e confirmar que "Ver QR" e "Escanear" ainda funcionam normalmente (agora carregando a lib na hora do clique); conferir no DevTools (aba Network) que respostas JS/CSS vêm com `Content-Encoding: gzip`; conferir que `/img/logoFatec.png` carrega em ~15KB.
+- Como reverter: `git revert` deste commit restaura os arquivos e o `firebase.json`/CSP originais (a imagem original de maior resolução precisa ser recuperada do histórico do git, já que foi sobrescrita no lugar).
+- Pendências para uma próxima rodada (não implementadas agora): paralelizar escritas em lote no `financeiro.js` (hoje seriais, uma de cada vez); reduzir o limite de `express.json`/`urlencoded` de 50mb (uso real é ~2mb); paginar coleções sem `.limit()` (pacientes, fornecedores, usuários); dar ao módulo Fidelidade um manifest.json/service worker de verdade.
+
+### [2026-08-10] Remoção do módulo CPA e da categoria "Docência"
+- Autor: Claude Code
+- Branch: main
+- Arquivos removidos:
+  - `/cpa/` (`index.html`, `app.js`, `cpa.css`)
+  - `/src/rotas/cpa.js`
+  - `/src/db-edubox.js`
+- Arquivos alterados:
+  - `/core/permissions.js` (remove categoria `docencia` e módulo `cpa` de `CATEGORIES`/`MODULES`, e `"cpa"` dos `modules` de `adm_l1`, `adm_l2`, `ti`, `coordenador`)
+  - `/src/middlewares/auth.js` (remove a chave `cpa` do `defaultPermissions` de todos os cargos)
+  - `/api/index.js` (remove `require`/`app.use` da rota `/api/cpa`)
+  - `/package.json` (remove dependência `pg`, exclusiva do `db-edubox.js`)
+  - `.env`, `.env_exemplo` (remove `EDUBOX_HOST`/`PORT`/`DATABASE`/`USER`/`PASSWORD`, usadas só pelo CPA)
+  - `/regras/regra_do_app.md` (remove seção "CPA" e `/cpa` da lista de módulos em Estrutura de pastas)
+- Tipo: Remoção / Limpeza
+- Motivo: Pedido do usuário (TI) — módulo CPA não será mais usado. Como a categoria "Docência" só continha o CPA (os módulos anteriores, Turmas/Avaliações, já haviam sido removidos em 2026-08-03), a categoria inteira foi removida junto.
+- Impacto: Usuários com os cargos `adm_l1`, `adm_l2`, `ti` e `coordenador` deixam de ver "CPA" e a categoria "Docência" no menu lateral. `GET /api/cpa/*` retorna 404. Nenhum dado do Edubox foi apagado (é um banco externo, somente leitura, não gerenciado por este projeto).
+- Como testar: Confirmar que nenhum cargo mostra a categoria "Docência" no menu; confirmar que `GET /api/cpa/campanhas` retorna 404; conferir que o servidor local sobe normalmente sem a dependência `pg`.
+- Como reverter: `git revert` deste commit restaura os arquivos e registros removidos (as credenciais do Edubox precisariam ser re-adicionadas manualmente ao `.env`, já que não ficam versionadas).
 
 ### [2026-08-03] Novo módulo: CPA (Comissão Própria de Avaliação)
 - Autor: Claude Code

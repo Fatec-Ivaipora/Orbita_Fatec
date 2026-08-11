@@ -8,11 +8,11 @@
     "dev": "node --watch api/index.js"
   },
   "dependencies": {
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^13.9.0",
-    "pg": "^8.13.1",
     "xlsx": "^0.18.5"
   }
 }
