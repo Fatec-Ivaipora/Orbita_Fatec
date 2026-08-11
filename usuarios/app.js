@@ -175,7 +175,6 @@ function initPage() {
   setupModals();
   setupPermissionTabs();
   setupPermissoesPorUsuario();
-  renderFiltroCategorias();
   searchInput.addEventListener('input', filterUsers);
   document.getElementById('search-roles')?.addEventListener('input', filterRoles);
   document.getElementById('btn-save-global-perms').addEventListener('click', saveGlobalPermissions);
@@ -395,31 +394,6 @@ function getModulosPorCategoria() {
     if (mods.length) grupos.push({ label: catLabel, modulos: mods });
   });
   return grupos;
-}
-
-// Pills de filtro por tópico — derivadas de CATEGORIES (fonte única):
-// tópico novo registrado em core/permissions.js aparece aqui sozinho.
-function renderFiltroCategorias() {
-  const box = document.getElementById('perm-cat-filter');
-  if (!box) return;
-  const temGeral = PERM_MODULES.some(m => !m.category);
-  const opcoes = [['todos', 'Todos']];
-  if (temGeral) opcoes.push(['geral', 'Geral']);
-  Object.entries(CATEGORIES).forEach(([key, label]) => {
-    if (PERM_MODULES.some(m => m.category === key)) opcoes.push([key, label]);
-  });
-
-  box.innerHTML = opcoes.map(([key, label]) =>
-    `<button class="perm-cat-pill ${filtroCategoria === key ? 'active' : ''}" data-cat="${key}">${esc(label)}</button>`
-  ).join('');
-
-  box.querySelectorAll('.perm-cat-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      filtroCategoria = btn.dataset.cat;
-      renderFiltroCategorias();
-      rerenderGrades();
-    });
-  });
 }
 
 function rerenderGrades() {
@@ -736,15 +710,51 @@ function renderPermissionsGrid(containerId, currentPerms, opts = {}) {
 // ================================================================
 let permUserSelecionado = null;
 
+function labelUsuarioPerm(u) {
+  const nome = u.name || u.email || u.uid;
+  return u.permissoes && Object.keys(u.permissoes).length ? `${nome} (personalizado)` : nome;
+}
+
+// Mantém o campo de busca sincronizado com allUsers (ex.: depois de salvar
+// permissões, o "(personalizado)" do usuário selecionado pode ter mudado).
 function popularSelectPermUsuario() {
-  const sel = document.getElementById('perm-user-select');
-  if (!sel) return;
-  const atual = sel.value;
-  sel.innerHTML = '<option value="">Selecione um usuário...</option>' +
-    allUsers.map(u =>
-      `<option value="${esc(u.uid)}">${esc(u.name || u.email || u.uid)}${u.permissoes && Object.keys(u.permissoes).length ? ' (personalizado)' : ''}</option>`
-    ).join('');
-  if (atual && allUsers.some(u => u.uid === atual)) sel.value = atual;
+  const input = document.getElementById('perm-user-search');
+  const hidden = document.getElementById('perm-user-select');
+  if (!input || !hidden) return;
+  if (permUserSelecionado && allUsers.some(u => u.uid === permUserSelecionado.uid)) {
+    permUserSelecionado = allUsers.find(u => u.uid === permUserSelecionado.uid);
+    input.value = labelUsuarioPerm(permUserSelecionado);
+    hidden.value = permUserSelecionado.uid;
+  }
+}
+
+// Lista filtrada (por nome ou e-mail) que aparece embaixo do campo de busca
+function renderDropdownUsuarios(query) {
+  const dropdown = document.getElementById('perm-user-dropdown');
+  const q = query.trim().toLowerCase();
+  const filtrados = !q ? allUsers : allUsers.filter(u =>
+    (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+  );
+
+  dropdown.innerHTML = filtrados.length
+    ? filtrados.map(u => `<div class="user-search-item" data-uid="${esc(u.uid)}">${esc(labelUsuarioPerm(u))}</div>`).join('')
+    : '<div class="user-search-empty">Nenhum usuário encontrado.</div>';
+
+  dropdown.querySelectorAll('.user-search-item').forEach(item => {
+    item.addEventListener('click', () => selecionarUsuarioPerm(item.dataset.uid));
+  });
+  dropdown.classList.remove('hidden');
+}
+
+function selecionarUsuarioPerm(uid) {
+  const input = document.getElementById('perm-user-search');
+  const hidden = document.getElementById('perm-user-select');
+  const dropdown = document.getElementById('perm-user-dropdown');
+  permUserSelecionado = allUsers.find(u => u.uid === uid) || null;
+  hidden.value = uid;
+  input.value = permUserSelecionado ? labelUsuarioPerm(permUserSelecionado) : '';
+  dropdown.classList.add('hidden');
+  renderPermissoesUsuario();
 }
 
 function setupPermissoesPorUsuario() {
@@ -760,10 +770,16 @@ function setupPermissoesPorUsuario() {
     });
   });
 
-  document.getElementById('perm-user-select').addEventListener('change', e => {
-    const uid = e.target.value;
-    permUserSelecionado = allUsers.find(u => u.uid === uid) || null;
-    renderPermissoesUsuario();
+  const searchInput = document.getElementById('perm-user-search');
+  const dropdown = document.getElementById('perm-user-dropdown');
+
+  searchInput.addEventListener('input', () => renderDropdownUsuarios(searchInput.value));
+  searchInput.addEventListener('focus', () => renderDropdownUsuarios(searchInput.value));
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#perm-user-searchbar')) return;
+    dropdown.classList.add('hidden');
+    searchInput.value = permUserSelecionado ? labelUsuarioPerm(permUserSelecionado) : '';
   });
 
   document.getElementById('btn-save-user-perms').addEventListener('click', salvarPermissoesUsuario);

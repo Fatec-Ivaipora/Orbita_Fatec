@@ -136,7 +136,6 @@ const requireModulePermission = (moduleName) => {
             adm_l2: {
                 emprestimo: 3,
                 usuarios: 3,
-                ensalamento: 3,
                 'carga-horaria': 3,
                 cpa: 3,
                 ferida: 3,
@@ -150,7 +149,6 @@ const requireModulePermission = (moduleName) => {
             ti: {
                 emprestimo: 3,
                 usuarios: 1,
-                ensalamento: 3,
                 'carga-horaria': 1,
                 cpa: 3,
                 ferida: 1,
@@ -164,7 +162,6 @@ const requireModulePermission = (moduleName) => {
             rh: {
                 emprestimo: 1,
                 usuarios: 1,
-                ensalamento: 1,
                 'carga-horaria': 3,
                 cpa: 1,
                 ferida: 1,
@@ -178,7 +175,6 @@ const requireModulePermission = (moduleName) => {
             financeiro: {
                 emprestimo: 1,
                 usuarios: 1,
-                ensalamento: 1,
                 'carga-horaria': 1,
                 cpa: 1,
                 ferida: 1,
@@ -192,7 +188,6 @@ const requireModulePermission = (moduleName) => {
             coordenador: {
                 emprestimo: 1,
                 usuarios: 1,
-                ensalamento: 1,
                 'carga-horaria': 1,
                 cpa: 3,
                 ferida: 1,
@@ -208,7 +203,6 @@ const requireModulePermission = (moduleName) => {
             sec: {
                 emprestimo: 1,
                 usuarios: 1,
-                ensalamento: 1,
                 'carga-horaria': 1,
                 cpa: 1,
                 ferida: 1,
@@ -222,7 +216,6 @@ const requireModulePermission = (moduleName) => {
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,
-                ensalamento: 2,
                 'carga-horaria': 1,
                 cpa: 1,
                 ferida: 1,
