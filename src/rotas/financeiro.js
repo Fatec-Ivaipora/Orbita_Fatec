@@ -333,11 +333,21 @@ router.put('/itens/:id', verifyToken, checkPermission, async (req, res) => {
         if (dados.quantidade !== undefined) {
             const doc = await db.collection(COL_ITENS).doc(req.params.id).get();
             if (!doc.exists) return res.status(404).json({ error: 'Item não encontrado.' });
-            const cotacoesAtuais = doc.data().cotacoes || [];
+            const itemAtual = doc.data();
+            const cotacoesAtuais = itemAtual.cotacoes || [];
             dados.cotacoes = cotacoesAtuais.map(c => ({
                 ...c,
                 valorTotal: Math.round(c.valorUnitario * dados.quantidade * 100) / 100
             }));
+
+            // Item já fechado: o valorFechado precisa acompanhar a quantidade
+            // nova, senão fica destoando da própria cotação da empresa que
+            // fechou (aconteceu de verdade — item editado depois de fechado
+            // deixava o valor fechado preso na quantidade antiga).
+            if (itemAtual.status === 'fechado' && itemAtual.fornecedorFechadoId) {
+                const cotacaoFechada = dados.cotacoes.find(c => c.fornecedorId === itemAtual.fornecedorFechadoId);
+                if (cotacaoFechada) dados.valorFechado = cotacaoFechada.valorTotal;
+            }
         }
 
         await db.collection(COL_ITENS).doc(req.params.id).update(dados);
@@ -394,9 +404,14 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
         if (semestre) query = query.where('semestre', '==', semestre);
         const snap = await query.get();
 
-        const porCurso = {}; // cursoId -> { curso, gastoTotal, economia, pendente, chegou }
-        const rankingFornecedores = {}; // fornecedorNome -> vitórias
-        let gastoTotalGeral = 0, economiaTotalGeral = 0, pendenteGeral = 0, chegouGeral = 0;
+        // Gasto e economia são calculados só sobre itens FECHADOS (decisão real
+        // de compra) — antes usava a menor cotação de TODO item cotado, mesmo o
+        // que nunca foi comprado, o que não batia com o que saiu do bolso de
+        // verdade e inflava a "economia" sem relação com o gasto real.
+        const porCurso = {}; // cursoId -> { curso, gastoTotal, economia } (só itens fechados)
+        const porFornecedorFechado = {}; // fornecedorId -> { fornecedor, itensFechados, gastoTotal, economia }
+        const rankingFornecedores = {}; // fornecedorNome -> vitórias (cotação mais barata, não necessariamente fechada)
+        let gastoTotalGeral = 0, economiaTotalGeral = 0;
 
         // Mapa comparativo: pra cada item, o valor que CADA fornecedor cotou —
         // não só quem ganhou. É o "orçamento lado a lado" que o financeiro pediu
@@ -418,22 +433,39 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
             if (cotacoesFiltro === 'unica' && cotacoes.length !== 1) return;
             if (cotacoesFiltro === 'multipla' && cotacoes.length < 2) return;
 
-            if (!porCurso[item.cursoId]) {
-                porCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, gastoTotal: 0, economia: 0, pendente: 0, chegou: 0 };
-            }
-            const c = porCurso[item.cursoId];
+            // Gasto/economia real: só conta o que foi de fato fechado. Economia
+            // aqui é "quanto deixou de pagar em relação à pior cotação recebida
+            // pro item" — a própria cotação vencedora (valorFechado) já está
+            // dentro de `cotacoes`, então maior >= valorFechado sempre, nunca
+            // fica negativa.
+            if (item.status === 'fechado' && item.valorFechado != null && item.fornecedorFechadoId) {
+                if (!porCurso[item.cursoId]) {
+                    porCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, gastoTotal: 0, economia: 0 };
+                }
+                const c = porCurso[item.cursoId];
+                const maiorCotado = cotacoes.length ? Math.max(...cotacoes.map(cot => cot.valorTotal)) : item.valorFechado;
+                const economiaItem = maiorCotado - item.valorFechado;
 
-            if (item.status === 'chegou') { c.chegou++; chegouGeral++; }
-            else { c.pendente++; pendenteGeral++; }
+                c.gastoTotal += item.valorFechado;
+                c.economia += economiaItem;
+                gastoTotalGeral += item.valorFechado;
+                economiaTotalGeral += economiaItem;
+
+                if (!porFornecedorFechado[item.fornecedorFechadoId]) {
+                    porFornecedorFechado[item.fornecedorFechadoId] = {
+                        fornecedorId: item.fornecedorFechadoId, fornecedor: item.fornecedorFechadoNome || '—',
+                        itensFechados: 0, gastoTotal: 0, economia: 0
+                    };
+                }
+                const f = porFornecedorFechado[item.fornecedorFechadoId];
+                f.itensFechados++;
+                f.gastoTotal += item.valorFechado;
+                f.economia += economiaItem;
+            }
 
             if (cotacoes.length) {
                 const valores = cotacoes.map(cot => cot.valorTotal);
                 const menor = Math.min(...valores);
-                const maior = Math.max(...valores);
-                c.gastoTotal += menor;
-                c.economia += (maior - menor);
-                gastoTotalGeral += menor;
-                economiaTotalGeral += (maior - menor);
 
                 const vencedor = cotacoes.find(cot => cot.valorTotal === menor);
                 if (vencedor) {
@@ -476,10 +508,15 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 .sort((a, b) => b.vitorias - a.vitorias),
             geral: {
                 gastoTotal: Math.round(gastoTotalGeral * 100) / 100,
-                economia: Math.round(economiaTotalGeral * 100) / 100,
-                pendente: pendenteGeral,
-                chegou: chegouGeral
+                economia: Math.round(economiaTotalGeral * 100) / 100
             },
+            porFornecedorFechado: Object.values(porFornecedorFechado)
+                .map(f => ({
+                    ...f,
+                    gastoTotal: Math.round(f.gastoTotal * 100) / 100,
+                    economia: Math.round(f.economia * 100) / 100
+                }))
+                .sort((a, b) => b.gastoTotal - a.gastoTotal),
             comparativo: {
                 fornecedores: Object.entries(fornecedoresColunas)
                     .map(([id, nome]) => ({ id, nome }))
@@ -884,20 +921,54 @@ router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearC
             .sort((a, b) => (a.fornecedorFechadoNome || '').localeCompare(b.fornecedorFechadoNome || '') ||
                 (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
 
+        // Economia por item: pior cotação recebida menos o que foi realmente
+        // pago — a própria cotação vencedora já está em `cotacoes`, então
+        // valorOriginal >= valorFechado sempre (nunca fica negativa). Mesma
+        // conta usada no Relatório, pra não ter dois números de "economia"
+        // diferentes no sistema.
+        const itensComEconomia = fechados.map(it => {
+            const cotacoes = it.cotacoes || [];
+            const valorOriginal = cotacoes.length ? Math.max(...cotacoes.map(c => c.valorTotal)) : (it.valorFechado || 0);
+            const economia = valorOriginal - (it.valorFechado || 0);
+            return { ...it, valorOriginal, economia };
+        });
+
+        // Desconto extra negociado NA HORA DO FECHAMENTO (ex.: ligou, empresa
+        // topou tirar mais R$500 do total) é diferente de "economia" acima —
+        // esse aqui compara com o valor que ELA MESMA já tinha proposto pro
+        // item (valorOriginalAntesDoDesconto, gravado por
+        // /fechamento/confirmar-com-desconto), não com a pior cotação de
+        // outra empresa. Só existe pra item fechado por esse fluxo.
         const porFornecedor = {};
-        fechados.forEach(it => {
+        itensComEconomia.forEach(it => {
             const nome = it.fornecedorFechadoNome || '—';
-            if (!porFornecedor[nome]) porFornecedor[nome] = { fornecedor: nome, itens: 0, total: 0 };
+            if (!porFornecedor[nome]) porFornecedor[nome] = { fornecedor: nome, itens: 0, total: 0, economia: 0, descontoNoFechamento: 0 };
             porFornecedor[nome].itens++;
             porFornecedor[nome].total += it.valorFechado || 0;
+            porFornecedor[nome].economia += it.economia;
+            if (it.valorOriginalAntesDoDesconto != null) {
+                porFornecedor[nome].descontoNoFechamento += it.valorOriginalAntesDoDesconto - (it.valorFechado || 0);
+            }
         });
 
         res.json({
-            itens: fechados.map(it => ({
+            itens: itensComEconomia.map(it => ({
                 id: it.id, curso: it.curso, produto: it.produto, quantidade: it.quantidade,
-                unidade: it.unidade, fornecedor: it.fornecedorFechadoNome, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm
+                unidade: it.unidade, fornecedor: it.fornecedorFechadoNome, valorFechado: it.valorFechado, fechadoEm: it.fechadoEm,
+                valorOriginal: Math.round(it.valorOriginal * 100) / 100,
+                economia: Math.round(it.economia * 100) / 100,
+                percentualEconomia: it.valorOriginal > 0 ? Math.round((it.economia / it.valorOriginal) * 10000) / 100 : 0,
+                valorOriginalAntesDoDesconto: it.valorOriginalAntesDoDesconto ?? null,
+                percentualDescontoFechamento: it.percentualDescontoFechamento ?? null
             })),
-            resumoPorFornecedor: Object.values(porFornecedor).sort((a, b) => b.total - a.total),
+            resumoPorFornecedor: Object.values(porFornecedor)
+                .map(f => ({
+                    ...f,
+                    economia: Math.round(f.economia * 100) / 100,
+                    percentualEconomia: (f.total + f.economia) > 0 ? Math.round((f.economia / (f.total + f.economia)) * 10000) / 100 : 0,
+                    descontoNoFechamento: Math.round(f.descontoNoFechamento * 100) / 100
+                }))
+                .sort((a, b) => b.total - a.total),
             totalGeral: fechados.reduce((s, it) => s + (it.valorFechado || 0), 0)
         });
     } catch (err) {

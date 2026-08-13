@@ -628,7 +628,7 @@ function renderLinhasCotacoes(item, cotacoesPorFornecedor) {
 // ==========================================
 // TELA DE RELATÓRIO (relatorio.html)
 // ==========================================
-let chartCurso = null, chartRanking = null, chartStatus = null;
+let chartCurso = null, chartRanking = null;
 let relatorioEmAndamento = Promise.resolve(); // promessa da última carga, pra "Imprimir" nunca pegar dado desatualizado
 
 async function initPaginaRelatorio() {
@@ -637,17 +637,9 @@ async function initPaginaRelatorio() {
   const selectPeriodicidade = document.getElementById('relatorio-periodicidade-select');
   const selectCotacoes = document.getElementById('relatorio-cotacoes-select');
   const cursoLabel = document.getElementById('print-curso-label');
-  const linkNegociacao = document.getElementById('link-negociacao');
   // Se veio de "Licitação" com um curso já selecionado (?cursoId=...), abre o
   // relatório já filtrado nele em vez de "Todos os cursos".
   const cursoIdInicial = new URLSearchParams(window.location.search).get('cursoId') || '';
-
-  function atualizarLinkNegociacao() {
-    if (!linkNegociacao) return;
-    linkNegociacao.href = select?.value
-      ? `/financeiro/licitacao/negociacao.html?cursoId=${encodeURIComponent(select.value)}`
-      : '/financeiro/licitacao/negociacao.html';
-  }
 
   function atualizarLabelImpressao() {
     if (!cursoLabel) return;
@@ -677,11 +669,9 @@ async function initPaginaRelatorio() {
     }
     select.addEventListener('change', () => {
       atualizarLabelImpressao();
-      atualizarLinkNegociacao();
       relatorioEmAndamento = carregarRelatorio();
     });
   }
-  atualizarLinkNegociacao();
 
   selectPeriodicidade?.addEventListener('change', () => {
     atualizarLabelImpressao();
@@ -728,10 +718,8 @@ async function initPaginaRelatorio() {
   // sem forçar um resize antes de imprimir, o gráfico não se ajusta ao
   // layout (mais estreito) da folha e o conteúdo aparece cortado.
   window.addEventListener('beforeprint', () => {
-    [chartCurso, chartRanking, chartStatus].forEach(c => c && c.resize());
+    [chartCurso, chartRanking].forEach(c => c && c.resize());
   });
-
-  window.addEventListener('resize', atualizarIndicadorScrollComparativo);
 
   relatorioEmAndamento = carregarRelatorio();
   await relatorioEmAndamento;
@@ -757,8 +745,6 @@ async function carregarRelatorio() {
 function renderRelatorio(dados) {
   document.getElementById('kpi-gasto').textContent = fmtMoeda(dados.geral.gastoTotal);
   document.getElementById('kpi-economia').textContent = fmtMoeda(dados.geral.economia);
-  document.getElementById('kpi-pendente').textContent = dados.geral.pendente;
-  document.getElementById('kpi-chegou').textContent = dados.geral.chegou;
 
   const porCurso = dados.porCurso.sort((a, b) => b.gastoTotal - a.gastoTotal);
   const ranking = dados.rankingFornecedores.slice(0, 8);
@@ -770,7 +756,7 @@ function renderRelatorio(dados) {
     type: 'bar',
     data: {
       labels: porCurso.map(c => c.curso),
-      datasets: [{ label: 'Gasto (menor cotação)', data: porCurso.map(c => c.gastoTotal), backgroundColor: '#0F4EB8', borderRadius: 6 }]
+      datasets: [{ label: 'Gasto (itens fechados)', data: porCurso.map(c => c.gastoTotal), backgroundColor: '#0F4EB8', borderRadius: 6 }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
@@ -785,78 +771,17 @@ function renderRelatorio(dados) {
     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
   });
 
-  if (chartStatus) chartStatus.destroy();
-  chartStatus = new Chart(document.getElementById('chart-status'), {
-    type: 'doughnut',
-    data: {
-      labels: ['Pendente', 'Chegou'],
-      datasets: [{ data: [dados.geral.pendente, dados.geral.chegou], backgroundColor: ['#F59E0B', '#10B981'] }]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-  });
-
-  renderComparativo(dados.comparativo);
-}
-
-// Tabela "produto x fornecedor" — mostra o valor que cada empresa cotou pra
-// cada item lado a lado (não só quem ganhou), pra dar a visão de orçamento
-// comparativo que o financeiro pediu.
-function renderComparativo(comparativo) {
-  const thead = document.getElementById('comparativo-thead');
-  const tbody = document.getElementById('comparativo-tbody');
-  if (!thead || !tbody) return;
-
-  const fornecedores = comparativo?.fornecedores || [];
-  const itens = comparativo?.itens || [];
-
-  if (!itens.length) {
-    thead.innerHTML = '';
-    tbody.innerHTML = '<tr><td class="tabela-msg">Nenhum item com cotação para os filtros selecionados.</td></tr>';
-    atualizarIndicadorScrollComparativo();
-    return;
+  const porFornecedorFechado = dados.porFornecedorFechado || [];
+  const tbodyEconomia = document.getElementById('economia-fornecedor-tbody');
+  if (tbodyEconomia) {
+    tbodyEconomia.innerHTML = porFornecedorFechado.length ? porFornecedorFechado.map(f => `
+      <tr>
+        <td>${esc(f.fornecedor)}</td>
+        <td>${f.itensFechados}</td>
+        <td>${fmtMoeda(f.gastoTotal)}</td>
+        <td class="valor-vencedor">${fmtMoeda(f.economia)}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="tabela-msg">Nenhum item fechado nesse filtro ainda.</td></tr>';
   }
-
-  thead.innerHTML = `<tr>
-    <th>Curso</th>
-    <th>Produto</th>
-    <th>Qtd/Und</th>
-    ${fornecedores.map(f => `<th>${esc(f.nome)}</th>`).join('')}
-  </tr>`;
-
-  tbody.innerHTML = itens.map(item => `
-    <tr>
-      <td>${esc(item.curso)}</td>
-      <td>${esc(item.produto)}</td>
-      <td>${esc(item.quantidade)}${item.unidade ? ' ' + esc(item.unidade) : ''}</td>
-      ${fornecedores.map(f => {
-        const valor = item.valoresPorFornecedor[f.id];
-        if (valor === undefined) return '<td class="valor-ausente">—</td>';
-        const classe = f.id === item.vencedorFornecedorId ? 'valor-vencedor' : '';
-        return `<td class="${classe}">${fmtMoeda(valor)}</td>`;
-      }).join('')}
-    </tr>
-  `).join('');
-
-  atualizarIndicadorScrollComparativo();
-}
-
-// Só mostra a dica/sombra de rolagem quando a tabela realmente transborda a
-// tela — sem isso, apareceria até quando cabem todos os fornecedores.
-function atualizarIndicadorScrollComparativo() {
-  const wrap = document.getElementById('comparativo-scroll-wrap');
-  const fade = document.getElementById('comparativo-scroll-fade');
-  const dica = document.getElementById('comparativo-scroll-dica');
-  if (!wrap || !fade || !dica) return;
-
-  const temOverflow = wrap.scrollWidth > wrap.clientWidth + 4;
-  dica.classList.toggle('hidden', !temOverflow);
-
-  const atualizarFade = () => {
-    const faltaRolar = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft;
-    fade.classList.toggle('hidden', !temOverflow || faltaRolar < 4);
-  };
-  atualizarFade();
-  wrap.onscroll = atualizarFade;
 }
 
 function esc(str) {
@@ -906,6 +831,9 @@ async function initPaginaNegociacao() {
 
   document.getElementById('btn-imprimir-ganhos')?.addEventListener('click', () => imprimirNegociacao('ganhos'));
   document.getElementById('btn-imprimir-perdidos')?.addEventListener('click', () => imprimirNegociacao('perdidos'));
+  document.getElementById('btn-imprimir-comparativo')?.addEventListener('click', () => imprimirNegociacao('comparativo'));
+  document.getElementById('comparativo-busca')?.addEventListener('input', () => renderComparativoNegociacao());
+  window.addEventListener('resize', atualizarIndicadorScrollComparativo);
 
   document.getElementById('comparar-empresa-a')?.addEventListener('change', renderComparacaoDuasEmpresas);
   document.getElementById('comparar-empresa-b')?.addEventListener('change', renderComparacaoDuasEmpresas);
@@ -943,6 +871,7 @@ async function carregarNegociacao(fornecedorIdForcado = '') {
       }
     }
     renderNegociacao(selectFornecedor?.value || '');
+    renderComparativoNegociacao();
     popularSelectsComparacao();
   } catch (err) {
     showToast('Erro ao carregar negociação: ' + err.message, 'error');
@@ -1158,6 +1087,96 @@ function renderNegociacao(fornecedorId) {
   document.getElementById('negociacao-print-nome-perdidos').textContent = nomeAtual;
   document.getElementById('negociacao-print-data-ganhos').textContent = dataEmissao;
   document.getElementById('negociacao-print-data-perdidos').textContent = dataEmissao;
+}
+
+// Tabela geral: todo mundo que cotou, lado a lado, por item — a visão ampla
+// de "quem está cobrando quanto" antes de focar numa empresa (ganhos/perdidos
+// acima) ou comparar duas cabeça a cabeça (seção mais abaixo). Reaproveita o
+// mesmo negociacaoComparativo já buscado — sem leitura nova no Firestore.
+function renderComparativoNegociacao() {
+  const thead = document.getElementById('comparativo-thead');
+  const tbody = document.getElementById('comparativo-tbody');
+  const contagem = document.getElementById('comparativo-contagem');
+  if (!thead || !tbody) return;
+
+  const { fornecedores, itens } = negociacaoComparativo;
+  const termo = (document.getElementById('comparativo-busca')?.value || '').trim().toLowerCase();
+  const itensFiltrados = termo ? itens.filter(i => (i.produto || '').toLowerCase().includes(termo)) : itens;
+
+  if (contagem) contagem.textContent = `${itensFiltrados.length} ${itensFiltrados.length === 1 ? 'item' : 'itens'}`;
+
+  if (!itensFiltrados.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = `<tr><td class="tabela-msg">${termo ? 'Nenhum produto encontrado pra essa busca.' : 'Nenhum item com cotação para os filtros selecionados.'}</td></tr>`;
+    atualizarIndicadorScrollComparativo();
+    return;
+  }
+
+  thead.innerHTML = `<tr>
+    <th>Curso</th>
+    <th>Produto</th>
+    <th>Qtd/Und</th>
+    ${fornecedores.map(f => `<th>${esc(f.nome)}</th>`).join('')}
+  </tr>`;
+
+  tbody.innerHTML = itensFiltrados.map(item => {
+    let menor = null;
+    fornecedores.forEach(f => {
+      const v = item.valoresPorFornecedor[f.id];
+      if (v !== undefined && (menor === null || v < menor)) menor = v;
+    });
+
+    const celulas = fornecedores.map(f => {
+      const valor = item.valoresPorFornecedor[f.id];
+      if (valor === undefined) return '<td class="valor-ausente-cell">—</td>';
+      const ehMenor = valor === menor;
+      // Selo "Fechado" na empresa que realmente ganhou o item — inclusive
+      // quando não era a mais barata (negociação/desconto), pra não parecer
+      // que o destaque verde já é a decisão final.
+      let selo = '';
+      if (item.status === 'fechado' && item.fornecedorFechadoId === f.id) {
+        const divergente = !ehMenor;
+        selo = `<span class="comparativo-fechado-selo${divergente ? ' divergente' : ''}">Fechado${divergente ? ' — não era o menor' : ''}</span>`;
+      }
+      return `<td class="${ehMenor ? 'valor-vencedor-cell' : ''}">${fmtMoeda(valor)}${selo}</td>`;
+    }).join('');
+
+    return `
+    <tr>
+      <td>${esc(item.curso)}</td>
+      <td>${esc(item.produto)}</td>
+      <td>${item.quantidade}${item.unidade ? ' ' + esc(item.unidade) : ''}</td>
+      ${celulas}
+    </tr>`;
+  }).join('');
+
+  atualizarIndicadorScrollComparativo();
+
+  const cursoSelect = document.getElementById('negociacao-curso-select');
+  const cursoNome = cursos.find(c => c.id === cursoSelect?.value)?.name || 'Todos os cursos';
+  const printCurso = document.getElementById('comparativo-print-curso');
+  const printData = document.getElementById('comparativo-print-data');
+  if (printCurso) printCurso.textContent = cursoNome;
+  if (printData) printData.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+}
+
+// Só mostra a dica/sombra de rolagem quando a tabela realmente transborda a
+// tela — sem isso, apareceria até quando cabem todos os fornecedores.
+function atualizarIndicadorScrollComparativo() {
+  const wrap = document.getElementById('comparativo-scroll-wrap');
+  const fade = document.getElementById('comparativo-scroll-fade');
+  const dica = document.getElementById('comparativo-scroll-dica');
+  if (!wrap || !fade || !dica) return;
+
+  const temOverflow = wrap.scrollWidth > wrap.clientWidth + 4;
+  dica.classList.toggle('hidden', !temOverflow);
+
+  const atualizarFade = () => {
+    const faltaRolar = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft;
+    fade.classList.toggle('hidden', !temOverflow || faltaRolar < 4);
+  };
+  atualizarFade();
+  wrap.onscroll = atualizarFade;
 }
 
 // Imprime só o card de "ganhos" ou só o de "perdidos" — marca no body qual
@@ -1936,6 +1955,9 @@ async function salvarValorFechado(id) {
 // Relatório geral: tudo que já foi fechado no semestre, com QUALQUER
 // empresa — pra ter uma visão completa do que já está decidido, não só de
 // uma empresa por vez.
+let fechaGeralDados = null; // última resposta de fechados-geral, pra expandir empresa sem nova leitura
+let fechaGeralEmpresaAberta = null;
+
 async function carregarFechadosGeral() {
   const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
   const resumoDiv = document.getElementById('fecha-geral-resumo');
@@ -1946,23 +1968,88 @@ async function carregarFechadosGeral() {
   const cursoId = document.getElementById('fecha-geral-curso-select')?.value || '';
   resumoDiv.innerHTML = '<p class="tabela-msg">Carregando...</p>';
   document.getElementById('fecha-geral-total').textContent = '—';
+  document.getElementById('fecha-geral-desconto-total').textContent = '';
+  document.getElementById('fecha-geral-detalhe').innerHTML = '';
+  fechaGeralEmpresaAberta = null;
   try {
     const qs = new URLSearchParams({ semestre });
     if (cursoId) qs.set('cursoId', cursoId);
-    const resp = await apiFetch(`/financeiro/fechamento/fechados-geral?${qs.toString()}`);
+    fechaGeralDados = await apiFetch(`/financeiro/fechamento/fechados-geral?${qs.toString()}`);
+    renderFechaGeralResumo();
 
-    resumoDiv.innerHTML = resp.resumoPorFornecedor.length ? resp.resumoPorFornecedor.map(r => `
-      <div class="kpi-card" style="min-width:180px;">
-        <div class="kpi-label">${esc(r.fornecedor)}</div>
-        <div class="kpi-value" style="font-size:1.1rem;">${r.itens} itens — ${fmtMoeda(r.total)}</div>
-      </div>`).join('') : '<p class="tabela-msg">Nenhum item fechado ainda nesse filtro.</p>';
-
-    const totalItens = resp.resumoPorFornecedor.reduce((s, r) => s + r.itens, 0);
+    const totalItens = fechaGeralDados.resumoPorFornecedor.reduce((s, r) => s + r.itens, 0);
+    const totalDescontoFechamento = fechaGeralDados.resumoPorFornecedor.reduce((s, r) => s + (r.descontoNoFechamento || 0), 0);
+    document.getElementById('fecha-geral-desconto-total').textContent =
+      totalDescontoFechamento > 0 ? `Desconto negociado no fechamento (todas as empresas): ${fmtMoeda(totalDescontoFechamento)}` : '';
     document.getElementById('fecha-geral-total').textContent =
-      `${totalItens} itens fechados no total — ${fmtMoeda(resp.totalGeral)}`;
+      `${totalItens} itens fechados no total — ${fmtMoeda(fechaGeralDados.totalGeral)}`;
   } catch (err) {
     resumoDiv.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
   }
+}
+
+// Cada card de empresa vira um botão — clicar expande a lista de itens dela
+// logo abaixo (sem nova leitura, reaproveita fechaGeralDados). Clicar de
+// novo na mesma empresa recolhe.
+function renderFechaGeralResumo() {
+  const resumoDiv = document.getElementById('fecha-geral-resumo');
+  const resumo = fechaGeralDados.resumoPorFornecedor;
+
+  resumoDiv.innerHTML = resumo.length ? resumo.map(r => `
+    <button type="button" class="kpi-card fecha-geral-empresa-btn ${fechaGeralEmpresaAberta === r.fornecedor ? 'ativo' : ''}" data-fornecedor="${esc(r.fornecedor)}" style="min-width:190px; text-align:left; cursor:pointer;">
+      <div class="kpi-label">${esc(r.fornecedor)}</div>
+      <div class="kpi-value" style="font-size:1.1rem;">${r.itens} itens — ${fmtMoeda(r.total)}</div>
+      <div style="font-size:0.78rem; color:var(--green); font-weight:700; margin-top:0.15rem;">economia ${fmtMoeda(r.economia)} (${r.percentualEconomia}%)</div>
+      ${r.descontoNoFechamento > 0 ? `<div style="font-size:0.78rem; color:var(--primary-blue); font-weight:700;">+ ${fmtMoeda(r.descontoNoFechamento)} de desconto negociado no fechamento</div>` : ''}
+    </button>`).join('') : '<p class="tabela-msg">Nenhum item fechado ainda nesse filtro.</p>';
+
+  resumoDiv.querySelectorAll('.fecha-geral-empresa-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fechaGeralEmpresaAberta = fechaGeralEmpresaAberta === btn.dataset.fornecedor ? null : btn.dataset.fornecedor;
+      renderFechaGeralResumo();
+      renderFechaGeralDetalhe();
+    });
+  });
+}
+
+function renderFechaGeralDetalhe() {
+  const container = document.getElementById('fecha-geral-detalhe');
+  if (!fechaGeralEmpresaAberta) { container.innerHTML = ''; return; }
+
+  const itens = fechaGeralDados.itens.filter(it => (it.fornecedor || '—') === fechaGeralEmpresaAberta);
+  const resumoEmpresa = fechaGeralDados.resumoPorFornecedor.find(r => r.fornecedor === fechaGeralEmpresaAberta);
+
+  container.innerHTML = `
+    <div class="card" style="margin-bottom:1.5rem; border-color:var(--primary-blue);">
+      <div class="fornecedor-detalhe-header">
+        <h4 class="card-secao-titulo" style="font-size:1rem;">${esc(fechaGeralEmpresaAberta)} — itens fechados</h4>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.15rem;">
+          <span style="color:var(--green); font-weight:700;">Economia (vs. pior cotação): ${fmtMoeda(resumoEmpresa?.economia || 0)} (${resumoEmpresa?.percentualEconomia || 0}%)</span>
+          ${resumoEmpresa?.descontoNoFechamento > 0 ? `<span style="color:var(--primary-blue); font-weight:700; font-size:0.85rem;">Desconto negociado no fechamento: ${fmtMoeda(resumoEmpresa.descontoNoFechamento)}</span>` : ''}
+        </div>
+      </div>
+      <div class="tabela-wrap tabela-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Curso</th><th>Produto</th><th>Qtd/Und</th><th>Valor original</th><th>Valor fechado</th><th>Economia</th><th>Desconto no fechamento</th></tr>
+          </thead>
+          <tbody>
+            ${itens.map(it => `
+              <tr>
+                <td>${esc(it.curso)}</td>
+                <td>${esc(it.produto)}</td>
+                <td>${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
+                <td>${fmtMoeda(it.valorOriginal)}</td>
+                <td>${fmtMoeda(it.valorFechado)}</td>
+                <td class="valor-vencedor">${fmtMoeda(it.economia)} (${it.percentualEconomia}%)</td>
+                <td>${it.valorOriginalAntesDoDesconto != null
+                  ? `${fmtMoeda(it.valorOriginalAntesDoDesconto)} → ${fmtMoeda(it.valorFechado)} (-${it.percentualDescontoFechamento}%)`
+                  : '<span class="tabela-msg" style="padding:0;">—</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 // Desfaz de uma vez todos os fechamentos dessa empresa nesse semestre — pra

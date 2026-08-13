@@ -148,7 +148,7 @@
 
                 <div class="card" style="margin-top:1.5rem; margin-bottom:1.5rem;">
                     <h3 class="card-secao-titulo">Relatório geral do que já foi fechado (todas as empresas)</h3>
-                    <p class="page-subtitle" style="padding:0 1.5rem;">Tudo que já está decidido no semestre, agrupado por empresa</p>
+                    <p class="page-subtitle" style="padding:0 1.5rem;">Tudo que já está decidido no semestre, agrupado por empresa — clique numa empresa pra ver os itens, o valor fechado e quanto foi economizado</p>
                     <div class="filters-bar" style="padding:0 1.5rem 1rem;">
                         <select class="select-filter" id="fecha-geral-curso-select">
                             <option value="">Todos os cursos</option>
@@ -156,6 +156,10 @@
                         <button type="button" class="btn-secondary" id="btn-ver-fechados-geral">Ver relatório geral</button>
                     </div>
                     <div id="fecha-geral-resumo" style="padding:0 1.5rem 1rem; display:flex; gap:1rem; flex-wrap:wrap;"><p class="tabela-msg">Selecione o semestre acima e clique em "Ver relatório geral".</p></div>
+                    <div id="fecha-geral-detalhe" style="padding:0 1.5rem;"></div>
+                    <div style="padding:0 1.5rem;">
+                        <span id="fecha-geral-desconto-total" style="color:var(--primary-blue); font-weight:700;"></span>
+                    </div>
                     <div class="calculadora-negociacao">
                         <span id="fecha-geral-total">—</span>
                     </div>
