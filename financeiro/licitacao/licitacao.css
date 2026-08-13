@@ -105,24 +105,7 @@
 .tabela-wrap::-webkit-scrollbar-thumb { background: var(--primary-blue); border-radius: 10px; }
 .tabela-wrap::-webkit-scrollbar-thumb:hover { background: var(--secondary-blue); }
 
-/* Aviso + sombra na borda direita do comparativo — só aparecem quando a
-   tabela realmente tem mais fornecedor do que cabe na tela (ver JS em
-   atualizarIndicadorScrollComparativo). */
-.tabela-scroll-dica {
-  display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem;
-  color: var(--primary-blue); font-weight: 700; margin: -0.5rem 0 0.75rem;
-}
-.tabela-scroll-dica.hidden { display: none; }
-.tabela-scroll-container { position: relative; }
-.tabela-scroll-fade {
-  position: absolute; top: 0; right: 0; bottom: 11px; width: 56px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.97));
-  pointer-events: none; border-radius: 0 14px 14px 0; transition: opacity 0.15s ease;
-}
-.tabela-scroll-fade.hidden { opacity: 0; }
-
-/* Tabela de itens (index.html) pode ter dezenas de linhas — mesmo problema e
-   mesma solução do comparativo-scroll (ver comentário abaixo): dar um scroll
+/* Tabela de itens (index.html) pode ter dezenas de linhas — dar um scroll
    vertical próprio e travado (max-height) pra virar o container que o
    sticky do cabeçalho realmente gruda, senão ao rolar a lista o cabeçalho
    (Produto, Qtd, Und...) some e fica difícil lembrar qual coluna é qual. */
@@ -156,6 +139,82 @@
 
 .diferenca-alta { color: var(--red); font-weight: 700; }
 
+/* ==========================================
+   Comparativo de fornecedores (negociacao.html) — produto × empresa lado a
+   lado, cabeçalho e 3 primeiras colunas fixas pra tabela larga (muito
+   fornecedor) não perder a referência de qual item é a linha.
+   ========================================== */
+.tabela-scroll-dica {
+  display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem;
+  color: var(--primary-blue); font-weight: 700; margin: -0.5rem 1.5rem 0.75rem;
+}
+.tabela-scroll-dica.hidden { display: none; }
+.tabela-scroll-container { position: relative; }
+.tabela-scroll-fade {
+  position: absolute; top: 0; right: 0; bottom: 11px; width: 56px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.97));
+  pointer-events: none; border-radius: 0 14px 14px 0; transition: opacity 0.15s ease;
+}
+.tabela-scroll-fade.hidden { opacity: 0; }
+
+.comparativo-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+  margin: 0 1.5rem 1.5rem;
+  width: calc(100% - 3rem);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+#tabela-comparativo { font-size: 0.85rem; }
+#tabela-comparativo thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* As 3 primeiras colunas (Curso, Produto, Qtd/Und) ficam fixas na horizontal
+   — sticky não soma a largura das anteriores sozinho, cada uma trava a
+   própria largura pra o "left" da próxima ser previsível. */
+#tabela-comparativo th:nth-child(1), #tabela-comparativo td:nth-child(1) {
+  position: sticky; left: 0; width: 130px; min-width: 130px; max-width: 130px;
+}
+#tabela-comparativo th:nth-child(2), #tabela-comparativo td:nth-child(2) {
+  position: sticky; left: 130px; width: 260px; min-width: 260px; max-width: 260px;
+  white-space: normal;
+}
+#tabela-comparativo th:nth-child(3), #tabela-comparativo td:nth-child(3) {
+  position: sticky; left: 390px; width: 90px; min-width: 90px; max-width: 90px;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
+}
+#tabela-comparativo td:nth-child(-n+3) { background: white; z-index: 1; }
+#tabela-comparativo tr:hover td:nth-child(-n+3) { background: #fafbfd; }
+#tabela-comparativo th:nth-child(-n+3) { background: #f8fafc; z-index: 3; }
+
+.valor-vencedor-cell { background: #ecfdf5; color: #047857; font-weight: 700; }
+#tabela-comparativo tr:hover td.valor-vencedor-cell { background: #dcfce7; }
+.valor-ausente-cell { color: var(--text-secondary); text-align: center; }
+
+/* Selo pequeno sob a célula vencedora quando o item já foi fechado — deixa
+   claro se foi fechado com quem realmente cotou mais barato ou com outra
+   empresa por negociação (evita achar que "mais barato" = "decidido"). */
+.comparativo-fechado-selo {
+  display: block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; margin-top: 0.15rem; color: var(--primary-blue);
+}
+.comparativo-fechado-selo.divergente { color: var(--accent-orange); }
+
+@media print {
+  body.pagina-negociacao .comparativo-scroll {
+    max-height: none;
+    overflow: visible;
+    margin: 0 1.5rem 1.5rem;
+  }
+  body.pagina-negociacao #tabela-comparativo th:nth-child(-n+3),
+  body.pagina-negociacao #tabela-comparativo td:nth-child(-n+3) {
+    position: static;
+    box-shadow: none;
+  }
+}
+
 /* "Calculadora" da negociação entre duas empresas — soma ao vivo dos itens
    marcados, pra usar durante a ligação/reunião de negociação em si. */
 .calculadora-negociacao {
@@ -170,55 +229,7 @@
 .calculadora-label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .comp-item-check { width: 18px; height: 18px; cursor: pointer; }
 
-/* A tabela comparativa pode ter muitas linhas — sem isso, ao rolar a página
-   o cabeçalho com o nome de cada empresa some e fica dificil lembrar qual
-   coluna é de qual fornecedor. position:sticky só gruda no ancestral mais
-   próximo que realmente rola — e .tabela-wrap (overflow-x:auto) já vira um
-   "scroll container" pro navegador mesmo sem barra visível (overflow-x não
-   visible força overflow-y a virar auto também), então o sticky tentava
-   grudar nele e não em .layout-main, sem nunca funcionar de fato. Solução:
-   dar um scroll vertical próprio e travado (max-height) só nessa tabela,
-   assim o sticky gruda nesse contêiner que realmente rola. */
-.comparativo-scroll {
-  max-height: 520px;
-  overflow-y: auto;
-}
-#tabela-comparativo thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
-/* Muitos fornecedores deixam a tabela bem larga — ao rolar pra ver todas as
-   colunas, as 3 primeiras (Curso, Produto, Qtd/Und) ficam fixas na horizontal
-   pra não perder a referência de qual item é a linha. sticky não soma a
-   largura das colunas anteriores sozinho, então cada uma trava uma largura
-   própria pra o "left" da próxima ser previsível. */
-#tabela-comparativo th:nth-child(1), #tabela-comparativo td:nth-child(1) {
-  position: sticky; left: 0; width: 140px; min-width: 140px; max-width: 140px;
-}
-#tabela-comparativo th:nth-child(2), #tabela-comparativo td:nth-child(2) {
-  position: sticky; left: 140px; width: 220px; min-width: 220px; max-width: 220px;
-}
-#tabela-comparativo th:nth-child(3), #tabela-comparativo td:nth-child(3) {
-  position: sticky; left: 360px; width: 90px; min-width: 90px; max-width: 90px;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
-}
-#tabela-comparativo td:nth-child(-n+3) { background: white; z-index: 1; }
-#tabela-comparativo tr:hover td:nth-child(-n+3) { background: #fafbfd; }
-#tabela-comparativo th:nth-child(-n+3) { background: #f8fafc; z-index: 3; }
-
-@media print {
-  /* Na impressão a tabela não pode ficar presa numa caixa de rolagem —
-     precisa aparecer inteira, com o restante do relatório. */
-  .comparativo-scroll {
-    max-height: none;
-    overflow: visible;
-  }
-}
-
 .valor-vencedor { color: #10B981; font-weight: 700; }
-.valor-ausente { color: var(--text-secondary); }
 
 .valor-menor { font-weight: 700; color: var(--green); }
 
@@ -326,6 +337,16 @@
 }
 .kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
 .kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
+
+/* Card de empresa clicável (relatório geral do Fechamento) — reseta os
+   estilos padrão de <button> pra continuar parecendo um kpi-card comum,
+   só com affordance de clique. */
+.fecha-geral-empresa-btn {
+  font-family: inherit; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.fecha-geral-empresa-btn:hover { border-color: var(--primary-blue); }
+.fecha-geral-empresa-btn:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 2px; }
+.fecha-geral-empresa-btn.ativo { border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.12); }
 
 .charts-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; }
 .chart-card { background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02); }
@@ -440,8 +461,7 @@ body.pagina-negociacao .layout-content {
     padding: 0 !important;
   }
 
-  body.pagina-negociacao #negociacao-card-ganhos,
-  body.pagina-negociacao #negociacao-card-perdidos {
+  body.pagina-negociacao .negociacao-imprimivel {
     box-shadow: none;
     border: none;
   }
@@ -454,15 +474,15 @@ body.pagina-negociacao .layout-content {
     position: static;
   }
 
-  /* Sem o atributo (impressão manual, ex.: Ctrl+P sem clicar em nenhum
-     botão de Imprimir), não mostra nenhum dos dois — evita imprimir os
-     dois juntos sem querer. */
-  body.pagina-negociacao:not([data-imprimindo]) #negociacao-card-ganhos,
-  body.pagina-negociacao:not([data-imprimindo]) #negociacao-card-perdidos {
+  /* Cada botão "Imprimir" marca body[data-imprimindo] com qual seção
+     imprimir — sem isso (Ctrl+P direto), não mostra nenhuma, pra nunca
+     imprimir tudo junto sem querer. */
+  body.pagina-negociacao:not([data-imprimindo]) .negociacao-imprimivel {
     display: none !important;
   }
-  body.pagina-negociacao[data-imprimindo="ganhos"] #negociacao-card-perdidos { display: none !important; }
-  body.pagina-negociacao[data-imprimindo="perdidos"] #negociacao-card-ganhos { display: none !important; }
+  body.pagina-negociacao[data-imprimindo="ganhos"] .negociacao-imprimivel:not(#negociacao-card-ganhos) { display: none !important; }
+  body.pagina-negociacao[data-imprimindo="perdidos"] .negociacao-imprimivel:not(#negociacao-card-perdidos) { display: none !important; }
+  body.pagina-negociacao[data-imprimindo="comparativo"] .negociacao-imprimivel:not(#comparativo-card) { display: none !important; }
 }
 
 /* Telas de relatório: o shell do app é flex com altura travada
@@ -515,14 +535,6 @@ body.pagina-relatorio .layout-content {
   .chart-card.full { grid-column: 1; }
   .chart-card { padding: 0.75rem 1rem; }
   .chart-canvas-wrap { height: 220px !important; }
-
-  /* A tabela comparativa pode crescer bastante (1 linha por item) — deixa
-     ela quebrar entre páginas em vez de forçar tudo numa página só (que é o
-     que o resto dos cards faz com break-inside: avoid). */
-  .comparativo-card { break-inside: auto; page-break-inside: auto; }
-  .comparativo-card table { font-size: 0.8rem; }
-  .comparativo-card thead { display: table-header-group; }
-  .comparativo-card tr { break-inside: avoid; page-break-inside: avoid; }
 }
 
 @media print {
