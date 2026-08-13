@@ -24,7 +24,7 @@
                         <p class="page-subtitle">O que a empresa está ganhando e os itens que perdeu, para comparar com o valor da concorrência</p>
                     </div>
                     <div class="page-header-actions">
-                        <a class="btn-secondary" href="/financeiro/licitacao/relatorio.html">
+                        <a class="btn-secondary" href="/financeiro/licitacao/index.html">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
                             Voltar
                         </a>
@@ -38,6 +38,48 @@
                     <select class="select-filter" id="negociacao-fornecedor-select">
                         <option value="">Selecione um fornecedor...</option>
                     </select>
+                </div>
+
+                <div class="card negociacao-imprimivel" id="comparativo-card" style="margin-bottom:1.5rem;">
+                    <div class="fornecedor-detalhe-header no-print">
+                        <div>
+                            <h3 class="card-secao-titulo">Comparativo de fornecedores</h3>
+                            <p class="page-subtitle" style="padding:0 1.5rem;">Valor cotado por cada empresa em cada item — menor valor destacado. Itens já fechados mostram quem realmente ganhou, mesmo quando não era o mais barato.</p>
+                        </div>
+                        <button type="button" class="btn-secondary" id="btn-imprimir-comparativo">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir
+                        </button>
+                    </div>
+                    <div class="rel-cabecalho-print" id="comparativo-cabecalho-print">
+                        <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                        <div>
+                            <h1>Comparativo de Fornecedores</h1>
+                            <p id="comparativo-print-curso">Todos os cursos</p>
+                        </div>
+                        <div class="rel-data-emissao" id="comparativo-print-data"></div>
+                    </div>
+
+                    <div class="filters-bar no-print" style="padding:0 1.5rem 1rem;">
+                        <div class="search-wrap">
+                            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" class="search-input" id="comparativo-busca" placeholder="Buscar produto...">
+                        </div>
+                        <span class="semestre-badge" id="comparativo-contagem">0 itens</span>
+                    </div>
+                    <p class="tabela-scroll-dica hidden no-print" id="comparativo-scroll-dica">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+                        Arraste a tabela pro lado pra ver todos os fornecedores
+                    </p>
+                    <div class="tabela-scroll-container">
+                        <div class="tabela-wrap comparativo-scroll" id="comparativo-scroll-wrap">
+                            <table class="data-table" id="tabela-comparativo">
+                                <thead id="comparativo-thead"></thead>
+                                <tbody id="comparativo-tbody"></tbody>
+                            </table>
+                        </div>
+                        <div class="tabela-scroll-fade hidden no-print" id="comparativo-scroll-fade"></div>
+                    </div>
                 </div>
 
                 <div id="negociacao-vazio" class="card no-print">
@@ -68,7 +110,7 @@
                         </div>
                     </div>
 
-                    <div class="card" id="negociacao-card-ganhos" style="margin-bottom:1.5rem;">
+                    <div class="card negociacao-imprimivel" id="negociacao-card-ganhos" style="margin-bottom:1.5rem;">
                         <div class="fornecedor-detalhe-header">
                             <h3 class="card-secao-titulo">Itens que a empresa está ganhando</h3>
                             <button type="button" class="btn-secondary no-print" id="btn-imprimir-ganhos">
@@ -99,7 +141,7 @@
                         </div>
                     </div>
 
-                    <div class="card" id="negociacao-card-perdidos">
+                    <div class="card negociacao-imprimivel" id="negociacao-card-perdidos">
                         <div class="fornecedor-detalhe-header">
                             <h3 class="card-secao-titulo">Itens que a empresa perdeu — oportunidade de negociação</h3>
                             <button type="button" class="btn-secondary no-print" id="btn-imprimir-perdidos">
