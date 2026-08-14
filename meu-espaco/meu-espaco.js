@@ -3,15 +3,15 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { firebaseConfig } from "../core/firebase-config.js";
-import { getRoleConfig } from "../core/permissions.js";
+import { CATEGORIES } from "../core/permissions.js";
 
-import { secureAction, sanitizeHTML, escapeHTML as esc } from "../core/security.js";
+import { secureAction, escapeHTML as esc } from "../core/security.js";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
 
-const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.')) 
-  ? `http://${window.location.hostname}:3000/api` 
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.'))
+  ? `http://${window.location.hostname}:3000/api`
   : '/api';
 
 async function apiFetch(endpoint, options = {}) {
@@ -33,6 +33,18 @@ let currentUser = null;
 let currentRole = null;
 let appInitialized = false;
 let initializedRole = null;
+
+// Estado do quadro Kanban — precisa estar declarado aqui em cima porque o
+// carregamento rápido (usuário cacheado) chama initApp() de forma síncrona,
+// antes do restante do módulo terminar de avaliar; deixar essas variáveis lá
+// embaixo (onde a seção Kanban fica) jogava initApp() na zona morta
+// temporal do `let` e travava com "Cannot access before initialization".
+let souGestor = false;
+let setorAtual = null;
+let minhasAtividades = [];
+let atividadesPorUid = {};
+let funcionariosDoSetor = [];
+let draggedId = null;
 
 // ================================================================
 //  AUTH GUARD & INIT
@@ -62,6 +74,15 @@ onAuthStateChanged(auth, async (user) => {
       if (!appInitialized || initializedRole !== role || (cached && (cached.user.displayName !== user.displayName || cached.user.email !== user.email))) {
         currentRole = role;
         initApp(user, role);
+      } else {
+        // App já rodou com o usuário cacheado (token pode ter vencido nesse
+        // meio tempo) — agora que o Firebase confirmou a sessão de verdade e
+        // renovou o token, recarrega o que depende dele pra não ficar preso
+        // no board vazio/desatualizado até um logout+login.
+        await carregarMeuQuadro();
+        const boardSelect = document.getElementById('board-select');
+        renderBoard(boardSelect ? boardSelect.value : '__self__');
+        if (souGestor && setorAtual) await carregarPainelSetor();
       }
     } catch (err) {
       console.error("Erro na revalidação de auth:", err);
@@ -83,424 +104,387 @@ async function initApp(user, role) {
     window.location.href = '../auth/login.html';
   });
 
-  renderWidgets(role);
-  setupNotes();
-  setupNotices(role);
   setupEventListeners();
+
+  const linkProcessos = document.getElementById('link-processos-setor');
+  souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
+  if (souGestor) {
+    if (linkProcessos) linkProcessos.classList.remove('hidden');
+    document.getElementById('gestor-panel').classList.remove('hidden');
+    await setupSetorScope(role);
+  }
+
+  document.getElementById('board-select').addEventListener('change', (e) => {
+    renderBoard(e.target.value);
+    atualizarProcessosFuncionario(e.target.value);
+  });
+  await carregarMeuQuadro();
+  renderBoard('__self__');
 }
 
 // ================================================================
-//  WIDGETS (CONFORME PERMISSÃO)
+//  PROCESSOS DO FUNCIONÁRIO SELECIONADO (referência, "Ver quadro de")
 // ================================================================
-async function renderWidgets(role) {
-  const container = document.getElementById('widgets-grid');
-  container.innerHTML = '';
-  
-  const filterEl = document.getElementById('widget-filter');
-  if (filterEl) filterEl.value = 'all';
-  
-  let dynamicPerms = null;
-  if (role !== 'adm_l1') {
-    try {
-      dynamicPerms = await apiFetch('/usuarios/config/permissions');
-    } catch(e) {}
-  }
-  
-  const roleConfig = getRoleConfig(role);
-  const modules = roleConfig.modules;
+const RECORRENCIA_LABEL = { diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal', bimestral: 'Bimestral', semestral: 'Semestral', anual: 'Anual', conforme_demanda: 'Conforme Demanda' };
 
-  // Helper para validar visualização baseada no banco dinâmico
-  const canView = (modId) => {
-    if (role === 'adm_l1') return true;
-    if (dynamicPerms && dynamicPerms[role] && dynamicPerms[role][modId] !== undefined) {
-      const rawPerm = dynamicPerms[role][modId];
-      const userLevel = (rawPerm !== undefined && typeof rawPerm === 'object')
-        ? (rawPerm.execute ? 3 : (rawPerm.view ? 2 : 1))
-        : (parseInt(rawPerm) || 1);
-      return userLevel >= 2;
+async function atualizarProcessosFuncionario(uidSelecionado) {
+  const el = document.getElementById('quadro-processos-funcionario');
+  if (uidSelecionado === '__self__') {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="loading-state">Carregando processos dessa pessoa...</div>';
+  try {
+    const processos = await apiFetch(`/processos/meus?uid=${encodeURIComponent(uidSelecionado)}`);
+    if (!processos.length) {
+      el.innerHTML = '<div class="empty-state">Nenhum processo do setor atribuído a essa pessoa ainda.</div>';
+      return;
     }
-    return true; // Fallback se falhar
-  };
-
-  // Widget Empréstimos
-  if (modules.includes('emprestimo') && canView('emprestimo')) {
-    const card = createWidgetCard('📦', 'Empréstimos Ativos', '0', 'emprestimo');
-    container.appendChild(card);
+    el.innerHTML = `
+      <div class="processos-funcionario-titulo">Processos do setor atribuídos a essa pessoa</div>
+      <div class="processos-funcionario-lista">
+        ${processos.map(p => `
+          <div class="processo-ref-item">
+            <span class="recorrencia-badge">${esc(RECORRENCIA_LABEL[p.recorrencia] || p.recorrencia)}</span>
+            <strong>${esc(p.titulo)}</strong>
+            ${(p.passos || []).length ? `<details class="kanban-card-passos"><summary>Ver passos (${p.passos.length})</summary><ul>${p.passos.map(x => `<li>${esc(x.texto)}</li>`).join('')}</ul></details>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    el.innerHTML = `<div class="empty-state">Erro ao carregar processos: ${esc(err.message)}</div>`;
   }
-
-  // Widget Usuários
-  if (modules.includes('usuarios') && (role === 'adm_l1' || role === 'adm_l2') && canView('usuarios')) {
-    const card = createWidgetCard('👥', 'Usuários Ativos', '...', 'usuarios');
-    container.appendChild(card);
-    try {
-      const users = await apiFetch('/usuarios');
-      card.querySelector('.widget-value').textContent = users.length;
-    } catch(e) { card.querySelector('.widget-value').textContent = '-'; }
-  }
-
-  // Widget Carga Horária
-  if (modules.includes('carga-horaria') && canView('carga-horaria')) {
-    const card = createWidgetCard('⏰', 'Eventos do Mês', '0', 'carga-horaria');
-    container.appendChild(card);
-  }
-
-  // Widget Administração (Só N1)
-  if (role === 'adm_l1') {
-    const card = createWidgetCard('🛡️', 'Admin Status', 'Ativo', 'dashboard');
-    container.appendChild(card);
-  }
-}
-
-function createWidgetCard(icon, label, value, modId) {
-  const div = document.createElement('div');
-  div.className = 'widget-card';
-  div.dataset.module = modId;
-  div.innerHTML = `
-    <div class="widget-icon">${icon}</div>
-    <div class="widget-info">
-      <span class="widget-label">${label}</span>
-      <span class="widget-value">${value}</span>
-    </div>
-  `;
-  return div;
 }
 
 // ================================================================
-//  QUADRO DO FUNCIONÁRIO (POST-ITS)
+//  MINHAS ATIVIDADES (QUADRO KANBAN — tarefas avulsas)
 // ================================================================
-function setupNotes() {
-  const notesGrid = document.getElementById('notes-grid');
-  
-  async function loadNotes() {
-    try {
-      const allNotes = await apiFetch('/meu-espaco/notes');
-      notesGrid.innerHTML = '';
-      if (allNotes.length === 0) {
-        notesGrid.innerHTML = '<div class="loading-state">Nenhuma nota criada. Que tal começar agora?</div>';
-        return;
-      }
-      
-      // Ordenar manualmente: Pinned primeiro
-      allNotes.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-      renderNotes(allNotes, notesGrid);
-    } catch(err) { console.error(err); }
-  }
+const COL_LABEL = { a_fazer: 'A Fazer', fazendo: 'Fazendo', concluido: 'Concluído' };
+const ORDEM_STATUS = ['a_fazer', 'fazendo', 'concluido'];
 
-  setInterval(() => {
-    if (!document.hidden) loadNotes();
-  }, 120000);
-  loadNotes();
-  window.loadNotes = loadNotes; // Expose to global for refresh after save
-}
-
-function renderNotes(allNotes, notesGrid) {
-
-    // Ordenar manualmente: Pinned primeiro
-    allNotes.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-    allNotes.forEach(note => {
-      const id = note.id;
-      const card = document.createElement('div');
-      card.className = `note-card ${note.pinned ? 'pinned' : ''}`;
-      card.style.backgroundColor = note.color || '#fef9c3';
-      
-      // Posicionamento livre
-      if (note.x !== undefined && note.y !== undefined) {
-        card.style.position = 'absolute';
-        card.style.left = note.x + 'px';
-        card.style.top = note.y + 'px';
-        card.style.margin = '0';
-      }
-
-      card.innerHTML = `
-        ${note.pinned ? '<span class="pin-indicator">📌</span>' : ''}
-        <div class="note-title">${esc(note.title || 'Sem título')}</div>
-        <div class="note-text-display">${note.text || ''}</div>
-        <div class="note-actions">
-          <button class="note-btn btn-pin" title="${note.pinned ? 'Desafixar' : 'Fixar'}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c-5.07 0-9.17-4.1-9.17-9.17"/><path d="M10 21c0-5.07-4.1-9.17-9.17-9.17"/></svg>
-          </button>
-          <button class="note-btn btn-edit" title="Editar">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="note-btn btn-delete" title="Excluir">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>
-        </div>
-      `;
-
-      // Drag Logic
-      setupDraggable(card, id);
-
-      card.querySelector('.btn-pin').onclick = (e) => { e.stopPropagation(); togglePinNote(id, note.pinned); };
-      card.querySelector('.btn-edit').onclick = (e) => { e.stopPropagation(); openNoteModal(id, note); };
-      card.querySelector('.btn-delete').onclick = (e) => { e.stopPropagation(); deleteNote(id); };
-
-      notesGrid.appendChild(card);
+async function setupSetorScope(role) {
+  const wrap = document.getElementById('proc-setor-select-wrap');
+  if (role === 'adm_l1' || role === 'adm_l2') {
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `
+      <select id="gestor-setor-select" class="form-input" style="width:auto; display:inline-block;">
+        <option value="">Selecione um setor...</option>
+        ${Object.entries(CATEGORIES).map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join('')}
+      </select>
+    `;
+    document.getElementById('gestor-setor-select').addEventListener('change', async (e) => {
+      setorAtual = e.target.value || null;
+      await carregarPainelSetor();
     });
+    setorAtual = null;
+  } else {
+    let me;
+    try { me = await apiFetch('/usuarios/me'); } catch (e) { me = {}; }
+    setorAtual = me.setorId || null;
+    await carregarPainelSetor();
+  }
 }
 
-async function saveNote(e) {
+async function carregarPainelSetor() {
+  const listEl = document.getElementById('setor-progresso-list');
+  const boardSelect = document.getElementById('board-select');
+  boardSelect.innerHTML = '<option value="__self__">Minhas atividades</option>';
+  atualizarProcessosFuncionario('__self__');
+
+  if (!setorAtual) {
+    listEl.innerHTML = '<div class="empty-state">Selecione um setor para ver o progresso da equipe.</div>';
+    atividadesPorUid = {};
+    funcionariosDoSetor = [];
+    return;
+  }
+
+  listEl.innerHTML = '<div class="loading-state">Carregando progresso do setor...</div>';
+  try {
+    const [progresso, board] = await Promise.all([
+      apiFetch(`/processos/setor/progresso?setorId=${encodeURIComponent(setorAtual)}`),
+      apiFetch(`/processos/setor/atividades?setorId=${encodeURIComponent(setorAtual)}`)
+    ]);
+    funcionariosDoSetor = board.funcionarios || [];
+    atividadesPorUid = board.atividadesPorUid || {};
+    renderPainelSetor(progresso);
+
+    funcionariosDoSetor
+      .filter(f => f.uid !== currentUser.uid)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.uid;
+        opt.textContent = f.name || f.email;
+        boardSelect.appendChild(opt);
+      });
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty-state">Erro ao carregar painel: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderPainelSetor(progresso) {
+  const listEl = document.getElementById('setor-progresso-list');
+  listEl.innerHTML = '';
+
+  if (!progresso.length) {
+    listEl.innerHTML = '<div class="empty-state">Nenhum funcionário neste setor ainda.</div>';
+    return;
+  }
+
+  progresso.forEach(p => {
+    const pct = p.total > 0 ? Math.round((p.concluidas / p.total) * 100) : 0;
+    const row = document.createElement('div');
+    row.className = 'setor-progresso-row';
+    row.innerHTML = `
+      <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
+      <div class="setor-progresso-info">
+        <div class="setor-progresso-nome">${esc(p.nome || p.uid)}</div>
+        <div class="setor-progresso-sub">${p.concluidas}/${p.total} concluídas</div>
+      </div>
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+async function carregarMeuQuadro() {
+  try {
+    minhasAtividades = await apiFetch('/processos/atividades');
+  } catch (err) {
+    minhasAtividades = [];
+  }
+}
+
+function renderBoard(uidSelecionado) {
+  const editavel = uidSelecionado === '__self__';
+  const atividades = editavel ? minhasAtividades : (atividadesPorUid[uidSelecionado] || []);
+
+  ORDEM_STATUS.forEach(status => {
+    const col = document.getElementById(`col-${status}`);
+    col.innerHTML = '';
+    col.dataset.editavel = editavel ? '1' : '0';
+  });
+
+  atividades
+    .slice()
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+    .forEach(a => {
+      const col = document.getElementById(`col-${a.status}`);
+      if (col) col.appendChild(criarCard(a, editavel));
+    });
+
+  renderProgressoBoard(atividades);
+  setupColumnDropTargets();
+}
+
+function renderProgressoBoard(atividades) {
+  const el = document.getElementById('board-progresso');
+  if (!atividades.length) { el.innerHTML = ''; return; }
+  const concluidas = atividades.filter(a => a.status === 'concluido').length;
+  const pct = Math.round((concluidas / atividades.length) * 100);
+  el.innerHTML = `
+    <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
+    <div class="board-progresso-texto">${concluidas} de ${atividades.length} atividades concluídas</div>
+  `;
+}
+
+function formatarPrazo(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function criarCard(atividade, editavel) {
+  const card = document.createElement('div');
+  const agora = new Date();
+  const atrasada = atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
+
+  card.className = `kanban-card ${atrasada ? 'atrasada' : ''}`;
+  card.draggable = editavel;
+  card.dataset.id = atividade.id;
+
+  const idx = ORDEM_STATUS.indexOf(atividade.status);
+
+  card.innerHTML = `
+    <div class="kanban-card-header">
+      ${atividade.criadoPor !== atividade.uid ? `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>` : '<span></span>'}
+      ${atrasada ? '<span class="atrasada-badge">Atrasada</span>' : ''}
+    </div>
+    <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
+    ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
+    ${atividade.prazo ? `<div class="kanban-card-prazo">Prazo: ${formatarPrazo(atividade.prazo)}</div>` : ''}
+    ${editavel ? `
+      <div class="kanban-card-actions">
+        <button class="btn-mover btn-voltar" ${idx === 0 ? 'disabled' : ''} title="Voltar">‹</button>
+        <span class="status-atual">${COL_LABEL[atividade.status]}</span>
+        <button class="btn-mover btn-avancar" ${idx === ORDEM_STATUS.length - 1 ? 'disabled' : ''} title="Avançar">›</button>
+        <button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>
+      </div>
+    ` : ''}
+  `;
+
+  if (editavel) {
+    card.addEventListener('dragstart', () => { draggedId = atividade.id; });
+    const btnVoltar = card.querySelector('.btn-voltar');
+    const btnAvancar = card.querySelector('.btn-avancar');
+    const btnExcluir = card.querySelector('.btn-excluir-atividade');
+    if (btnVoltar) btnVoltar.onclick = () => moverAtividade(atividade.id, ORDEM_STATUS[idx - 1]);
+    if (btnAvancar) btnAvancar.onclick = () => moverAtividade(atividade.id, ORDEM_STATUS[idx + 1]);
+    if (btnExcluir) btnExcluir.onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+  }
+
+  return card;
+}
+
+// Colunas aceitam drop tanto para trocar de status quanto para reordenar
+// (soltar entre dois cards já existentes na mesma coluna).
+function setupColumnDropTargets() {
+  ORDEM_STATUS.forEach(status => {
+    const col = document.getElementById(`col-${status}`);
+    if (col.dataset.editavel !== '1') return;
+    const body = col;
+    body.ondragover = (e) => e.preventDefault();
+    body.ondrop = (e) => {
+      e.preventDefault();
+      if (!draggedId) return;
+
+      const afterEl = [...body.querySelectorAll('.kanban-card')].find(el => {
+        const rect = el.getBoundingClientRect();
+        return e.clientY < rect.top + rect.height / 2;
+      });
+
+      const atividade = minhasAtividades.find(a => a.id === draggedId);
+      if (!atividade) return;
+
+      if (atividade.status !== status) {
+        moverAtividade(draggedId, status);
+      } else {
+        const idsNaColuna = minhasAtividades
+          .filter(a => a.status === status)
+          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+          .map(a => a.id)
+          .filter(id => id !== draggedId);
+        const idxAfter = afterEl ? idsNaColuna.indexOf(afterEl.dataset.id) : -1;
+        if (idxAfter === -1) idsNaColuna.push(draggedId);
+        else idsNaColuna.splice(idxAfter, 0, draggedId);
+        reordenarColuna(status, idsNaColuna);
+      }
+      draggedId = null;
+    };
+  });
+}
+
+async function moverAtividade(id, novoStatus) {
+  try {
+    await apiFetch(`/processos/atividades/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
+    await carregarMeuQuadro();
+    renderBoard('__self__');
+  } catch (err) {
+    alert('Erro ao mover atividade: ' + err.message);
+  }
+}
+
+async function excluirAtividade(id, titulo) {
+  if (!confirm(`Excluir a atividade "${titulo}"?`)) return;
+  try {
+    await apiFetch(`/processos/atividades/${id}`, { method: 'DELETE' });
+    await carregarMeuQuadro();
+    renderBoard('__self__');
+  } catch (err) {
+    alert('Erro ao excluir atividade: ' + err.message);
+  }
+}
+
+async function reordenarColuna(status, idsOrdenados) {
+  // Atualiza localmente antes de confirmar no servidor para o drag parecer instantâneo
+  idsOrdenados.forEach((id, i) => {
+    const a = minhasAtividades.find(a => a.id === id);
+    if (a) a.ordem = i;
+  });
+  renderBoard('__self__');
+  try {
+    await apiFetch('/processos/atividades/reordenar', { method: 'PUT', body: JSON.stringify({ status, ordenadas: idsOrdenados }) });
+  } catch (err) {
+    alert('Erro ao reordenar: ' + err.message);
+    await carregarMeuQuadro();
+    renderBoard('__self__');
+  }
+}
+
+// ================================================================
+//  MODAL: NOVA ATIVIDADE
+// ================================================================
+function abrirModalAtividade() {
+  document.getElementById('form-atividade').reset();
+
+  const wrap = document.getElementById('atividade-para-wrap');
+  const select = document.getElementById('atividade-uid');
+  if (souGestor && funcionariosDoSetor.length) {
+    wrap.classList.remove('hidden');
+    const boardSelect = document.getElementById('board-select');
+    const selecionadoAtual = boardSelect ? boardSelect.value : '__self__';
+    select.innerHTML = `<option value="${esc(currentUser.uid)}">Eu mesmo</option>` +
+      funcionariosDoSetor
+        .filter(f => f.uid !== currentUser.uid)
+        .map(f => `<option value="${esc(f.uid)}">${esc(f.name || f.email)}</option>`).join('');
+    select.value = (selecionadoAtual && selecionadoAtual !== '__self__') ? selecionadoAtual : currentUser.uid;
+  } else {
+    wrap.classList.add('hidden');
+  }
+
+  abrirModal('modal-atividade');
+}
+
+async function salvarAtividade(e) {
   e.preventDefault();
-  const id = document.getElementById('note-id').value;
-  const title = document.getElementById('note-title').value.trim();
-  const rawText = document.getElementById('note-text').innerHTML;
-  const text = sanitizeHTML(rawText);
-  const color = document.querySelector('input[name="note-color"]:checked').value;
+  const titulo = document.getElementById('atividade-titulo').value.trim();
+  const descricao = document.getElementById('atividade-descricao').value.trim();
+  const prazoInput = document.getElementById('atividade-prazo').value;
+  const uidSelect = document.getElementById('atividade-uid');
 
-  if (!text || text === '<br>') return;
+  if (!titulo) return;
 
-  const noteData = {
-    title,
-    text,
-    color
+  const data = {
+    titulo,
+    descricao,
+    prazo: prazoInput ? new Date(prazoInput).toISOString() : null
   };
+  if (souGestor && uidSelect && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
+    data.uid = uidSelect.value;
+  }
 
   try {
     await secureAction(currentUser.uid, async () => {
-      if (id) {
-        await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify(noteData) });
-      } else {
-        noteData.pinned = false;
-        noteData.x = 20 + (Math.random() * 50);
-        noteData.y = 20 + (Math.random() * 50);
-        await apiFetch('/meu-espaco/notes', { method: 'POST', body: JSON.stringify(noteData) });
-      }
+      await apiFetch('/processos/atividades', { method: 'POST', body: JSON.stringify(data) });
     });
-    fecharModal('modal-note');
-    if (window.loadNotes) window.loadNotes();
-
-  } catch (err) {
-    if (err.message.includes("Rate limit")) return; // Alerta já mostrado pelo security.js
-    alert("Erro ao salvar nota: " + err.message);
-  }
-}
-
-function setupDraggable(el, id) {
-  let isDragging = false;
-  let startX, startY;
-
-  el.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.note-actions')) return;
-    isDragging = true;
-    startX = e.clientX - el.offsetLeft;
-    startY = e.clientY - el.offsetTop;
-    el.style.zIndex = '1000';
-    el.style.cursor = 'grabbing';
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const canvas = document.getElementById('notes-grid');
-    const rect = canvas.getBoundingClientRect();
-    
-    let x = e.clientX - startX;
-    let y = e.clientY - startY;
-
-    // Limitar movimento ao canvas
-    const maxX = rect.width - el.offsetWidth;
-    const maxY = rect.height - el.offsetHeight;
-    
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x > maxX) x = maxX;
-    if (y > maxY) y = maxY;
-
-    el.style.position = 'absolute';
-    el.style.left = x + 'px';
-    el.style.top = y + 'px';
-  });
-
-  document.addEventListener('mouseup', async () => {
-    if (!isDragging) return;
-    isDragging = false;
-    el.style.cursor = 'default';
-    el.style.zIndex = '10';
-
-    const x = parseInt(el.style.left);
-    const y = parseInt(el.style.top);
-
-    try {
-      await secureAction(currentUser.uid, async () => {
-        await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify({ x, y }) });
-      });
-    } catch (err) {
-      console.error("Erro ao salvar posição:", err);
-    }
-  });
-}
-
-async function togglePinNote(id, current) {
-  await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify({ pinned: !current }) });
-  if (window.loadNotes) window.loadNotes();
-}
-
-async function deleteNote(id) {
-  if (confirm("Deseja excluir esta nota?")) {
-    await apiFetch(`/meu-espaco/notes/${id}`, { method: 'DELETE' });
-    if (window.loadNotes) window.loadNotes();
-  }
-}
-
-function openNoteModal(id = '', data = null) {
-  document.getElementById('form-note').reset();
-  document.getElementById('note-id').value = id;
-  document.getElementById('note-modal-title').textContent = id ? 'Editar Nota' : 'Nova Nota';
-  
-  if (data) {
-    document.getElementById('note-title').value = data.title || '';
-    document.getElementById('note-text').innerHTML = data.text || '';
-    const radio = document.querySelector(`input[name="note-color"][value="${data.color}"]`);
-    if (radio) radio.checked = true;
-  } else {
-    document.getElementById('note-text').innerHTML = '';
-  }
-  
-  abrirModal('modal-note');
-}
-
-// FORMATAÇÃO RICH TEXT
-window.formatDoc = (cmd, val = null) => {
-  document.execCommand(cmd, false, val);
-  document.getElementById('note-text').focus();
-};
-
-// ================================================================
-//  QUADRO DE AVISOS (INSTITUCIONAL)
-// ================================================================
-function setupNotices(role) {
-  const noticesList = document.getElementById('notices-list');
-  const btnManage = document.getElementById('btn-new-notice');
-  
-  const canManage = (role === 'adm_l1' || role === 'adm_l2');
-  if (canManage) btnManage.classList.remove('hidden');
-
-  async function loadNotices() {
-    try {
-      const allNotices = await apiFetch('/meu-espaco/notices');
-      noticesList.innerHTML = '';
-      
-      const activeNotices = allNotices.filter(n => n.active !== false);
-
-      if (activeNotices.length === 0) {
-        noticesList.innerHTML = '<div class="loading-state">Nenhum aviso no momento.</div>';
-        return;
+    fecharModal('modal-atividade');
+    if (data.uid && data.uid !== currentUser.uid) {
+      await carregarPainelSetor();
+      const boardSelect = document.getElementById('board-select');
+      if (boardSelect) {
+        boardSelect.value = data.uid;
+        renderBoard(data.uid);
+        atualizarProcessosFuncionario(data.uid);
       }
-      
-      renderNotices(activeNotices, noticesList, canManage);
-    } catch(err) { console.error(err); }
-  }
-
-  setInterval(() => {
-    if (!document.hidden) loadNotices();
-  }, 120000);
-  loadNotices();
-  window.loadNotices = loadNotices;
-}
-
-function renderNotices(activeNotices, noticesList, canManage) {
-
-    activeNotices.forEach(notice => {
-      const id = notice.id;
-      const card = document.createElement('div');
-      card.className = `notice-card priority-${notice.priority}`;
-      card.innerHTML = `
-        <div class="notice-title">${esc(notice.title)}</div>
-        <div class="notice-message">${esc(notice.message)}</div>
-        <div class="notice-meta">
-          <span>${notice.createdAt ? new Date(notice.createdAt._seconds ? notice.createdAt._seconds * 1000 : notice.createdAt).toLocaleDateString('pt-BR') : 'Agora'}</span>
-          ${canManage ? `
-            <div class="notice-admin-actions">
-              <button class="btn-edit-notice" title="Editar">Editar</button>
-              <button class="btn-delete-notice" title="Excluir">Excluir</button>
-            </div>
-          ` : ''}
-        </div>
-      `;
-      
-      if (canManage) {
-        card.querySelector('.btn-edit-notice').onclick = () => openNoticeModal(id, notice);
-        card.querySelector('.btn-delete-notice').onclick = () => deleteNotice(id, notice.title);
-      }
-
-      noticesList.appendChild(card);
-    });
-}
-
-async function saveNotice(e) {
-  e.preventDefault();
-  const id = document.getElementById('notice-id').value;
-  const title = document.getElementById('notice-title').value.trim();
-  const message = document.getElementById('notice-message').value.trim();
-  const priority = document.getElementById('notice-priority').value;
-
-  const data = {
-    title, message, priority,
-    active: true
-  };
-
-  try {
-    if (id) {
-      await apiFetch(`/meu-espaco/notices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     } else {
-      await apiFetch('/meu-espaco/notices', { method: 'POST', body: JSON.stringify(data) });
+      await carregarMeuQuadro();
+      renderBoard('__self__');
     }
-    fecharModal('modal-notice');
-    if (window.loadNotices) window.loadNotices();
   } catch (err) {
-    alert("Erro ao salvar aviso: " + err.message);
+    if (err.message.includes("Rate limit")) return;
+    alert("Erro ao salvar atividade: " + err.message);
   }
-}
-
-async function deleteNotice(id, title) {
-  if (confirm(`Deseja excluir permanentemente o aviso "${title}"?`)) {
-    try {
-      await apiFetch(`/meu-espaco/notices/${id}`, { method: 'DELETE' });
-      if (window.loadNotices) window.loadNotices();
-    } catch (err) {
-      alert("Erro ao excluir: " + err.message);
-    }
-  }
-}
-
-function openNoticeModal(id = '', data = null) {
-  document.getElementById('form-notice').reset();
-  document.getElementById('notice-id').value = id;
-  if (data) {
-    document.getElementById('notice-title').value = data.title;
-    document.getElementById('notice-message').value = data.message;
-    document.getElementById('notice-priority').value = data.priority;
-  }
-  abrirModal('modal-notice');
 }
 
 // ================================================================
 //  HELPERS & EVENTS
 // ================================================================
 function setupEventListeners() {
-  document.getElementById('btn-new-note').onclick = () => openNoteModal();
-  document.getElementById('btn-new-notice').onclick = () => openNoticeModal();
-  document.getElementById('form-note').onsubmit = saveNote;
-  document.getElementById('form-notice').onsubmit = saveNotice;
-
-  const filterEl = document.getElementById('widget-filter');
-  if (filterEl) {
-    filterEl.onchange = (e) => {
-      const selected = e.target.value;
-      const cards = document.querySelectorAll('#widgets-grid .widget-card');
-      cards.forEach(card => {
-        if (selected === 'all' || card.dataset.module === selected) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
-      });
-    };
-  }
+  document.getElementById('btn-nova-atividade').onclick = () => abrirModalAtividade();
+  document.getElementById('form-atividade').onsubmit = salvarAtividade;
 }
 
 window.abrirModal = (id) => document.getElementById(id).classList.add('active');
 window.fecharModal = (id) => document.getElementById(id).classList.remove('active');
-
-
-

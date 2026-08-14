@@ -16,83 +16,67 @@
   font-weight: 500;
 }
 
-/* ---- WIDGETS ---- */
-.widgets-grid {
+/* ---- ACESSO RÁPIDO (Processos) ---- */
+.quick-access-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 3rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
 }
 
-.widget-card {
-  background: white;
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 1.5rem;
+.quick-access-card {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  transition: 0.3s;
+  gap: 1rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.25rem;
+  text-decoration: none;
+  transition: 0.2s;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-.widget-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+.quick-access-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
 }
 
-.widget-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 14px;
-  background: #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-}
-
-.widget-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.widget-label {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.widget-value {
-  font-size: 1.5rem;
-  font-weight: 800;
+.quick-access-card strong {
+  display: block;
   color: var(--text-main);
+  font-weight: 800;
+  margin-bottom: 0.2rem;
 }
 
-/* ---- LAYOUT ---- */
-.espaco-layout {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 2.5rem;
-  align-items: start;
+.quick-access-card small {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
-@media (max-width: 1100px) {
-  .espaco-layout {
-    grid-template-columns: 1fr;
-  }
+.quick-access-icon {
+  font-size: 1.75rem;
 }
 
-.notes-section {
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+  background: white;
+  border: 1px dashed var(--border-color);
+  border-radius: 16px;
+}
+
+.activities-section {
   background: white;
   border-radius: 24px;
   padding: 2.5rem;
   border: 1px solid var(--border-color);
-  background-image: 
+  background-image:
     radial-gradient(#e5e7eb 1px, transparent 1px);
   background-size: 24px 24px;
-  min-height: 500px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  margin-bottom: 2.5rem;
 }
 
 .section-header {
@@ -100,6 +84,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .header-title {
@@ -156,191 +142,312 @@
   background: #e2e8f0;
 }
 
-/* ---- NOTES CANVAS (Free Movement) ---- */
-.notes-grid {
-  position: relative;
-  width: 100%;
-  min-height: 450px;
-  background: rgba(255, 255, 255, 0.4);
-  border-radius: 16px;
-}
-
-.note-card {
-  width: 200px;
-  min-height: 200px;
-  padding: 1.25rem;
-  border-radius: 12px;
-  position: relative; /* Default, will be absolute via JS if x/y exist */
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05), 0 2px 6px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.3s, transform 0.2s;
-  border: 1px solid rgba(0,0,0,0.03);
-  cursor: grab;
-  overflow: hidden;
-  user-select: none;
-}
-
-.note-card:active {
-  cursor: grabbing;
-}
-
-.note-card:hover {
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
-  z-index: 10;
-}
-
-.note-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.15);
-  pointer-events: none;
-}
-
-.note-card.pinned {
-  border-top: 6px solid var(--accent-orange);
-}
-
-.note-title {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
-  padding-bottom: 0.25rem;
-}
-
-.note-text-display {
-  flex: 1;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  color: #475569;
-  word-break: break-word;
-  font-family: 'Inter', sans-serif;
-  overflow-y: auto;
-}
-
-.note-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  opacity: 0;
-  transition: 0.2s;
-}
-
-.note-card:hover .note-actions {
-  opacity: 1;
-}
-
-.note-btn {
-  background: rgba(255, 255, 255, 0.5);
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: 0.2s;
-}
-
-.note-btn:hover {
+/* ---- PAINEL DO SETOR (Chefe de Setor / ADM) ---- */
+.gestor-panel {
   background: white;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
 }
 
-.pin-indicator {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  font-size: 1.2rem;
-}
-
-/* ---- NOTICES LIST ---- */
-.notices-list {
+.setor-progresso-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.notice-card {
-  background: white;
+.setor-progresso-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
   border: 1px solid var(--border-color);
-  border-left: 4px solid #94a3b8;
-  border-radius: 12px;
-  padding: 1.25rem;
-  transition: 0.2s;
+  border-radius: 14px;
 }
 
-.notice-card.priority-importante {
-  border-left-color: var(--primary-blue);
-  background: #f8faff;
+.setor-progresso-info {
+  flex: 1;
+  min-width: 0;
 }
 
-.notice-card.priority-urgente {
-  border-left-color: #ef4444;
-  background: #fff5f5;
-}
-
-.notice-title {
-  font-size: 0.95rem;
+.setor-progresso-nome {
   font-weight: 700;
   color: var(--text-main);
-  margin-bottom: 0.5rem;
 }
 
-.notice-message {
-  font-size: 0.88rem;
+.setor-progresso-sub {
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  margin-bottom: 0.35rem;
 }
 
-.notice-meta {
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
+.historico-dots {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.historico-dots .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ---- ANEL DE PROGRESSO (visual só, sem pontuação/ranking) ---- */
+.progress-ring {
+  --pct: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: conic-gradient(var(--primary-blue) calc(var(--pct) * 1%), #e5e7eb 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.progress-ring::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  background: white;
+  border-radius: 50%;
+}
+
+.progress-ring span {
+  position: relative;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+/* ---- SELETOR DE QUADRO (visão do gestor sobre outro funcionário) ---- */
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.board-select {
+  width: auto;
+  display: inline-block;
+}
+
+.board-progresso {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.board-progresso-texto {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* ---- QUADRO KANBAN (Minhas Atividades, estilo post-it) ---- */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .kanban-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kanban-col {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.kanban-col-title {
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 0.85rem;
+}
+
+.kanban-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 120px;
+}
+
+.kanban-card {
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05), 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.3s, transform 0.2s;
+  border: 1px solid rgba(0,0,0,0.03);
+  cursor: grab;
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.kanban-card:hover {
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Cor de post-it por coluna — só estética, não indica prioridade */
+.kanban-col[data-status="a_fazer"] .kanban-card { background: #fef9c3; }
+.kanban-col[data-status="fazendo"] .kanban-card { background: #dbeafe; }
+.kanban-col[data-status="concluido"] .kanban-card { background: #dcfce7; }
+
+.kanban-card.atrasada {
+  border: 1px solid var(--accent-orange);
+  box-shadow: 0 10px 20px rgba(249, 115, 22, 0.15);
+}
+
+.kanban-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 0.5rem;
 }
 
-.notice-admin-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.btn-edit-notice, .btn-delete-notice {
-  background: none;
-  border: none;
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  transition: 0.2s;
-}
-
-.btn-edit-notice {
+.recorrencia-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: rgba(15, 78, 184, 0.12);
   color: var(--primary-blue);
 }
 
-.btn-edit-notice:hover {
-  text-decoration: underline;
-  color: var(--secondary-blue);
+.atrasada-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: rgba(249, 115, 22, 0.2);
+  color: #c2410c;
 }
 
-.btn-delete-notice {
-  color: #ef4444;
+.kanban-card-titulo {
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding-bottom: 0.25rem;
 }
 
-.btn-delete-notice:hover {
-  text-decoration: underline;
-  color: #dc2626;
+.kanban-card-prazo {
+  font-size: 0.78rem;
+  color: #475569;
+  margin-bottom: 0.5rem;
+}
+
+.kanban-card-passos {
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.kanban-card-passos summary {
+  cursor: pointer;
+  color: var(--primary-blue);
+  font-weight: 600;
+}
+
+.kanban-card-passos ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: #475569;
+}
+
+/* ---- PROCESSOS DO FUNCIONÁRIO SELECIONADO (referência, "Ver quadro de") ---- */
+#quadro-processos-funcionario {
+  background: rgba(15, 78, 184, 0.04);
+  border: 1px solid rgba(15, 78, 184, 0.15);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.processos-funcionario-titulo {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 0.85rem;
+}
+
+.processos-funcionario-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.processo-ref-item {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
+.processo-ref-item strong {
+  display: block;
+  margin: 0.3rem 0 0;
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+
+.kanban-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+.btn-mover {
+  background: rgba(255, 255, 255, 0.6);
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.btn-mover:hover:not(:disabled) {
+  background: var(--primary-blue);
+  color: white;
+}
+
+.btn-mover:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.status-atual {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
 }
 
 /* ---- MODAL & FORMS ---- */
@@ -431,93 +538,6 @@
   flex: 1;
 }
 
-.color-picker {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
-
-/* RICH TEXT TOOLBAR */
-.rich-toolbar {
-  display: flex;
-  gap: 0.35rem;
-  background: #ffffff;
-  padding: 0.6rem;
-  border-radius: 12px 12px 0 0;
-  border: 1.5px solid var(--border-color);
-  border-bottom: none;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-}
-
-.btn-tool {
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-tool:hover {
-  background: #f1f5f9;
-  color: var(--primary-blue);
-  transform: scale(1.05);
-}
-
-.btn-tool:active {
-  transform: scale(0.95);
-  background: #e2e8f0;
-}
-
-.btn-tool svg {
-  stroke-width: 2.5px;
-}
-
-.rich-editor {
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-  min-height: 120px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.note-text-display ul {
-  margin: 0.5rem 0;
-  padding-left: 1.25rem;
-}
-
-.note-text-display li {
-  list-style-type: disc;
-  margin-bottom: 0.25rem;
-}
-
-.color-opt {
-  cursor: pointer;
-}
-
-.color-opt input {
-  display: none;
-}
-
-.color-opt span {
-  display: block;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: 2px solid transparent;
-  transition: 0.2s;
-}
-
-.color-opt input:checked + span {
-  border-color: var(--primary-blue);
-  transform: scale(1.1);
-}
-
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
@@ -534,11 +554,6 @@
   font-style: italic;
 }
 
-/* ---- WIDGET FILTER ---- */
-.widgets-filter-container {
-  display: none;
-}
-
 /* ---- MOBILE RESPONSIVO ---- */
 @media (max-width: 600px) {
   .page-title {
@@ -549,104 +564,11 @@
     font-size: 0.95rem !important;
   }
 
-  /* Filtro de Resumos no Mobile */
-  .widgets-filter-container {
-    display: flex !important;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    background: white;
-    padding: 0.85rem 1rem;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
-  }
-
-  .widgets-filter-container label {
-    font-size: 0.8rem;
-    font-weight: 800;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .widget-filter-select {
-    flex: 1;
-    padding: 0.6rem 0.85rem;
-    border: 1.5px solid var(--border-color);
-    border-radius: 10px;
-    font-family: inherit;
-    font-size: 0.88rem;
-    outline: none;
-    background-color: #fff;
-    cursor: pointer;
-    color: var(--text-main);
-  }
-
-  /* Widgets mais compactos no Mobile */
-  .widgets-grid {
-    gap: 0.75rem !important;
-    margin-bottom: 2rem !important;
-  }
-
-  .widget-card {
-    padding: 1rem !important;
-    border-radius: 14px !important;
-  }
-
-  .widget-icon {
-    width: 40px !important;
-    height: 40px !important;
-    font-size: 1.25rem !important;
-    border-radius: 10px !important;
-  }
-
-  .widget-value {
-    font-size: 1.25rem !important;
-  }
-
-  /* Inversão de ordem: Avisos primeiro, Quadro do Funcionário depois */
-  .espaco-layout {
-    display: grid;
-    grid-template-columns: 1fr !important;
-    gap: 2rem !important;
-  }
-
-  .notices-section {
-    order: 1 !important;
-  }
-
-  .notes-section {
-    order: 2 !important;
+  .activities-section {
     padding: 1.5rem 1rem !important;
   }
 
-  /* Layout de notas no Celular (sobrepõe o posicionamento absoluto do desktop) */
-  .notes-grid {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 1rem !important;
-    justify-content: center !important;
-    min-height: auto !important;
-    padding: 1rem 0 !important;
-  }
-
-  .note-card {
-    position: relative !important;
-    left: auto !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 290px !important;
-    min-height: 180px !important;
-    margin: 0 !important;
-  }
-
-  .note-actions {
-    opacity: 1 !important; /* Sempre visível no mobile */
-    margin-top: auto !important; /* Garante que fica no rodapé do card */
-  }
-
-  /* Evitar colisão do botão "Nova Nota" ou "Gerenciar" com o título */
+  /* Evitar colisão do botão "Nova Atividade"/seletor com o título */
   .section-header {
     flex-direction: column !important;
     align-items: stretch !important;
