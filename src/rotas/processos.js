@@ -216,14 +216,19 @@ router.get('/setor/funcionarios', verifyToken, requireGestor, async (req, res) =
 // ATIVIDADES (tarefas avulsas do funcionário — o quadro Kanban)
 // ==========================================
 
+// Retorna as atividades da própria pessoa (uid) MAIS as que ela mesma
+// atribuiu a outra pessoa (criadoPor) — assim quem atribui continua vendo o
+// que delegou, e o que cada funcionário cria pra si mesmo só aparece pra ele.
 router.get('/atividades', verifyToken, async (req, res) => {
     try {
-        const snap = await db.collection('atividades')
-            .where('uid', '==', req.user.uid)
-            .get();
-        const atividades = [];
-        snap.forEach(doc => atividades.push({ id: doc.id, ...doc.data() }));
-        res.json(atividades);
+        const [minhasSnap, delegadasSnap] = await Promise.all([
+            db.collection('atividades').where('uid', '==', req.user.uid).get(),
+            db.collection('atividades').where('criadoPor', '==', req.user.uid).get()
+        ]);
+        const porId = new Map();
+        minhasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
+        delegadasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
+        res.json([...porId.values()]);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -234,6 +239,7 @@ router.post('/atividades', verifyToken, async (req, res) => {
     try {
         const { titulo, descricao, prazo } = req.body;
         if (!titulo || !titulo.trim()) return res.status(400).json({ error: 'Informe o título da atividade.' });
+        if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
 
         let uidAlvo = req.user.uid;
         let setorIdAlvo = req.user.setorId || null;
@@ -252,20 +258,14 @@ router.post('/atividades', verifyToken, async (req, res) => {
             setorIdAlvo = alvo.setorId || null;
         }
 
-        const abertasSnap = await db.collection('atividades')
-            .where('uid', '==', uidAlvo)
-            .where('status', '==', 'a_fazer')
-            .get();
-
         const now = new Date().toISOString();
         const data = {
             uid: uidAlvo,
             setorId: setorIdAlvo,
             titulo: titulo.trim(),
             descricao: (descricao || '').trim(),
-            prazo: prazo || null,
+            prazo,
             status: 'a_fazer',
-            ordem: abertasSnap.size,
             criadoPor: req.user.uid,
             criadoPorNome: req.user.name || req.user.email || '',
             concluidoEm: null,
@@ -274,6 +274,37 @@ router.post('/atividades', verifyToken, async (req, res) => {
         };
         const docRef = await db.collection('atividades').add(data);
         res.status(201).json({ id: docRef.id, ...data });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Reagenda uma atividade (muda o dia/horário) — usado pelo drag-and-drop
+// entre os dias da agenda.
+// Edita uma atividade (título/descrição/prazo) ou só reagenda (drag-and-drop
+// manda só o prazo). Só o dono pode editar.
+router.put('/atividades/:id', verifyToken, async (req, res) => {
+    try {
+        const { titulo, descricao, prazo } = req.body;
+
+        const docRef = db.collection('atividades').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Atividade não encontrada.' });
+        if (snap.data().uid !== req.user.uid) {
+            return res.status(403).json({ error: 'Você só pode editar suas próprias atividades.' });
+        }
+
+        const data = { updatedAt: new Date().toISOString() };
+        if (titulo !== undefined) {
+            if (!titulo.trim()) return res.status(400).json({ error: 'Título não pode ser vazio.' });
+            data.titulo = titulo.trim();
+        }
+        if (descricao !== undefined) data.descricao = (descricao || '').trim();
+        if (prazo !== undefined) {
+            if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
+            data.prazo = prazo;
+        }
+
+        await docRef.update(data);
+        res.json({ message: 'Atividade atualizada com sucesso!' });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -327,46 +358,10 @@ router.put('/atividades/:id/status', verifyToken, async (req, res) => {
                 updatedAt: new Date().toISOString()
             };
 
-            // Trocou de coluna — entra ao final da coluna de destino
-            if (status !== atividade.status) {
-                const destinoSnap = await db.collection('atividades')
-                    .where('uid', '==', req.user.uid)
-                    .where('status', '==', status)
-                    .get();
-                data.ordem = destinoSnap.size;
-            }
-
             t.update(docRef, data);
         });
 
         res.json({ message: 'Atividade atualizada com sucesso!' });
-    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
-});
-
-// Reordena as atividades dentro de uma mesma coluna (sequência de execução,
-// sem afetar o status) — recebe a lista de ids já na ordem desejada.
-router.put('/atividades/reordenar', verifyToken, async (req, res) => {
-    try {
-        const { status, ordenadas } = req.body;
-        if (!['a_fazer', 'fazendo', 'concluido'].includes(status)) {
-            return res.status(400).json({ error: 'Status inválido.' });
-        }
-        if (!Array.isArray(ordenadas) || !ordenadas.length) {
-            return res.status(400).json({ error: 'Informe a lista de atividades ordenadas.' });
-        }
-
-        const batch = db.batch();
-        for (let i = 0; i < ordenadas.length; i++) {
-            const docRef = db.collection('atividades').doc(ordenadas[i]);
-            const snap = await docRef.get();
-            if (!snap.exists || snap.data().uid !== req.user.uid || snap.data().status !== status) {
-                return res.status(403).json({ error: 'Uma ou mais atividades não pertencem a você ou não estão nesta coluna.' });
-            }
-            batch.update(docRef, { ordem: i, updatedAt: new Date().toISOString() });
-        }
-        await batch.commit();
-
-        res.json({ message: 'Ordem atualizada com sucesso!' });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 

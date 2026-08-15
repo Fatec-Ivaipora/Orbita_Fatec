@@ -161,10 +161,35 @@ async function atualizarProcessosFuncionario(uidSelecionado) {
 }
 
 // ================================================================
-//  MINHAS ATIVIDADES (QUADRO KANBAN — tarefas avulsas)
+//  MINHAS ATIVIDADES (AGENDA SEMANAL — tarefas avulsas)
 // ================================================================
 const COL_LABEL = { a_fazer: 'A Fazer', fazendo: 'Fazendo', concluido: 'Concluído' };
 const ORDEM_STATUS = ['a_fazer', 'fazendo', 'concluido'];
+const DIA_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+let semanaOffset = 0;
+
+function segundaDaSemana(offset) {
+  const hoje = new Date();
+  const dia = hoje.getDay(); // 0=Dom..6=Sáb
+  const diffPraSegunda = (dia === 0 ? -6 : 1) - dia;
+  const segunda = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + diffPraSegunda + offset * 7);
+  segunda.setHours(0, 0, 0, 0);
+  return segunda;
+}
+
+function diasDaSemana(offset) {
+  const segunda = segundaDaSemana(offset);
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(segunda);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+
+function chaveDia(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 async function setupSetorScope(role) {
   const wrap = document.getElementById('proc-setor-select-wrap');
@@ -221,9 +246,48 @@ async function carregarPainelSetor() {
         opt.textContent = f.name || f.email;
         boardSelect.appendChild(opt);
       });
+
+    document.getElementById('agenda-setor-wrap').classList.remove('hidden');
+    renderAgendaSetor();
   } catch (err) {
     listEl.innerHTML = `<div class="empty-state">Erro ao carregar painel: ${esc(err.message)}</div>`;
   }
+}
+
+// Visão geral do setor: todo mundo, dia a dia, na mesma semana do quadro
+// pessoal abaixo — pra ver de relance quem tem o quê marcado em cada dia.
+function renderAgendaSetor() {
+  const el = document.getElementById('agenda-setor');
+  const dias = diasDaSemana(semanaOffset);
+  const fmtCurto = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+  el.innerHTML = '';
+  dias.forEach(dia => {
+    const chave = chaveDia(dia);
+    const hoje = chaveDia(new Date()) === chave;
+
+    const porPessoa = funcionariosDoSetor.map(f => {
+      const itens = (atividadesPorUid[f.uid] || [])
+        .filter(a => a.prazo && a.status !== 'concluido' && chaveDia(new Date(a.prazo)) === chave)
+        .sort((a, b) => new Date(a.prazo) - new Date(b.prazo));
+      return { nome: f.name || f.email, itens };
+    }).filter(p => p.itens.length);
+
+    const col = document.createElement('div');
+    col.className = 'agenda-dia agenda-setor-dia';
+    col.innerHTML = `
+      <h3 class="agenda-dia-title ${hoje ? 'agenda-dia-hoje' : ''}">${DIA_LABEL[dia.getDay()]} <span>${fmtCurto(dia)}</span></h3>
+      <div class="agenda-dia-body">
+        ${porPessoa.length ? porPessoa.map(p => `
+          <div class="agenda-setor-pessoa">
+            <strong>${esc(p.nome)}</strong>
+            ${p.itens.map(a => `<div class="agenda-setor-item">${formatarHorario(a.prazo)} — ${esc(a.titulo)}</div>`).join('')}
+          </div>
+        `).join('') : '<div class="empty-state" style="padding:1rem;">Nada marcado</div>'}
+      </div>
+    `;
+    el.appendChild(col);
+  });
 }
 
 function renderPainelSetor(progresso) {
@@ -258,26 +322,106 @@ async function carregarMeuQuadro() {
   }
 }
 
+let boardAtual = '__self__';
+
 function renderBoard(uidSelecionado) {
+  boardAtual = uidSelecionado;
   const editavel = uidSelecionado === '__self__';
   const atividades = editavel ? minhasAtividades : (atividadesPorUid[uidSelecionado] || []);
 
-  ORDEM_STATUS.forEach(status => {
-    const col = document.getElementById(`col-${status}`);
-    col.innerHTML = '';
-    col.dataset.editavel = editavel ? '1' : '0';
+  const dias = diasDaSemana(semanaOffset);
+  const primeiro = dias[0], ultimo = dias[4];
+  const fmtCurto = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  document.getElementById('agenda-semana-label').textContent =
+    semanaOffset === 0 ? `Esta semana (${fmtCurto(primeiro)} a ${fmtCurto(ultimo)})` : `${fmtCurto(primeiro)} a ${fmtCurto(ultimo)}`;
+
+  const comData = atividades.filter(a => a.prazo);
+  const semData = atividades.length - comData.length;
+  const pendentes = comData.filter(a => a.status !== 'concluido');
+
+  const porDia = {};
+  pendentes.forEach(a => {
+    const chave = chaveDia(new Date(a.prazo));
+    if (!porDia[chave]) porDia[chave] = [];
+    porDia[chave].push(a);
   });
 
-  atividades
-    .slice()
-    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
-    .forEach(a => {
-      const col = document.getElementById(`col-${a.status}`);
-      if (col) col.appendChild(criarCard(a, editavel));
-    });
+  const agendaEl = document.getElementById('agenda-semana');
+  agendaEl.innerHTML = '';
+  dias.forEach(dia => {
+    const chave = chaveDia(dia);
+    const doDia = (porDia[chave] || []).sort((a, b) => new Date(a.prazo) - new Date(b.prazo));
 
-  renderProgressoBoard(atividades);
-  setupColumnDropTargets();
+    const col = document.createElement('div');
+    col.className = 'agenda-dia';
+    col.dataset.chave = chave;
+    col.dataset.editavel = editavel ? '1' : '0';
+
+    const hoje = chaveDia(new Date()) === chave;
+    col.innerHTML = `
+      <h3 class="agenda-dia-title ${hoje ? 'agenda-dia-hoje' : ''}">${DIA_LABEL[dia.getDay()]} <span>${fmtCurto(dia)}</span></h3>
+      <div class="agenda-dia-body"></div>
+      ${editavel ? '<button type="button" class="btn-add-dia" title="Nova atividade nesse dia">+ atividade</button>' : ''}
+    `;
+    const body = col.querySelector('.agenda-dia-body');
+    doDia.forEach(a => body.appendChild(criarCard(a, editavel && a.uid === currentUser.uid)));
+
+    if (editavel) {
+      col.querySelector('.btn-add-dia').onclick = () => abrirModalAtividade(dia);
+      col.ondragover = (e) => e.preventDefault();
+      col.ondrop = (e) => {
+        e.preventDefault();
+        if (!draggedId) return;
+        reagendarAtividade(draggedId, dia);
+        draggedId = null;
+      };
+    }
+
+    agendaEl.appendChild(col);
+  });
+
+  const avisoEl = document.getElementById('agenda-sem-data-aviso');
+  if (semData > 0) {
+    avisoEl.classList.remove('hidden');
+    avisoEl.textContent = `${semData} atividade(s) antiga(s) sem data cadastrada não aparecem na agenda.`;
+  } else {
+    avisoEl.classList.add('hidden');
+  }
+
+  renderProgressoBoard(editavel ? comData.filter(a => a.uid === currentUser.uid) : comData);
+  renderConcluidas(atividades.filter(a => a.status === 'concluido'), editavel);
+}
+
+// Início do período (semana/mês/semestre/ano) contado a partir de hoje —
+// é sempre relativo a "agora", independe da semana que está navegando na agenda.
+function inicioDoPeriodo(periodo) {
+  const hoje = new Date();
+  switch (periodo) {
+    case 'semana': return segundaDaSemana(0);
+    case 'mes': return new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    case 'semestre': return new Date(hoje.getFullYear(), hoje.getMonth() < 6 ? 0 : 6, 1);
+    case 'ano': return new Date(hoje.getFullYear(), 0, 1);
+    default: return null;
+  }
+}
+
+function renderConcluidas(concluidasTodas, editavel) {
+  const periodo = document.getElementById('concluidas-periodo').value;
+  const inicio = inicioDoPeriodo(periodo);
+  const concluidas = inicio
+    ? concluidasTodas.filter(a => new Date(a.concluidoEm || a.updatedAt) >= inicio)
+    : concluidasTodas;
+
+  document.getElementById('concluidas-contador').textContent = concluidas.length;
+  const el = document.getElementById('agenda-concluidas');
+
+  concluidas.sort((a, b) => new Date(b.concluidoEm || b.updatedAt) - new Date(a.concluidoEm || a.updatedAt));
+  el.innerHTML = '';
+  if (!concluidas.length) {
+    el.innerHTML = '<div class="empty-state">Nenhuma atividade concluída nesse período.</div>';
+    return;
+  }
+  concluidas.forEach(a => el.appendChild(criarCard(a, editavel && a.uid === currentUser.uid)));
 }
 
 function renderProgressoBoard(atividades) {
@@ -287,13 +431,17 @@ function renderProgressoBoard(atividades) {
   const pct = Math.round((concluidas / atividades.length) * 100);
   el.innerHTML = `
     <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
-    <div class="board-progresso-texto">${concluidas} de ${atividades.length} atividades concluídas</div>
+    <div class="board-progresso-texto">${concluidas} de ${atividades.length} atividades concluídas nesta semana</div>
   `;
 }
 
-function formatarPrazo(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function nomePorUid(uid) {
+  const f = funcionariosDoSetor.find(f => f.uid === uid);
+  return f ? (f.name || f.email) : 'outra pessoa';
+}
+
+function formatarHorario(iso) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function criarCard(atividade, editavel) {
@@ -304,83 +452,50 @@ function criarCard(atividade, editavel) {
   card.className = `kanban-card ${atrasada ? 'atrasada' : ''}`;
   card.draggable = editavel;
   card.dataset.id = atividade.id;
+  card.dataset.status = atividade.status;
 
-  const idx = ORDEM_STATUS.indexOf(atividade.status);
+  const souDono = atividade.uid === currentUser.uid;
+  let etiqueta = '';
+  if (!souDono) {
+    etiqueta = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
+  } else if (atividade.criadoPor !== atividade.uid) {
+    etiqueta = `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>`;
+  }
 
   card.innerHTML = `
     <div class="kanban-card-header">
-      ${atividade.criadoPor !== atividade.uid ? `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>` : '<span></span>'}
+      <span class="kanban-card-horario">${atividade.prazo ? formatarHorario(atividade.prazo) : ''}</span>
+      ${etiqueta}
       ${atrasada ? '<span class="atrasada-badge">Atrasada</span>' : ''}
     </div>
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
-    ${atividade.prazo ? `<div class="kanban-card-prazo">Prazo: ${formatarPrazo(atividade.prazo)}</div>` : ''}
     ${editavel ? `
       <div class="kanban-card-actions">
-        <button class="btn-mover btn-voltar" ${idx === 0 ? 'disabled' : ''} title="Voltar">‹</button>
-        <span class="status-atual">${COL_LABEL[atividade.status]}</span>
-        <button class="btn-mover btn-avancar" ${idx === ORDEM_STATUS.length - 1 ? 'disabled' : ''} title="Avançar">›</button>
+        <select class="status-select">
+          ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
+        </select>
+        <button class="btn-mover btn-editar-atividade" title="Editar">✎</button>
         <button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>
       </div>
-    ` : ''}
+    ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
   `;
 
   if (editavel) {
     card.addEventListener('dragstart', () => { draggedId = atividade.id; });
-    const btnVoltar = card.querySelector('.btn-voltar');
-    const btnAvancar = card.querySelector('.btn-avancar');
-    const btnExcluir = card.querySelector('.btn-excluir-atividade');
-    if (btnVoltar) btnVoltar.onclick = () => moverAtividade(atividade.id, ORDEM_STATUS[idx - 1]);
-    if (btnAvancar) btnAvancar.onclick = () => moverAtividade(atividade.id, ORDEM_STATUS[idx + 1]);
-    if (btnExcluir) btnExcluir.onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+    card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
+    card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
+    card.querySelector('.btn-excluir-atividade').onclick = () => excluirAtividade(atividade.id, atividade.titulo);
   }
 
   return card;
-}
-
-// Colunas aceitam drop tanto para trocar de status quanto para reordenar
-// (soltar entre dois cards já existentes na mesma coluna).
-function setupColumnDropTargets() {
-  ORDEM_STATUS.forEach(status => {
-    const col = document.getElementById(`col-${status}`);
-    if (col.dataset.editavel !== '1') return;
-    const body = col;
-    body.ondragover = (e) => e.preventDefault();
-    body.ondrop = (e) => {
-      e.preventDefault();
-      if (!draggedId) return;
-
-      const afterEl = [...body.querySelectorAll('.kanban-card')].find(el => {
-        const rect = el.getBoundingClientRect();
-        return e.clientY < rect.top + rect.height / 2;
-      });
-
-      const atividade = minhasAtividades.find(a => a.id === draggedId);
-      if (!atividade) return;
-
-      if (atividade.status !== status) {
-        moverAtividade(draggedId, status);
-      } else {
-        const idsNaColuna = minhasAtividades
-          .filter(a => a.status === status)
-          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
-          .map(a => a.id)
-          .filter(id => id !== draggedId);
-        const idxAfter = afterEl ? idsNaColuna.indexOf(afterEl.dataset.id) : -1;
-        if (idxAfter === -1) idsNaColuna.push(draggedId);
-        else idsNaColuna.splice(idxAfter, 0, draggedId);
-        reordenarColuna(status, idsNaColuna);
-      }
-      draggedId = null;
-    };
-  });
 }
 
 async function moverAtividade(id, novoStatus) {
   try {
     await apiFetch(`/processos/atividades/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
     await carregarMeuQuadro();
-    renderBoard('__self__');
+    renderBoard(boardAtual);
   } catch (err) {
     alert('Erro ao mover atividade: ' + err.message);
   }
@@ -391,37 +506,60 @@ async function excluirAtividade(id, titulo) {
   try {
     await apiFetch(`/processos/atividades/${id}`, { method: 'DELETE' });
     await carregarMeuQuadro();
-    renderBoard('__self__');
+    renderBoard(boardAtual);
   } catch (err) {
     alert('Erro ao excluir atividade: ' + err.message);
   }
 }
 
-async function reordenarColuna(status, idsOrdenados) {
-  // Atualiza localmente antes de confirmar no servidor para o drag parecer instantâneo
-  idsOrdenados.forEach((id, i) => {
-    const a = minhasAtividades.find(a => a.id === id);
-    if (a) a.ordem = i;
-  });
-  renderBoard('__self__');
+// Arrastou o card pra outro dia: troca a data, mantendo o horário original.
+async function reagendarAtividade(id, novoDia) {
+  const atividade = minhasAtividades.find(a => a.id === id);
+  if (!atividade || !atividade.prazo) return;
+  const original = new Date(atividade.prazo);
+  const novaData = new Date(novoDia);
+  novaData.setHours(original.getHours(), original.getMinutes(), 0, 0);
+
   try {
-    await apiFetch('/processos/atividades/reordenar', { method: 'PUT', body: JSON.stringify({ status, ordenadas: idsOrdenados }) });
-  } catch (err) {
-    alert('Erro ao reordenar: ' + err.message);
+    await apiFetch(`/processos/atividades/${id}`, { method: 'PUT', body: JSON.stringify({ prazo: novaData.toISOString() }) });
     await carregarMeuQuadro();
-    renderBoard('__self__');
+    renderBoard(boardAtual);
+  } catch (err) {
+    alert('Erro ao reagendar: ' + err.message);
   }
 }
 
 // ================================================================
 //  MODAL: NOVA ATIVIDADE
 // ================================================================
-function abrirModalAtividade() {
+let editandoId = null;
+
+function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
   document.getElementById('form-atividade').reset();
+  editandoId = editar ? editar.id : null;
+
+  document.getElementById('atividade-modal-title').textContent = editar ? 'Editar Atividade' : 'Nova Atividade';
+
+  const prazoInput = document.getElementById('atividade-prazo');
+  const preencherPrazo = (iso) => {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  if (editar) {
+    document.getElementById('atividade-titulo').value = editar.titulo || '';
+    document.getElementById('atividade-descricao').value = editar.descricao || '';
+    if (editar.prazo) preencherPrazo(editar.prazo);
+  } else if (diaPreset) {
+    const d = new Date(diaPreset);
+    d.setHours(9, 0, 0, 0);
+    preencherPrazo(d);
+  }
 
   const wrap = document.getElementById('atividade-para-wrap');
   const select = document.getElementById('atividade-uid');
-  if (souGestor && funcionariosDoSetor.length) {
+  if (!editar && souGestor && funcionariosDoSetor.length) {
     wrap.classList.remove('hidden');
     const boardSelect = document.getElementById('board-select');
     const selecionadoAtual = boardSelect ? boardSelect.value : '__self__';
@@ -445,19 +583,24 @@ async function salvarAtividade(e) {
   const uidSelect = document.getElementById('atividade-uid');
 
   if (!titulo) return;
+  if (!prazoInput) { alert('Informe o dia e horário da atividade.'); return; }
 
   const data = {
     titulo,
     descricao,
-    prazo: prazoInput ? new Date(prazoInput).toISOString() : null
+    prazo: new Date(prazoInput).toISOString()
   };
-  if (souGestor && uidSelect && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
+  if (!editandoId && souGestor && uidSelect && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
     data.uid = uidSelect.value;
   }
 
   try {
     await secureAction(currentUser.uid, async () => {
-      await apiFetch('/processos/atividades', { method: 'POST', body: JSON.stringify(data) });
+      if (editandoId) {
+        await apiFetch(`/processos/atividades/${editandoId}`, { method: 'PUT', body: JSON.stringify(data) });
+      } else {
+        await apiFetch('/processos/atividades', { method: 'POST', body: JSON.stringify(data) });
+      }
     });
     fecharModal('modal-atividade');
     if (data.uid && data.uid !== currentUser.uid) {
@@ -470,7 +613,7 @@ async function salvarAtividade(e) {
       }
     } else {
       await carregarMeuQuadro();
-      renderBoard('__self__');
+      renderBoard(boardAtual);
     }
   } catch (err) {
     if (err.message.includes("Rate limit")) return;
@@ -481,9 +624,22 @@ async function salvarAtividade(e) {
 // ================================================================
 //  HELPERS & EVENTS
 // ================================================================
+function mudarSemana(delta) {
+  semanaOffset += delta;
+  renderBoard(boardAtual);
+  if (souGestor && setorAtual) renderAgendaSetor();
+}
+
 function setupEventListeners() {
   document.getElementById('btn-nova-atividade').onclick = () => abrirModalAtividade();
   document.getElementById('form-atividade').onsubmit = salvarAtividade;
+  document.getElementById('btn-semana-anterior').onclick = () => mudarSemana(-1);
+  document.getElementById('btn-semana-proxima').onclick = () => mudarSemana(1);
+  document.getElementById('btn-toggle-concluidas').onclick = () => {
+    document.getElementById('agenda-concluidas').classList.toggle('hidden');
+    document.getElementById('concluidas-periodo').classList.toggle('hidden');
+  };
+  document.getElementById('concluidas-periodo').addEventListener('change', () => renderBoard(boardAtual));
 }
 
 window.abrirModal = (id) => document.getElementById(id).classList.add('active');
