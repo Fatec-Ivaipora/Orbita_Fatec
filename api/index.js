@@ -1,9 +1,14 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 require('dotenv').config();
 
 const app = express();
+
+// Compressão gzip/brotli das respostas — reduz bastante o peso transferido
+// em conexões móveis lentas (JSON da API e os estáticos servidos localmente).
+app.use(compression());
 
 // Middlewares globais
 // Origens permitidas: apenas o painel web oficial e ambiente de desenvolvimento local.
@@ -53,7 +58,6 @@ const rotasMeuEspaco = require('../src/rotas/meu-espaco');
 const rotasCargaHoraria = require('../src/rotas/carga-horaria');
 const rotasEmpresas = require('../src/rotas/empresas');
 const rotasValidacao = require('../src/rotas/validacao');
-const rotasCpa = require('../src/rotas/cpa');
 const rotasAgenda = require('../src/rotas/agenda');
 const rotasLocais = require('../src/rotas/locais');
 const rotasFerida = require('../src/rotas/ferida');
@@ -71,7 +75,6 @@ app.use('/api/meu-espaco', rotasMeuEspaco);
 app.use('/api/carga-horaria', rotasCargaHoraria);
 app.use('/api/empresas', rotasEmpresas);
 app.use('/api/validacao', rotasValidacao);
-app.use('/api/cpa', rotasCpa);
 app.use('/api/agenda', rotasAgenda);
 app.use('/api/locais', rotasLocais);
 app.use('/api/ferida', rotasFerida);
