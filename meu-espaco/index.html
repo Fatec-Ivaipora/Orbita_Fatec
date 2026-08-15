@@ -26,7 +26,7 @@
         <main class="mod-main" id="main-content">
           <div class="welcome-section">
             <h1 class="page-title">Meus Processos</h1>
-            <p class="page-subtitle">Suas atividades — as que você criou e as que o chefe do setor atribuiu pra você.</p>
+            <p class="page-subtitle">Sua agenda da semana — o que você marcou e o que o chefe do setor atribuiu pra você, dia a dia.</p>
           </div>
 
           <div class="quick-access-grid">
@@ -51,9 +51,14 @@
             <div id="setor-progresso-list" class="setor-progresso-list">
               <div class="loading-state">Carregando progresso do setor...</div>
             </div>
+
+            <div id="agenda-setor-wrap" class="hidden">
+              <h3 class="card-secao-titulo" style="padding:1.5rem 0 0.75rem;">Agenda do setor (semana atual do quadro abaixo)</h3>
+              <div id="agenda-setor" class="agenda-setor"></div>
+            </div>
           </section>
 
-          <!-- Minhas Atividades (quadro Kanban) -->
+          <!-- Minhas Atividades (agenda semanal) -->
           <section class="activities-section">
             <div class="section-header">
               <div class="header-title">
@@ -76,20 +81,28 @@
 
             <div id="board-progresso" class="board-progresso"></div>
 
-            <div class="kanban-board">
-              <div class="kanban-col" data-status="a_fazer">
-                <h3 class="kanban-col-title">A Fazer</h3>
-                <div class="kanban-col-body" id="col-a_fazer"></div>
-              </div>
-              <div class="kanban-col" data-status="fazendo">
-                <h3 class="kanban-col-title">Fazendo</h3>
-                <div class="kanban-col-body" id="col-fazendo"></div>
-              </div>
-              <div class="kanban-col" data-status="concluido">
-                <h3 class="kanban-col-title">Concluído</h3>
-                <div class="kanban-col-body" id="col-concluido"></div>
-              </div>
+            <div class="agenda-semana-nav">
+              <button type="button" id="btn-semana-anterior" class="btn btn-secondary btn-sm">‹ Semana anterior</button>
+              <span id="agenda-semana-label" class="agenda-semana-label"></span>
+              <button type="button" id="btn-semana-proxima" class="btn btn-secondary btn-sm">Próxima semana ›</button>
             </div>
+
+            <div id="agenda-semana" class="agenda-semana"></div>
+            <div id="agenda-sem-data-aviso" class="agenda-sem-data-aviso hidden"></div>
+
+            <div class="agenda-concluidas-header">
+              <button type="button" id="btn-toggle-concluidas" class="btn btn-secondary btn-sm">
+                Atividades concluídas (<span id="concluidas-contador">0</span>)
+              </button>
+              <select id="concluidas-periodo" class="form-input hidden" style="width:auto; display:inline-block;">
+                <option value="semana">Esta semana</option>
+                <option value="mes">Este mês</option>
+                <option value="semestre">Este semestre</option>
+                <option value="ano">Este ano</option>
+                <option value="tudo">Tudo</option>
+              </select>
+            </div>
+            <div id="agenda-concluidas" class="agenda-concluidas hidden"></div>
           </section>
         </main>
 
@@ -101,7 +114,7 @@
   <div id="modal-atividade" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">Nova Atividade</h3>
+        <h3 class="modal-title" id="atividade-modal-title">Nova Atividade</h3>
         <button class="modal-close" onclick="fecharModal('modal-atividade')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -120,8 +133,8 @@
           <textarea id="atividade-descricao" class="form-input" rows="2" placeholder="Detalhes da atividade (opcional)"></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Prazo</label>
-          <input type="datetime-local" id="atividade-prazo" class="form-input">
+          <label class="form-label">Dia e horário *</label>
+          <input type="datetime-local" id="atividade-prazo" class="form-input" required>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-atividade')">Cancelar</button>

@@ -250,19 +250,44 @@
 }
 
 /* ---- QUADRO KANBAN (Minhas Atividades, estilo post-it) ---- */
-.kanban-board {
+/* ---- AGENDA SEMANAL (Segunda a Sexta) ---- */
+.agenda-semana-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.agenda-semana-label {
+  font-weight: 800;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  min-width: 220px;
+  text-align: center;
+}
+
+.agenda-sem-data-aviso {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 1rem;
+}
+
+.agenda-semana {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 1.25rem;
 }
 
 @media (max-width: 900px) {
-  .kanban-board {
+  .agenda-semana {
     grid-template-columns: 1fr;
   }
 }
 
-.kanban-col {
+.agenda-dia {
   background: rgba(255, 255, 255, 0.5);
   border: 1px solid var(--border-color);
   border-radius: 18px;
@@ -270,20 +295,51 @@
   min-height: 200px;
 }
 
-.kanban-col-title {
-  font-size: 0.9rem;
+.agenda-dia-title {
+  font-size: 0.85rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
   margin-bottom: 0.85rem;
+  display: flex;
+  justify-content: space-between;
 }
 
-.kanban-col-body {
+.agenda-dia-title span {
+  font-weight: 600;
+  text-transform: none;
+}
+
+.agenda-dia-hoje {
+  color: var(--primary-blue);
+}
+
+.agenda-dia-body {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  min-height: 120px;
+  min-height: 100px;
+}
+
+.btn-add-dia {
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-add-dia:hover {
+  background: rgba(15, 78, 184, 0.06);
+  color: var(--primary-blue);
+  border-color: var(--primary-blue);
 }
 
 .kanban-card {
@@ -303,10 +359,64 @@
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
 }
 
-/* Cor de post-it por coluna — só estética, não indica prioridade */
-.kanban-col[data-status="a_fazer"] .kanban-card { background: #fef9c3; }
-.kanban-col[data-status="fazendo"] .kanban-card { background: #dbeafe; }
-.kanban-col[data-status="concluido"] .kanban-card { background: #dcfce7; }
+/* Cor de post-it pelo status da própria atividade — só estética */
+.kanban-card[data-status="a_fazer"] { background: #fef9c3; }
+.kanban-card[data-status="fazendo"] { background: #dbeafe; }
+.kanban-card[data-status="concluido"] { background: #dcfce7; }
+
+.kanban-card-horario {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+/* ---- ATIVIDADES CONCLUÍDAS (colapsável, com filtro de período) ---- */
+.agenda-concluidas-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.agenda-concluidas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+/* ---- AGENDA DO SETOR (visão geral do chefe) ---- */
+.agenda-setor {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .agenda-setor {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agenda-setor-pessoa {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.agenda-setor-pessoa strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--text-main);
+}
+
+.agenda-setor-item {
+  color: #475569;
+  padding: 0.15rem 0;
+}
 
 .kanban-card.atrasada {
   border: 1px solid var(--accent-orange);
@@ -448,6 +558,18 @@
   font-weight: 700;
   color: #475569;
   text-transform: uppercase;
+}
+
+.status-select {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+  background: white;
+  cursor: pointer;
 }
 
 /* ---- MODAL & FORMS ---- */
