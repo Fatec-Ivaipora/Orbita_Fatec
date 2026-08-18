@@ -742,6 +742,7 @@ async function carregarRelatorio() {
 }
 
 function renderRelatorio(dados) {
+  document.getElementById('kpi-valor-original').textContent = fmtMoeda(dados.geral.valorOriginal);
   document.getElementById('kpi-gasto').textContent = fmtMoeda(dados.geral.gastoTotal);
   document.getElementById('kpi-economia').textContent = fmtMoeda(dados.geral.economia);
 
