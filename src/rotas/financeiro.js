@@ -19,6 +19,19 @@ function bloquearCoordenador(req, res, next) {
     next();
 }
 
+// "Economia" de um item = referência de preço − valor fechado. Usava a MAIOR
+// cotação recebida como referência, mas isso deixa uma única cotação errada
+// (unidade/digitação trocada) inflar a economia sozinha — aconteceu de
+// verdade com fornecedor cotando 10-30x o valor real em vários itens. A
+// mediana ignora esse tipo de outlier isolado sem precisar corrigir
+// cotação por cotação.
+function medianaValorTotal(cotacoes, fallback) {
+    if (!cotacoes.length) return fallback;
+    const valores = cotacoes.map(c => c.valorTotal).sort((a, b) => a - b);
+    const meio = Math.floor(valores.length / 2);
+    return valores.length % 2 === 0 ? (valores[meio - 1] + valores[meio]) / 2 : valores[meio];
+}
+
 const COL_CONFIG = 'config';
 const DOC_CONFIG_FINANCEIRO = 'financeiro';
 
@@ -459,17 +472,18 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
             if (cotacoesFiltro === 'multipla' && cotacoes.length < 2) return;
 
             // Gasto/economia real: só conta o que foi de fato fechado. Economia
-            // aqui é "quanto deixou de pagar em relação à pior cotação recebida
-            // pro item" — a própria cotação vencedora (valorFechado) já está
-            // dentro de `cotacoes`, então maior >= valorFechado sempre, nunca
-            // fica negativa.
+            // aqui é "quanto deixou de pagar em relação à mediana das cotações
+            // recebidas pro item" — usar a mediana em vez da maior cotação evita
+            // que uma cotação isolada errada (unidade/digitação trocada) infle a
+            // economia sozinha. Diferente da maior, a mediana pode ficar abaixo
+            // do valor fechado (economia negativa é possível e correta aqui).
             if (item.status === 'fechado' && item.valorFechado != null && item.fornecedorFechadoId) {
                 if (!porCurso[item.cursoId]) {
                     porCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, gastoTotal: 0, economia: 0 };
                 }
                 const c = porCurso[item.cursoId];
-                const maiorCotado = cotacoes.length ? Math.max(...cotacoes.map(cot => cot.valorTotal)) : item.valorFechado;
-                const economiaItem = maiorCotado - item.valorFechado;
+                const referencia = medianaValorTotal(cotacoes, item.valorFechado);
+                const economiaItem = referencia - item.valorFechado;
 
                 c.gastoTotal += item.valorFechado;
                 c.economia += economiaItem;
@@ -533,7 +547,12 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 .sort((a, b) => b.vitorias - a.vitorias),
             geral: {
                 gastoTotal: Math.round(gastoTotalGeral * 100) / 100,
-                economia: Math.round(economiaTotalGeral * 100) / 100
+                economia: Math.round(economiaTotalGeral * 100) / 100,
+                // Quanto sairia se cada item fechado tivesse ficado com a pior
+                // cotação recebida — é gastoTotal + economia, mas expõe pronto
+                // pra tela não ter que somar os dois pra mostrar "valor total
+                // da compra sem a negociação".
+                valorOriginal: Math.round((gastoTotalGeral + economiaTotalGeral) * 100) / 100
             },
             porFornecedorFechado: Object.values(porFornecedorFechado)
                 .map(f => ({
@@ -946,14 +965,14 @@ router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearC
             .sort((a, b) => (a.fornecedorFechadoNome || '').localeCompare(b.fornecedorFechadoNome || '') ||
                 (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
 
-        // Economia por item: pior cotação recebida menos o que foi realmente
-        // pago — a própria cotação vencedora já está em `cotacoes`, então
-        // valorOriginal >= valorFechado sempre (nunca fica negativa). Mesma
-        // conta usada no Relatório, pra não ter dois números de "economia"
-        // diferentes no sistema.
+        // Economia por item: mediana das cotações recebidas menos o que foi
+        // realmente pago (ver medianaValorTotal) — mesma conta usada no
+        // Relatório, pra não ter dois números de "economia" diferentes no
+        // sistema. Pode ficar negativa se o valor fechado ficou acima da
+        // mediana das cotações.
         const itensComEconomia = fechados.map(it => {
             const cotacoes = it.cotacoes || [];
-            const valorOriginal = cotacoes.length ? Math.max(...cotacoes.map(c => c.valorTotal)) : (it.valorFechado || 0);
+            const valorOriginal = medianaValorTotal(cotacoes, it.valorFechado || 0);
             const economia = valorOriginal - (it.valorFechado || 0);
             return { ...it, valorOriginal, economia };
         });
