@@ -69,6 +69,28 @@ router.get('/cursos', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// GET /cursos-com-itens — só os cursos que já têm pelo menos 1 item cadastrado
+// na licitação, pra não poluir o filtro do Relatório com cursos que nunca
+// lançaram nada aqui (diferente de /cursos, que traz TODOS os cursos ativos
+// da escola). Mesmo custo de leitura do /relatorio (varre a coleção
+// inteira), então só é usado nessa tela, que já paga esse custo mesmo.
+router.get('/cursos-com-itens', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_ITENS).select('cursoId', 'curso').get();
+        const mapa = new Map();
+        snap.forEach(d => {
+            const it = d.data();
+            if (it.cursoId && !mapa.has(it.cursoId)) mapa.set(it.cursoId, it.curso || '');
+        });
+        const cursos = [...mapa.entries()]
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        res.json(cursos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
 // FORNECEDORES
 // ==========================================
@@ -167,7 +189,10 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
         const incluiItem = (dados) => {
             if (statusFiltro === 'fechados') return dados.status === 'fechado';
             if (statusFiltro === 'todos') return true;
-            return dados.status !== 'fechado';
+            // 'inativo' = item deixado fora da negociação/fechamento (ex.: não vai
+            // mais ser comprado neste semestre), mas mantido no histórico — não
+            // conta como pendente no dia a dia.
+            return dados.status !== 'fechado' && dados.status !== 'inativo';
         };
 
         // Pagina de verdade no Firestore (limit + startAfter) em vez de trazer o
@@ -325,7 +350,7 @@ router.put('/itens/:id', verifyToken, checkPermission, async (req, res) => {
         if (professor !== undefined) dados.professor = (professor || '').trim();
         if (linkReferencia !== undefined) dados.linkReferencia = (linkReferencia || '').trim();
         if (status !== undefined) {
-            if (!['pendente', 'chegou'].includes(status)) return res.status(400).json({ error: 'Status inválido.' });
+            if (!['pendente', 'chegou', 'inativo'].includes(status)) return res.status(400).json({ error: 'Status inválido.' });
             dados.status = status;
         }
 
@@ -583,7 +608,7 @@ router.get('/fechamento/pendentes', verifyToken, checkPermission, bloquearCoorde
 
         const pendentes = snap.docs
             .map(d => ({ id: d.id, ...d.data() }))
-            .filter(it => it.status !== 'fechado')
+            .filter(it => it.status !== 'fechado' && it.status !== 'inativo')
             .sort((a, b) => (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
 
         res.json(pendentes.map(it => {
@@ -619,7 +644,7 @@ router.post('/fechamento/candidatos', verifyToken, checkPermission, bloquearCoor
         // (se precisar mudar quem fechou, primeiro reabre na lista de fechados).
         const itensSistema = snap.docs
             .map(d => ({ id: d.id, ...d.data() }))
-            .filter(it => it.status !== 'fechado');
+            .filter(it => it.status !== 'fechado' && it.status !== 'inativo');
 
         const resultado = itens.map(itemOrcamento => {
             const candidatos = itensSistema
