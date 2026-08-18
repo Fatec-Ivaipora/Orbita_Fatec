@@ -651,13 +651,12 @@ async function initPaginaRelatorio() {
     cursoLabel.textContent = partes.join(' — ');
   }
 
-  // Lista de cursos pro filtro — usa o endpoint leve (~16 docs) em vez de
-  // buscar o /relatorio inteiro (que lê TODOS os itens) só pra montar um
-  // dropdown. Efeito colateral aceitável: pode listar curso sem nenhum item
-  // ainda, que simplesmente mostra "sem dados" se selecionado.
+  // Lista de cursos pro filtro — só os que já têm item cadastrado na
+  // licitação (evita poluir o dropdown com cursos da escola que nunca
+  // lançaram nada aqui).
   let cursosComItens = [];
   try {
-    cursosComItens = (await apiFetch('/financeiro/cursos')).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+    cursosComItens = await apiFetch('/financeiro/cursos-com-itens');
   } catch (err) {
     showToast('Erro ao carregar cursos do relatório: ' + err.message, 'error');
   }
@@ -1957,6 +1956,7 @@ async function salvarValorFechado(id) {
 // uma empresa por vez.
 let fechaGeralDados = null; // última resposta de fechados-geral, pra expandir empresa sem nova leitura
 let fechaGeralEmpresaAberta = null;
+let fechaGeralDetalheCursoFiltro = ''; // filtro de curso dentro do detalhe da empresa aberta (ex.: separar Medicina)
 
 async function carregarFechadosGeral() {
   const semestre = document.getElementById('fecha-semestre-input')?.value.trim();
@@ -2005,28 +2005,49 @@ function renderFechaGeralResumo() {
 
   resumoDiv.querySelectorAll('.fecha-geral-empresa-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      fechaGeralEmpresaAberta = fechaGeralEmpresaAberta === btn.dataset.fornecedor ? null : btn.dataset.fornecedor;
+      const mesmaEmpresa = fechaGeralEmpresaAberta === btn.dataset.fornecedor;
+      fechaGeralEmpresaAberta = mesmaEmpresa ? null : btn.dataset.fornecedor;
+      if (!mesmaEmpresa) fechaGeralDetalheCursoFiltro = ''; // troca de empresa reseta o filtro de curso
       renderFechaGeralResumo();
       renderFechaGeralDetalhe();
     });
   });
 }
 
+// Dentro do detalhe de uma empresa, os itens vêm de todos os cursos
+// misturados — o financeiro pediu pra conseguir isolar por curso (ex.:
+// Medicina é negociada separado comercialmente dos outros cursos), sem
+// precisar mudar o filtro geral da tela (que recarrega o relatório inteiro
+// e fecha o detalhe aberto). Filtro e subtotal aqui são só em cima dos
+// dados já carregados — não gera nova leitura no banco.
 function renderFechaGeralDetalhe() {
   const container = document.getElementById('fecha-geral-detalhe');
   if (!fechaGeralEmpresaAberta) { container.innerHTML = ''; return; }
 
-  const itens = fechaGeralDados.itens.filter(it => (it.fornecedor || '—') === fechaGeralEmpresaAberta);
-  const resumoEmpresa = fechaGeralDados.resumoPorFornecedor.find(r => r.fornecedor === fechaGeralEmpresaAberta);
+  const todosItensEmpresa = fechaGeralDados.itens.filter(it => (it.fornecedor || '—') === fechaGeralEmpresaAberta);
+  const cursos = [...new Set(todosItensEmpresa.map(it => it.curso || '—'))].sort();
+  const itens = fechaGeralDetalheCursoFiltro
+    ? todosItensEmpresa.filter(it => (it.curso || '—') === fechaGeralDetalheCursoFiltro)
+    : todosItensEmpresa;
+
+  const subtotal = itens.reduce((s, it) => s + (it.valorFechado || 0), 0);
+  const economiaSubtotal = itens.reduce((s, it) => s + (it.economia || 0), 0);
+  const descontoFechamentoSubtotal = itens.reduce((s, it) =>
+    s + (it.valorOriginalAntesDoDesconto != null ? it.valorOriginalAntesDoDesconto - (it.valorFechado || 0) : 0), 0);
 
   container.innerHTML = `
     <div class="card" style="margin-bottom:1.5rem; border-color:var(--primary-blue);">
       <div class="fornecedor-detalhe-header">
         <h4 class="card-secao-titulo" style="font-size:1rem;">${esc(fechaGeralEmpresaAberta)} — itens fechados</h4>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.15rem;">
-          <span style="color:var(--green); font-weight:700;">Economia (vs. pior cotação): ${fmtMoeda(resumoEmpresa?.economia || 0)} (${resumoEmpresa?.percentualEconomia || 0}%)</span>
-          ${resumoEmpresa?.descontoNoFechamento > 0 ? `<span style="color:var(--primary-blue); font-weight:700; font-size:0.85rem;">Desconto negociado no fechamento: ${fmtMoeda(resumoEmpresa.descontoNoFechamento)}</span>` : ''}
-        </div>
+        <select class="select-filter" id="fecha-geral-detalhe-curso-select" style="min-width:180px;">
+          <option value="">Todos os cursos</option>
+          ${cursos.map(c => `<option value="${esc(c)}" ${fechaGeralDetalheCursoFiltro === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="padding:0 1.5rem 0.5rem; display:flex; gap:1.5rem; flex-wrap:wrap; font-size:0.85rem;">
+        <span><strong>${itens.length}</strong> itens${fechaGeralDetalheCursoFiltro ? ` em ${esc(fechaGeralDetalheCursoFiltro)}` : ''} — <strong>${fmtMoeda(subtotal)}</strong></span>
+        <span style="color:var(--green); font-weight:700;">Economia (vs. pior cotação): ${fmtMoeda(economiaSubtotal)}</span>
+        ${descontoFechamentoSubtotal > 0 ? `<span style="color:var(--primary-blue); font-weight:700;">Desconto negociado no fechamento: ${fmtMoeda(descontoFechamentoSubtotal)}</span>` : ''}
       </div>
       <div class="tabela-wrap tabela-scroll">
         <table class="data-table">
@@ -2050,6 +2071,11 @@ function renderFechaGeralDetalhe() {
         </table>
       </div>
     </div>`;
+
+  document.getElementById('fecha-geral-detalhe-curso-select')?.addEventListener('change', (e) => {
+    fechaGeralDetalheCursoFiltro = e.target.value;
+    renderFechaGeralDetalhe();
+  });
 }
 
 // Desfaz de uma vez todos os fechamentos dessa empresa nesse semestre — pra
