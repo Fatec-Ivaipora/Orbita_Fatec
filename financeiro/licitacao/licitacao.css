@@ -235,6 +235,7 @@
 
 .item-link { margin-left: 0.4rem; text-decoration: none; }
 .item-obs { margin-left: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); }
+.item-obs-alerta { color: #dc2626; font-weight: 700; }
 
 .status-badge {
   border: none; border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 700;

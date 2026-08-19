@@ -489,6 +489,7 @@ function renderTabelaItens(lista) {
           ${esc(item.produto)}
           ${renderLinkReferencia(item.linkReferencia)}
           ${item.precisaConferencia ? `<span class="item-obs" title="${esc(item.motivoConferencia || 'Confira este item contra a planilha original antes de fechar.')}">⚠️ Conferir</span>` : ''}
+          ${!(item.cotacoes || []).length && item.status !== 'fechado' ? `<span class="item-obs item-obs-alerta" title="Nenhuma empresa cotou este item ainda — cadastre uma cotação assim que achar fornecedor.">🔴 FALTA LICITAÇÃO</span>` : ''}
         </td>
         <td>${item.quantidade}</td>
         <td>${esc(item.unidade || '—')}</td>
