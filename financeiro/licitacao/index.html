@@ -44,7 +44,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
                             Entregas
                         </a>
-                        <button class="btn-secondary action-execute no-coordenador" id="btn-config-semestre" title="Definir o semestre que os coordenadores enxergam">
+                        <button class="btn-secondary action-execute no-coordenador" id="btn-config-semestre" title="Definir o semestre/rodada padrão ao abrir a tela">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                             Semestre ativo
                         </button>
@@ -56,10 +56,13 @@
                 </div>
 
                 <div class="filters-bar">
-                    <select class="select-filter" id="curso-select">
-                        <option value="">Carregando cursos...</option>
+                    <select class="select-filter no-coordenador" id="licitacao-select" style="max-width:420px;">
+                        <option value="">Selecione uma licitação...</option>
                     </select>
-                    <input type="text" class="select-filter no-coordenador" id="semestre-input" placeholder="Semestre (ex.: 2026.2)" style="max-width:180px;">
+                    <button type="button" class="btn-icon no-coordenador" id="btn-nova-licitacao" title="Criar nova licitação">+</button>
+                    <select class="select-filter" id="curso-select">
+                        <option value="">Selecione uma licitação primeiro...</option>
+                    </select>
                     <select class="select-filter no-coordenador" id="status-filtro-select" style="max-width:180px;">
                         <option value="pendentes">Pendentes</option>
                         <option value="fechados">Fechados</option>
@@ -157,19 +160,44 @@
         </div>
     </div>
 
-    <!-- Modal: Semestre ativo (o que os coordenadores enxergam) -->
+    <!-- Modal: Licitação ativa (a que já vem selecionada ao abrir a tela) -->
     <div id="modal-semestre" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2>Semestre ativo para coordenadores</h2>
-            <p class="modal-subtitle">Coordenadores só veem e cadastram itens desse semestre. Troque quando abrir o próximo período.</p>
+            <h2>Licitação ativa</h2>
+            <p class="modal-subtitle">É a que já vem selecionada quando alguém abre a tela de Licitação. Troque só quando quiser que essa passe a ser a licitação padrão pra quem entrar.</p>
             <div class="form-group">
-                <label>Semestre (formato AAAA.N)</label>
-                <input type="text" id="semestre-ativo-input" placeholder="2026.2">
+                <label>Licitação</label>
+                <select id="semestre-ativo-input"></select>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" id="btn-cancelar-semestre">Cancelar</button>
                 <button type="button" class="btn-primary" id="btn-salvar-semestre">Salvar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Nova Licitação -->
+    <div id="modal-nova-licitacao" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Nova Licitação</h2>
+            <form id="form-nova-licitacao">
+                <div class="form-group">
+                    <label>Nome da licitação</label>
+                    <input type="text" id="nova-licitacao-nome" placeholder="Ex.: INSUMOS CURSOS, LIC.MED-VET" required>
+                </div>
+                <div class="form-group">
+                    <label>Semestre (código único — separa os itens no sistema)</label>
+                    <input type="text" id="nova-licitacao-semestre" placeholder="Ex.: 2026.2" required>
+                </div>
+                <div class="form-group">
+                    <label>Período acadêmico (opcional — só exibição, pode repetir)</label>
+                    <input type="text" id="nova-licitacao-periodo" placeholder="Deixe em branco pra usar o mesmo valor do semestre">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-nova-licitacao">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-nova-licitacao">Criar</button>
+                </div>
+            </form>
         </div>
     </div>
 

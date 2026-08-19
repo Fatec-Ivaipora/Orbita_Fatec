@@ -37,6 +37,9 @@
                 </div>
 
                 <div class="filters-bar no-print">
+                    <select class="select-filter" id="relatorio-licitacao-select" style="max-width:420px;">
+                        <option value="">Todas as licitações</option>
+                    </select>
                     <select class="select-filter" id="relatorio-curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
@@ -74,6 +77,17 @@
                         <div class="kpi-card">
                             <div class="kpi-label">Economia obtida</div>
                             <div class="kpi-value" id="kpi-economia">—</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-grid hidden" id="kpi-grid-projecao" style="margin-top:-0.5rem;">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Valor estimado se fechar (projeção, menor cotação)</div>
+                            <div class="kpi-value" id="kpi-valor-estimado">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Economia potencial (projeção)</div>
+                            <div class="kpi-value" id="kpi-economia-potencial">—</div>
                         </div>
                     </div>
 
