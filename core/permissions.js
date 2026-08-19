@@ -134,9 +134,12 @@ export const ROLE_PERMISSIONS = {
     label: "Financeiro",
     modules: ["dashboard", "fidelidade", "licitacao", "matriculas"]
   },
+  // Coordenador perdeu acesso à Licitação (18/08) — passou a ser tarefa
+  // exclusiva do Financeiro, pra não misturar semestre ativo entre uma
+  // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "licitacao"]
+    modules: ["dashboard", "fidelidade"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da

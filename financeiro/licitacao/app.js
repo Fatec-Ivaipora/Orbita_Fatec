@@ -18,10 +18,11 @@ let appInitialized = false;
 let initializedRole = null;
 
 let cursos = [];
+let licitacoes = []; // [{id, nome, semestre}] — registro explícito das rodadas
 let fornecedores = [];
 let itens = [];
 let cursoSelecionadoId = null;
-let semestreSelecionado = null;
+let semestreSelecionado = null; // = licitacao.semestre da licitação selecionada
 let itemEmEdicaoCotacoes = null;
 let itensNextCursor = null;
 let itensHasMore = false;
@@ -153,30 +154,85 @@ async function initApp(user, role) {
 // ==========================================
 // TELA PRINCIPAL (index.html)
 // ==========================================
+// Registro de licitações (nome + semestre) — a fonte de verdade das rodadas
+// existentes, pra selecionar em vez de digitar. Reaproveitado pelo relatório
+// também (mesmo app.js).
+async function carregarLicitacoes() {
+  try {
+    licitacoes = await apiFetch('/financeiro/licitacoes');
+  } catch (err) {
+    showToast('Erro ao carregar licitações: ' + err.message, 'error');
+  }
+}
+
+function opcoesLicitacoes() {
+  return licitacoes.map(l => `<option value="${esc(l.semestre)}">${esc(l.nome)} - ${esc(l.periodoAcademico || l.semestre)}</option>`).join('');
+}
+
+// Curso só aparece na lista se já tiver item NAQUELA licitação específica —
+// mas licitação recém-criada (sem item nenhum ainda) cai de volta pra lista
+// completa de cursos da escola, senão não teria como escolher curso pro
+// primeiro item. "+ Outro curso" é a válvula de escape pra incluir um curso
+// novo numa licitação que já tem itens em outros cursos.
+async function atualizarCursosDaLicitacao(semestre) {
+  const selectCurso = document.getElementById('curso-select');
+  if (!selectCurso) return;
+  if (!semestre) {
+    selectCurso.innerHTML = '<option value="">Selecione uma licitação primeiro...</option>';
+    selectCurso.disabled = true;
+    return;
+  }
+  selectCurso.disabled = false;
+  selectCurso.innerHTML = '<option value="">Carregando cursos...</option>';
+  try {
+    const cursosDaLicitacao = await apiFetch(`/financeiro/cursos-com-itens?semestre=${encodeURIComponent(semestre)}`);
+    const opcoes = cursosDaLicitacao.length
+      ? cursosDaLicitacao.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+      : cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    const opcaoOutro = cursosDaLicitacao.length ? '<option value="__outro__">+ Outro curso (ainda sem item nesta licitação)</option>' : '';
+    selectCurso.innerHTML = '<option value="">Selecione um curso...</option>' + opcoes + opcaoOutro;
+  } catch (err) {
+    showToast('Erro ao carregar cursos da licitação: ' + err.message, 'error');
+  }
+}
+
 async function initPaginaLicitacao() {
   await carregarCursos();
-  const selectCurso = document.getElementById('curso-select');
-  if (selectCurso) {
-    selectCurso.innerHTML = '<option value="">Selecione um curso...</option>' +
-      cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  }
+  await carregarLicitacoes();
+  const selectLicitacao = document.getElementById('licitacao-select');
+  if (selectLicitacao) selectLicitacao.innerHTML = '<option value="">Selecione uma licitação...</option>' + opcoesLicitacoes();
+
   setupModalItem();
   setupModalCotacoes();
   setupModalSemestre();
+  setupModalNovaLicitacao();
   await carregarSemestreAtivo();
 
+  document.getElementById('licitacao-select')?.addEventListener('change', async (e) => {
+    semestreSelecionado = e.target.value || null;
+    cursoSelecionadoId = null;
+    await atualizarCursosDaLicitacao(semestreSelecionado);
+    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
+    atualizarLinkRelatorio();
+    renderTabelaItens([]);
+  });
+
   document.getElementById('curso-select')?.addEventListener('change', async (e) => {
+    if (e.target.value === '__outro__') {
+      // Mostra todos os cursos da escola — inclui um curso novo nesta
+      // licitação, mesmo que outros cursos dela já tenham item.
+      e.target.innerHTML = '<option value="">Selecione um curso...</option>' +
+        cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      cursoSelecionadoId = null;
+      document.getElementById('btn-novo-item')?.toggleAttribute('disabled', true);
+      renderTabelaItens([]);
+      return;
+    }
     cursoSelecionadoId = e.target.value || null;
     document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
     atualizarLinkRelatorio();
     if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
     else renderTabelaItens([]);
-  });
-
-  document.getElementById('semestre-input')?.addEventListener('change', async (e) => {
-    semestreSelecionado = e.target.value.trim() || null;
-    document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
-    if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
   });
 
   document.getElementById('status-filtro-select')?.addEventListener('change', async (e) => {
@@ -238,28 +294,19 @@ function atualizarBotaoCarregarMais() {
   btn.textContent = 'Carregar mais itens';
 }
 
-// Busca o semestre ativo configurado pelo financeiro. Coordenador fica travado
-// nesse valor (só vê o badge); financeiro/admin veem o campo editável, já
-// preenchido com o semestre ativo, mas podem trocar pra ver outro período.
+// Pré-seleciona a licitação ativa (configurada pelo financeiro) ao abrir a
+// tela, já carregando os cursos dela — puro valor padrão, não trava nada
+// (coordenador não usa mais este módulo).
 async function carregarSemestreAtivo() {
   try {
     const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
-    const input = document.getElementById('semestre-input');
-    const badge = document.getElementById('semestre-badge');
-
-    if (isCoordenador()) {
-      semestreSelecionado = semestreAtivoCoordenador || null;
-      if (badge) {
-        badge.textContent = semestreAtivoCoordenador ? `Semestre: ${semestreAtivoCoordenador}` : 'Semestre ainda não configurado pelo financeiro';
-        badge.classList.remove('hidden');
-      }
-    } else if (input) {
-      input.value = semestreAtivoCoordenador || '';
-      semestreSelecionado = input.value.trim() || null;
-    }
+    semestreSelecionado = semestreAtivoCoordenador || null;
+    const select = document.getElementById('licitacao-select');
+    if (select && semestreSelecionado) select.value = semestreSelecionado;
+    await atualizarCursosDaLicitacao(semestreSelecionado);
     document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
   } catch (err) {
-    showToast('Erro ao carregar semestre ativo: ' + err.message, 'error');
+    showToast('Erro ao carregar licitação ativa: ' + err.message, 'error');
   }
 }
 
@@ -270,7 +317,9 @@ function setupModalSemestre() {
   document.getElementById('btn-config-semestre')?.addEventListener('click', async () => {
     try {
       const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
-      document.getElementById('semestre-ativo-input').value = semestreAtivoCoordenador || '';
+      const select = document.getElementById('semestre-ativo-input');
+      select.innerHTML = opcoesLicitacoes();
+      if (semestreAtivoCoordenador) select.value = semestreAtivoCoordenador;
       modal.classList.remove('hidden');
     } catch (err) {
       showToast('Erro ao carregar configuração: ' + err.message, 'error');
@@ -280,19 +329,65 @@ function setupModalSemestre() {
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 
   document.getElementById('btn-salvar-semestre')?.addEventListener('click', async () => {
-    const semestre = document.getElementById('semestre-ativo-input').value.trim();
+    const semestre = document.getElementById('semestre-ativo-input').value;
+    if (!semestre) { showToast('Selecione uma licitação.', 'error'); return; }
     const btn = document.getElementById('btn-salvar-semestre');
     btn.disabled = true;
     btn.textContent = 'Salvando...';
     try {
       await apiFetch('/financeiro/config/semestre-ativo', { method: 'PUT', body: JSON.stringify({ semestre }) });
       modal.classList.add('hidden');
-      showToast('Semestre ativo atualizado');
+      showToast('Licitação ativa atualizada');
     } catch (err) {
       showToast('Erro ao salvar: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Salvar';
+    }
+  });
+}
+
+function setupModalNovaLicitacao() {
+  const modal = document.getElementById('modal-nova-licitacao');
+  if (!modal) return;
+
+  document.getElementById('btn-nova-licitacao')?.addEventListener('click', () => {
+    document.getElementById('form-nova-licitacao').reset();
+    modal.classList.remove('hidden');
+  });
+  document.getElementById('btn-cancelar-nova-licitacao')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('form-nova-licitacao')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nome = document.getElementById('nova-licitacao-nome').value.trim();
+    const semestre = document.getElementById('nova-licitacao-semestre').value.trim().toUpperCase();
+    const periodoAcademico = document.getElementById('nova-licitacao-periodo').value.trim().toUpperCase();
+    const btn = document.getElementById('btn-salvar-nova-licitacao');
+    btn.disabled = true;
+    btn.textContent = 'Criando...';
+    try {
+      await apiFetch('/financeiro/licitacoes', { method: 'POST', body: JSON.stringify({ nome, semestre, periodoAcademico }) });
+      modal.classList.add('hidden');
+      showToast('Licitação criada');
+
+      await carregarLicitacoes();
+      const select = document.getElementById('licitacao-select');
+      if (select) {
+        select.innerHTML = '<option value="">Selecione uma licitação...</option>' + opcoesLicitacoes();
+        select.value = semestre;
+      }
+      semestreSelecionado = semestre;
+      cursoSelecionadoId = null;
+      await atualizarCursosDaLicitacao(semestreSelecionado);
+      document.getElementById('btn-novo-item')?.toggleAttribute('disabled', true);
+      atualizarLinkRelatorio();
+      renderTabelaItens([]);
+    } catch (err) {
+      showToast('Erro ao criar licitação: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Criar';
     }
   });
 }
@@ -393,6 +488,7 @@ function renderTabelaItens(lista) {
         <td>
           ${esc(item.produto)}
           ${renderLinkReferencia(item.linkReferencia)}
+          ${item.precisaConferencia ? `<span class="item-obs" title="${esc(item.motivoConferencia || 'Confira este item contra a planilha original antes de fechar.')}">⚠️ Conferir</span>` : ''}
         </td>
         <td>${item.quantidade}</td>
         <td>${esc(item.unidade || '—')}</td>
@@ -631,9 +727,28 @@ function renderLinhasCotacoes(item, cotacoesPorFornecedor) {
 let chartCurso = null, chartRanking = null;
 let relatorioEmAndamento = Promise.resolve(); // promessa da última carga, pra "Imprimir" nunca pegar dado desatualizado
 
+// Lista de cursos pro filtro do relatório — com licitação selecionada, só os
+// cursos QUE TÊM ITEM naquela licitação (evita mostrar curso de outra
+// rodada); sem licitação ("Todas"), os que têm item em qualquer rodada.
+async function atualizarCursosRelatorio(semestre) {
+  const select = document.getElementById('relatorio-curso-select');
+  if (!select) return;
+  const valorAtual = select.value;
+  try {
+    const qs = semestre ? `?semestre=${encodeURIComponent(semestre)}` : '';
+    const cursosComItens = await apiFetch(`/financeiro/cursos-com-itens${qs}`);
+    select.innerHTML = '<option value="">Todos os cursos</option>' + cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    if (cursosComItens.some(c => c.id === valorAtual)) select.value = valorAtual;
+  } catch (err) {
+    showToast('Erro ao carregar cursos do relatório: ' + err.message, 'error');
+  }
+}
+
 async function initPaginaRelatorio() {
   await carregarCursos();
+  await carregarLicitacoes();
   const select = document.getElementById('relatorio-curso-select');
+  const selectLicitacao = document.getElementById('relatorio-licitacao-select');
   const selectPeriodicidade = document.getElementById('relatorio-periodicidade-select');
   const selectCotacoes = document.getElementById('relatorio-cotacoes-select');
   const cursoLabel = document.getElementById('print-curso-label');
@@ -645,43 +760,39 @@ async function initPaginaRelatorio() {
     if (!cursoLabel) return;
     const curso = cursos.find(c => c.id === select.value);
     const partes = [curso ? curso.name : 'Todos os cursos'];
+    const licitacao = licitacoes.find(l => l.semestre === selectLicitacao?.value);
+    if (licitacao) partes.push(`${licitacao.nome} - ${licitacao.periodoAcademico || licitacao.semestre}`);
     if (selectPeriodicidade?.value) partes.push(selectPeriodicidade.value);
     if (selectCotacoes?.value === 'unica') partes.push('apenas 1 cotação');
     if (selectCotacoes?.value === 'multipla') partes.push('mais de 1 cotação');
     cursoLabel.textContent = partes.join(' — ');
   }
 
-  // Lista de cursos pro filtro — só os que já têm item cadastrado na
-  // licitação (evita poluir o dropdown com cursos da escola que nunca
-  // lançaram nada aqui).
-  let cursosComItens = [];
-  try {
-    cursosComItens = await apiFetch('/financeiro/cursos-com-itens');
-  } catch (err) {
-    showToast('Erro ao carregar cursos do relatório: ' + err.message, 'error');
+  // Sem licitação selecionada, o relatório soma itens de TODAS as rodadas
+  // juntos (ex.: 2026.2 e LIC.MED-VET apareciam misturados) — pré-seleciona
+  // a licitação ativa, mas deixa livre pra escolher "Todas" (ver tudo junto)
+  // ou outra rodada específica.
+  if (selectLicitacao) {
+    selectLicitacao.innerHTML = '<option value="">Todas as licitações</option>' + opcoesLicitacoes();
+    try {
+      const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+      if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
+    } catch (err) {}
   }
 
-  if (select) {
-    select.innerHTML = '<option value="">Todos os cursos</option>' + cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if (cursoIdInicial && cursosComItens.some(c => c.id === cursoIdInicial)) {
-      select.value = cursoIdInicial;
-    }
-    select.addEventListener('change', () => {
-      atualizarLabelImpressao();
-      relatorioEmAndamento = carregarRelatorio();
-    });
-  }
+  await atualizarCursosRelatorio(selectLicitacao?.value || '');
+  if (select && cursoIdInicial) select.value = cursoIdInicial;
 
-  selectPeriodicidade?.addEventListener('change', () => {
-    atualizarLabelImpressao();
-    relatorioEmAndamento = carregarRelatorio();
-  });
-  selectCotacoes?.addEventListener('change', () => {
+  selectLicitacao?.addEventListener('change', async () => {
+    await atualizarCursosRelatorio(selectLicitacao.value);
     atualizarLabelImpressao();
     relatorioEmAndamento = carregarRelatorio();
   });
 
-  atualizarLabelImpressao();
+  select?.addEventListener('change', () => {
+    atualizarLabelImpressao();
+    relatorioEmAndamento = carregarRelatorio();
+  });
 
   selectPeriodicidade?.addEventListener('change', () => {
     atualizarLabelImpressao();
@@ -727,10 +838,12 @@ async function initPaginaRelatorio() {
 async function carregarRelatorio() {
   try {
     const cursoId = document.getElementById('relatorio-curso-select')?.value || '';
+    const semestre = document.getElementById('relatorio-licitacao-select')?.value || '';
     const periodicidade = document.getElementById('relatorio-periodicidade-select')?.value || '';
     const cotacoesFiltro = document.getElementById('relatorio-cotacoes-select')?.value || '';
     const params = new URLSearchParams();
     if (cursoId) params.set('cursoId', cursoId);
+    if (semestre) params.set('semestre', semestre);
     if (periodicidade) params.set('periodicidade', periodicidade);
     if (cotacoesFiltro) params.set('cotacoesFiltro', cotacoesFiltro);
     const qs = params.toString() ? `?${params.toString()}` : '';
@@ -745,6 +858,23 @@ function renderRelatorio(dados) {
   document.getElementById('kpi-valor-original').textContent = fmtMoeda(dados.geral.valorOriginal);
   document.getElementById('kpi-gasto').textContent = fmtMoeda(dados.geral.gastoTotal);
   document.getElementById('kpi-economia').textContent = fmtMoeda(dados.geral.economia);
+
+  // Projeção só faz sentido pra uma licitação específica que ainda não fechou
+  // nada (ex.: LIC.MED-VET) — escondida em "Todas as licitações" e na
+  // licitação de insumos, que já mede pelo fechado de verdade.
+  const semestreSelecionado = document.getElementById('relatorio-licitacao-select')?.value || '';
+  const licitacaoSelecionada = licitacoes.find(l => l.semestre === semestreSelecionado);
+  const gridProjecao = document.getElementById('kpi-grid-projecao');
+  const ehInsumos = (licitacaoSelecionada?.nome || '').toUpperCase().includes('INSUMOS');
+  if (gridProjecao) {
+    if (semestreSelecionado && !ehInsumos) {
+      gridProjecao.classList.remove('hidden');
+      document.getElementById('kpi-valor-estimado').textContent = fmtMoeda(dados.projecaoGeral?.valorEstimado || 0);
+      document.getElementById('kpi-economia-potencial').textContent = fmtMoeda(dados.projecaoGeral?.economiaPotencial || 0);
+    } else {
+      gridProjecao.classList.add('hidden');
+    }
+  }
 
   const porCurso = dados.porCurso.sort((a, b) => b.gastoTotal - a.gastoTotal);
   const ranking = dados.rankingFornecedores.slice(0, 8);
@@ -803,29 +933,50 @@ let selecionadosComparacao = new Set(); // itemId dos itens marcados na calculad
 
 async function initPaginaNegociacao() {
   await carregarCursos();
+  await carregarLicitacoes();
+  const selectLicitacao = document.getElementById('negociacao-licitacao-select');
   const selectCurso = document.getElementById('negociacao-curso-select');
   const selectFornecedor = document.getElementById('negociacao-fornecedor-select');
   const params = new URLSearchParams(window.location.search);
   const cursoIdInicial = params.get('cursoId') || '';
   const fornecedorIdInicial = params.get('fornecedorId') || '';
 
-  // Lista de cursos pro filtro — endpoint leve, em vez do /relatorio inteiro
-  // (ver mesma correção em initPaginaRelatorio).
-  let cursosComItens = [];
-  try {
-    cursosComItens = (await apiFetch('/financeiro/cursos')).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
-  } catch (err) {
-    showToast('Erro ao carregar cursos: ' + err.message, 'error');
+  // Sem licitação selecionada, a negociação mistura itens de TODAS as
+  // rodadas (mesmo problema já corrigido no relatório) — pré-seleciona a
+  // licitação ativa, mas deixa livre pra escolher "Todas" ou outra.
+  if (selectLicitacao) {
+    selectLicitacao.innerHTML = '<option value="">Todas as licitações</option>' + opcoesLicitacoes();
+    try {
+      const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
+      if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
+    } catch (err) {}
   }
 
-  if (selectCurso) {
-    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
-      cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if (cursoIdInicial && cursosComItens.some(c => c.id === cursoIdInicial)) {
-      selectCurso.value = cursoIdInicial;
+  // Lista de cursos pro filtro — só os que têm item na licitação selecionada
+  // (ou em qualquer uma, com "Todas as licitações").
+  async function atualizarCursosNegociacao() {
+    if (!selectCurso) return;
+    const valorAtual = selectCurso.value;
+    try {
+      const qs = selectLicitacao?.value ? `?semestre=${encodeURIComponent(selectLicitacao.value)}` : '';
+      const cursosComItens = await apiFetch(`/financeiro/cursos-com-itens${qs}`);
+      selectCurso.innerHTML = '<option value="">Todos os cursos</option>' + cursosComItens.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      if (cursoIdInicial && cursosComItens.some(c => c.id === cursoIdInicial)) {
+        selectCurso.value = cursoIdInicial;
+      } else if (cursosComItens.some(c => c.id === valorAtual)) {
+        selectCurso.value = valorAtual;
+      }
+    } catch (err) {
+      showToast('Erro ao carregar cursos: ' + err.message, 'error');
     }
-    selectCurso.addEventListener('change', () => carregarNegociacao());
   }
+  await atualizarCursosNegociacao();
+
+  selectLicitacao?.addEventListener('change', async () => {
+    await atualizarCursosNegociacao();
+    await carregarNegociacao();
+  });
+  selectCurso?.addEventListener('change', () => carregarNegociacao());
 
   selectFornecedor?.addEventListener('change', () => renderNegociacao(selectFornecedor.value));
 
@@ -859,7 +1010,11 @@ async function carregarNegociacao(fornecedorIdForcado = '') {
   const fornecedorSelecionado = fornecedorIdForcado || selectFornecedor?.value || '';
   try {
     const cursoId = document.getElementById('negociacao-curso-select')?.value || '';
-    const qs = cursoId ? `?cursoId=${encodeURIComponent(cursoId)}` : '';
+    const semestre = document.getElementById('negociacao-licitacao-select')?.value || '';
+    const params = new URLSearchParams();
+    if (cursoId) params.set('cursoId', cursoId);
+    if (semestre) params.set('semestre', semestre);
+    const qs = params.toString() ? `?${params.toString()}` : '';
     const dados = await apiFetch(`/financeiro/relatorio${qs}`);
     negociacaoComparativo = dados.comparativo || { fornecedores: [], itens: [] };
 
@@ -1421,17 +1576,19 @@ async function initPaginaFechamento() {
       fornecedores.map(f => `<option value="${f.id}">${esc(f.nome)}</option>`).join('');
   }
 
-  // Pré-preenche com o semestre ativo que o financeiro já configurou (mesmo
-  // valor que os coordenadores enxergam) — continua editável pra fechar um
-  // semestre diferente se precisar.
+  // Lista de licitações pra selecionar (antes era um campo de texto livre —
+  // por isso só "2026.2" aparecia: precisava digitar do zero pra ver outra
+  // rodada). Pré-seleciona a licitação ativa, mas continua trocável.
+  await carregarLicitacoes();
   const semestreInput = document.getElementById('fecha-semestre-input');
   if (semestreInput) {
+    semestreInput.innerHTML = '<option value="">Selecione uma licitação...</option>' + opcoesLicitacoes();
     try {
       const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
       if (semestreAtivoCoordenador) semestreInput.value = semestreAtivoCoordenador;
     } catch (err) {
-      // Sem semestre ativo configurado ainda — deixa o campo em branco pra
-      // preencher na mão, sem travar o resto da tela.
+      // Sem semestre ativo configurado ainda — deixa em branco pra
+      // selecionar na mão, sem travar o resto da tela.
     }
   }
 
@@ -2130,8 +2287,12 @@ async function initPaginaEntregas() {
       cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
+  // Lista de licitações pra selecionar em vez de digitar (era texto livre —
+  // por isso só "2026.2" aparecia, tinha que digitar do zero outra rodada).
+  await carregarLicitacoes();
   const semestreInput = document.getElementById('entregas-semestre-input');
   if (semestreInput) {
+    semestreInput.innerHTML = '<option value="">Selecione uma licitação...</option>' + opcoesLicitacoes();
     try {
       const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
       if (semestreAtivoCoordenador) semestreInput.value = semestreAtivoCoordenador;

@@ -7,6 +7,23 @@ const checkPermission = verifyToken.requireModulePermission('licitacao');
 
 const COL_FORNECEDORES = 'financeiro_fornecedores';
 const COL_ITENS = 'financeiro_itens';
+const COL_LICITACOES = 'financeiro_licitacoes';
+
+// "Semestre" também é usado como identificador livre de rodada/licitação
+// pontual (ex.: "LIC.MED-VET" pra uma licitação específica fora do ciclo
+// normal), não só o formato acadêmico AAAA.N — aceita os dois, só barra
+// vazio/lixo. Coordenador não usa mais este módulo, então isso só afeta
+// Financeiro/Admin digitando o valor.
+const SEMESTRE_REGEX = /^[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9 ._-]{0,29}$/;
+function validarSemestreLivre(semestre) {
+    return SEMESTRE_REGEX.test(semestre || '');
+}
+// Firestore compara string exata — "LIC.MED-VET" != "lic.med-vet". Normaliza
+// SEMPRE (ao salvar e ao consultar) pra digitar de qualquer jeito e ainda
+// achar/gravar no mesmo grupo, sem depender de bater maiúscula/espaço certo.
+function normalizarSemestre(semestre) {
+    return (semestre || '').toString().trim().toUpperCase();
+}
 
 // Coordenador tem nível de execução no módulo (cadastra/edita itens), mas não
 // pode ver preços/fornecedores/relatório — isso é restrito ao financeiro/admin.
@@ -32,6 +49,26 @@ function medianaValorTotal(cotacoes, fallback) {
     return valores.length % 2 === 0 ? (valores[meio - 1] + valores[meio]) / 2 : valores[meio];
 }
 
+// Mediana como referência de economia só faz sentido na licitação "de
+// insumos" (dezenas de cotações por item, sofre com outlier de digitação).
+// Nas demais licitações (poucas cotações, ex.: LIC.MED-VET) o financeiro
+// pediu pra referência voltar a ser a MAIOR cotação recebida.
+async function getSemestresComMediana() {
+    const snap = await db.collection(COL_LICITACOES).get();
+    const set = new Set();
+    snap.forEach(doc => {
+        const l = doc.data();
+        if ((l.nome || '').toUpperCase().includes('INSUMOS')) set.add(l.semestre);
+    });
+    return set;
+}
+
+function referenciaEconomia(semestre, semestresComMediana, cotacoes, fallback) {
+    if (!cotacoes.length) return fallback;
+    if (semestresComMediana.has(semestre)) return medianaValorTotal(cotacoes, fallback);
+    return Math.max(...cotacoes.map(c => c.valorTotal));
+}
+
 const COL_CONFIG = 'config';
 const DOC_CONFIG_FINANCEIRO = 'financeiro';
 
@@ -54,11 +91,58 @@ router.get('/config', verifyToken, checkPermission, async (req, res) => {
 
 router.put('/config/semestre-ativo', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const semestre = (req.body.semestre || '').trim();
-        if (!/^\d{4}\.\d$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+        const semestre = normalizarSemestre(req.body.semestre);
+        if (!validarSemestreLivre(semestre)) return res.status(400).json({ error: 'Informe um semestre/rodada válido (ex.: 2026.2 ou LIC.MED-VET).' });
 
         await db.collection(COL_CONFIG).doc(DOC_CONFIG_FINANCEIRO).set({ semestreAtivoCoordenador: semestre }, { merge: true });
         res.json({ message: 'Semestre ativo atualizado.', semestreAtivoCoordenador: semestre });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// LICITAÇÕES — registro explícito de cada rodada (nome + semestre), em vez
+// de digitar um "semestre" livre em cada tela sem saber quais já existem.
+// O campo `semestre` continua sendo a chave usada em financeiro_itens (não
+// migra os 601 itens já cadastrados) — aqui só dá um nome amigável a cada
+// valor de semestre e vira a lista pra selecionar em vez de digitar.
+// ==========================================
+router.get('/licitacoes', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_LICITACOES).orderBy('createdAt', 'desc').get();
+        res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/licitacoes', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
+    try {
+        const nome = (req.body.nome || '').toString().trim();
+        const semestre = normalizarSemestre(req.body.semestre);
+        // periodoAcademico é só informativo (ex.: "2026.2") — PODE repetir entre
+        // licitações (uma licitação avulsa tipo LIC.MED-VET pode pertencer ao
+        // mesmo período de outra). `semestre` continua sendo a chave única de
+        // verdade, é ela que bate com financeiro_itens.semestre pra separar os
+        // itens — não pode repetir, senão duas licitações puxariam os mesmos itens.
+        const periodoAcademico = normalizarSemestre(req.body.periodoAcademico) || semestre;
+        if (!nome) return res.status(400).json({ error: 'Informe o nome da licitação.' });
+        if (!validarSemestreLivre(semestre)) return res.status(400).json({ error: 'Informe um semestre válido (ex.: 2026.2 ou LIC.MED-VET).' });
+
+        const existenteSnap = await db.collection(COL_LICITACOES).where('semestre', '==', semestre).limit(1).get();
+        if (!existenteSnap.empty) {
+            return res.status(400).json({ error: `Já existe uma licitação com o semestre "${semestre}" (${existenteSnap.docs[0].data().nome}).` });
+        }
+
+        const docRef = await db.collection(COL_LICITACOES).add({
+            nome,
+            semestre,
+            periodoAcademico,
+            createdAt: new Date().toISOString(),
+            createdBy: req.user.uid
+        });
+        res.status(201).json({ id: docRef.id, message: 'Licitação criada.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -85,11 +169,17 @@ router.get('/cursos', verifyToken, checkPermission, async (req, res) => {
 // GET /cursos-com-itens — só os cursos que já têm pelo menos 1 item cadastrado
 // na licitação, pra não poluir o filtro do Relatório com cursos que nunca
 // lançaram nada aqui (diferente de /cursos, que traz TODOS os cursos ativos
-// da escola). Mesmo custo de leitura do /relatorio (varre a coleção
-// inteira), então só é usado nessa tela, que já paga esse custo mesmo.
+// da escola). Com ?semestre=, filtra pra só os cursos QUE TÊM ITEM NAQUELA
+// LICITAÇÃO específica (ex.: LIC.MED-VET só tem Medicina Veterinária).
+// Mesmo custo de leitura do /relatorio (varre a coleção inteira ou o filtro
+// de semestre), então só é usado nessa tela, que já paga esse custo mesmo.
 router.get('/cursos-com-itens', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const snap = await db.collection(COL_ITENS).select('cursoId', 'curso').get();
+        const semestre = normalizarSemestre(req.query.semestre);
+        let query = db.collection(COL_ITENS);
+        if (semestre) query = query.where('semestre', '==', semestre);
+        query = query.select('cursoId', 'curso');
+        const snap = await query.get();
         const mapa = new Map();
         snap.forEach(d => {
             const it = d.data();
@@ -183,7 +273,7 @@ router.get('/itens', verifyToken, checkPermission, async (req, res) => {
 
         // Coordenador só enxerga o semestre configurado como ativo — travado
         // aqui no servidor, ignorando qualquer semestre que venha na URL.
-        let semestre = req.query.semestre;
+        let semestre = normalizarSemestre(req.query.semestre) || undefined;
         if (req.user.role === 'coordenador') {
             semestre = await getSemestreAtivo();
             if (!semestre) return res.status(409).json({ error: 'O financeiro ainda não configurou o semestre ativo.' });
@@ -302,8 +392,8 @@ router.post('/itens', verifyToken, checkPermission, async (req, res) => {
             semestre = await getSemestreAtivo();
             if (!semestre) return res.status(409).json({ error: 'O financeiro ainda não configurou o semestre ativo.' });
         } else {
-            semestre = (req.body.semestre || '').trim();
-            if (!/^\d{4}\.\d$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+            semestre = normalizarSemestre(req.body.semestre);
+            if (!validarSemestreLivre(semestre)) return res.status(400).json({ error: 'Informe um semestre/rodada válido (ex.: 2026.2 ou LIC.MED-VET).' });
         }
 
         const qtd = parseFloat(quantidade);
@@ -436,11 +526,12 @@ router.put('/itens/:id/cotacoes', verifyToken, checkPermission, bloquearCoordena
 // ==========================================
 router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, async (req, res) => {
     try {
-        const { cursoId, semestre, periodicidade, cotacoesFiltro } = req.query;
+        const { cursoId, periodicidade, cotacoesFiltro } = req.query;
+        const semestre = normalizarSemestre(req.query.semestre);
         let query = db.collection(COL_ITENS);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
         if (semestre) query = query.where('semestre', '==', semestre);
-        const snap = await query.get();
+        const [snap, semestresComMediana] = await Promise.all([query.get(), getSemestresComMediana()]);
 
         // Gasto e economia são calculados só sobre itens FECHADOS (decisão real
         // de compra) — antes usava a menor cotação de TODO item cotado, mesmo o
@@ -450,6 +541,13 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
         const porFornecedorFechado = {}; // fornecedorId -> { fornecedor, itensFechados, gastoTotal, economia }
         const rankingFornecedores = {}; // fornecedorNome -> vitórias (cotação mais barata, não necessariamente fechada)
         let gastoTotalGeral = 0, economiaTotalGeral = 0;
+
+        // Projeção: só faz sentido pra licitação que AINDA não fechou nada (ex.:
+        // LIC.MED-VET) — pega a menor cotação de cada item pendente como "se
+        // fechasse hoje". Não entra item já fechado (esse já tem número real
+        // acima) nem licitação de insumos (essa já mede pelo fechado de verdade).
+        const projecaoPorCurso = {}; // cursoId -> { curso, valorEstimado, economiaPotencial }
+        let valorEstimadoGeral = 0, economiaPotencialGeral = 0;
 
         // Mapa comparativo: pra cada item, o valor que CADA fornecedor cotou —
         // não só quem ganhou. É o "orçamento lado a lado" que o financeiro pediu
@@ -472,17 +570,17 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
             if (cotacoesFiltro === 'multipla' && cotacoes.length < 2) return;
 
             // Gasto/economia real: só conta o que foi de fato fechado. Economia
-            // aqui é "quanto deixou de pagar em relação à mediana das cotações
-            // recebidas pro item" — usar a mediana em vez da maior cotação evita
-            // que uma cotação isolada errada (unidade/digitação trocada) infle a
-            // economia sozinha. Diferente da maior, a mediana pode ficar abaixo
-            // do valor fechado (economia negativa é possível e correta aqui).
+            // aqui é "quanto deixou de pagar em relação à referência" — a
+            // referência é a MAIOR cotação recebida, exceto na licitação de
+            // insumos, onde é a mediana (ver referenciaEconomia/getSemestresComMediana).
+            // Com a mediana a economia pode ficar negativa (valor fechado acima
+            // dela) — correto e esperado nesse caso.
             if (item.status === 'fechado' && item.valorFechado != null && item.fornecedorFechadoId) {
                 if (!porCurso[item.cursoId]) {
                     porCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, gastoTotal: 0, economia: 0 };
                 }
                 const c = porCurso[item.cursoId];
-                const referencia = medianaValorTotal(cotacoes, item.valorFechado);
+                const referencia = referenciaEconomia(item.semestre, semestresComMediana, cotacoes, item.valorFechado);
                 const economiaItem = referencia - item.valorFechado;
 
                 c.gastoTotal += item.valorFechado;
@@ -505,6 +603,18 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
             if (cotacoes.length) {
                 const valores = cotacoes.map(cot => cot.valorTotal);
                 const menor = Math.min(...valores);
+
+                if (item.status !== 'fechado' && !semestresComMediana.has(item.semestre)) {
+                    const referenciaProjecao = referenciaEconomia(item.semestre, semestresComMediana, cotacoes, menor);
+                    const economiaProjetadaItem = referenciaProjecao - menor;
+                    if (!projecaoPorCurso[item.cursoId]) {
+                        projecaoPorCurso[item.cursoId] = { cursoId: item.cursoId, curso: item.curso, valorEstimado: 0, economiaPotencial: 0 };
+                    }
+                    projecaoPorCurso[item.cursoId].valorEstimado += menor;
+                    projecaoPorCurso[item.cursoId].economiaPotencial += economiaProjetadaItem;
+                    valorEstimadoGeral += menor;
+                    economiaPotencialGeral += economiaProjetadaItem;
+                }
 
                 const vencedor = cotacoes.find(cot => cot.valorTotal === menor);
                 if (vencedor) {
@@ -553,6 +663,15 @@ router.get('/relatorio', verifyToken, checkPermission, bloquearCoordenador, asyn
                 // pra tela não ter que somar os dois pra mostrar "valor total
                 // da compra sem a negociação".
                 valorOriginal: Math.round((gastoTotalGeral + economiaTotalGeral) * 100) / 100
+            },
+            projecaoPorCurso: Object.values(projecaoPorCurso).map(c => ({
+                ...c,
+                valorEstimado: Math.round(c.valorEstimado * 100) / 100,
+                economiaPotencial: Math.round(c.economiaPotencial * 100) / 100
+            })),
+            projecaoGeral: {
+                valorEstimado: Math.round(valorEstimadoGeral * 100) / 100,
+                economiaPotencial: Math.round(economiaPotencialGeral * 100) / 100
             },
             porFornecedorFechado: Object.values(porFornecedorFechado)
                 .map(f => ({
@@ -722,6 +841,9 @@ router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoord
             // pra "reabrir" conseguir desfazer de verdade — sem isso, reabrir só
             // limpava os campos de fechado mas deixava a cotação nova (errada,
             // se o casamento automático tivesse acertado o item errado) intacta.
+            // Fechar o item é a própria conferência acontecendo — o alerta de
+            // "precisaConferencia" (posto por correção/migração de cotação)
+            // deixa de fazer sentido depois disso.
             await db.collection(COL_ITENS).doc(f.itemId).update({
                 cotacoes,
                 status: 'fechado',
@@ -730,6 +852,8 @@ router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoord
                 valorFechado: valorTotal,
                 fechadoEm: new Date().toISOString(),
                 estadoAntesDoFechamento: { cotacoes: item.cotacoes || [], status: item.status || 'pendente' },
+                precisaConferencia: admin.firestore.FieldValue.delete(),
+                motivoConferencia: admin.firestore.FieldValue.delete(),
                 updatedAt: new Date().toISOString()
             });
             atualizados++;
@@ -803,6 +927,8 @@ router.post('/fechamento/confirmar-com-desconto', verifyToken, checkPermission, 
                 percentualDescontoFechamento: Math.round(percentual * 100) / 100,
                 fechadoEm: new Date().toISOString(),
                 estadoAntesDoFechamento: { cotacoes: item.cotacoes || [], status: item.status || 'pendente' },
+                precisaConferencia: admin.firestore.FieldValue.delete(),
+                motivoConferencia: admin.firestore.FieldValue.delete(),
                 updatedAt: new Date().toISOString()
             });
             atualizados++;
@@ -957,7 +1083,7 @@ router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearC
 
         let query = db.collection(COL_ITENS).where('semestre', '==', semestre);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
-        const snap = await query.get();
+        const [snap, semestresComMediana] = await Promise.all([query.get(), getSemestresComMediana()]);
 
         const fechados = snap.docs
             .map(d => ({ id: d.id, ...d.data() }))
@@ -965,14 +1091,14 @@ router.get('/fechamento/fechados-geral', verifyToken, checkPermission, bloquearC
             .sort((a, b) => (a.fornecedorFechadoNome || '').localeCompare(b.fornecedorFechadoNome || '') ||
                 (a.curso || '').localeCompare(b.curso || '') || (a.produto || '').localeCompare(b.produto || ''));
 
-        // Economia por item: mediana das cotações recebidas menos o que foi
-        // realmente pago (ver medianaValorTotal) — mesma conta usada no
-        // Relatório, pra não ter dois números de "economia" diferentes no
-        // sistema. Pode ficar negativa se o valor fechado ficou acima da
-        // mediana das cotações.
+        // Economia por item: referência (maior cotação, ou mediana na licitação
+        // de insumos — ver referenciaEconomia) menos o que foi realmente pago —
+        // mesma conta usada no Relatório, pra não ter dois números de "economia"
+        // diferentes no sistema. Pode ficar negativa quando a referência é a
+        // mediana e o valor fechado ficou acima dela.
         const itensComEconomia = fechados.map(it => {
             const cotacoes = it.cotacoes || [];
-            const valorOriginal = medianaValorTotal(cotacoes, it.valorFechado || 0);
+            const valorOriginal = referenciaEconomia(it.semestre, semestresComMediana, cotacoes, it.valorFechado || 0);
             const economia = valorOriginal - (it.valorFechado || 0);
             return { ...it, valorOriginal, economia };
         });

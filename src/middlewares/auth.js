@@ -181,6 +181,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 3,
                 matriculas: 3
             },
+            // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
+            // tarefa exclusiva do Financeiro.
             coordenador: {
                 emprestimo: 1,
                 usuarios: 1,
@@ -190,7 +192,7 @@ const requireModulePermission = (moduleName) => {
                 'almoxarifado-saude': 1,
                 'relatorio-dp': 1,
                 acessos: 1,
-                licitacao: 3,
+                licitacao: 1,
                 matriculas: 1
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
