@@ -6,6 +6,9 @@ const verifyToken = require('../middlewares/auth');
 const checkPermission = verifyToken.requireModulePermission('matriculas');
 
 const COL_ALUNOS = 'matriculas_alunos';
+const COL_CONFIG = 'matriculas_config';
+const DOC_SEMESTRES = 'semestres';
+const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 
 // Situação e Plano/Confissão são SELECT fixo (não texto livre) — é exatamente
 // isso que substitui a bagunça de digitação da planilha original (variações
@@ -241,6 +244,111 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
 
 router.get('/config/opcoes', verifyToken, checkPermission, async (req, res) => {
     res.json({ situacoes: SITUACOES, planosConfissao: PLANOS_CONFISSAO });
+});
+
+// Lista de semestres pro seletor — sempre inclui os padrão + o que já foi
+// criado via /virar-semestre, união (não substituição) pra nunca sumir
+// semestre antigo do dropdown por causa de doc de config ainda não existir
+// ou estar desatualizado.
+router.get('/config/semestres', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const doc = await db.collection(COL_CONFIG).doc(DOC_SEMESTRES).get();
+        const daBase = (doc.exists && Array.isArray(doc.data().lista)) ? doc.data().lista : [];
+        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort();
+        res.json({ semestres });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// VIRADA DE SEMESTRE — copia pro próximo semestre só os alunos que a
+// coordenação/financeiro escolheu manualmente na tela (não existe regra
+// automática por situação decidindo quem continua — a pessoa que sabe quem
+// vai ficar). O sistema só ajuda avançando o período (+1) e deixando a
+// situação nova como "Não Assinou" (pendente de confirmar rematrícula ao
+// longo do semestre que está abrindo). Os registros de origem não são
+// tocados — continuam intactos como histórico/relatório do semestre que fechou.
+// ==========================================
+function avancarPeriodo(periodoOriginal) {
+    const m = (periodoOriginal || '').trim().match(/^(\d+)º$/);
+    if (!m) return periodoOriginal || ''; // "DP", vazio ou fora do padrão — não mexe, fica pra revisão manual
+    return `${parseInt(m[1], 10) + 1}º`;
+}
+
+router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestreOrigem = (req.body.semestreOrigem || '').trim();
+        const semestreDestino = (req.body.semestreDestino || '').trim();
+        const alunoIds = Array.isArray(req.body.alunoIds) ? [...new Set(req.body.alunoIds)] : [];
+        // Overrides opcionais vindos da tela (período/situação editados linha a
+        // linha antes de confirmar) — quem não vier aqui usa o padrão sugerido.
+        const overrides = (req.body.overrides && typeof req.body.overrides === 'object') ? req.body.overrides : {};
+
+        if (!validarSemestre(semestreOrigem)) return res.status(400).json({ error: 'Semestre de origem inválido.' });
+        if (!validarSemestre(semestreDestino)) return res.status(400).json({ error: 'Informe o semestre de destino no formato AAAA.N (ex.: 2027.1).' });
+        if (semestreDestino === semestreOrigem) return res.status(400).json({ error: 'O semestre de destino precisa ser diferente do de origem.' });
+        if (!alunoIds.length) return res.status(400).json({ error: 'Selecione pelo menos um aluno.' });
+        if (alunoIds.length > 3000) return res.status(400).json({ error: 'Selecione no máximo 3000 alunos por vez.' });
+
+        const refs = alunoIds.map(id => db.collection(COL_ALUNOS).doc(id));
+        const snaps = [];
+        for (let i = 0; i < refs.length; i += 300) {
+            const lote = await db.getAll(...refs.slice(i, i + 300));
+            snaps.push(...lote);
+        }
+
+        const avisosPeriodo = [];
+        const docsParaGravar = [];
+        for (const snap of snaps) {
+            if (!snap.exists) continue; // pode ter sido excluído entre carregar a tela e confirmar
+            const origem = snap.data();
+            if (origem.semestre !== semestreOrigem) continue; // proteção: só copia quem é realmente do semestre de origem informado
+
+            const override = overrides[snap.id] || {};
+            const periodoSugerido = avancarPeriodo(origem.periodo);
+            if (periodoSugerido === origem.periodo && origem.periodo && override.periodo === undefined) avisosPeriodo.push(origem.nome);
+
+            const periodoNovo = (override.periodo !== undefined && override.periodo !== null) ? override.periodo.toString().trim() : periodoSugerido;
+            const situacaoNovaBruta = override.situacao;
+            const situacaoNova = SITUACOES.includes(situacaoNovaBruta) ? situacaoNovaBruta : 'Não Assinou';
+
+            docsParaGravar.push({
+                modulo: origem.modulo,
+                cursoId: origem.cursoId || null,
+                curso: origem.curso,
+                periodo: periodoNovo,
+                nome: origem.nome,
+                cidade: origem.cidade || '',
+                telefone: origem.telefone || '',
+                situacao: situacaoNova,
+                planoConfissao: origem.planoConfissao || 'Não',
+                observacoes: origem.observacoes || '',
+                semestre: semestreDestino,
+                origemAlunoId: snap.id,
+                createdAt: new Date().toISOString(),
+                createdBy: req.user.uid,
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        if (!docsParaGravar.length) return res.status(400).json({ error: 'Nenhum dos alunos selecionados pertence ao semestre de origem informado (recarregue a tela e tente de novo).' });
+
+        for (let i = 0; i < docsParaGravar.length; i += 400) {
+            const chunk = docsParaGravar.slice(i, i + 400);
+            const batch = db.batch();
+            chunk.forEach(dados => batch.set(db.collection(COL_ALUNOS).doc(), dados));
+            await batch.commit();
+        }
+
+        await db.collection(COL_CONFIG).doc(DOC_SEMESTRES).set({
+            lista: admin.firestore.FieldValue.arrayUnion(semestreOrigem, semestreDestino)
+        }, { merge: true });
+
+        res.json({ copiados: docsParaGravar.length, avisosPeriodo });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;
