@@ -116,10 +116,27 @@ async function initApp(user, role) {
 
   document.getElementById('app').classList.remove('hidden');
 
-  if (document.getElementById('alunos-tbody')) {
+  if (document.getElementById('virar-semestre-root')) {
+    initPaginaVirarSemestre();
+  } else if (document.getElementById('alunos-tbody')) {
     initPaginaLancamento();
   } else if (document.getElementById('matriculas-relatorio-root')) {
     initPaginaRelatorio();
+  }
+}
+
+// Lista de semestres existentes (padrão + os já criados via "Virar Semestre")
+// pros três seletores do módulo — busca uma vez por carregamento de página,
+// nunca varre a coleção de alunos inteira só pra montar esse combo.
+async function popularSelectSemestres(selectEl) {
+  if (!selectEl) return;
+  const valorAtual = selectEl.value;
+  try {
+    const { semestres } = await apiFetch('/matriculas/config/semestres');
+    selectEl.innerHTML = semestres.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    selectEl.value = semestres.includes(valorAtual) ? valorAtual : semestres[semestres.length - 1];
+  } catch (err) {
+    showToast('Erro ao carregar semestres: ' + err.message, 'error');
   }
 }
 
@@ -142,6 +159,8 @@ let alunoEmEdicaoId = null;
 async function initPaginaLancamento() {
   await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
   popularSelectsOpcoes();
+  await popularSelectSemestres(document.getElementById('semestre-select'));
+  semestreSelecionado = document.getElementById('semestre-select')?.value || semestreSelecionado;
 
   document.getElementById('modulo-select')?.addEventListener('change', (e) => {
     moduloSelecionado = e.target.value;
@@ -503,6 +522,7 @@ async function initPaginaRelatorio() {
     selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
       cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
+  await popularSelectSemestres(selectSemestre);
   atualizarVisibilidadeCursoRelatorio();
 
   selectModulo?.addEventListener('change', () => {
@@ -657,4 +677,227 @@ function renderRelatorio(dados) {
     .filter(p => (porPlano[p] || 0) > 0)
     .map(p => `<tr><td>${esc(p)}</td><td>${porPlano[p] || 0}</td></tr>`)
     .join('') || '<tr><td colspan="2" class="tabela-msg">Nenhum aluno lançado para esse módulo/semestre ainda.</td></tr>';
+}
+
+// ==========================================
+// TELA VIRAR SEMESTRE (virar-semestre.html)
+// ==========================================
+// Quem vai pro próximo semestre é escolha manual, linha a linha — não existe
+// regra automática por situação aqui. O período (+1) e a situação nova
+// ("Não Assinou") são só sugestão editável antes de confirmar.
+let vsAlunos = [];
+
+function vsAvancarPeriodo(periodoOriginal) {
+  const m = (periodoOriginal || '').trim().match(/^(\d+)º$/);
+  if (!m) return periodoOriginal || '';
+  return `${parseInt(m[1], 10) + 1}º`;
+}
+
+async function initPaginaVirarSemestre() {
+  await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
+
+  const selectCurso = document.getElementById('vs-curso-filtro');
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosFatec.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  }
+  const periodoFiltro = document.getElementById('vs-periodo-filtro');
+  if (periodoFiltro) {
+    const periodos = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
+    periodoFiltro.innerHTML = '<option value="">Todos os períodos</option>' +
+      periodos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  }
+  const situacaoFiltro = document.getElementById('vs-situacao-filtro');
+  if (situacaoFiltro) {
+    situacaoFiltro.innerHTML = '<option value="">Todas as situações</option>' +
+      opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  }
+
+  await popularSelectSemestres(document.getElementById('vs-origem-select'));
+  vsAtualizarVisibilidadeCurso();
+
+  document.getElementById('vs-modulo-select')?.addEventListener('change', () => {
+    vsAtualizarVisibilidadeCurso();
+    vsResetarCarregamento();
+  });
+  document.getElementById('vs-origem-select')?.addEventListener('change', vsResetarCarregamento);
+
+  document.getElementById('btn-vs-carregar')?.addEventListener('click', vsCarregarAlunos);
+
+  ['vs-curso-filtro', 'vs-periodo-filtro', 'vs-situacao-filtro'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', vsRenderTabela);
+  });
+  document.getElementById('vs-busca')?.addEventListener('input', vsRenderTabela);
+
+  document.getElementById('btn-vs-marcar-filtrados')?.addEventListener('click', () => vsMarcarFiltrados(true));
+  document.getElementById('btn-vs-desmarcar-filtrados')?.addEventListener('click', () => vsMarcarFiltrados(false));
+  document.getElementById('vs-check-todos-cabecalho')?.addEventListener('change', (e) => vsMarcarFiltrados(e.target.checked));
+  document.getElementById('btn-vs-limpar-selecao')?.addEventListener('click', () => {
+    vsAlunos.forEach(a => { a._selecionado = false; });
+    vsRenderTabela();
+  });
+
+  document.getElementById('vs-destino-input')?.addEventListener('input', vsAtualizarContadorEBotao);
+  document.getElementById('btn-vs-confirmar')?.addEventListener('click', vsConfirmar);
+}
+
+function vsAtualizarVisibilidadeCurso() {
+  const isFatec = document.getElementById('vs-modulo-select')?.value !== 'medicina';
+  document.getElementById('vs-curso-filtro')?.classList.toggle('hidden', !isFatec);
+}
+
+function vsResetarCarregamento() {
+  vsAlunos = [];
+  document.getElementById('vs-area-selecao')?.classList.add('hidden');
+  document.getElementById('vs-barra-confirmar')?.classList.add('hidden');
+}
+
+async function vsCarregarAlunos() {
+  const modulo = document.getElementById('vs-modulo-select')?.value;
+  const semestre = document.getElementById('vs-origem-select')?.value;
+  if (!modulo || !semestre) return;
+
+  const btn = document.getElementById('btn-vs-carregar');
+  btn.disabled = true;
+  btn.textContent = 'Carregando...';
+  try {
+    const carregados = [];
+    let cursor = null;
+    let hasMore = true;
+    while (hasMore) {
+      const params = new URLSearchParams({ modulo, semestre, pageSize: '200' });
+      if (cursor) { params.set('cursorNome', cursor.nome); params.set('cursorId', cursor.id); }
+      const resp = await apiFetch(`/matriculas/alunos?${params.toString()}`);
+      carregados.push(...resp.alunos);
+      hasMore = resp.hasMore;
+      cursor = resp.nextCursor;
+    }
+    vsAlunos = carregados.map(a => ({
+      ...a,
+      _selecionado: false,
+      _periodoNovo: vsAvancarPeriodo(a.periodo),
+      _situacaoNova: 'Não Assinou'
+    }));
+    document.getElementById('vs-area-selecao')?.classList.remove('hidden');
+    document.getElementById('vs-barra-confirmar')?.classList.remove('hidden');
+    document.getElementById('vs-busca').value = '';
+    vsRenderTabela();
+  } catch (err) {
+    showToast('Erro ao carregar alunos: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Carregar alunos';
+  }
+}
+
+function vsAlunosFiltrados() {
+  const curso = document.getElementById('vs-curso-filtro')?.value;
+  const periodo = document.getElementById('vs-periodo-filtro')?.value;
+  const situacao = document.getElementById('vs-situacao-filtro')?.value;
+  const termo = document.getElementById('vs-busca')?.value.trim().toLowerCase();
+  return vsAlunos.filter(a =>
+    (!curso || a.curso === curso) &&
+    (!periodo || a.periodo === periodo) &&
+    (!situacao || a.situacao === situacao) &&
+    (!termo || a.nome.toLowerCase().includes(termo))
+  );
+}
+
+function vsSituacaoOptionsHtml(selecionada) {
+  return opcoes.situacoes.map(s => `<option value="${esc(s)}" ${s === selecionada ? 'selected' : ''}>${esc(s)}</option>`).join('');
+}
+
+function vsRenderTabela() {
+  const tbody = document.getElementById('vs-tbody');
+  const filtrados = vsAlunosFiltrados();
+
+  if (!vsAlunos.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tabela-msg">Escolha módulo e semestre de origem e clique em "Carregar alunos".</td></tr>';
+  } else if (!filtrados.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tabela-msg">Nenhum aluno encontrado para os filtros atuais.</td></tr>';
+  } else {
+    tbody.innerHTML = filtrados.map(a => `
+      <tr>
+        <td><input type="checkbox" data-vs-check="${a.id}" ${a._selecionado ? 'checked' : ''}></td>
+        <td>${esc(a.nome)}</td>
+        <td>${esc(a.curso)}</td>
+        <td>${esc(a.periodo)}</td>
+        <td><input type="text" data-vs-periodo="${a.id}" value="${esc(a._periodoNovo)}" style="width: 4.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;"></td>
+        <td><span class="status-badge ${situacaoBadgeClasse(a.situacao)}">${esc(a.situacao)}</span></td>
+        <td><select data-vs-situacao="${a.id}" style="padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;">${vsSituacaoOptionsHtml(a._situacaoNova)}</select></td>
+      </tr>`).join('');
+  }
+
+  tbody.querySelectorAll('[data-vs-check]').forEach(el => el.addEventListener('change', (e) => {
+    const aluno = vsAlunos.find(a => a.id === el.dataset.vsCheck);
+    if (aluno) aluno._selecionado = e.target.checked;
+    vsAtualizarContadorEBotao();
+  }));
+  tbody.querySelectorAll('[data-vs-periodo]').forEach(el => el.addEventListener('input', (e) => {
+    const aluno = vsAlunos.find(a => a.id === el.dataset.vsPeriodo);
+    if (aluno) aluno._periodoNovo = e.target.value;
+  }));
+  tbody.querySelectorAll('[data-vs-situacao]').forEach(el => el.addEventListener('change', (e) => {
+    const aluno = vsAlunos.find(a => a.id === el.dataset.vsSituacao);
+    if (aluno) aluno._situacaoNova = e.target.value;
+  }));
+
+  vsAtualizarContadorEBotao();
+}
+
+function vsMarcarFiltrados(valor) {
+  vsAlunosFiltrados().forEach(a => { a._selecionado = valor; });
+  vsRenderTabela();
+}
+
+function vsAtualizarContadorEBotao() {
+  const selecionados = vsAlunos.filter(a => a._selecionado).length;
+  document.getElementById('vs-contador-selecionados').textContent = `${selecionados} aluno${selecionados === 1 ? '' : 's'} selecionado${selecionados === 1 ? '' : 's'}`;
+
+  const destino = document.getElementById('vs-destino-input')?.value.trim();
+  const origem = document.getElementById('vs-origem-select')?.value;
+  const destinoValido = /^\d{4}\.\d$/.test(destino || '') && destino !== origem;
+  document.getElementById('btn-vs-confirmar').disabled = !(selecionados > 0 && destinoValido);
+}
+
+async function vsConfirmar() {
+  const semestreOrigem = document.getElementById('vs-origem-select')?.value;
+  const semestreDestino = document.getElementById('vs-destino-input')?.value.trim();
+  const selecionados = vsAlunos.filter(a => a._selecionado);
+  if (!selecionados.length) return;
+
+  if (!confirm(`Copiar ${selecionados.length} aluno(s) de ${semestreOrigem} para ${semestreDestino}?\n\nOs registros de ${semestreOrigem} não serão alterados nem apagados.`)) return;
+
+  const btn = document.getElementById('btn-vs-confirmar');
+  btn.disabled = true;
+  btn.textContent = 'Gravando...';
+  try {
+    const overrides = {};
+    selecionados.forEach(a => { overrides[a.id] = { periodo: a._periodoNovo, situacao: a._situacaoNova }; });
+
+    const resp = await apiFetch('/matriculas/virar-semestre', {
+      method: 'POST',
+      body: JSON.stringify({
+        semestreOrigem,
+        semestreDestino,
+        alunoIds: selecionados.map(a => a.id),
+        overrides
+      })
+    });
+
+    showToast(`${resp.copiados} aluno(s) copiado(s) para ${semestreDestino}.`);
+    if (resp.avisosPeriodo?.length) {
+      showToast(`${resp.avisosPeriodo.length} aluno(s) com período fora do padrão "Nº" — confira manualmente.`, 'error');
+    }
+
+    vsResetarCarregamento();
+    document.getElementById('vs-destino-input').value = '';
+    await popularSelectSemestres(document.getElementById('vs-origem-select'));
+  } catch (err) {
+    showToast('Erro ao virar semestre: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar virada de semestre';
+    vsAtualizarContadorEBotao();
+  }
 }
