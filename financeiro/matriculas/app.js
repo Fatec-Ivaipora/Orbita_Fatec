@@ -30,6 +30,21 @@ async function apiFetch(endpoint, options = {}) {
   return res.json();
 }
 
+// Usado só no guard de acesso (role/permissões no login) — uma instabilidade
+// passageira de rede/servidor nessas duas chamadas não pode virar "sem
+// acesso" e chutar quem já tem permissão de volta pro Meu Espaço. Tenta de
+// novo uma vez antes de desistir.
+async function apiFetchComRetentativa(endpoint, tentativas = 2) {
+  for (let i = 1; i <= tentativas; i++) {
+    try {
+      return await apiFetch(endpoint);
+    } catch (err) {
+      if (i === tentativas) throw err;
+      await new Promise(r => setTimeout(r, 600));
+    }
+  }
+}
+
 function showToast(msg, tipo = 'success') {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -66,7 +81,7 @@ onAuthStateChanged(auth, async (user) => {
     let role = 'visitante';
     let meuOverrides = null;
     try {
-      const userData = await apiFetch('/usuarios/me');
+      const userData = await apiFetchComRetentativa('/usuarios/me');
       role = userData.role || 'visitante';
       meuOverrides = userData.permissoes || null;
     } catch (err) {
@@ -80,7 +95,7 @@ onAuthStateChanged(auth, async (user) => {
       level = 3;
     } else {
       try {
-        const perms = await apiFetch('/usuarios/config/permissions');
+        const perms = await apiFetchComRetentativa('/usuarios/config/permissions');
         level = getEffectiveLevel(perms[role] || {}, meuOverrides, 'matriculas');
       } catch (e) {
         if (role === 'adm_l2') level = 3;
@@ -170,16 +185,16 @@ async function initPaginaLancamento() {
     atualizarVisibilidadeCurso();
     atualizarBotaoNovoAluno();
     atualizarLabelImpressaoLista();
-    if (podeCarregar()) carregarAlunos();
-    else renderTabelaAlunos([]);
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
   document.getElementById('semestre-select')?.addEventListener('change', (e) => {
     semestreSelecionado = e.target.value;
     atualizarBotaoNovoAluno();
     atualizarLabelImpressaoLista();
-    if (podeCarregar()) carregarAlunos();
-    else renderTabelaAlunos([]);
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
   document.getElementById('curso-select')?.addEventListener('change', (e) => {
@@ -188,13 +203,13 @@ async function initPaginaLancamento() {
     cursoSelecionadoNome = curso ? curso.name : null;
     atualizarBotaoNovoAluno();
     atualizarLabelImpressaoLista();
-    if (podeCarregar()) carregarAlunos();
-    else renderTabelaAlunos([]);
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
   ['periodo-filtro', 'situacao-filtro', 'plano-filtro'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
-      if (podeCarregar()) carregarAlunos();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     });
   });
 
@@ -242,7 +257,38 @@ async function initPaginaLancamento() {
   setupModalAluno();
   atualizarVisibilidadeCurso();
   atualizarBotaoNovoAluno();
-  if (podeCarregar()) carregarAlunos();
+  atualizarLabelImpressaoLista();
+  if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+}
+
+// Contador "X com esse filtro — Y no total" — usa aggregation query do
+// Firestore (count()), não busca os documentos, então funciona instantâneo
+// mesmo com Fatec tendo 1500+ alunos no módulo/semestre.
+function limparContadorRegistros() {
+  const el = document.getElementById('contador-registros');
+  if (el) el.textContent = '';
+}
+
+async function atualizarContadorRegistros() {
+  const el = document.getElementById('contador-registros');
+  if (!el || !podeCarregar()) return;
+  try {
+    const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado });
+    if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
+    const periodo = document.getElementById('periodo-filtro')?.value;
+    const situacao = document.getElementById('situacao-filtro')?.value;
+    const plano = document.getElementById('plano-filtro')?.value;
+    if (periodo) params.set('periodo', periodo);
+    if (situacao) params.set('situacao', situacao);
+    if (plano) params.set('planoConfissao', plano);
+
+    const { total, filtrados } = await apiFetch(`/matriculas/alunos/contagem?${params.toString()}`);
+    el.textContent = (filtrados === total)
+      ? `${total} aluno${total === 1 ? '' : 's'} no total`
+      : `${filtrados} aluno${filtrados === 1 ? '' : 's'} com esse filtro — ${total} no total`;
+  } catch (err) {
+    limparContadorRegistros();
+  }
 }
 
 // Curso é opcional pra LISTAR (dá pra ver "todos os cursos" e filtrar por
@@ -263,6 +309,21 @@ function atualizarVisibilidadeCurso() {
 
 function atualizarBotaoNovoAluno() {
   document.getElementById('btn-novo-aluno')?.toggleAttribute('disabled', !podeCriarAluno());
+}
+
+// Label do cabeçalho de impressão da lista (index.html) — mesmo padrão do
+// atualizarLabelImpressaoRelatorio já usado em relatorio.html. Estava sendo
+// chamada nos handlers de módulo/semestre/curso mas nunca tinha sido escrita:
+// isso derrubava o handler inteiro com ReferenceError, então trocar o curso
+// nunca chegava a recarregar a lista.
+function atualizarLabelImpressaoLista() {
+  const label = document.getElementById('print-filtro-label-lista');
+  if (!label) return;
+  const modulo = moduloSelecionado === 'medicina' ? 'Medicina' : 'Fatec';
+  const partes = [modulo];
+  if (moduloSelecionado !== 'medicina') partes.push(cursoSelecionadoNome || 'Todos os cursos');
+  partes.push(semestreSelecionado);
+  label.textContent = partes.filter(Boolean).join(' — ');
 }
 
 async function carregarOpcoes() {
