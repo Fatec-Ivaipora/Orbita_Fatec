@@ -148,10 +148,40 @@ router.post('/licitacoes', verifyToken, checkPermission, bloquearCoordenador, as
     }
 });
 
+// Nível de acesso de UM módulo pra esse usuário (override pessoal vence
+// cargo) — cópia enxuta do que já existe em middlewares/auth.js, só que
+// consultável pra módulo avulso sem precisar montar um middleware novo pra
+// cada combinação. Usado só pela rota /cursos abaixo, que é compartilhada
+// entre Licitação e Matrículas.
+async function nivelModulo(req, moduleName) {
+    if (req.user.role === 'adm_l1') return 3;
+    if (req.user.permissoes && req.user.permissoes[moduleName] !== undefined) {
+        return parseInt(req.user.permissoes[moduleName], 10) || 1;
+    }
+    const permDoc = await db.collection('config').doc('permissions').get();
+    const perms = permDoc.exists ? permDoc.data() : {};
+    const rolePerms = perms[req.user.role] || {};
+    return rolePerms[moduleName] !== undefined ? (parseInt(rolePerms[moduleName], 10) || 1) : 1;
+}
+
 // ==========================================
 // CURSOS (proxy somente-leitura de `courses`, já usada pelo Planejamento Acadêmico)
 // ==========================================
-router.get('/cursos', verifyToken, checkPermission, async (req, res) => {
+// Só devolve nome/id de curso (nada sensível) — libera pra quem tem nível
+// de visualização em Licitação OU Matrículas, já que os dois módulos usam
+// essa mesma lista pra popular o filtro de curso.
+router.get('/cursos', verifyToken, async (req, res, next) => {
+    try {
+        const [nivelLicitacao, nivelMatriculas] = await Promise.all([
+            nivelModulo(req, 'licitacao'),
+            nivelModulo(req, 'matriculas')
+        ]);
+        if (Math.max(nivelLicitacao, nivelMatriculas) >= 2) return next();
+        return res.status(403).json({ error: 'Acesso negado à lista de cursos.' });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+}, async (req, res) => {
     try {
         // Coleção pequena (dezenas de cursos) — filtra/ordena em memória em vez de
         // exigir índice composto do Firestore para where+orderBy em campos diferentes.

@@ -105,6 +105,39 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// GET /alunos/contagem — total do módulo/semestre + quantos batem com os
+// filtros atuais (curso/período/situação/plano), sem buscar os documentos:
+// aggregation query do Firestore (1 leitura por contagem, não 1 por aluno).
+// Só faz a 2ª query (filtrada) quando existe algum filtro além de módulo+semestre.
+router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { modulo, semestre, cursoId, situacao, planoConfissao, periodo } = req.query;
+        if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+
+        const base = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
+
+        let filtrada = base;
+        if (cursoId) filtrada = filtrada.where('cursoId', '==', cursoId);
+        if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
+        if (planoConfissao) filtrada = filtrada.where('planoConfissao', '==', planoConfissao);
+        if (periodo) filtrada = filtrada.where('periodo', '==', periodo);
+        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo);
+
+        const [totalSnap, filtradaSnap] = await Promise.all([
+            base.count().get(),
+            temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
+        ]);
+
+        const total = totalSnap.data().count;
+        const filtrados = temFiltroExtra ? filtradaSnap.data().count : total;
+
+        res.json({ total, filtrados });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
         const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes } = req.body;
