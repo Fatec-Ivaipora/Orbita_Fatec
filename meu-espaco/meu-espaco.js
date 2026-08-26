@@ -168,7 +168,18 @@ async function setupSetorScope(role) {
       setorAtual = e.target.value || null;
       await carregarPainelSetor();
     });
-    setorAtual = null;
+
+    // ADM que também é chefe de um setor específico (ex.: TI) já abre no
+    // próprio setor por padrão, igual antes de virar ADM — só que aqui,
+    // diferente do Chefe de Setor puro, o select continua liberado pra
+    // trocar pra qualquer outro setor quando precisar.
+    let me;
+    try { me = await apiFetch('/usuarios/me'); } catch (e) { me = {}; }
+    setorAtual = me.setorId || null;
+    if (setorAtual) {
+      document.getElementById('gestor-setor-select').value = setorAtual;
+      await carregarPainelSetor();
+    }
   } else {
     let me;
     try { me = await apiFetch('/usuarios/me'); } catch (e) { me = {}; }
@@ -465,6 +476,13 @@ function criarCard(atividade, editavel) {
   // criou (pra si ou delegando) ou o gestor vendo o quadro do setor dele.
   const podeExcluir = editavel && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
 
+  // Andamento fica direto no card pra quem é dono (não escondido atrás do
+  // ✎ Editar) — é o campo que a pessoa mais usa no dia a dia da atividade,
+  // igual pediram: "coloca o progresso" tem que estar tão à mão quanto o
+  // status. Quem só está gerenciando (gestor vendo card de outra pessoa) só
+  // vê o andamento em modo leitura, não edita por ela.
+  const podeAndamentoInline = editavel && souDono;
+
   card.innerHTML = `
     <div class="kanban-card-header">
       <span class="kanban-card-horario">${atividade.prazo ? formatarHorario(atividade.prazo) : ''}</span>
@@ -473,7 +491,7 @@ function criarCard(atividade, editavel) {
     </div>
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
-    ${atividade.andamento ? `<div class="kanban-card-andamento"><strong>Andamento:</strong> ${esc(atividade.andamento)}</div>` : ''}
+    ${!podeAndamentoInline && atividade.andamento ? `<div class="kanban-card-andamento"><strong>Andamento:</strong> ${esc(atividade.andamento)}</div>` : ''}
     ${editavel ? `
       <div class="kanban-card-actions">
         <select class="status-select">
@@ -482,6 +500,12 @@ function criarCard(atividade, editavel) {
         <button class="btn-mover btn-editar-atividade" title="Editar">✎</button>
         ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : '<span class="btn-excluir-bloqueado" title="Atribuída por outra pessoa — peça pra ela excluir">🔒</span>'}
       </div>
+      ${podeAndamentoInline ? `
+        <div class="kanban-card-andamento-edit">
+          <textarea class="andamento-input" rows="2" placeholder="Como está o andamento dessa atividade...">${esc(atividade.andamento || '')}</textarea>
+          <button type="button" class="btn btn-secondary btn-sm btn-salvar-andamento">Salvar andamento</button>
+        </div>
+      ` : ''}
     ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
   `;
 
@@ -490,9 +514,25 @@ function criarCard(atividade, editavel) {
     card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
     card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
     if (podeExcluir) card.querySelector('.btn-excluir-atividade').onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+    if (podeAndamentoInline) {
+      const textarea = card.querySelector('.andamento-input');
+      textarea.draggable = false;
+      textarea.addEventListener('mousedown', (e) => e.stopPropagation()); // não deixa o drag do card "roubar" o clique de selecionar texto
+      card.querySelector('.btn-salvar-andamento').onclick = () => salvarAndamento(atividade.id, textarea.value.trim());
+    }
   }
 
   return card;
+}
+
+async function salvarAndamento(id, andamento) {
+  try {
+    await apiFetch(`/processos/atividades/${id}`, { method: 'PUT', body: JSON.stringify({ andamento }) });
+    await recarregarQuadroAtual();
+    renderBoard(boardAtual);
+  } catch (err) {
+    alert('Erro ao salvar andamento: ' + err.message);
+  }
 }
 
 async function moverAtividade(id, novoStatus) {
@@ -561,12 +601,15 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
     prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  // Andamento só aparece no modal quando quem está editando é o próprio
+  // dono da atividade — mesma regra do campo inline no card, ninguém edita
+  // o progresso relatado por outra pessoa (nem gestor, nem quem atribuiu).
   const andamentoWrap = document.getElementById('atividade-andamento-wrap');
   if (editar) {
     document.getElementById('atividade-titulo').value = editar.titulo || '';
     document.getElementById('atividade-descricao').value = editar.descricao || '';
     document.getElementById('atividade-andamento').value = editar.andamento || '';
-    andamentoWrap.classList.remove('hidden');
+    andamentoWrap.classList.toggle('hidden', editar.uid !== currentUser.uid);
     if (editar.prazo) preencherPrazo(editar.prazo);
   } else {
     andamentoWrap.classList.add('hidden');
@@ -639,7 +682,10 @@ async function salvarAtividade(e) {
     descricao,
     prazo: new Date(prazoInput).toISOString()
   };
-  if (editandoId) {
+  // Só manda andamento se o campo estava visível (dono editando o próprio) —
+  // senão, editar título/prazo de uma atividade de outra pessoa apagaria o
+  // andamento dela com o valor vazio do campo escondido.
+  if (editandoId && !document.getElementById('atividade-andamento-wrap').classList.contains('hidden')) {
     data.andamento = document.getElementById('atividade-andamento').value.trim();
   }
   if (!editandoId && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
