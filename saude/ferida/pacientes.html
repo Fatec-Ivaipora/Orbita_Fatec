@@ -58,6 +58,12 @@
                         <input type="text" id="busca-paciente" placeholder="Buscar por nome, município ou enfermeiro(a)..." autocomplete="off">
                     </div>
 
+                    <div class="pac-filtro-status" id="pac-filtro-status">
+                        <button type="button" class="pac-filtro-btn ativo" data-status="ativos">Em atendimento</button>
+                        <button type="button" class="pac-filtro-btn" data-status="alta">Alta</button>
+                        <button type="button" class="pac-filtro-btn" data-status="todos">Todos</button>
+                    </div>
+
                     <div class="pac-lista-tabela-wrap">
                         <table class="pac-lista-tabela">
                             <thead>
@@ -66,13 +72,14 @@
                                     <th>Tipo de ferida</th>
                                     <th>Município</th>
                                     <th>Enfermeiro(a)</th>
+                                    <th>Status</th>
                                     <th>Atendimentos</th>
                                     <th>Cadastrado em</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-pacientes">
-                                <tr><td colspan="7" class="pac-lista-msg">Carregando...</td></tr>
+                                <tr><td colspan="8" class="pac-lista-msg">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
