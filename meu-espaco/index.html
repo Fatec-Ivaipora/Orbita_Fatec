@@ -29,16 +29,6 @@
             <p class="page-subtitle">Sua agenda da semana — o que você marcou e o que o chefe do setor atribuiu pra você, dia a dia.</p>
           </div>
 
-          <div class="quick-access-grid">
-            <a href="/meu-espaco/processos/index.html" id="link-processos-setor" class="quick-access-card hidden">
-              <span class="quick-access-icon">📋</span>
-              <div>
-                <strong>Gerenciar Processos do Setor</strong>
-                <small>Cadastre e atribua processos à equipe</small>
-              </div>
-            </a>
-          </div>
-
           <!-- Painel do Setor: só para Chefe de Setor / ADM. Renderizado via JS -->
           <section id="gestor-panel" class="gestor-panel hidden">
             <div class="section-header">
@@ -76,8 +66,6 @@
                 </button>
               </div>
             </div>
-
-            <div id="quadro-processos-funcionario" class="hidden"></div>
 
             <div id="board-progresso" class="board-progresso"></div>
 
@@ -121,8 +109,8 @@
       </div>
       <form id="form-atividade">
         <div class="form-group hidden" id="atividade-para-wrap">
-          <label class="form-label">Para</label>
-          <select id="atividade-uid" class="form-input"></select>
+          <label class="form-label">Para (pode marcar mais de uma pessoa)</label>
+          <div id="atividade-uid-lista" class="checkbox-lista"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Título *</label>
@@ -135,6 +123,10 @@
         <div class="form-group">
           <label class="form-label">Dia e horário *</label>
           <input type="datetime-local" id="atividade-prazo" class="form-input" required>
+        </div>
+        <div class="form-group hidden" id="atividade-andamento-wrap">
+          <label class="form-label">Andamento</label>
+          <textarea id="atividade-andamento" class="form-input" rows="2" placeholder="Como está o andamento dessa atividade..."></textarea>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-atividade')">Cancelar</button>
