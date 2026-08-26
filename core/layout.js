@@ -10,32 +10,12 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
     } catch (e) {}
   }
 
-  // "dashboard" (Meu Espaço) e "fidelidade" ficam sempre liberados pra todo
-  // mundo POR PADRÃO — mas se algum usuário tiver um override explícito de
-  // `permissoes.dashboard` (mecanismo já existente, pensado pra módulo
-  // normal), respeita esse override em vez do padrão. Caso raro: usuário
-  // externo/parceiro que só deve ver 1 módulo específico e nem entrar no
-  // quadro de atividades pessoal. Sem override (o caso de todo mundo), o
-  // comportamento continua idêntico a antes.
-  const dashboardLiberadoPorPadrao = !(cachedPerms && cachedPerms.dashboard !== undefined && getAccessLevel(cachedPerms.dashboard) < 2);
-
   // Guard de acesso à página: com cache, decide pelo nível efetivo;
   // sem cache, cai na lista estática do cargo (primeiro load)
-  if (role !== 'adm_l1' && activeModuleId !== 'fidelidade' && !(activeModuleId === 'dashboard' && dashboardLiberadoPorPadrao)) {
+  if (role !== 'adm_l1' && activeModuleId !== 'dashboard' && activeModuleId !== 'fidelidade') {
     if (cachedPerms) {
       if (getAccessLevel(cachedPerms[activeModuleId]) < 2) {
-        // Fallback padrão é o dashboard — mas se for JUSTO o dashboard que
-        // está bloqueado (caso do usuário externo acima), isso viraria loop
-        // infinito (bloqueado → dashboard → bloqueado de novo → ...). Nesse
-        // caso, manda pro primeiro módulo que a pessoa realmente pode ver;
-        // "fidelidade" é o último recurso por ser sempre liberado pra todo
-        // mundo, então nunca fica sem lugar seguro pra cair.
-        if (activeModuleId === 'dashboard') {
-          const primeiroPermitido = Object.values(MODULES).find(m => getAccessLevel(cachedPerms[m.id]) >= 2);
-          window.location.href = primeiroPermitido ? primeiroPermitido.url : '/fidelidade/index.html';
-        } else {
-          window.location.href = '/meu-espaco/index.html';
-        }
+        window.location.href = '/meu-espaco/index.html';
         return;
       }
     } else if (!hasPermission(role, activeModuleId)) {
@@ -50,8 +30,7 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   // sem cache, fallback para a lista estática do cargo
   const podeVerModulo = (modId) => {
     if (role === 'adm_l1') return true;
-    if (modId === 'dashboard') return dashboardLiberadoPorPadrao;
-    if (modId === 'fidelidade') return true;
+    if (modId === 'dashboard' || modId === 'fidelidade') return true;
     if (cachedPerms) return getAccessLevel(cachedPerms[modId]) >= 2;
     return roleConfig.modules.includes(modId);
   };
