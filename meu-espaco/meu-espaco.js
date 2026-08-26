@@ -83,10 +83,26 @@ onAuthStateChanged(auth, async (user) => {
         // meio tempo) — agora que o Firebase confirmou a sessão de verdade e
         // renovou o token, recarrega o que depende dele pra não ficar preso
         // no board vazio/desatualizado até um logout+login.
+        //
+        // Não dá pra confiar em `souGestor`/`setorAtual` aqui — essa branch
+        // pode disparar ANTES do initApp() do carregamento rápido (fast path
+        // do cache, lá em cima) terminar de setar essas variáveis, já que os
+        // dois rodam em paralelo. Resultado: numa recarga de página (F5), às
+        // vezes essa branch corria primeiro, achava souGestor/setorAtual
+        // ainda vazios e nunca chamava carregarPainelSetor()/carregarAvisos()
+        // — Painel do Setor e Quadro de Avisos sumiam até deslogar e logar de
+        // novo. Recalcula tudo de novo aqui, sem depender do outro fluxo.
+        souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
+        document.getElementById('gestor-panel')?.classList.toggle('hidden', !souGestor);
+        document.getElementById('aviso-composer')?.classList.toggle('hidden', !souGestor);
+        if (souGestor) {
+          await setupSetorScope(role);
+        } else {
+          await carregarAvisos();
+        }
         await carregarMeuQuadro();
         const boardSelect = document.getElementById('board-select');
         renderBoard(boardSelect ? boardSelect.value : '__self__');
-        if (souGestor && setorAtual) await carregarPainelSetor();
       }
     } catch (err) {
       console.error("Erro na revalidação de auth:", err);
@@ -111,9 +127,13 @@ async function initApp(user, role) {
   setupEventListeners();
 
   souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
+  setupComposerAviso();
   if (souGestor) {
     document.getElementById('gestor-panel').classList.remove('hidden');
+    document.getElementById('aviso-composer').classList.remove('hidden');
     await setupSetorScope(role);
+  } else {
+    await carregarAvisos();
   }
 
   document.getElementById('board-select').addEventListener('change', (e) => {
@@ -154,6 +174,101 @@ function chaveDia(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// ================================================================
+//  QUADRO DE AVISOS (mural de post-its do setor)
+// ================================================================
+const CORES_AVISO = ['amarelo', 'rosa', 'azul', 'verde', 'laranja'];
+let corAvisoSelecionada = CORES_AVISO[0];
+
+function setupComposerAviso() {
+  const wrap = document.getElementById('aviso-cor-opcoes');
+  if (!wrap) return;
+  wrap.innerHTML = CORES_AVISO.map(c => `<span class="aviso-cor-swatch ${c === corAvisoSelecionada ? 'selecionada' : ''}" data-cor="${c}" title="${c}"></span>`).join('');
+  wrap.querySelectorAll('.aviso-cor-swatch').forEach(el => el.addEventListener('click', () => {
+    corAvisoSelecionada = el.dataset.cor;
+    wrap.querySelectorAll('.aviso-cor-swatch').forEach(s => s.classList.toggle('selecionada', s.dataset.cor === corAvisoSelecionada));
+  }));
+  document.getElementById('btn-publicar-aviso')?.addEventListener('click', publicarAviso);
+}
+
+async function carregarAvisos() {
+  const secao = document.getElementById('avisos-section');
+  const mural = document.getElementById('avisos-mural');
+  if (!secao || !mural) return;
+  secao.classList.remove('hidden');
+
+  // Gestor sem setor escolhido ainda não tem o que buscar — evita mandar
+  // requisição à toa (mesma lógica do Painel do Setor).
+  if (souGestor && !setorAtual) {
+    mural.innerHTML = '<div class="empty-state">Selecione um setor acima pra ver e publicar avisos.</div>';
+    return;
+  }
+
+  mural.innerHTML = '<div class="loading-state">Carregando avisos...</div>';
+  try {
+    const params = (souGestor && setorAtual) ? `?setorId=${encodeURIComponent(setorAtual)}` : '';
+    const avisos = await apiFetch(`/processos/avisos${params}`);
+    renderAvisos(avisos);
+  } catch (err) {
+    mural.innerHTML = `<div class="empty-state">Erro ao carregar avisos: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderAvisos(avisos) {
+  const mural = document.getElementById('avisos-mural');
+  if (!avisos.length) {
+    mural.innerHTML = '<div class="empty-state">Nenhum aviso publicado pra esse setor ainda.</div>';
+    return;
+  }
+  mural.innerHTML = avisos.map((a, i) => {
+    const tilt = (i % 2 === 0 ? -1 : 1) * (2 + (i % 3));
+    const podeExcluir = a.autorUid === currentUser.uid || souAdmin();
+    const data = new Date(a.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    return `
+      <div class="aviso-card" data-cor="${esc(a.cor)}" style="--tilt:${tilt}deg;">
+        <div class="aviso-card-texto">${esc(a.texto)}</div>
+        <div class="aviso-card-footer">
+          <span>${esc(a.autorNome)} · ${data}</span>
+          ${podeExcluir ? `<button type="button" class="aviso-card-excluir" data-id="${a.id}" title="Remover aviso">🗑</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  mural.querySelectorAll('.aviso-card-excluir').forEach(btn => btn.addEventListener('click', () => excluirAviso(btn.dataset.id)));
+}
+
+function souAdmin() {
+  return currentRole === 'adm_l1' || currentRole === 'adm_l2';
+}
+
+async function publicarAviso() {
+  const texto = document.getElementById('aviso-texto').value.trim();
+  if (!texto) return;
+  const btn = document.getElementById('btn-publicar-aviso');
+  btn.disabled = true;
+  try {
+    const params = setorAtual ? `?setorId=${encodeURIComponent(setorAtual)}` : '';
+    await apiFetch(`/processos/avisos${params}`, { method: 'POST', body: JSON.stringify({ texto, cor: corAvisoSelecionada }) });
+    document.getElementById('aviso-texto').value = '';
+    await carregarAvisos();
+  } catch (err) {
+    alert('Erro ao publicar aviso: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function excluirAviso(id) {
+  if (!confirm('Remover esse aviso do mural?')) return;
+  try {
+    await apiFetch(`/processos/avisos/${id}`, { method: 'DELETE' });
+    await carregarAvisos();
+  } catch (err) {
+    alert('Erro ao remover aviso: ' + err.message);
+  }
+}
+
 async function setupSetorScope(role) {
   const wrap = document.getElementById('proc-setor-select-wrap');
   if (role === 'adm_l1' || role === 'adm_l2') {
@@ -189,6 +304,8 @@ async function setupSetorScope(role) {
 }
 
 async function carregarPainelSetor() {
+  await carregarAvisos();
+
   const listEl = document.getElementById('setor-progresso-list');
   const boardSelect = document.getElementById('board-select');
   boardSelect.innerHTML = '<option value="__self__">Minhas atividades</option>';
@@ -463,25 +580,43 @@ function criarCard(atividade, editavel) {
   card.dataset.id = atividade.id;
   card.dataset.status = atividade.status;
 
-  const souDono = atividade.uid === currentUser.uid;
+  const coletiva = Array.isArray(atividade.atribuidos);
+  const souAtribuidoLocal = atividade.uid === currentUser.uid || (coletiva && atividade.atribuidos.includes(currentUser.uid));
+
   let etiqueta = '';
-  if (!souDono) {
+  if (coletiva) {
+    const nomes = atividade.atribuidos.map(uid => uid === currentUser.uid ? 'Eu' : nomePorUid(uid));
+    etiqueta = `<span class="recorrencia-badge" title="Atividade coletiva — todo mundo vê o mesmo histórico">👥 ${esc(nomes.join(', '))}</span>`;
+  } else if (atividade.uid !== currentUser.uid) {
     etiqueta = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
   } else if (atividade.criadoPor !== atividade.uid) {
     etiqueta = `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>`;
   }
 
-  // Excluir é mais restrito que editar/mover: quem só é dono de uma
-  // atividade atribuída por outra pessoa não pode excluir direto — só quem
+  // Excluir é mais restrito que editar/mover: quem só é atribuído a uma
+  // atividade que outra pessoa criou não pode excluir direto — só quem
   // criou (pra si ou delegando) ou o gestor vendo o quadro do setor dele.
   const podeExcluir = editavel && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
 
-  // Andamento fica direto no card pra quem é dono (não escondido atrás do
-  // ✎ Editar) — é o campo que a pessoa mais usa no dia a dia da atividade,
-  // igual pediram: "coloca o progresso" tem que estar tão à mão quanto o
-  // status. Quem só está gerenciando (gestor vendo card de outra pessoa) só
-  // vê o andamento em modo leitura, não edita por ela.
-  const podeAndamentoInline = editavel && souDono;
+  // Quem está atribuído pode ACRESCENTAR uma entrada no histórico de
+  // andamento (nunca sobrescrever/apagar as de outra pessoa) — é assim que
+  // dá pra saber, numa atividade dividida entre turnos, onde cada um parou:
+  // "Junior: fiz até Agronomia", depois "Maria: terminei o resto". Quem só
+  // está gerenciando (gestor vendo o card de outra pessoa) vê o histórico
+  // completo, mas em modo leitura.
+  const podeAndamentoInline = editavel && souAtribuidoLocal;
+  const historico = Array.isArray(atividade.historico) ? atividade.historico : [];
+
+  const historicoHtml = historico.length ? `
+    <div class="kanban-card-historico">
+      ${historico.map(h => `
+        <div class="historico-item">
+          <strong>${esc(h.autorNome || 'Alguém')}:</strong> ${esc(h.texto)}
+          <span class="historico-data">${formatarHorario(h.criadoEm)}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
 
   card.innerHTML = `
     <div class="kanban-card-header">
@@ -491,7 +626,7 @@ function criarCard(atividade, editavel) {
     </div>
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
-    ${!podeAndamentoInline && atividade.andamento ? `<div class="kanban-card-andamento"><strong>Andamento:</strong> ${esc(atividade.andamento)}</div>` : ''}
+    ${historicoHtml}
     ${editavel ? `
       <div class="kanban-card-actions">
         <select class="status-select">
@@ -502,8 +637,8 @@ function criarCard(atividade, editavel) {
       </div>
       ${podeAndamentoInline ? `
         <div class="kanban-card-andamento-edit">
-          <textarea class="andamento-input" rows="2" placeholder="Como está o andamento dessa atividade...">${esc(atividade.andamento || '')}</textarea>
-          <button type="button" class="btn btn-secondary btn-sm btn-salvar-andamento">Salvar andamento</button>
+          <textarea class="andamento-input" rows="2" placeholder="Contar como está o andamento..."></textarea>
+          <button type="button" class="btn btn-secondary btn-sm btn-salvar-andamento">Adicionar ao histórico</button>
         </div>
       ` : ''}
     ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
@@ -518,20 +653,21 @@ function criarCard(atividade, editavel) {
       const textarea = card.querySelector('.andamento-input');
       textarea.draggable = false;
       textarea.addEventListener('mousedown', (e) => e.stopPropagation()); // não deixa o drag do card "roubar" o clique de selecionar texto
-      card.querySelector('.btn-salvar-andamento').onclick = () => salvarAndamento(atividade.id, textarea.value.trim());
+      card.querySelector('.btn-salvar-andamento').onclick = () => adicionarAndamento(atividade.id, textarea.value.trim());
     }
   }
 
   return card;
 }
 
-async function salvarAndamento(id, andamento) {
+async function adicionarAndamento(id, texto) {
+  if (!texto) return;
   try {
-    await apiFetch(`/processos/atividades/${id}`, { method: 'PUT', body: JSON.stringify({ andamento }) });
+    await apiFetch(`/processos/atividades/${id}/andamento`, { method: 'POST', body: JSON.stringify({ texto }) });
     await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
-    alert('Erro ao salvar andamento: ' + err.message);
+    alert('Erro ao adicionar andamento: ' + err.message);
   }
 }
 
@@ -601,23 +737,14 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
     prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  // Andamento só aparece no modal quando quem está editando é o próprio
-  // dono da atividade — mesma regra do campo inline no card, ninguém edita
-  // o progresso relatado por outra pessoa (nem gestor, nem quem atribuiu).
-  const andamentoWrap = document.getElementById('atividade-andamento-wrap');
   if (editar) {
     document.getElementById('atividade-titulo').value = editar.titulo || '';
     document.getElementById('atividade-descricao').value = editar.descricao || '';
-    document.getElementById('atividade-andamento').value = editar.andamento || '';
-    andamentoWrap.classList.toggle('hidden', editar.uid !== currentUser.uid);
     if (editar.prazo) preencherPrazo(editar.prazo);
-  } else {
-    andamentoWrap.classList.add('hidden');
-    if (diaPreset) {
-      const d = new Date(diaPreset);
-      d.setHours(9, 0, 0, 0);
-      preencherPrazo(d);
-    }
+  } else if (diaPreset) {
+    const d = new Date(diaPreset);
+    d.setHours(9, 0, 0, 0);
+    preencherPrazo(d);
   }
 
   const wrap = document.getElementById('atividade-para-wrap');
@@ -682,12 +809,6 @@ async function salvarAtividade(e) {
     descricao,
     prazo: new Date(prazoInput).toISOString()
   };
-  // Só manda andamento se o campo estava visível (dono editando o próprio) —
-  // senão, editar título/prazo de uma atividade de outra pessoa apagaria o
-  // andamento dela com o valor vazio do campo escondido.
-  if (editandoId && !document.getElementById('atividade-andamento-wrap').classList.contains('hidden')) {
-    data.andamento = document.getElementById('atividade-andamento').value.trim();
-  }
   if (!editandoId && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
     const uids = [...document.querySelectorAll('#atividade-uid-lista input[type="checkbox"]:checked')].map(cb => cb.value);
     if (!uids.length) { alert('Marque pelo menos uma pessoa em "Para".'); return; }

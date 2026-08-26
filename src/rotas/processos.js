@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 const GESTOR_ROLES = ['chefe_setor', 'adm_l1', 'adm_l2'];
@@ -42,16 +42,23 @@ function requireGestor(req, res, next) {
     next();
 }
 
-// Dono da atividade, quem criou, ou o gestor (chefe do mesmo setor / ADM) —
-// regra geral pra editar título/descrição/andamento, mudar status ou
+// Atividade coletiva (atribuída a várias pessoas de uma vez, ex.: tarefa que
+// atravessa turnos) guarda `atribuidos` (array) em vez de `uid` (string) —
+// essa função cobre os dois formatos num lugar só.
+function souAtribuido(req, atividade) {
+    if (atividade.uid === req.user.uid) return true;
+    return Array.isArray(atividade.atribuidos) && atividade.atribuidos.includes(req.user.uid);
+}
+
+// Dono/atribuído da atividade, quem criou, ou o gestor (chefe do mesmo setor
+// / ADM) — regra geral pra editar título/descrição, mudar status ou
 // reagendar (drag-and-drop). Exclusão e adiar prazo têm regra própria, mais
 // restrita — ver podeExcluirAtividade() e a checagem de prazo no PUT.
 function podeGerenciarAtividade(req, atividade) {
-    const souDono = atividade.uid === req.user.uid;
     const souCriador = atividade.criadoPor === req.user.uid;
     const souGestorDoSetor = GESTOR_ROLES.includes(req.user.role) &&
         (req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || atividade.setorId === req.user.setorId);
-    return souDono || souCriador || souGestorDoSetor;
+    return souAtribuido(req, atividade) || souCriador || souGestorDoSetor;
 }
 
 // Excluir é mais restrito que editar: quem só é dono (a atividade foi
@@ -86,33 +93,109 @@ router.get('/pessoas', verifyToken, async (req, res) => {
 });
 
 // ==========================================
+// QUADRO DE AVISOS (mural do setor, estilo post-it — Chefe de Setor/ADM
+// deixam recados pra equipe. Cada setor só vê os próprios avisos.)
+// ==========================================
+const CORES_AVISO = ['amarelo', 'rosa', 'azul', 'verde', 'laranja'];
+
+// Setor efetivo pra CONSULTAR avisos: gestor pode passar ?setorId= (chefe só
+// o próprio, ADM qualquer um); funcionário comum sempre vê o próprio setor,
+// sem escolha.
+function resolveSetorConsulta(req) {
+    const { role, setorId } = req.user;
+    const alvo = req.query.setorId;
+    if (alvo && GESTOR_ROLES.includes(role)) {
+        if (role === 'chefe_setor' && alvo !== setorId) {
+            const err = new Error('Você só pode ver avisos do seu próprio setor.');
+            err.status = 403;
+            throw err;
+        }
+        return alvo;
+    }
+    return setorId || null;
+}
+
+router.get('/avisos', verifyToken, async (req, res) => {
+    try {
+        const setorId = resolveSetorConsulta(req);
+        if (!setorId) return res.json([]);
+        const snap = await db.collection('avisos').where('setorId', '==', setorId).get();
+        const avisos = [];
+        snap.forEach(doc => avisos.push({ id: doc.id, ...doc.data() }));
+        avisos.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        res.json(avisos);
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+router.post('/avisos', verifyToken, requireGestor, async (req, res) => {
+    try {
+        const texto = (req.body.texto || '').trim();
+        if (!texto) return res.status(400).json({ error: 'Escreva o aviso antes de publicar.' });
+        const cor = CORES_AVISO.includes(req.body.cor) ? req.body.cor : CORES_AVISO[0];
+        const setorId = resolveSetorGestor(req);
+
+        const data = {
+            setorId,
+            texto,
+            cor,
+            autorUid: req.user.uid,
+            autorNome: req.user.name || req.user.email || '',
+            createdAt: new Date().toISOString()
+        };
+        const docRef = await db.collection('avisos').add(data);
+        res.status(201).json({ id: docRef.id, ...data });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Só quem publicou ou ADM pode remover — nem o resto da chefia do mesmo
+// setor mexe no aviso de quem não é o autor.
+router.delete('/avisos/:id', verifyToken, async (req, res) => {
+    try {
+        const docRef = db.collection('avisos').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Aviso não encontrado.' });
+        const aviso = snap.data();
+        const souAutor = aviso.autorUid === req.user.uid;
+        const souAdmin = req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
+        if (!souAutor && !souAdmin) {
+            return res.status(403).json({ error: 'Só quem publicou o aviso (ou um ADM) pode remover.' });
+        }
+        await docRef.delete();
+        res.json({ message: 'Aviso removido.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// ==========================================
 // ATIVIDADES (tarefas avulsas do funcionário — o quadro Kanban)
 // ==========================================
 
-// Retorna as atividades da própria pessoa (uid) MAIS as que ela mesma
-// atribuiu a outra pessoa (criadoPor) — assim quem atribui continua vendo o
-// que delegou, e o que cada funcionário cria pra si mesmo só aparece pra ele.
+// Retorna as atividades da própria pessoa (uid), as coletivas em que ela
+// está entre os atribuídos (ex.: tarefa dividida entre turnos — todo mundo
+// vê a mesma atividade e o mesmo histórico), MAIS as que ela mesma atribuiu
+// a outra pessoa (criadoPor) — assim quem atribui continua vendo o que
+// delegou, e o que cada funcionário cria pra si mesmo só aparece pra ele.
 router.get('/atividades', verifyToken, async (req, res) => {
     try {
-        const [minhasSnap, delegadasSnap] = await Promise.all([
+        const [minhasSnap, coletivasSnap, delegadasSnap] = await Promise.all([
             db.collection('atividades').where('uid', '==', req.user.uid).get(),
+            db.collection('atividades').where('atribuidos', 'array-contains', req.user.uid).get(),
             db.collection('atividades').where('criadoPor', '==', req.user.uid).get()
         ]);
         const porId = new Map();
         minhasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
+        coletivasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
         delegadasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
         res.json([...porId.values()]);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // Cria uma tarefa avulsa. Sem `uids`/`uid` no body: cria pra si mesmo. Com
-// uma ou mais pessoas: qualquer funcionário pode delegar pra qualquer outro
-// — às vezes uma tarefa precisa especificamente de uma pessoa fora do
-// próprio setor/hierarquia (ex.: pedir algo direto pro TI ou pra Secretaria),
-// não só gestor atribuindo pra quem está abaixo dele. Quando marca mais de
-// uma pessoa, cria um documento INDEPENDENTE por pessoa (cada uma só edita/
-// exclui/reporta andamento do próprio — nunca do de outra), todos visíveis
-// juntos pra quem criou através do `criadoPor` (GET /atividades já traz).
+// uma pessoa: documento normal (`uid`). Com VÁRIAS pessoas: um único
+// documento COMPARTILHADO (`atribuidos`) — todo mundo vê a mesma atividade,
+// o mesmo status e o mesmo histórico de andamento (ex.: tarefa que atravessa
+// turnos: o turno da noite precisa ver onde o turno do dia parou). Qualquer
+// funcionário pode delegar pra qualquer outro, dentro ou fora do próprio
+// setor/hierarquia (ex.: pedir algo direto pro TI ou pra Secretaria).
 router.post('/atividades', verifyToken, async (req, res) => {
     try {
         const { titulo, descricao, prazo } = req.body;
@@ -137,12 +220,11 @@ router.post('/atividades', verifyToken, async (req, res) => {
 
         const now = new Date().toISOString();
         const base = {
-            setorId: null,
             titulo: titulo.trim(),
             descricao: (descricao || '').trim(),
             prazo,
             status: 'a_fazer',
-            andamento: '',
+            historico: [],
             criadoPor: req.user.uid,
             criadoPorNome: req.user.name || req.user.email || '',
             concluidoEm: null,
@@ -156,16 +238,9 @@ router.post('/atividades', verifyToken, async (req, res) => {
             return res.status(201).json({ id: docRef.id, ...data });
         }
 
-        const batch = db.batch();
-        const criadas = [];
-        uidsAlvo.forEach(uid => {
-            const data = { ...base, uid, setorId: setorPorUid[uid] };
-            const ref = db.collection('atividades').doc();
-            batch.set(ref, data);
-            criadas.push({ id: ref.id, ...data });
-        });
-        await batch.commit();
-        res.status(201).json({ criadas });
+        const data = { ...base, atribuidos: uidsAlvo, setorId: null };
+        const docRef = await db.collection('atividades').add(data);
+        res.status(201).json({ id: docRef.id, ...data });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -175,7 +250,7 @@ router.post('/atividades', verifyToken, async (req, res) => {
 // manda só o prazo). Dono, criador, ou gestor do setor dela.
 router.put('/atividades/:id', verifyToken, async (req, res) => {
     try {
-        const { titulo, descricao, prazo, andamento } = req.body;
+        const { titulo, descricao, prazo } = req.body;
 
         const docRef = db.collection('atividades').doc(req.params.id);
         const snap = await docRef.get();
@@ -193,28 +268,51 @@ router.put('/atividades/:id', verifyToken, async (req, res) => {
         if (descricao !== undefined) data.descricao = (descricao || '').trim();
         if (prazo !== undefined) {
             if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
-            // Quem só é dono (não foi quem atribuiu) só pode ANTECIPAR o prazo
-            // de uma atividade que outra pessoa colocou pra ela — adiar exige
-            // pedir mais prazo pra quem atribuiu, não é decisão unilateral dela.
-            const souApenasDono = atual.uid === req.user.uid && atual.criadoPor !== atual.uid;
-            if (souApenasDono && new Date(prazo) > new Date(atual.prazo)) {
+            // Quem só é atribuído (não foi quem criou) só pode ANTECIPAR o
+            // prazo de uma atividade que outra pessoa colocou pra ela — adiar
+            // exige pedir mais prazo pra quem atribuiu, não é decisão unilateral.
+            const souApenasAtribuido = souAtribuido(req, atual) && atual.criadoPor !== req.user.uid;
+            if (souApenasAtribuido && new Date(prazo) > new Date(atual.prazo)) {
                 return res.status(403).json({ error: 'Essa atividade foi atribuída por outra pessoa — você só pode antecipar o prazo, não adiar. Peça mais prazo pra quem atribuiu.' });
             }
             data.prazo = prazo;
         }
-        // Nota de progresso que quem executa a tarefa vai preenchendo — não é
-        // a descrição original (o que precisa ser feito), é o "como está indo".
-        // Só o próprio dono relata o progresso dele — nem criador, nem gestor,
-        // podem editar/apagar o andamento que outra pessoa escreveu.
-        if (andamento !== undefined) {
-            if (atual.uid !== req.user.uid) {
-                return res.status(403).json({ error: 'Só quem executa a atividade pode relatar o andamento dela.' });
-            }
-            data.andamento = (andamento || '').trim();
-        }
 
         await docRef.update(data);
         res.json({ message: 'Atividade atualizada com sucesso!' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Adiciona uma entrada no histórico de andamento — nunca sobrescreve nem
+// apaga entradas anteriores (de si mesmo ou de outra pessoa), só acrescenta.
+// É assim que dá pra saber, numa atividade dividida entre turnos, onde cada
+// um parou: "Junior: fiz até Agronomia" e depois "Maria: terminei o resto".
+// Só quem está entre os atribuídos da atividade pode relatar o progresso
+// dela — nem criador nem gestor escrevem em nome de quem executa.
+router.post('/atividades/:id/andamento', verifyToken, async (req, res) => {
+    try {
+        const texto = (req.body.texto || '').trim();
+        if (!texto) return res.status(400).json({ error: 'Escreva o andamento antes de salvar.' });
+
+        const docRef = db.collection('atividades').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Atividade não encontrada.' });
+        const atual = snap.data();
+        if (!souAtribuido(req, atual)) {
+            return res.status(403).json({ error: 'Só quem está atribuído à atividade pode relatar o andamento dela.' });
+        }
+
+        const entrada = {
+            autorUid: req.user.uid,
+            autorNome: req.user.name || req.user.email || '',
+            texto,
+            criadoEm: new Date().toISOString()
+        };
+        await docRef.update({
+            historico: admin.firestore.FieldValue.arrayUnion(entrada),
+            updatedAt: new Date().toISOString()
+        });
+        res.status(201).json(entrada);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 

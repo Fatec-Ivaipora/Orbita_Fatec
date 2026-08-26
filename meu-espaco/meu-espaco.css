@@ -142,6 +142,118 @@
   background: #e2e8f0;
 }
 
+/* ---- QUADRO DE AVISOS (mural de post-its do setor) ---- */
+.avisos-section {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.aviso-composer {
+  background: #f8fafc;
+  border: 1px dashed var(--border-color);
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.aviso-composer textarea {
+  resize: vertical;
+}
+.aviso-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+.aviso-cor-opcoes {
+  display: flex;
+  gap: 0.5rem;
+}
+.aviso-cor-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s;
+}
+.aviso-cor-swatch:hover { transform: scale(1.1); }
+.aviso-cor-swatch.selecionada { border-color: var(--text-main); }
+.aviso-cor-swatch[data-cor="amarelo"] { background: #fde68a; }
+.aviso-cor-swatch[data-cor="rosa"] { background: #fbcfe8; }
+.aviso-cor-swatch[data-cor="azul"] { background: #bfdbfe; }
+.aviso-cor-swatch[data-cor="verde"] { background: #bbf7d0; }
+.aviso-cor-swatch[data-cor="laranja"] { background: #fed7aa; }
+
+.avisos-mural {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.5rem;
+  padding: 0.5rem;
+}
+
+.aviso-card {
+  position: relative;
+  border-radius: 4px;
+  padding: 1.25rem 1.1rem 1rem;
+  min-height: 130px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+  font-size: 0.88rem;
+  color: #422006;
+  line-height: 1.5;
+  transform: rotate(var(--tilt, -2deg));
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  word-wrap: break-word;
+}
+.aviso-card:hover {
+  transform: rotate(0deg) scale(1.03);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16), 0 4px 8px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+}
+.aviso-card::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f87171, #b91c1c);
+  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.3);
+}
+.aviso-card[data-cor="amarelo"] { background: #fef3c7; }
+.aviso-card[data-cor="rosa"] { background: #fce7f3; }
+.aviso-card[data-cor="azul"] { background: #dbeafe; }
+.aviso-card[data-cor="verde"] { background: #dcfce7; }
+.aviso-card[data-cor="laranja"] { background: #ffedd5; }
+
+.aviso-card-texto {
+  white-space: pre-wrap;
+}
+.aviso-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.85rem;
+  font-size: 0.72rem;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 600;
+}
+.aviso-card-excluir {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0.55;
+  padding: 0;
+}
+.aviso-card-excluir:hover { opacity: 1; }
+
 /* ---- PAINEL DO SETOR (Chefe de Setor / ADM) ---- */
 .gestor-panel {
   background: white;
@@ -473,17 +585,31 @@
   margin-bottom: 0.5rem;
 }
 
-.kanban-card-andamento {
-  font-size: 0.78rem;
+.kanban-card-historico {
+  max-height: 130px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.historico-item {
+  font-size: 0.76rem;
   color: #475569;
   background: #f8fafc;
   border-left: 3px solid var(--primary-blue, #0F4EB8);
-  padding: 0.35rem 0.5rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 4px;
-  margin-bottom: 0.5rem;
+  line-height: 1.35;
 }
-.kanban-card-andamento strong {
+.historico-item strong {
   color: #0B1F33;
+}
+.historico-data {
+  display: block;
+  font-size: 0.68rem;
+  color: #94a3b8;
+  margin-top: 0.1rem;
 }
 
 .kanban-card-andamento-edit {

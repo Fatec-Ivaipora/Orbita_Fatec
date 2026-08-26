@@ -29,6 +29,27 @@
             <p class="page-subtitle">Sua agenda da semana — o que você marcou e o que o chefe do setor atribuiu pra você, dia a dia.</p>
           </div>
 
+          <!-- Quadro de Avisos: mural de post-its do setor. Composer só aparece
+               pra Chefe de Setor/ADM; o mural em si aparece pra todo mundo. -->
+          <section id="avisos-section" class="avisos-section hidden">
+            <div class="section-header">
+              <div class="header-title">
+                <span class="icon">📌</span>
+                <h2>Quadro de Avisos</h2>
+              </div>
+            </div>
+
+            <div id="aviso-composer" class="aviso-composer hidden">
+              <textarea id="aviso-texto" class="form-input" rows="2" placeholder="Deixe um aviso pra equipe..."></textarea>
+              <div class="aviso-composer-footer">
+                <div class="aviso-cor-opcoes" id="aviso-cor-opcoes"></div>
+                <button type="button" id="btn-publicar-aviso" class="btn btn-primary btn-sm">Publicar aviso</button>
+              </div>
+            </div>
+
+            <div id="avisos-mural" class="avisos-mural"></div>
+          </section>
+
           <!-- Painel do Setor: só para Chefe de Setor / ADM. Renderizado via JS -->
           <section id="gestor-panel" class="gestor-panel hidden">
             <div class="section-header">
@@ -123,10 +144,6 @@
         <div class="form-group">
           <label class="form-label">Dia e horário *</label>
           <input type="datetime-local" id="atividade-prazo" class="form-input" required>
-        </div>
-        <div class="form-group hidden" id="atividade-andamento-wrap">
-          <label class="form-label">Andamento</label>
-          <textarea id="atividade-andamento" class="form-input" rows="2" placeholder="Como está o andamento dessa atividade..."></textarea>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-atividade')">Cancelar</button>
