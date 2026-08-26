@@ -176,6 +176,9 @@ async function initApp(user, role) {
 // ==========================================
 let buscaPacienteTimer = null;
 let pacientesListaAtual = [];
+// "ativos" (padrão) esconde quem já teve alta, sem precisar buscar de novo —
+// é só um filtro em cima da lista já carregada.
+let filtroStatusAtual = 'ativos';
 
 async function initPaginaPacientes() {
   const input = document.getElementById('busca-paciente');
@@ -194,10 +197,19 @@ async function initPaginaPacientes() {
     atualizarBadgeSolicitacoes();
   }
 
-  document.getElementById('tabela-pacientes')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('.pac-lista-excluir');
+  document.getElementById('pac-filtro-status')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pac-filtro-btn');
     if (!btn) return;
-    excluirPacienteDaLista(btn.dataset.id, btn.dataset.nome);
+    filtroStatusAtual = btn.dataset.status;
+    document.querySelectorAll('.pac-filtro-btn').forEach(b => b.classList.toggle('ativo', b === btn));
+    renderTabelaPacientes(pacientesListaAtual);
+  });
+
+  document.getElementById('tabela-pacientes')?.addEventListener('click', (e) => {
+    const btnExcluir = e.target.closest('.pac-lista-excluir');
+    if (btnExcluir) { excluirPacienteDaLista(btnExcluir.dataset.id, btnExcluir.dataset.nome); return; }
+    const btnAlta = e.target.closest('.pac-lista-alta-btn');
+    if (btnAlta) { mudarAltaDaLista(btnAlta.dataset.id, btnAlta.dataset.novoValor === 'true'); return; }
   });
 
   document.getElementById('tabela-pacientes')?.addEventListener('change', (e) => {
@@ -336,14 +348,14 @@ function setupSolicitacoesModal() {
 
 async function buscarEExibirPacientes(termo) {
   const tbody = document.getElementById('tabela-pacientes');
-  tbody.innerHTML = `<tr><td colspan="7" class="pac-lista-msg">Buscando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="pac-lista-msg">Buscando...</td></tr>`;
   try {
     const qs = termo ? `?busca=${encodeURIComponent(termo)}` : '';
     const lista = await apiFetch(`/ferida/pacientes${qs}`);
     pacientesListaAtual = lista;
     renderTabelaPacientes(lista);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
   }
 }
 
@@ -376,20 +388,51 @@ async function mudarEnfermeiroDaLista(id, novoValor) {
   }
 }
 
+// Dar alta / reativar direto na lista — mesmo padrão do enfermeiro inline,
+// sem precisar abrir a ficha inteira pra uma troca operacional simples.
+async function mudarAltaDaLista(id, novaAlta) {
+  const p = pacientesListaAtual.find(x => x.id === id);
+  if (!p) return;
+  try {
+    await apiFetch(`/ferida/pacientes/${id}/alta`, {
+      method: 'PUT',
+      body: JSON.stringify({ alta: novaAlta })
+    });
+    p.alta = novaAlta;
+    p.dataAlta = novaAlta ? new Date().toISOString() : null;
+    showToast(novaAlta ? 'Paciente recebeu alta.' : 'Paciente reativado.');
+    renderTabelaPacientes(pacientesListaAtual);
+  } catch (err) {
+    showToast('Erro ao atualizar status: ' + err.message, 'error');
+  }
+}
+
 function renderTabelaPacientes(lista) {
   const tbody = document.getElementById('tabela-pacientes');
-  if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="pac-lista-msg">Nenhum paciente encontrado.</td></tr>`;
+  const filtrada = filtroStatusAtual === 'todos' ? lista
+    : filtroStatusAtual === 'alta' ? lista.filter(p => p.alta)
+    : lista.filter(p => !p.alta);
+
+  if (!filtrada.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="pac-lista-msg">Nenhum paciente encontrado.</td></tr>`;
     return;
   }
-  tbody.innerHTML = lista.map(p => {
+  tbody.innerHTML = filtrada.map(p => {
     const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
+    const dataAltaTxt = p.dataAlta ? new Date(p.dataAlta).toLocaleDateString('pt-BR') : '';
     return `
       <tr>
         <td>${esc(p.nome)}</td>
         <td>${esc(p.tipoFerida || '—')}</td>
         <td>${esc(p.municipio || '—')}</td>
         <td>${montarSelectEnfermeiroInline(p.id, p.enfermeiro)}</td>
+        <td>
+          ${p.alta
+            ? `<span class="pac-status-badge alta">Alta${dataAltaTxt ? ' em ' + dataAltaTxt : ''}</span>
+               <button type="button" class="pac-lista-alta-btn action-execute" data-id="${p.id}" data-novo-valor="false" title="Reativar paciente">Reativar</button>`
+            : `<span class="pac-status-badge ativo">Em atendimento</span>
+               <button type="button" class="pac-lista-alta-btn action-execute" data-id="${p.id}" data-novo-valor="true" title="Dar alta">Dar alta</button>`}
+        </td>
         <td>${p.atendimentosCount ?? 0}</td>
         <td>${cadastro}</td>
         <td class="pac-lista-acoes">

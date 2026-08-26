@@ -94,6 +94,8 @@ router.post('/pacientes', verifyToken, checkPermission, async (req, res) => {
             municipio: (municipio || '').trim(),
             tipoFerida: TIPOS_FERIDA.includes(tipoFerida) ? tipoFerida : null,
             enfermeiro: (enfermeiro || '').trim(),
+            alta: false,
+            dataAlta: null,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             createdByName: req.user.name || req.user.email || ''
@@ -143,6 +145,24 @@ router.put('/pacientes/:id/enfermeiro', verifyToken, checkPermission, async (req
             updatedBy: req.user.uid
         });
         res.json({ message: 'Enfermeiro atualizado com sucesso!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/ferida/pacientes/:id/alta - Dar alta ou reativar o paciente
+// (aberto a todos os enfermeiros — mesma lógica do endpoint de enfermeiro:
+// troca operacional do dia a dia, não edição do cadastro clínico em si).
+router.put('/pacientes/:id/alta', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const alta = req.body.alta === true;
+        await db.collection(COL_PACIENTES).doc(req.params.id).update({
+            alta,
+            dataAlta: alta ? new Date().toISOString() : null,
+            updatedAt: new Date().toISOString(),
+            updatedBy: req.user.uid
+        });
+        res.json({ message: alta ? 'Paciente recebeu alta.' : 'Paciente reativado.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
