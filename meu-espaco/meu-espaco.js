@@ -45,6 +45,10 @@ let minhasAtividades = [];
 let atividadesPorUid = {};
 let funcionariosDoSetor = [];
 let draggedId = null;
+// Lista de "todo mundo" pra delegar atividade — qualquer funcionário pode
+// atribuir tarefa pra qualquer outro, não só gestor pro próprio setor.
+// Buscada só na primeira vez que abre "Nova Atividade" (sob demanda), cacheada.
+let todasPessoas = null;
 
 // ================================================================
 //  AUTH GUARD & INIT
@@ -106,58 +110,17 @@ async function initApp(user, role) {
 
   setupEventListeners();
 
-  const linkProcessos = document.getElementById('link-processos-setor');
   souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
   if (souGestor) {
-    if (linkProcessos) linkProcessos.classList.remove('hidden');
     document.getElementById('gestor-panel').classList.remove('hidden');
     await setupSetorScope(role);
   }
 
   document.getElementById('board-select').addEventListener('change', (e) => {
     renderBoard(e.target.value);
-    atualizarProcessosFuncionario(e.target.value);
   });
   await carregarMeuQuadro();
   renderBoard('__self__');
-}
-
-// ================================================================
-//  PROCESSOS DO FUNCIONÁRIO SELECIONADO (referência, "Ver quadro de")
-// ================================================================
-const RECORRENCIA_LABEL = { diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal', bimestral: 'Bimestral', semestral: 'Semestral', anual: 'Anual', conforme_demanda: 'Conforme Demanda' };
-
-async function atualizarProcessosFuncionario(uidSelecionado) {
-  const el = document.getElementById('quadro-processos-funcionario');
-  if (uidSelecionado === '__self__') {
-    el.classList.add('hidden');
-    el.innerHTML = '';
-    return;
-  }
-
-  el.classList.remove('hidden');
-  el.innerHTML = '<div class="loading-state">Carregando processos dessa pessoa...</div>';
-  try {
-    const processos = await apiFetch(`/processos/meus?uid=${encodeURIComponent(uidSelecionado)}`);
-    if (!processos.length) {
-      el.innerHTML = '<div class="empty-state">Nenhum processo do setor atribuído a essa pessoa ainda.</div>';
-      return;
-    }
-    el.innerHTML = `
-      <div class="processos-funcionario-titulo">Processos do setor atribuídos a essa pessoa</div>
-      <div class="processos-funcionario-lista">
-        ${processos.map(p => `
-          <div class="processo-ref-item">
-            <span class="recorrencia-badge">${esc(RECORRENCIA_LABEL[p.recorrencia] || p.recorrencia)}</span>
-            <strong>${esc(p.titulo)}</strong>
-            ${(p.passos || []).length ? `<details class="kanban-card-passos"><summary>Ver passos (${p.passos.length})</summary><ul>${p.passos.map(x => `<li>${esc(x.texto)}</li>`).join('')}</ul></details>` : ''}
-          </div>
-        `).join('')}
-      </div>
-    `;
-  } catch (err) {
-    el.innerHTML = `<div class="empty-state">Erro ao carregar processos: ${esc(err.message)}</div>`;
-  }
 }
 
 // ================================================================
@@ -218,7 +181,6 @@ async function carregarPainelSetor() {
   const listEl = document.getElementById('setor-progresso-list');
   const boardSelect = document.getElementById('board-select');
   boardSelect.innerHTML = '<option value="__self__">Minhas atividades</option>';
-  atualizarProcessosFuncionario('__self__');
 
   if (!setorAtual) {
     listEl.innerHTML = '<div class="empty-state">Selecione um setor para ver o progresso da equipe.</div>';
@@ -303,6 +265,7 @@ function renderPainelSetor(progresso) {
     const pct = p.total > 0 ? Math.round((p.concluidas / p.total) * 100) : 0;
     const row = document.createElement('div');
     row.className = 'setor-progresso-row';
+    row.title = 'Clique para ver as atividades desta pessoa';
     row.innerHTML = `
       <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
       <div class="setor-progresso-info">
@@ -310,8 +273,22 @@ function renderPainelSetor(progresso) {
         <div class="setor-progresso-sub">${p.concluidas}/${p.total} concluídas</div>
       </div>
     `;
+    row.addEventListener('click', () => verQuadroDe(p.uid));
     listEl.appendChild(row);
   });
+}
+
+// Abre o quadro Kanban (A Fazer / Fazendo / Concluído) dessa pessoa a partir
+// do clique no cartão dela no Painel do Setor — mesmo mecanismo do combo
+// "Ver quadro de" acima do quadro, só que disparado pelo card em vez do select.
+function verQuadroDe(uid) {
+  const boardSelect = document.getElementById('board-select');
+  const valor = uid === currentUser.uid ? '__self__' : uid;
+  if (![...boardSelect.options].some(o => o.value === valor)) return;
+  boardSelect.value = valor;
+  renderBoard(valor);
+  atualizarProcessosFuncionario(valor);
+  document.querySelector('.activities-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function carregarMeuQuadro() {
@@ -322,12 +299,33 @@ async function carregarMeuQuadro() {
   }
 }
 
+// Atualiza os dados por trás do quadro que está aberto na tela — o próprio
+// (minhasAtividades) ou o de um colaborador (atividadesPorUid), sem resetar
+// a seleção do combo "Ver quadro de" nem o painel de progresso inteiro.
+async function recarregarQuadroAtual() {
+  if (boardAtual === '__self__') {
+    await carregarMeuQuadro();
+    return;
+  }
+  if (!setorAtual) return;
+  try {
+    const board = await apiFetch(`/processos/setor/atividades?setorId=${encodeURIComponent(setorAtual)}`);
+    funcionariosDoSetor = board.funcionarios || [];
+    atividadesPorUid = board.atividadesPorUid || {};
+  } catch (err) {}
+}
+
 let boardAtual = '__self__';
 
 function renderBoard(uidSelecionado) {
   boardAtual = uidSelecionado;
-  const editavel = uidSelecionado === '__self__';
-  const atividades = editavel ? minhasAtividades : (atividadesPorUid[uidSelecionado] || []);
+  const ehMeuBoard = uidSelecionado === '__self__';
+  // Chefe de Setor/ADM também pode arrastar (reagendar) e mudar status das
+  // atividades da própria equipe, não só ver — o quadro de outra pessoa só
+  // aparece pra quem é gestor do setor dela (Painel do Setor/combo já filtram
+  // isso), então chegar aqui com uidSelecionado != '__self__' já implica gestão.
+  const editavel = ehMeuBoard || souGestor;
+  const atividades = ehMeuBoard ? minhasAtividades : (atividadesPorUid[uidSelecionado] || []);
 
   const dias = diasDaSemana(semanaOffset);
   const primeiro = dias[0], ultimo = dias[4];
@@ -364,10 +362,10 @@ function renderBoard(uidSelecionado) {
       ${editavel ? '<button type="button" class="btn-add-dia" title="Nova atividade nesse dia">+ atividade</button>' : ''}
     `;
     const body = col.querySelector('.agenda-dia-body');
-    doDia.forEach(a => body.appendChild(criarCard(a, editavel && a.uid === currentUser.uid)));
+    doDia.forEach(a => body.appendChild(criarCard(a, editavel)));
 
     if (editavel) {
-      col.querySelector('.btn-add-dia').onclick = () => abrirModalAtividade(dia);
+      col.querySelector('.btn-add-dia').onclick = () => abrirModalAtividade({ diaPreset: dia });
       col.ondragover = (e) => e.preventDefault();
       col.ondrop = (e) => {
         e.preventDefault();
@@ -436,7 +434,7 @@ function renderProgressoBoard(atividades) {
 }
 
 function nomePorUid(uid) {
-  const f = funcionariosDoSetor.find(f => f.uid === uid);
+  const f = funcionariosDoSetor.find(f => f.uid === uid) || (todasPessoas || []).find(p => p.uid === uid);
   return f ? (f.name || f.email) : 'outra pessoa';
 }
 
@@ -462,6 +460,11 @@ function criarCard(atividade, editavel) {
     etiqueta = `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>`;
   }
 
+  // Excluir é mais restrito que editar/mover: quem só é dono de uma
+  // atividade atribuída por outra pessoa não pode excluir direto — só quem
+  // criou (pra si ou delegando) ou o gestor vendo o quadro do setor dele.
+  const podeExcluir = editavel && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
+
   card.innerHTML = `
     <div class="kanban-card-header">
       <span class="kanban-card-horario">${atividade.prazo ? formatarHorario(atividade.prazo) : ''}</span>
@@ -470,13 +473,14 @@ function criarCard(atividade, editavel) {
     </div>
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
+    ${atividade.andamento ? `<div class="kanban-card-andamento"><strong>Andamento:</strong> ${esc(atividade.andamento)}</div>` : ''}
     ${editavel ? `
       <div class="kanban-card-actions">
         <select class="status-select">
           ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
         </select>
         <button class="btn-mover btn-editar-atividade" title="Editar">✎</button>
-        <button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>
+        ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : '<span class="btn-excluir-bloqueado" title="Atribuída por outra pessoa — peça pra ela excluir">🔒</span>'}
       </div>
     ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
   `;
@@ -485,7 +489,7 @@ function criarCard(atividade, editavel) {
     card.addEventListener('dragstart', () => { draggedId = atividade.id; });
     card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
     card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
-    card.querySelector('.btn-excluir-atividade').onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+    if (podeExcluir) card.querySelector('.btn-excluir-atividade').onclick = () => excluirAtividade(atividade.id, atividade.titulo);
   }
 
   return card;
@@ -494,7 +498,7 @@ function criarCard(atividade, editavel) {
 async function moverAtividade(id, novoStatus) {
   try {
     await apiFetch(`/processos/atividades/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
-    await carregarMeuQuadro();
+    await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
     alert('Erro ao mover atividade: ' + err.message);
@@ -505,7 +509,7 @@ async function excluirAtividade(id, titulo) {
   if (!confirm(`Excluir a atividade "${titulo}"?`)) return;
   try {
     await apiFetch(`/processos/atividades/${id}`, { method: 'DELETE' });
-    await carregarMeuQuadro();
+    await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
     alert('Erro ao excluir atividade: ' + err.message);
@@ -514,15 +518,25 @@ async function excluirAtividade(id, titulo) {
 
 // Arrastou o card pra outro dia: troca a data, mantendo o horário original.
 async function reagendarAtividade(id, novoDia) {
-  const atividade = minhasAtividades.find(a => a.id === id);
+  const origem = boardAtual === '__self__' ? minhasAtividades : (atividadesPorUid[boardAtual] || []);
+  const atividade = origem.find(a => a.id === id);
   if (!atividade || !atividade.prazo) return;
   const original = new Date(atividade.prazo);
   const novaData = new Date(novoDia);
   novaData.setHours(original.getHours(), original.getMinutes(), 0, 0);
 
+  // Quem só é dono (não foi quem atribuiu) só pode antecipar o prazo de uma
+  // atividade atribuída por outra pessoa, nunca adiar — checagem local pra
+  // já avisar na hora, o backend também barra por segurança.
+  const souApenasDono = atividade.uid === currentUser.uid && atividade.criadoPor !== atividade.uid;
+  if (souApenasDono && novaData > original) {
+    alert('Essa atividade foi atribuída por outra pessoa — você só pode antecipar o prazo, não adiar. Peça mais prazo pra quem atribuiu.');
+    return;
+  }
+
   try {
     await apiFetch(`/processos/atividades/${id}`, { method: 'PUT', body: JSON.stringify({ prazo: novaData.toISOString() }) });
-    await carregarMeuQuadro();
+    await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
     alert('Erro ao reagendar: ' + err.message);
@@ -534,7 +548,7 @@ async function reagendarAtividade(id, novoDia) {
 // ================================================================
 let editandoId = null;
 
-function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
+async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
   document.getElementById('form-atividade').reset();
   editandoId = editar ? editar.id : null;
 
@@ -547,32 +561,68 @@ function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
     prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  const andamentoWrap = document.getElementById('atividade-andamento-wrap');
   if (editar) {
     document.getElementById('atividade-titulo').value = editar.titulo || '';
     document.getElementById('atividade-descricao').value = editar.descricao || '';
+    document.getElementById('atividade-andamento').value = editar.andamento || '';
+    andamentoWrap.classList.remove('hidden');
     if (editar.prazo) preencherPrazo(editar.prazo);
-  } else if (diaPreset) {
-    const d = new Date(diaPreset);
-    d.setHours(9, 0, 0, 0);
-    preencherPrazo(d);
+  } else {
+    andamentoWrap.classList.add('hidden');
+    if (diaPreset) {
+      const d = new Date(diaPreset);
+      d.setHours(9, 0, 0, 0);
+      preencherPrazo(d);
+    }
   }
 
   const wrap = document.getElementById('atividade-para-wrap');
-  const select = document.getElementById('atividade-uid');
-  if (!editar && souGestor && funcionariosDoSetor.length) {
+  const lista = document.getElementById('atividade-uid-lista');
+  const boardSelect = document.getElementById('board-select');
+  const selecionadoAtual = boardSelect ? boardSelect.value : '__self__';
+
+  const marcarCheckbox = (uid, marcado) => {
+    const cb = lista.querySelector(`input[value="${CSS.escape(uid)}"]`);
+    if (cb) cb.checked = marcado;
+  };
+
+  if (!editar) {
     wrap.classList.remove('hidden');
-    const boardSelect = document.getElementById('board-select');
-    const selecionadoAtual = boardSelect ? boardSelect.value : '__self__';
-    select.innerHTML = `<option value="${esc(currentUser.uid)}">Eu mesmo</option>` +
-      funcionariosDoSetor
-        .filter(f => f.uid !== currentUser.uid)
-        .map(f => `<option value="${esc(f.uid)}">${esc(f.name || f.email)}</option>`).join('');
-    select.value = (selecionadoAtual && selecionadoAtual !== '__self__') ? selecionadoAtual : currentUser.uid;
+    lista.innerHTML = `<label><input type="checkbox" value="${esc(currentUser.uid)}" checked> Eu mesmo</label>`;
   } else {
     wrap.classList.add('hidden');
   }
 
   abrirModal('modal-atividade');
+
+  // Gestor com um setor selecionado (Painel do Setor) vê só a equipe DESSE
+  // setor pra atribuir — é o caso mais comum e uma lista com a escola
+  // inteira misturada só atrapalha. Fora desse contexto (funcionário comum,
+  // ou gestor sem setor escolhido ainda), mostra todo mundo — é o caso de
+  // "preciso pedir uma coisa específica pra alguém fora da minha área".
+  if (!editar) {
+    const listaSetor = souGestor && setorAtual && funcionariosDoSetor.length;
+    if (!listaSetor && !todasPessoas) {
+      try { todasPessoas = await apiFetch('/processos/pessoas'); } catch (e) { todasPessoas = []; }
+    }
+    if (editandoId !== null || !document.getElementById('modal-atividade').classList.contains('active')) return; // modal fechado ou trocou pra edição nesse meio-tempo
+
+    const pessoas = listaSetor ? funcionariosDoSetor : (todasPessoas || []);
+    lista.innerHTML = `<label><input type="checkbox" value="${esc(currentUser.uid)}"> Eu mesmo</label>` +
+      pessoas
+        .filter(p => p.uid !== currentUser.uid)
+        .map(p => `<label><input type="checkbox" value="${esc(p.uid)}"> ${esc(p.name || p.email)}</label>`).join('');
+
+    // Pré-marca conforme o contexto: vendo o quadro de alguém (gestor) marca
+    // essa pessoa; senão marca "Eu mesmo" — mas continua sendo só sugestão,
+    // dá pra marcar mais gente.
+    if (souGestor && selecionadoAtual !== '__self__' && pessoas.some(p => p.uid === selecionadoAtual)) {
+      marcarCheckbox(selecionadoAtual, true);
+    } else {
+      marcarCheckbox(currentUser.uid, true);
+    }
+  }
 }
 
 async function salvarAtividade(e) {
@@ -580,7 +630,6 @@ async function salvarAtividade(e) {
   const titulo = document.getElementById('atividade-titulo').value.trim();
   const descricao = document.getElementById('atividade-descricao').value.trim();
   const prazoInput = document.getElementById('atividade-prazo').value;
-  const uidSelect = document.getElementById('atividade-uid');
 
   if (!titulo) return;
   if (!prazoInput) { alert('Informe o dia e horário da atividade.'); return; }
@@ -590,8 +639,13 @@ async function salvarAtividade(e) {
     descricao,
     prazo: new Date(prazoInput).toISOString()
   };
-  if (!editandoId && souGestor && uidSelect && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
-    data.uid = uidSelect.value;
+  if (editandoId) {
+    data.andamento = document.getElementById('atividade-andamento').value.trim();
+  }
+  if (!editandoId && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
+    const uids = [...document.querySelectorAll('#atividade-uid-lista input[type="checkbox"]:checked')].map(cb => cb.value);
+    if (!uids.length) { alert('Marque pelo menos uma pessoa em "Para".'); return; }
+    data.uids = uids;
   }
 
   try {
@@ -603,13 +657,27 @@ async function salvarAtividade(e) {
       }
     });
     fecharModal('modal-atividade');
-    if (data.uid && data.uid !== currentUser.uid) {
+    if (boardAtual !== '__self__') {
+      // Editando/arrastando/movendo enquanto o quadro aberto é de um
+      // colaborador — só recarrega os dados do setor, sem trocar de quadro.
+      await recarregarQuadroAtual();
+      renderBoard(boardAtual);
+    } else if (souGestor && data.uids && data.uids.some(uid => uid !== currentUser.uid)) {
+      // Sou gestor e criei uma atividade nova PARA uma ou mais pessoas a
+      // partir do meu próprio quadro — troca pro quadro da primeira delas
+      // pra já mostrar o resultado (só faz sentido pra gestor, que tem o
+      // Painel do Setor/board-select com outras pessoas; funcionário comum
+      // delegando pra fora do seu alcance de gestão não tem quadro alheio
+      // pra abrir, então fica no seu).
+      const outroUid = data.uids.find(uid => uid !== currentUser.uid);
       await carregarPainelSetor();
       const boardSelect = document.getElementById('board-select');
-      if (boardSelect) {
-        boardSelect.value = data.uid;
-        renderBoard(data.uid);
-        atualizarProcessosFuncionario(data.uid);
+      if (boardSelect && [...boardSelect.options].some(o => o.value === outroUid)) {
+        boardSelect.value = outroUid;
+        renderBoard(outroUid);
+        atualizarProcessosFuncionario(outroUid);
+      } else {
+        renderBoard(boardAtual);
       }
     } else {
       await carregarMeuQuadro();

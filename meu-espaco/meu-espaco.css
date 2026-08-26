@@ -164,6 +164,12 @@
   padding: 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.setor-progresso-row:hover {
+  border-color: var(--primary-blue);
+  background: rgba(15, 78, 184, 0.05);
 }
 
 .setor-progresso-info {
@@ -467,6 +473,19 @@
   margin-bottom: 0.5rem;
 }
 
+.kanban-card-andamento {
+  font-size: 0.78rem;
+  color: #475569;
+  background: #f8fafc;
+  border-left: 3px solid var(--primary-blue, #0F4EB8);
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+.kanban-card-andamento strong {
+  color: #0B1F33;
+}
+
 .kanban-card-passos {
   font-size: 0.8rem;
   margin-bottom: 0.5rem;
@@ -482,44 +501,6 @@
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;
   color: #475569;
-}
-
-/* ---- PROCESSOS DO FUNCIONÁRIO SELECIONADO (referência, "Ver quadro de") ---- */
-#quadro-processos-funcionario {
-  background: rgba(15, 78, 184, 0.04);
-  border: 1px solid rgba(15, 78, 184, 0.15);
-  border-radius: 16px;
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.processos-funcionario-titulo {
-  font-size: 0.9rem;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 0.85rem;
-}
-
-.processos-funcionario-lista {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.processo-ref-item {
-  background: white;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 0.6rem 0.85rem;
-  min-width: 220px;
-  flex: 1 1 220px;
-}
-
-.processo-ref-item strong {
-  display: block;
-  margin: 0.3rem 0 0;
-  color: var(--text-main);
-  font-size: 0.85rem;
 }
 
 .kanban-card-actions {
@@ -630,6 +611,28 @@
   font-weight: 700;
   color: var(--text-main);
 }
+
+.checkbox-lista {
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.5rem 0.25rem;
+}
+.checkbox-lista label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.checkbox-lista label:hover { background: rgba(15, 78, 184, 0.06); }
+.checkbox-lista input[type="checkbox"] { cursor: pointer; }
 
 .form-input {
   width: 100%;
