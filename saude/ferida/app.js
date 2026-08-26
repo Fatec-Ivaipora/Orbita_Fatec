@@ -428,7 +428,7 @@ function renderTabelaPacientes(lista) {
         <td>${montarSelectEnfermeiroInline(p.id, p.enfermeiro)}</td>
         <td>
           ${p.alta
-            ? `<span class="pac-status-badge alta" title="${dataAltaTxt ? 'Alta em ' + dataAltaTxt : ''}">Alta</span>
+            ? `<span class="pac-status-badge alta">Alta${dataAltaTxt ? ' em ' + dataAltaTxt : ''}</span>
                <button type="button" class="pac-lista-alta-btn action-execute" data-id="${p.id}" data-novo-valor="false" title="Reativar paciente">Reativar</button>`
             : `<span class="pac-status-badge ativo">Em atendimento</span>
                <button type="button" class="pac-lista-alta-btn action-execute" data-id="${p.id}" data-novo-valor="true" title="Dar alta">Dar alta</button>`}
