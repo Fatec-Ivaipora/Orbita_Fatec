@@ -52,6 +52,8 @@ const verifyToken = async (req, res, next) => {
         if (cached && (now - cached.lastFetched) < USER_CACHE_TTL) {
             req.user.role = cached.role;
             req.user.permissoes = cached.permissoes;
+            req.user.setorId = cached.setorId;
+            req.user.chefeDeSetor = cached.chefeDeSetor;
         } else {
             const { db } = require('../firebase');
             const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -60,7 +62,22 @@ const verifyToken = async (req, res, next) => {
             // Permissões específicas do usuário (override por módulo) — sempre
             // vencem as do cargo quando definidas
             req.user.permissoes = userData.permissoes || null;
-            userRoleCache.set(req.user.uid, { role: req.user.role, permissoes: req.user.permissoes, lastFetched: now });
+            // setorId/chefeDeSetor nunca eram lidos aqui — toda rota que
+            // dependia de req.user.setorId (Painel do Setor, Quadro de
+            // Avisos) recebia sempre undefined. `chefeDeSetor` é uma
+            // permissão à parte do cargo normal — dá o poder de "gestor do
+            // setor" (Painel do Setor/Avisos) sem trocar o cargo/permissões
+            // de módulo que a pessoa já tem (ex.: Secretaria continua com
+            // acesso a Matrículas e ainda vira chefe do setor Secretaria).
+            req.user.setorId = userData.setorId || null;
+            req.user.chefeDeSetor = userData.chefeDeSetor === true;
+            userRoleCache.set(req.user.uid, {
+                role: req.user.role,
+                permissoes: req.user.permissoes,
+                setorId: req.user.setorId,
+                chefeDeSetor: req.user.chefeDeSetor,
+                lastFetched: now
+            });
         }
         next();
     } catch (error) {
