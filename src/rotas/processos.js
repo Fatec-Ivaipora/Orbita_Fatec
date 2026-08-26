@@ -9,6 +9,14 @@ const GESTOR_ROLES = ['chefe_setor', 'adm_l1', 'adm_l2'];
 // HELPERS DE ACESSO POR SETOR
 // ==========================================
 
+// "Gestor de setor" = cargo chefe_setor/adm_l1/adm_l2 OU qualquer cargo com
+// a flag `chefeDeSetor: true` (ex.: Secretaria que também é chefe do setor
+// Secretaria, sem perder o acesso normal de Secretaria a outros módulos —
+// é por isso que isso não vira uma troca de cargo, é um poder à parte).
+function ehGestorSetor(req) {
+    return GESTOR_ROLES.includes(req.user.role) || req.user.chefeDeSetor === true;
+}
+
 // Resolve o setorId em que o usuário logado pode atuar como gestor
 // (chefe: o próprio setor; adm: precisa informar ?setorId=).
 function resolveSetorGestor(req) {
@@ -22,7 +30,7 @@ function resolveSetorGestor(req) {
         }
         return alvo;
     }
-    if (role === 'chefe_setor') {
+    if (ehGestorSetor(req)) {
         if (!setorId) {
             const err = new Error('Chefe de Setor sem setor de atuação definido — contate o ADM.');
             err.status = 400;
@@ -36,7 +44,7 @@ function resolveSetorGestor(req) {
 }
 
 function requireGestor(req, res, next) {
-    if (!GESTOR_ROLES.includes(req.user.role)) {
+    if (!ehGestorSetor(req)) {
         return res.status(403).json({ error: 'Apenas Chefe de Setor ou Administrador podem gerenciar processos.' });
     }
     next();
@@ -56,7 +64,7 @@ function souAtribuido(req, atividade) {
 // restrita — ver podeExcluirAtividade() e a checagem de prazo no PUT.
 function podeGerenciarAtividade(req, atividade) {
     const souCriador = atividade.criadoPor === req.user.uid;
-    const souGestorDoSetor = GESTOR_ROLES.includes(req.user.role) &&
+    const souGestorDoSetor = ehGestorSetor(req) &&
         (req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || atividade.setorId === req.user.setorId);
     return souAtribuido(req, atividade) || souCriador || souGestorDoSetor;
 }
@@ -68,7 +76,7 @@ function podeGerenciarAtividade(req, atividade) {
 // gestor.
 function podeExcluirAtividade(req, atividade) {
     const souCriador = atividade.criadoPor === req.user.uid;
-    const souGestorDoSetor = GESTOR_ROLES.includes(req.user.role) &&
+    const souGestorDoSetor = ehGestorSetor(req) &&
         (req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || atividade.setorId === req.user.setorId);
     return souCriador || souGestorDoSetor;
 }

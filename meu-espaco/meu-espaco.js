@@ -40,6 +40,11 @@ let initializedRole = null;
 // embaixo (onde a seção Kanban fica) jogava initApp() na zona morta
 // temporal do `let` e travava com "Cannot access before initialization".
 let souGestor = false;
+// Flag à parte do cargo (`role`) — dá o poder de "gestor do setor" (Painel
+// do Setor/Quadro de Avisos) sem trocar as permissões de módulo que a
+// pessoa já tem por cargo (ex.: Secretaria continua Secretaria e também
+// vira chefe do setor Secretaria). Vem de GET /usuarios/me.
+let currentChefeDeSetor = false;
 let setorAtual = null;
 let minhasAtividades = [];
 let atividadesPorUid = {};
@@ -49,6 +54,12 @@ let draggedId = null;
 // atribuir tarefa pra qualquer outro, não só gestor pro próprio setor.
 // Buscada só na primeira vez que abre "Nova Atividade" (sob demanda), cacheada.
 let todasPessoas = null;
+// Mesmo motivo das variáveis acima: setupComposerAviso() é chamado por
+// initApp() no carregamento rápido (cache), então CORES_AVISO precisa já
+// estar inicializada antes disso — senão dá "Cannot access before
+// initialization" (zona morta temporal do const/let mais abaixo no arquivo).
+const CORES_AVISO = ['amarelo', 'rosa', 'azul', 'verde', 'laranja'];
+let corAvisoSelecionada = CORES_AVISO[0];
 
 // ================================================================
 //  AUTH GUARD & INIT
@@ -69,6 +80,7 @@ onAuthStateChanged(auth, async (user) => {
       try {
         const userData = await apiFetch('/usuarios/me');
         role = userData.role || 'visitante';
+        currentChefeDeSetor = userData.chefeDeSetor === true;
       } catch(e) {
         role = cached ? cached.role : 'visitante';
       }
@@ -92,7 +104,7 @@ onAuthStateChanged(auth, async (user) => {
         // ainda vazios e nunca chamava carregarPainelSetor()/carregarAvisos()
         // — Painel do Setor e Quadro de Avisos sumiam até deslogar e logar de
         // novo. Recalcula tudo de novo aqui, sem depender do outro fluxo.
-        souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
+        souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role) || currentChefeDeSetor;
         document.getElementById('gestor-panel')?.classList.toggle('hidden', !souGestor);
         document.getElementById('aviso-composer')?.classList.toggle('hidden', !souGestor);
         if (souGestor) {
@@ -126,7 +138,7 @@ async function initApp(user, role) {
 
   setupEventListeners();
 
-  souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role);
+  souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role) || currentChefeDeSetor;
   setupComposerAviso();
   if (souGestor) {
     document.getElementById('gestor-panel').classList.remove('hidden');
@@ -177,9 +189,6 @@ function chaveDia(date) {
 // ================================================================
 //  QUADRO DE AVISOS (mural de post-its do setor)
 // ================================================================
-const CORES_AVISO = ['amarelo', 'rosa', 'azul', 'verde', 'laranja'];
-let corAvisoSelecionada = CORES_AVISO[0];
-
 function setupComposerAviso() {
   const wrap = document.getElementById('aviso-cor-opcoes');
   if (!wrap) return;
