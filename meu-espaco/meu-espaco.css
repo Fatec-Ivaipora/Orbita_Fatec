@@ -486,6 +486,28 @@
   color: #0B1F33;
 }
 
+.kanban-card-andamento-edit {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+.kanban-card-andamento-edit textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  resize: vertical;
+  background: white;
+  margin-bottom: 0.4rem;
+}
+.kanban-card-andamento-edit .btn-salvar-andamento {
+  width: 100%;
+}
+
 .kanban-card-passos {
   font-size: 0.8rem;
   margin-bottom: 0.5rem;

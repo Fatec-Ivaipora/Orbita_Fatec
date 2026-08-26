@@ -204,7 +204,14 @@ router.put('/atividades/:id', verifyToken, async (req, res) => {
         }
         // Nota de progresso que quem executa a tarefa vai preenchendo — não é
         // a descrição original (o que precisa ser feito), é o "como está indo".
-        if (andamento !== undefined) data.andamento = (andamento || '').trim();
+        // Só o próprio dono relata o progresso dele — nem criador, nem gestor,
+        // podem editar/apagar o andamento que outra pessoa escreveu.
+        if (andamento !== undefined) {
+            if (atual.uid !== req.user.uid) {
+                return res.status(403).json({ error: 'Só quem executa a atividade pode relatar o andamento dela.' });
+            }
+            data.andamento = (andamento || '').trim();
+        }
 
         await docRef.update(data);
         res.json({ message: 'Atividade atualizada com sucesso!' });
