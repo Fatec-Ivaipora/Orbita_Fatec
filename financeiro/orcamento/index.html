@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orçamento - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Orçamento</h1>
+                        <p class="page-subtitle">Verba prevista por setor/projeto e acompanhamento do que já foi gasto</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn-primary action-execute" id="btn-novo-orcamento" disabled>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Novo Orçamento
+                        </button>
+                    </div>
+                </div>
+
+                <div class="kpi-grid" id="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Previsto (filtro atual)</div>
+                        <div class="kpi-value" id="kpi-previsto">R$ 0,00</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gasto</div>
+                        <div class="kpi-value" id="kpi-gasto">R$ 0,00</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Saldo</div>
+                        <div class="kpi-value" id="kpi-saldo">R$ 0,00</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Orçamentos</div>
+                        <div class="kpi-value" id="kpi-qtd">0</div>
+                        <div class="kpi-hint" id="kpi-qtd-hint"></div>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select class="select-filter" id="setor-select">
+                        <option value="">Todos os setores</option>
+                    </select>
+                    <select class="select-filter" id="semestre-select">
+                        <option value="">Todos os períodos</option>
+                    </select>
+                    <select class="select-filter" id="status-select">
+                        <option value="aberto">Abertos</option>
+                        <option value="encerrado">Encerrados</option>
+                        <option value="todos">Todos</option>
+                    </select>
+                    <div class="search-wrap">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" class="search-input" id="busca-orcamento" placeholder="Buscar orçamento pelo nome...">
+                    </div>
+                </div>
+
+                <div class="orc-grid" id="orc-grid">
+                    <div class="tabela-msg-grid">Carregando...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Novo/Editar Orçamento -->
+    <div id="modal-orcamento" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-orcamento-title">Novo Orçamento</h2>
+            <p class="modal-subtitle">Defina a verba prevista para um setor, projeto ou compra pontual.</p>
+            <form id="form-orcamento">
+                <input type="hidden" id="orcamento-id">
+                <div class="form-group">
+                    <label>Nome do orçamento</label>
+                    <input type="text" id="orcamento-nome" placeholder="Ex.: Zeladoria 2026.2" required maxlength="120">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Setor / Departamento</label>
+                        <input type="text" id="orcamento-setor" list="setores-datalist" placeholder="Ex.: Zeladoria" required maxlength="60">
+                        <datalist id="setores-datalist"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Período (opcional)</label>
+                        <input type="text" id="orcamento-semestre" placeholder="Ex.: 2026.2" maxlength="30">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Valor previsto (R$)</label>
+                    <input type="number" id="orcamento-valor-previsto" step="0.01" min="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Observações</label>
+                    <textarea id="orcamento-observacoes" maxlength="500"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-orcamento">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-orcamento">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Detalhe do Orçamento (lançamentos) -->
+    <div id="modal-detalhe" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem;">
+                <div>
+                    <h2 id="detalhe-nome">Orçamento</h2>
+                    <p class="modal-subtitle" id="detalhe-meta">Setor · Período</p>
+                </div>
+                <span class="status-badge action-execute" id="detalhe-status-toggle" title="Clique para abrir/encerrar"></span>
+            </div>
+
+            <div class="orc-detalhe-resumo">
+                <div><span>Previsto</span><strong id="detalhe-previsto">R$ 0,00</strong></div>
+                <div><span>Gasto</span><strong id="detalhe-gasto">R$ 0,00</strong></div>
+                <div><span>Saldo</span><strong id="detalhe-saldo">R$ 0,00</strong></div>
+            </div>
+
+            <div class="card-secao-titulo" style="padding:0; margin-bottom:0.75rem;">Lançamentos de gasto</div>
+            <div class="tabela-wrap" style="max-height: 300px; overflow-y:auto; border:1px solid var(--border-color); border-radius:10px; margin-bottom:1rem;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Descrição</th>
+                            <th>Fornecedor</th>
+                            <th>Qtd</th>
+                            <th>Vlr. Unit.</th>
+                            <th>Total</th>
+                            <th>Data</th>
+                            <th class="action-execute">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lancamentos-tbody">
+                        <tr><td colspan="7" class="tabela-msg">Nenhum lançamento ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <form id="form-lancamento" class="action-execute">
+                <input type="hidden" id="lancamento-id">
+                <input type="hidden" id="lancamento-orcamento-id">
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label>Descrição</label>
+                        <input type="text" id="lancamento-descricao" placeholder="Produto/serviço comprado" required maxlength="200">
+                    </div>
+                    <div class="form-group">
+                        <label>Qtd</label>
+                        <input type="number" id="lancamento-quantidade" step="0.01" min="0.01" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Vlr. Unit. (R$)</label>
+                        <input type="number" id="lancamento-valor-unitario" step="0.01" min="0" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fornecedor (opcional)</label>
+                        <input type="text" id="lancamento-fornecedor" maxlength="120">
+                    </div>
+                    <div class="form-group">
+                        <label>Data</label>
+                        <input type="date" id="lancamento-data">
+                    </div>
+                </div>
+                <div class="modal-actions-split">
+                    <button type="button" class="btn-secondary hidden" id="btn-cancelar-lancamento">Cancelar edição</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-lancamento" style="margin-left:auto;">Lançar gasto</button>
+                </div>
+            </form>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-editar-orcamento">Editar orçamento</button>
+                <button type="button" class="btn-secondary" id="btn-fechar-detalhe">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/orcamento/app.js"></script>
+</body>
+</html>
