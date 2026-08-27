@@ -110,17 +110,24 @@ export const MODULES = {
     title: "Relatório Matrículas",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>`,
     url: "/financeiro/matriculas/index.html"
+  },
+  orcamento: {
+    id: "orcamento",
+    category: "financeiro",
+    title: "Orçamento",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    url: "/financeiro/orcamento/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento"]
   },
   ti: {
     label: "T.I.",
@@ -132,7 +139,7 @@ export const ROLE_PERMISSIONS = {
   },
   financeiro: {
     label: "Financeiro",
-    modules: ["dashboard", "fidelidade", "licitacao", "matriculas"]
+    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento"]
   },
   // Coordenador perdeu acesso à Licitação (18/08) — passou a ser tarefa
   // exclusiva do Financeiro, pra não misturar semestre ativo entre uma
