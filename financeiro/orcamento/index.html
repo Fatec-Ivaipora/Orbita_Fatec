@@ -33,15 +33,15 @@
 
                 <div class="kpi-grid" id="kpi-grid">
                     <div class="kpi-card">
-                        <div class="kpi-label">Previsto (filtro atual)</div>
+                        <div class="kpi-label" id="kpi-previsto-label">Previsto</div>
                         <div class="kpi-value" id="kpi-previsto">R$ 0,00</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Gasto</div>
+                        <div class="kpi-label" id="kpi-gasto-label">Gasto</div>
                         <div class="kpi-value" id="kpi-gasto">R$ 0,00</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Saldo</div>
+                        <div class="kpi-label" id="kpi-saldo-label">Saldo</div>
                         <div class="kpi-value" id="kpi-saldo">R$ 0,00</div>
                     </div>
                     <div class="kpi-card">
@@ -59,8 +59,8 @@
                         <option value="">Todos os períodos</option>
                     </select>
                     <select class="select-filter" id="status-select">
-                        <option value="aberto">Abertos</option>
-                        <option value="encerrado">Encerrados</option>
+                        <option value="aberto">Em aberto</option>
+                        <option value="encerrado">Fechados</option>
                         <option value="todos">Todos</option>
                     </select>
                     <div class="search-wrap">
@@ -90,10 +90,8 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Setor / Departamento</label>
-                        <select id="orcamento-setor" required>
-                            <option value="">Selecione...</option>
-                        </select>
-                        <div class="form-hint" id="orcamento-setor-hint"></div>
+                        <input type="text" id="orcamento-setor" list="setores-datalist" placeholder="Ex.: Zeladoria" required maxlength="60">
+                        <datalist id="setores-datalist"></datalist>
                     </div>
                     <div class="form-group">
                         <label>Período (opcional)</label>
@@ -124,7 +122,7 @@
                     <h2 id="detalhe-nome">Orçamento</h2>
                     <p class="modal-subtitle" id="detalhe-meta">Setor · Período</p>
                 </div>
-                <span class="status-badge action-execute" id="detalhe-status-toggle" title="Clique para abrir/encerrar"></span>
+                <span class="status-badge" id="detalhe-status-badge"></span>
             </div>
 
             <div class="orc-detalhe-resumo" id="detalhe-resumo">
@@ -188,9 +186,10 @@
 
             <div class="modal-actions-split">
                 <button type="button" class="btn-secondary hidden" id="btn-excluir-orcamento" title="Só Administrador ou Chefe deste setor podem excluir" style="color:var(--red); border-color:var(--red);">Excluir orçamento</button>
-                <div style="display:flex; gap:0.75rem; margin-left:auto;">
+                <div style="display:flex; gap:0.75rem; margin-left:auto; flex-wrap:wrap;">
+                    <button type="button" class="btn-secondary action-execute" id="btn-alternar-status">Fechar orçamento</button>
                     <button type="button" class="btn-secondary" id="btn-editar-orcamento">Editar orçamento</button>
-                    <button type="button" class="btn-secondary" id="btn-fechar-detalhe">Fechar</button>
+                    <button type="button" class="btn-secondary" id="btn-fechar-detalhe">Voltar</button>
                 </div>
             </div>
         </div>

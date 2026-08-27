@@ -19,10 +19,8 @@ let orcamentos = [];
 let orcamentoDetalheId = null;
 let lancamentoEmEdicaoId = null;
 let fornecedoresGlobais = [];
-let setoresPorId = {}; // id (users.setorId / roles.id) -> nome de exibição
 let currentRole = null;
 let currentChefeDeSetor = false;
-let currentSetorId = null;
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -97,7 +95,6 @@ onAuthStateChanged(auth, async (user) => {
       role = userData.role || 'visitante';
       meuOverrides = userData.permissoes || null;
       currentChefeDeSetor = userData.chefeDeSetor === true;
-      currentSetorId = userData.setorId || null;
     } catch (err) {
       role = cached ? cached.role : 'visitante';
     }
@@ -148,37 +145,8 @@ async function initApp(user, role) {
   document.getElementById('btn-novo-orcamento').disabled = false;
 
   wireEventos();
-  await carregarSetoresSistema();
   await carregarOrcamentos();
   carregarFornecedores();
-}
-
-// Setores/cargos cadastrados em Usuários → Setores — usados como origem
-// única do campo Setor do orçamento (select, não texto livre), pra poder
-// checar depois quem é Chefe daquele setor específico na exclusão.
-async function carregarSetoresSistema() {
-  const select = document.getElementById('orcamento-setor');
-  const hint = document.getElementById('orcamento-setor-hint');
-  try {
-    const setores = await apiFetch('/orcamento/setores-sistema');
-    setoresPorId = {};
-    setores.forEach(s => { setoresPorId[s.id] = s.name || s.id; });
-
-    const opcoes = Object.entries(setoresPorId).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
-    select.innerHTML = '<option value="">Selecione...</option>' + opcoes.map(([id, nome]) => `<option value="${esc(id)}">${esc(nome)}</option>`).join('');
-
-    if (!opcoes.length) {
-      hint.textContent = 'Nenhum setor cadastrado ainda — cadastre em Usuários → Setores antes de criar um orçamento.';
-    } else {
-      hint.textContent = '';
-    }
-  } catch (err) {
-    hint.textContent = 'Não foi possível carregar a lista de setores.';
-  }
-}
-
-function nomeSetor(id) {
-  return setoresPorId[id] || id || '—';
 }
 
 // Lista de fornecedores compartilhada com o módulo Licitação — só para
@@ -213,11 +181,14 @@ async function carregarOrcamentos() {
 
 function popularFiltroSetor() {
   const select = document.getElementById('setor-select');
+  const datalist = document.getElementById('setores-datalist');
   const atual = select.value;
-  const setores = [...new Set(orcamentos.map(o => o.setor).filter(Boolean))].sort((a, b) => nomeSetor(a).localeCompare(nomeSetor(b), 'pt-BR'));
+  const setores = [...new Set(orcamentos.map(o => o.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
-  select.innerHTML = '<option value="">Todos os setores</option>' + setores.map(s => `<option value="${esc(s)}">${esc(nomeSetor(s))}</option>`).join('');
+  select.innerHTML = '<option value="">Todos os setores</option>' + setores.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   select.value = setores.includes(atual) ? atual : '';
+
+  datalist.innerHTML = setores.map(s => `<option value="${esc(s)}">`).join('');
 }
 
 function popularFiltroSemestre() {
@@ -257,11 +228,20 @@ function renderizarGrid() {
   const grid = document.getElementById('orc-grid');
 
   // KPIs sobre o conjunto filtrado — "Previsto"/"Saldo" só somam quem tem
-  // teto definido (nem todo orçamento tem); "Gasto" soma todo mundo.
+  // teto definido (nem todo orçamento tem); "Gasto" soma todo mundo. O
+  // rótulo deixa claro de ONDE vem o valor: nome do orçamento quando o
+  // filtro resulta em um só, ou "N orçamentos" quando é uma soma de vários
+  // — sem isso não dá pra saber se é o previsto de 1 orçamento ou de todos.
   const comPrevisto = lista.filter(o => o.valorPrevisto !== null && o.valorPrevisto !== undefined);
   const totalPrevisto = comPrevisto.reduce((s, o) => s + o.valorPrevisto, 0);
   const totalGasto = lista.reduce((s, o) => s + (o.totalGasto || 0), 0);
   const saldoGeral = totalPrevisto - comPrevisto.reduce((s, o) => s + (o.totalGasto || 0), 0);
+
+  const escopo = lista.length === 1 ? `(${lista[0].nome})` : `— ${lista.length} orçamento${lista.length === 1 ? '' : 's'}`;
+  document.getElementById('kpi-previsto-label').textContent = `Previsto ${escopo}`;
+  document.getElementById('kpi-gasto-label').textContent = `Gasto ${escopo}`;
+  document.getElementById('kpi-saldo-label').textContent = `Saldo ${escopo}`;
+
   document.getElementById('kpi-previsto').textContent = comPrevisto.length ? fmtMoeda(totalPrevisto) : '—';
   document.getElementById('kpi-gasto').textContent = fmtMoeda(totalGasto);
   const kpiSaldo = document.getElementById('kpi-saldo');
@@ -285,10 +265,10 @@ function renderizarGrid() {
       <div class="orc-card" data-id="${o.id}">
         <div class="orc-card-topo">
           <div class="orc-card-nome">${esc(o.nome)}</div>
-          <span class="status-badge status-${o.status}">${o.status === 'aberto' ? 'Aberto' : 'Encerrado'}</span>
+          <span class="status-badge status-${o.status}">${o.status === 'aberto' ? 'Em aberto' : 'Fechado'}</span>
         </div>
         <div class="orc-card-meta">
-          <span class="setor-chip">${esc(nomeSetor(o.setor))}</span>
+          <span class="setor-chip">${esc(o.setor)}</span>
           ${o.semestre ? `<span class="semestre-chip">${esc(o.semestre)}</span>` : ''}
         </div>
         ${temPrevisto ? `<div class="orc-progress-track"><div class="orc-progress-fill ${classeProgresso(previsto, gasto)}" style="width:${pct}%"></div></div>` : ''}
@@ -318,17 +298,6 @@ function abrirModalOrcamento(orcamento = null) {
   document.getElementById('modal-orcamento-title').textContent = orcamento ? 'Editar Orçamento' : 'Novo Orçamento';
   document.getElementById('orcamento-nome').value = orcamento ? orcamento.nome : '';
   document.getElementById('orcamento-setor').value = orcamento ? orcamento.setor : '';
-  // Setor de um orçamento antigo que não bate com nenhum setor cadastrado
-  // hoje (ex.: texto livre de antes desta mudança) — adiciona como opção
-  // avulsa pra não perder/apagar sem querer o valor já salvo.
-  const selectSetor = document.getElementById('orcamento-setor');
-  if (orcamento && orcamento.setor && selectSetor.value !== orcamento.setor) {
-    const opt = document.createElement('option');
-    opt.value = orcamento.setor;
-    opt.textContent = `${nomeSetor(orcamento.setor)} (não cadastrado)`;
-    selectSetor.appendChild(opt);
-    selectSetor.value = orcamento.setor;
-  }
   document.getElementById('orcamento-semestre').value = orcamento ? (orcamento.semestre || '') : '';
   document.getElementById('orcamento-valor-previsto').value = (orcamento && orcamento.valorPrevisto !== null && orcamento.valorPrevisto !== undefined) ? orcamento.valorPrevisto : '';
   document.getElementById('orcamento-observacoes').value = orcamento ? (orcamento.observacoes || '') : '';
@@ -376,15 +345,17 @@ async function abrirDetalhe(id) {
   orcamentoDetalheId = id;
 
   document.getElementById('detalhe-nome').textContent = orcamento.nome;
-  const setorLabel = nomeSetor(orcamento.setor);
-  document.getElementById('detalhe-meta').textContent = orcamento.semestre ? `${setorLabel} · ${orcamento.semestre}` : setorLabel;
+  document.getElementById('detalhe-meta').textContent = orcamento.semestre ? `${orcamento.setor} · ${orcamento.semestre}` : orcamento.setor;
   atualizarResumoDetalhe(orcamento);
 
-  const statusToggle = document.getElementById('detalhe-status-toggle');
-  statusToggle.textContent = orcamento.status === 'aberto' ? 'Aberto' : 'Encerrado';
-  statusToggle.className = `status-badge action-execute status-${orcamento.status}`;
+  const statusBadge = document.getElementById('detalhe-status-badge');
+  statusBadge.textContent = orcamento.status === 'aberto' ? 'Em aberto' : 'Fechado';
+  statusBadge.className = `status-badge status-${orcamento.status}`;
 
-  document.getElementById('btn-excluir-orcamento').classList.toggle('hidden', !podeExcluirOrcamento(orcamento));
+  const btnAlternarStatus = document.getElementById('btn-alternar-status');
+  btnAlternarStatus.textContent = orcamento.status === 'aberto' ? 'Fechar orçamento' : 'Reabrir orçamento';
+
+  document.getElementById('btn-excluir-orcamento').classList.toggle('hidden', !podeExcluirOrcamento());
 
   cancelarEdicaoLancamento();
   document.getElementById('lancamento-orcamento-id').value = id;
@@ -560,7 +531,7 @@ async function alternarStatusDetalhe() {
   const novoStatus = orcamento.status === 'aberto' ? 'encerrado' : 'aberto';
   try {
     await apiFetch(`/orcamento/orcamentos/${orcamento.id}`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
-    showToast(novoStatus === 'aberto' ? 'Orçamento reaberto.' : 'Orçamento encerrado.');
+    showToast(novoStatus === 'aberto' ? 'Orçamento reaberto.' : 'Orçamento fechado.');
     await carregarOrcamentos();
     abrirDetalhe(orcamento.id);
   } catch (err) {
@@ -574,11 +545,10 @@ function fecharModalDetalhe() {
 }
 
 // Excluir o orçamento é mais restrito que editar/lançar gasto: só ADM N1/N2
-// ou quem é Chefe do MESMO setor deste orçamento. Checagem só de UI — quem
-// decide de verdade é o backend (ver DELETE /orcamento/orcamentos/:id).
-function podeExcluirOrcamento(orcamento) {
-  if (currentRole === 'adm_l1' || currentRole === 'adm_l2') return true;
-  return currentChefeDeSetor && !!currentSetorId && currentSetorId === orcamento.setor;
+// ou qualquer Chefe de Setor. Checagem só de UI — quem decide de verdade é
+// o backend (ver DELETE /orcamento/orcamentos/:id).
+function podeExcluirOrcamento() {
+  return currentRole === 'adm_l1' || currentRole === 'adm_l2' || currentChefeDeSetor === true;
 }
 
 async function excluirOrcamentoAtual() {
@@ -609,7 +579,7 @@ function wireEventos() {
   document.getElementById('busca-orcamento').addEventListener('input', renderizarGrid);
 
   document.getElementById('btn-fechar-detalhe').addEventListener('click', fecharModalDetalhe);
-  document.getElementById('detalhe-status-toggle').addEventListener('click', alternarStatusDetalhe);
+  document.getElementById('btn-alternar-status').addEventListener('click', alternarStatusDetalhe);
   document.getElementById('btn-editar-orcamento').addEventListener('click', () => {
     const orcamento = orcamentos.find(o => o.id === orcamentoDetalheId);
     if (orcamento) abrirModalOrcamento(orcamento);
