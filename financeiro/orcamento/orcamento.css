@@ -207,6 +207,8 @@
   outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
 }
 .form-group textarea { resize: vertical; min-height: 70px; }
+.form-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.35rem; }
+.form-hint a { color: var(--primary-blue); font-weight: 600; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
 .modal-actions-split { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }

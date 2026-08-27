@@ -59,6 +59,24 @@ router.get('/orcamentos/setores', verifyToken, checkPermission, async (req, res)
     }
 });
 
+// Setores/cargos cadastrados no sistema (coleção `roles`, gerenciada em
+// Usuários → Setores) — usado pra escolher o setor do orçamento a partir de
+// uma lista real, em vez de texto livre. É o mesmo `setorId` gravado no
+// usuário (users/{uid}.setorId) que decide quem é "Chefe de Setor" — só
+// batendo o orçamento com um setor de verdade dá pra restringir a exclusão
+// ao chefe daquele setor específico (ver DELETE /orcamentos/:id).
+// Endpoint próprio (em vez de reusar /api/usuarios/roles) porque aquele é
+// restrito a quem tem o módulo "usuarios" — Financeiro/ADM que só têm
+// "orcamento" não teriam acesso.
+router.get('/setores-sistema', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection('roles').get();
+        res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.post('/orcamentos', verifyToken, checkPermission, async (req, res) => {
     try {
         const nome = normalizarTexto(req.body.nome);
@@ -130,12 +148,27 @@ router.put('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => 
     }
 });
 
+// Excluir o orçamento é mais restrito que cadastrar/editar/lançar gasto
+// (nível 3 do módulo, que Financeiro/ADM N2 já têm por padrão): só ADM N1/N2
+// ou quem é Chefe de Setor (users/{uid}.chefeDeSetor) do MESMO setor deste
+// orçamento (users/{uid}.setorId === orcamento.setor) pode apagar.
 router.delete('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
+        const ref = db.collection(COL_ORCAMENTOS).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Orçamento não encontrado.' });
+        const orcamento = snap.data();
+
+        const ehAdmin = req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
+        const ehChefeDoSetor = req.user.chefeDeSetor === true && req.user.setorId && req.user.setorId === orcamento.setor;
+        if (!ehAdmin && !ehChefeDoSetor) {
+            return res.status(403).json({ error: 'Só o Administrador ou o Chefe do Setor deste orçamento podem excluí-lo.' });
+        }
+
         const lancSnap = await db.collection(COL_LANCAMENTOS).where('orcamentoId', '==', req.params.id).limit(1).get();
         if (!lancSnap.empty) return res.status(400).json({ error: 'Este orçamento já tem gastos lançados — encerre-o em vez de excluir.' });
 
-        await db.collection(COL_ORCAMENTOS).doc(req.params.id).delete();
+        await ref.delete();
         res.json({ message: 'Orçamento excluído.' });
     } catch (err) {
         res.status(500).json({ error: err.message });

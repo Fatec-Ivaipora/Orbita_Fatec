@@ -90,8 +90,10 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Setor / Departamento</label>
-                        <input type="text" id="orcamento-setor" list="setores-datalist" placeholder="Ex.: Zeladoria" required maxlength="60">
-                        <datalist id="setores-datalist"></datalist>
+                        <select id="orcamento-setor" required>
+                            <option value="">Selecione...</option>
+                        </select>
+                        <div class="form-hint" id="orcamento-setor-hint"></div>
                     </div>
                     <div class="form-group">
                         <label>Período (opcional)</label>
@@ -184,9 +186,12 @@
                 </div>
             </form>
 
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="btn-editar-orcamento">Editar orçamento</button>
-                <button type="button" class="btn-secondary" id="btn-fechar-detalhe">Fechar</button>
+            <div class="modal-actions-split">
+                <button type="button" class="btn-secondary hidden" id="btn-excluir-orcamento" title="Só Administrador ou Chefe deste setor podem excluir" style="color:var(--red); border-color:var(--red);">Excluir orçamento</button>
+                <div style="display:flex; gap:0.75rem; margin-left:auto;">
+                    <button type="button" class="btn-secondary" id="btn-editar-orcamento">Editar orçamento</button>
+                    <button type="button" class="btn-secondary" id="btn-fechar-detalhe">Fechar</button>
+                </div>
             </div>
         </div>
     </div>
