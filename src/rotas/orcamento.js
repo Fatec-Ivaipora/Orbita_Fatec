@@ -16,6 +16,13 @@ function normalizarTexto(v) {
     return (v || '').toString().trim();
 }
 
+// Nem todo orçamento tem um teto definido de antemão (na prática do setor,
+// às vezes só se registra o que foi comprado sem um valor previsto — ver
+// planilhas de referência). Sem previsto, não existe "saldo" a calcular.
+function calcularSaldo(valorPrevisto, totalGasto) {
+    return valorPrevisto === null || valorPrevisto === undefined ? null : valorPrevisto - totalGasto;
+}
+
 // ==========================================
 // ORÇAMENTOS — verba prevista por setor/projeto (ex.: "Zeladoria 2026.2",
 // "Medicina Veterinária - Equipamentos"), com totalGasto/saldo denormalizados
@@ -58,11 +65,12 @@ router.post('/orcamentos', verifyToken, checkPermission, async (req, res) => {
         const setor = normalizarTexto(req.body.setor);
         const semestre = normalizarTexto(req.body.semestre);
         const observacoes = normalizarTexto(req.body.observacoes);
-        const valorPrevisto = Number(req.body.valorPrevisto);
+        const temPrevisto = req.body.valorPrevisto !== undefined && req.body.valorPrevisto !== null && req.body.valorPrevisto !== '';
+        const valorPrevisto = temPrevisto ? Number(req.body.valorPrevisto) : null;
 
         if (!validarTexto(nome)) return res.status(400).json({ error: 'Informe um nome para o orçamento.' });
         if (!validarTexto(setor, 60)) return res.status(400).json({ error: 'Informe o setor/departamento.' });
-        if (!Number.isFinite(valorPrevisto) || valorPrevisto <= 0) return res.status(400).json({ error: 'Informe um valor previsto válido, maior que zero.' });
+        if (temPrevisto && (!Number.isFinite(valorPrevisto) || valorPrevisto <= 0)) return res.status(400).json({ error: 'Informe um valor previsto válido, maior que zero (ou deixe em branco).' });
 
         const docRef = await db.collection(COL_ORCAMENTOS).add({
             nome,
@@ -71,7 +79,7 @@ router.post('/orcamentos', verifyToken, checkPermission, async (req, res) => {
             observacoes: observacoes || null,
             valorPrevisto,
             totalGasto: 0,
-            saldo: valorPrevisto,
+            saldo: calcularSaldo(valorPrevisto, 0),
             status: 'aberto',
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid
@@ -108,10 +116,11 @@ router.put('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => 
             update.status = req.body.status;
         }
         if (req.body.valorPrevisto !== undefined) {
-            const valorPrevisto = Number(req.body.valorPrevisto);
-            if (!Number.isFinite(valorPrevisto) || valorPrevisto <= 0) return res.status(400).json({ error: 'Informe um valor previsto válido, maior que zero.' });
+            const limpo = req.body.valorPrevisto === null || req.body.valorPrevisto === '';
+            const valorPrevisto = limpo ? null : Number(req.body.valorPrevisto);
+            if (!limpo && (!Number.isFinite(valorPrevisto) || valorPrevisto <= 0)) return res.status(400).json({ error: 'Informe um valor previsto válido, maior que zero (ou deixe em branco).' });
             update.valorPrevisto = valorPrevisto;
-            update.saldo = valorPrevisto - (atual.totalGasto || 0);
+            update.saldo = calcularSaldo(valorPrevisto, atual.totalGasto || 0);
         }
 
         await ref.update(update);
@@ -181,7 +190,7 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
             });
             tx.update(orcamentoRef, {
                 totalGasto: novoTotalGasto,
-                saldo: orc.valorPrevisto - novoTotalGasto
+                saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto)
             });
         });
 
@@ -219,7 +228,7 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
             const novoTotalGasto = (orc.totalGasto || 0) - (lanc.valorTotal || 0) + valorTotalNovo;
 
             tx.update(lancamentoRef, { descricao, fornecedor: fornecedor || null, quantidade, valorUnitario, valorTotal: valorTotalNovo, data });
-            tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: orc.valorPrevisto - novoTotalGasto });
+            tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
         });
 
         res.json({ message: 'Lançamento atualizado.' });
@@ -242,7 +251,7 @@ router.delete('/lancamentos/:id', verifyToken, checkPermission, async (req, res)
             if (orcSnap.exists) {
                 const orc = orcSnap.data();
                 const novoTotalGasto = Math.max(0, (orc.totalGasto || 0) - (lanc.valorTotal || 0));
-                tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: orc.valorPrevisto - novoTotalGasto });
+                tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
             }
             tx.delete(lancamentoRef);
         });

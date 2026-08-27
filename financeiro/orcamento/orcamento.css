@@ -167,6 +167,15 @@
 .tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
 .acoes-col { white-space: nowrap; }
 
+/* Cabeçalho de grupo (fornecedor) dentro da tabela de lançamentos — separa
+   visualmente "o que comprar de cada fornecedor" em vez de uma lista única
+   misturada. */
+.lanc-grupo-header td {
+  background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.82rem;
+  padding: 0.6rem 1rem; border-bottom: 1px solid var(--border-color);
+}
+.lanc-grupo-header td span { color: var(--text-secondary); font-weight: 600; }
+
 /* Modais */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);

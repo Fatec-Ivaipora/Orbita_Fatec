@@ -18,6 +18,7 @@ let initializedRole = null;
 let orcamentos = [];
 let orcamentoDetalheId = null;
 let lancamentoEmEdicaoId = null;
+let fornecedoresGlobais = [];
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -141,6 +142,21 @@ async function initApp(user, role) {
 
   wireEventos();
   await carregarOrcamentos();
+  carregarFornecedores();
+}
+
+// Lista de fornecedores compartilhada com o módulo Licitação — só para
+// sugerir nomes já usados (autocomplete) e manter consistência ao agrupar
+// lançamentos por fornecedor. Falha aqui não deve travar a página.
+async function carregarFornecedores() {
+  try {
+    const lista = await apiFetch('/financeiro/fornecedores');
+    fornecedoresGlobais = lista.map(f => f.nome).filter(Boolean);
+    document.getElementById('fornecedores-datalist').innerHTML = fornecedoresGlobais.map(n => `<option value="${esc(n)}">`).join('');
+  } catch (err) {
+    // Sem permissão de Licitação ou erro pontual — o campo de fornecedor
+    // continua funcionando como texto livre, só sem sugestão.
+  }
 }
 
 // ==========================================
@@ -207,17 +223,19 @@ function renderizarGrid() {
   const lista = orcamentosFiltrados();
   const grid = document.getElementById('orc-grid');
 
-  // KPIs sobre o conjunto filtrado
-  const totalPrevisto = lista.reduce((s, o) => s + (o.valorPrevisto || 0), 0);
+  // KPIs sobre o conjunto filtrado — "Previsto"/"Saldo" só somam quem tem
+  // teto definido (nem todo orçamento tem); "Gasto" soma todo mundo.
+  const comPrevisto = lista.filter(o => o.valorPrevisto !== null && o.valorPrevisto !== undefined);
+  const totalPrevisto = comPrevisto.reduce((s, o) => s + o.valorPrevisto, 0);
   const totalGasto = lista.reduce((s, o) => s + (o.totalGasto || 0), 0);
-  const saldoGeral = totalPrevisto - totalGasto;
-  document.getElementById('kpi-previsto').textContent = fmtMoeda(totalPrevisto);
+  const saldoGeral = totalPrevisto - comPrevisto.reduce((s, o) => s + (o.totalGasto || 0), 0);
+  document.getElementById('kpi-previsto').textContent = comPrevisto.length ? fmtMoeda(totalPrevisto) : '—';
   document.getElementById('kpi-gasto').textContent = fmtMoeda(totalGasto);
   const kpiSaldo = document.getElementById('kpi-saldo');
-  kpiSaldo.textContent = fmtMoeda(saldoGeral);
-  kpiSaldo.classList.toggle('valor-negativo', saldoGeral < 0);
+  kpiSaldo.textContent = comPrevisto.length ? fmtMoeda(saldoGeral) : '—';
+  kpiSaldo.classList.toggle('valor-negativo', comPrevisto.length > 0 && saldoGeral < 0);
   document.getElementById('kpi-qtd').textContent = lista.length;
-  document.getElementById('kpi-qtd-hint').textContent = lista.some(o => (o.totalGasto || 0) > (o.valorPrevisto || 0)) ? 'Há orçamento(s) estourado(s)' : '';
+  document.getElementById('kpi-qtd-hint').textContent = comPrevisto.some(o => (o.totalGasto || 0) > o.valorPrevisto) ? 'Há orçamento(s) estourado(s)' : '';
 
   if (!lista.length) {
     grid.innerHTML = '<div class="tabela-msg-grid">Nenhum orçamento encontrado com esses filtros.</div>';
@@ -225,6 +243,7 @@ function renderizarGrid() {
   }
 
   grid.innerHTML = lista.map(o => {
+    const temPrevisto = o.valorPrevisto !== null && o.valorPrevisto !== undefined;
     const previsto = o.valorPrevisto || 0;
     const gasto = o.totalGasto || 0;
     const saldo = o.saldo !== undefined ? o.saldo : (previsto - gasto);
@@ -239,11 +258,13 @@ function renderizarGrid() {
           <span class="setor-chip">${esc(o.setor)}</span>
           ${o.semestre ? `<span class="semestre-chip">${esc(o.semestre)}</span>` : ''}
         </div>
-        <div class="orc-progress-track"><div class="orc-progress-fill ${classeProgresso(previsto, gasto)}" style="width:${pct}%"></div></div>
+        ${temPrevisto ? `<div class="orc-progress-track"><div class="orc-progress-fill ${classeProgresso(previsto, gasto)}" style="width:${pct}%"></div></div>` : ''}
         <div class="orc-card-valores">
-          <div><span>Previsto</span><strong>${fmtMoeda(previsto)}</strong></div>
+          ${temPrevisto ? `<div><span>Previsto</span><strong>${fmtMoeda(previsto)}</strong></div>` : ''}
           <div><span>Gasto</span><strong>${fmtMoeda(gasto)}</strong></div>
-          <div class="${saldo < 0 ? 'valor-saldo-negativo' : ''}"><span>Saldo</span><strong>${fmtMoeda(saldo)}</strong></div>
+          ${temPrevisto
+            ? `<div class="${saldo < 0 ? 'valor-saldo-negativo' : ''}"><span>Saldo</span><strong>${fmtMoeda(saldo)}</strong></div>`
+            : `<div><span>Teto</span><strong>Não definido</strong></div>`}
         </div>
       </div>
     `;
@@ -265,7 +286,7 @@ function abrirModalOrcamento(orcamento = null) {
   document.getElementById('orcamento-nome').value = orcamento ? orcamento.nome : '';
   document.getElementById('orcamento-setor').value = orcamento ? orcamento.setor : '';
   document.getElementById('orcamento-semestre').value = orcamento ? (orcamento.semestre || '') : '';
-  document.getElementById('orcamento-valor-previsto').value = orcamento ? orcamento.valorPrevisto : '';
+  document.getElementById('orcamento-valor-previsto').value = (orcamento && orcamento.valorPrevisto !== null && orcamento.valorPrevisto !== undefined) ? orcamento.valorPrevisto : '';
   document.getElementById('orcamento-observacoes').value = orcamento ? (orcamento.observacoes || '') : '';
   document.getElementById('modal-orcamento').classList.remove('hidden');
 }
@@ -277,11 +298,12 @@ function fecharModalOrcamento() {
 async function salvarOrcamento(e) {
   e.preventDefault();
   const id = document.getElementById('orcamento-id').value;
+  const valorPrevistoTexto = document.getElementById('orcamento-valor-previsto').value.trim();
   const body = {
     nome: document.getElementById('orcamento-nome').value.trim(),
     setor: document.getElementById('orcamento-setor').value.trim(),
     semestre: document.getElementById('orcamento-semestre').value.trim(),
-    valorPrevisto: Number(document.getElementById('orcamento-valor-previsto').value),
+    valorPrevisto: valorPrevistoTexto === '' ? null : Number(valorPrevistoTexto),
     observacoes: document.getElementById('orcamento-observacoes').value.trim()
   };
 
@@ -322,47 +344,82 @@ async function abrirDetalhe(id) {
   document.getElementById('lancamento-data').value = new Date().toISOString().slice(0, 10);
 
   document.getElementById('modal-detalhe').classList.remove('hidden');
-  document.getElementById('lancamentos-tbody').innerHTML = '<tr><td colspan="7" class="tabela-msg">Carregando...</td></tr>';
+  document.getElementById('lancamentos-tbody').innerHTML = '<tr><td colspan="6" class="tabela-msg">Carregando...</td></tr>';
 
   try {
     const lancamentos = await apiFetch(`/orcamento/orcamentos/${id}/lancamentos`);
     renderizarLancamentos(lancamentos);
   } catch (err) {
-    document.getElementById('lancamentos-tbody').innerHTML = `<tr><td colspan="7" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    document.getElementById('lancamentos-tbody').innerHTML = `<tr><td colspan="6" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
   }
 }
 
 function atualizarResumoDetalhe(orcamento) {
-  const previsto = orcamento.valorPrevisto || 0;
+  const temPrevisto = orcamento.valorPrevisto !== null && orcamento.valorPrevisto !== undefined;
   const gasto = orcamento.totalGasto || 0;
-  const saldo = orcamento.saldo !== undefined ? orcamento.saldo : (previsto - gasto);
-  document.getElementById('detalhe-previsto').textContent = fmtMoeda(previsto);
   document.getElementById('detalhe-gasto').textContent = fmtMoeda(gasto);
-  const saldoEl = document.getElementById('detalhe-saldo');
-  saldoEl.textContent = fmtMoeda(saldo);
-  saldoEl.closest('div').classList.toggle('valor-negativo', saldo < 0);
+
+  const previstoWrap = document.getElementById('detalhe-previsto-wrap');
+  const saldoWrap = document.getElementById('detalhe-saldo-wrap');
+  previstoWrap.classList.toggle('hidden', !temPrevisto);
+  saldoWrap.classList.toggle('hidden', !temPrevisto);
+
+  if (temPrevisto) {
+    const previsto = orcamento.valorPrevisto;
+    const saldo = orcamento.saldo !== undefined && orcamento.saldo !== null ? orcamento.saldo : (previsto - gasto);
+    document.getElementById('detalhe-previsto').textContent = fmtMoeda(previsto);
+    const saldoEl = document.getElementById('detalhe-saldo');
+    saldoEl.textContent = fmtMoeda(saldo);
+    saldoWrap.classList.toggle('valor-negativo', saldo < 0);
+  }
 }
 
+// Agrupado por fornecedor (em vez de lista única) — é isso que deixa claro
+// "o que vou comprar de cada fornecedor" na hora da compra, em vez de tudo
+// misturado numa tabela só.
 function renderizarLancamentos(lancamentos) {
   const tbody = document.getElementById('lancamentos-tbody');
   if (!lancamentos.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="tabela-msg">Nenhum lançamento ainda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum lançamento ainda.</td></tr>';
     return;
   }
-  tbody.innerHTML = lancamentos.map(l => `
-    <tr>
-      <td>${esc(l.descricao)}</td>
-      <td>${esc(l.fornecedor || '—')}</td>
-      <td>${l.quantidade}</td>
-      <td>${fmtMoeda(l.valorUnitario)}</td>
-      <td>${fmtMoeda(l.valorTotal)}</td>
-      <td>${l.data ? new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
-      <td class="acoes-col action-execute">
-        <button type="button" class="btn-icon action-execute" data-editar-lanc="${l.id}" title="Editar">✎</button>
-        <button type="button" class="btn-icon action-execute" data-excluir-lanc="${l.id}" title="Excluir">🗑</button>
-      </td>
-    </tr>
-  `).join('');
+
+  const grupos = new Map(); // nome do fornecedor (ou "Sem fornecedor") -> lançamentos[]
+  lancamentos.forEach(l => {
+    const chave = l.fornecedor || 'Sem fornecedor';
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(l);
+  });
+
+  const nomesOrdenados = [...grupos.keys()].sort((a, b) => {
+    if (a === 'Sem fornecedor') return 1;
+    if (b === 'Sem fornecedor') return -1;
+    return a.localeCompare(b, 'pt-BR');
+  });
+
+  tbody.innerHTML = nomesOrdenados.map(nome => {
+    const itens = grupos.get(nome);
+    const subtotal = itens.reduce((s, l) => s + (l.valorTotal || 0), 0);
+    const header = `
+      <tr class="lanc-grupo-header">
+        <td colspan="6">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
+      </tr>
+    `;
+    const linhas = itens.map(l => `
+      <tr>
+        <td>${esc(l.descricao)}</td>
+        <td>${l.quantidade}</td>
+        <td>${fmtMoeda(l.valorUnitario)}</td>
+        <td>${fmtMoeda(l.valorTotal)}</td>
+        <td>${l.data ? new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+        <td class="acoes-col action-execute">
+          <button type="button" class="btn-icon action-execute" data-editar-lanc="${l.id}" title="Editar">✎</button>
+          <button type="button" class="btn-icon action-execute" data-excluir-lanc="${l.id}" title="Excluir">🗑</button>
+        </td>
+      </tr>
+    `).join('');
+    return header + linhas;
+  }).join('');
 
   tbody.querySelectorAll('[data-editar-lanc]').forEach(btn => {
     btn.addEventListener('click', () => editarLancamento(btn.dataset.editarLanc, lancamentos));
