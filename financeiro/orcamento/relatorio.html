@@ -47,6 +47,12 @@
                         <option value="encerrado">Fechados</option>
                         <option value="todos" selected>Todos</option>
                     </select>
+                    <select class="select-filter" id="rel-orcamento-select">
+                        <option value="">Todos os orçamentos</option>
+                    </select>
+                    <select class="select-filter" id="rel-fornecedor-select" disabled>
+                        <option value="">Todos os fornecedores</option>
+                    </select>
                 </div>
 
                 <div class="print-page">
@@ -79,7 +85,8 @@
                         </div>
                     </div>
 
-                    <div class="card">
+                    <!-- Nenhum orçamento específico selecionado: visão geral (1 linha por orçamento) -->
+                    <div class="card" id="relatorio-card-orcamentos">
                         <h3 class="card-secao-titulo">Orçamentos</h3>
                         <div class="tabela-wrap">
                             <table class="data-table">
@@ -101,17 +108,10 @@
                         </div>
                     </div>
 
-                    <div class="card" style="margin-top:1.5rem;">
-                        <h3 class="card-secao-titulo">Itens por fornecedor</h3>
-                        <div class="filters-bar no-print" style="padding:0 1.5rem 1rem;">
-                            <select class="select-filter" id="rel-orcamento-select">
-                                <option value="">Selecione um orçamento...</option>
-                            </select>
-                            <select class="select-filter" id="rel-fornecedor-select" disabled>
-                                <option value="">Todos os fornecedores</option>
-                            </select>
-                        </div>
-                        <div id="rel-itens-cabecalho" style="padding: 0 1.5rem 1rem; display:none;">
+                    <!-- Um orçamento selecionado no filtro: itens dele (por fornecedor) -->
+                    <div class="card hidden" id="relatorio-card-itens">
+                        <h3 class="card-secao-titulo">Itens do orçamento</h3>
+                        <div id="rel-itens-cabecalho" style="padding: 0 1.5rem 1rem;">
                             <div class="orc-detalhe-resumo" style="margin:0;">
                                 <div><span>Comprar com</span><strong id="rel-itens-fornecedor">—</strong></div>
                                 <div><span>Orçamento</span><strong id="rel-itens-orcamento">—</strong></div>
@@ -130,7 +130,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="rel-itens-tbody">
-                                    <tr><td colspan="5" class="tabela-msg">Selecione um orçamento acima pra ver os itens.</td></tr>
+                                    <tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>
                                 </tbody>
                             </table>
                         </div>

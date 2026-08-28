@@ -193,29 +193,37 @@ async function initPaginaRelatorio() {
 function popularSelectOrcamentoRelatorio() {
   const select = document.getElementById('rel-orcamento-select');
   if (!select) return;
+  const atual = select.value;
   const ordenados = [...orcamentos].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  select.innerHTML = '<option value="">Selecione um orçamento...</option>' +
+  select.innerHTML = '<option value="">Todos os orçamentos</option>' +
     ordenados.map(o => `<option value="${o.id}">${esc(o.nome)}</option>`).join('');
+  select.value = ordenados.some(o => o.id === atual) ? atual : '';
 }
 
-// Ao trocar de orçamento, busca os itens dele (1 leitura, só quando a pessoa
-// realmente escolhe um orçamento — não varre tudo de antemão) e monta o
-// filtro de fornecedor com quem realmente venceu algum item ali.
+// Um orçamento específico selecionado no filtro de cima → troca a visão
+// geral (1 linha por orçamento) pelos itens daquele orçamento, igual o
+// usuário pediu: já está filtrando o que quer imprimir ali em cima, não
+// precisa de um filtro separado embaixo.
 let lancamentosOrcamentoRelatorio = [];
 async function carregarItensRelatorio() {
   const orcamentoId = document.getElementById('rel-orcamento-select').value;
   const selectFornecedor = document.getElementById('rel-fornecedor-select');
+  const cardOrcamentos = document.getElementById('relatorio-card-orcamentos');
+  const cardItens = document.getElementById('relatorio-card-itens');
   const tbody = document.getElementById('rel-itens-tbody');
 
   if (!orcamentoId) {
     lancamentosOrcamentoRelatorio = [];
     selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>';
     selectFornecedor.disabled = true;
-    document.getElementById('rel-itens-cabecalho').style.display = 'none';
-    tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Selecione um orçamento acima pra ver os itens.</td></tr>';
+    cardItens.classList.add('hidden');
+    cardOrcamentos.classList.remove('hidden');
+    renderizarRelatorio();
     return;
   }
 
+  cardOrcamentos.classList.add('hidden');
+  cardItens.classList.remove('hidden');
   tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
   try {
     lancamentosOrcamentoRelatorio = await apiFetch(`/orcamento/orcamentos/${orcamentoId}/lancamentos`);
@@ -237,7 +245,6 @@ function renderizarItensRelatorio() {
   const orcamentoId = document.getElementById('rel-orcamento-select').value;
   const fornecedorSelecionado = document.getElementById('rel-fornecedor-select').value;
   const tbody = document.getElementById('rel-itens-tbody');
-  const cabecalho = document.getElementById('rel-itens-cabecalho');
 
   if (!orcamentoId) return;
 
@@ -250,7 +257,12 @@ function renderizarItensRelatorio() {
   document.getElementById('rel-itens-fornecedor').textContent = fornecedorSelecionado || 'Todos os fornecedores';
   document.getElementById('rel-itens-orcamento').textContent = orcamento ? orcamento.nome : '—';
   document.getElementById('rel-itens-total').textContent = fmtMoeda(total);
-  cabecalho.style.display = '';
+
+  // KPIs do topo passam a refletir o orçamento selecionado (não faz sentido
+  // mostrar a soma de vários orçamentos enquanto se olha os itens de só um).
+  if (orcamento) atualizarKPIs([orcamento]);
+
+  atualizarLabelImpressaoOrcamento();
 
   if (!itens.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Nenhum item encontrado.</td></tr>';
@@ -260,14 +272,32 @@ function renderizarItensRelatorio() {
   tbody.innerHTML = montarLinhasAgrupadasPorFornecedor(itens, false);
 }
 
+// Rótulo do cabeçalho impresso — reflete o que está de fato filtrado/visível
+// no momento, seja a visão geral ou os itens de um orçamento/fornecedor.
+function atualizarLabelImpressaoOrcamento() {
+  const filtroLabel = document.getElementById('print-filtro-label');
+  if (!filtroLabel) return;
+
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  if (orcamentoId) {
+    const orcamento = orcamentos.find(o => o.id === orcamentoId);
+    const fornecedor = document.getElementById('rel-fornecedor-select').value;
+    filtroLabel.textContent = fornecedor
+      ? `${orcamento ? orcamento.nome : ''} — ${fornecedor}`
+      : `${orcamento ? orcamento.nome : ''} — Todos os fornecedores`;
+    return;
+  }
+
+  const setorLabel = document.getElementById('setor-select').selectedOptions[0]?.textContent || 'Todos os setores';
+  const semestreLabel = document.getElementById('semestre-select').selectedOptions[0]?.textContent || 'Todos os períodos';
+  filtroLabel.textContent = `${setorLabel} — ${semestreLabel}`;
+}
+
 function renderizarRelatorio() {
   const lista = orcamentosFiltrados();
   atualizarKPIs(lista);
 
-  const setorLabel = document.getElementById('setor-select').selectedOptions[0]?.textContent || 'Todos os setores';
-  const semestreLabel = document.getElementById('semestre-select').selectedOptions[0]?.textContent || 'Todos os períodos';
-  const filtroLabel = document.getElementById('print-filtro-label');
-  if (filtroLabel) filtroLabel.textContent = `${setorLabel} — ${semestreLabel}`;
+  atualizarLabelImpressaoOrcamento();
 
   const tbody = document.getElementById('relatorio-tbody');
   if (!lista.length) {
