@@ -53,15 +53,23 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
         const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ALUNOS_PAGE_SIZE_PADRAO, 200);
+        const busca = (req.query.busca || '').trim().toLowerCase();
 
-        // Filtros de situação/plano são aplicados em memória durante a paginação
-        // (mesmo padrão do "pula item fechado" já usado em /financeiro/itens) —
-        // evita precisar de um índice composto novo pra cada combinação possível
-        // de filtro, já que a query-base (módulo+semestre[+curso]) já é enxuta.
+        // Filtros de situação/plano/nome são aplicados em memória durante a
+        // paginação (mesmo padrão do "pula item fechado" já usado em
+        // /financeiro/itens) — evita precisar de um índice composto novo pra
+        // cada combinação possível de filtro, já que a query-base
+        // (módulo+semestre[+curso]) já é enxuta. Busca por nome também entra
+        // aqui em vez de virar filtro no Firestore (que só suporta prefixo,
+        // não "contém em qualquer posição") — antes disso o front buscava a
+        // TODA a lista (podia passar de 50 páginas) só pra filtrar no
+        // navegador; agora o próprio loop de paginação abaixo já pula
+        // direto pros que batem, sem round-trip HTTP por página.
         const passaNoFiltro = (a) =>
             (!situacao || a.situacao === situacao) &&
             (!planoConfissao || a.planoConfissao === planoConfissao) &&
-            (!periodo || a.periodo === periodo);
+            (!periodo || a.periodo === periodo) &&
+            (!busca || (a.nome || '').toLowerCase().includes(busca));
 
         let cursor = (req.query.cursorNome && req.query.cursorId)
             ? { nome: req.query.cursorNome, id: req.query.cursorId }
