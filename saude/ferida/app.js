@@ -191,6 +191,7 @@ async function initPaginaPacientes() {
     buscaPacienteTimer = setTimeout(() => buscarEExibirPacientes(input.value.trim()), 300);
   });
   setupEnfermeirosModal();
+  setupDarAltaModal();
   if (souAmandaOuAdmin()) {
     document.getElementById('btn-solicitacoes')?.classList.remove('hidden');
     setupSolicitacoesModal();
@@ -209,7 +210,15 @@ async function initPaginaPacientes() {
     const btnExcluir = e.target.closest('.pac-lista-excluir');
     if (btnExcluir) { excluirPacienteDaLista(btnExcluir.dataset.id, btnExcluir.dataset.nome); return; }
     const btnAlta = e.target.closest('.pac-lista-alta-btn');
-    if (btnAlta) { mudarAltaDaLista(btnAlta.dataset.id, btnAlta.dataset.novoValor === 'true'); return; }
+    if (btnAlta) {
+      const novoValor = btnAlta.dataset.novoValor === 'true';
+      // Reativar não precisa de data (dataAlta só existe enquanto o
+      // paciente está de alta); dar alta abre o modal pra informar quando
+      // aconteceu, em vez de assumir "agora" sem perguntar.
+      if (novoValor) abrirModalDarAlta(btnAlta.dataset.id);
+      else mudarAltaDaLista(btnAlta.dataset.id, false);
+      return;
+    }
   });
 
   document.getElementById('tabela-pacientes')?.addEventListener('change', (e) => {
@@ -390,21 +399,47 @@ async function mudarEnfermeiroDaLista(id, novoValor) {
 
 // Dar alta / reativar direto na lista — mesmo padrão do enfermeiro inline,
 // sem precisar abrir a ficha inteira pra uma troca operacional simples.
-async function mudarAltaDaLista(id, novaAlta) {
+// dataAlta é opcional (só faz sentido quando novaAlta=true) — sem ela o
+// backend assume a data de hoje.
+async function mudarAltaDaLista(id, novaAlta, dataAlta) {
   const p = pacientesListaAtual.find(x => x.id === id);
   if (!p) return;
   try {
     await apiFetch(`/ferida/pacientes/${id}/alta`, {
       method: 'PUT',
-      body: JSON.stringify({ alta: novaAlta })
+      body: JSON.stringify({ alta: novaAlta, dataAlta: novaAlta ? dataAlta : undefined })
     });
     p.alta = novaAlta;
-    p.dataAlta = novaAlta ? new Date().toISOString() : null;
+    p.dataAlta = novaAlta ? dataAlta : null;
     showToast(novaAlta ? 'Paciente recebeu alta.' : 'Paciente reativado.');
     renderTabelaPacientes(pacientesListaAtual);
   } catch (err) {
     showToast('Erro ao atualizar status: ' + err.message, 'error');
   }
+}
+
+function abrirModalDarAlta(id) {
+  const modal = document.getElementById('modal-dar-alta');
+  if (!modal) return;
+  document.getElementById('alta-paciente-id').value = id;
+  document.getElementById('alta-data-input').value = todayStr();
+  modal.classList.remove('hidden');
+}
+
+function setupDarAltaModal() {
+  const modal = document.getElementById('modal-dar-alta');
+  if (!modal) return;
+
+  document.getElementById('btn-cancelar-alta')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('btn-confirmar-alta')?.addEventListener('click', async () => {
+    const id = document.getElementById('alta-paciente-id').value;
+    const data = document.getElementById('alta-data-input').value;
+    if (!data) { showToast('Informe a data da alta.', 'error'); return; }
+    await mudarAltaDaLista(id, true, data);
+    modal.classList.add('hidden');
+  });
 }
 
 function renderTabelaPacientes(lista) {
@@ -419,7 +454,13 @@ function renderTabelaPacientes(lista) {
   }
   tbody.innerHTML = filtrada.map(p => {
     const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
-    const dataAltaTxt = p.dataAlta ? new Date(p.dataAlta).toLocaleDateString('pt-BR') : '';
+    // dataAlta agora é "AAAA-MM-DD" puro (informado na tela, sem hora) —
+    // fmtData() evita o efeito de fuso do new Date() virando um dia pra
+    // trás. Pacientes com alta antiga (timestamp ISO completo) ainda caem
+    // no new Date(), que continua correto nesse formato.
+    const dataAltaTxt = p.dataAlta
+      ? (p.dataAlta.includes('T') ? new Date(p.dataAlta).toLocaleDateString('pt-BR') : fmtData(p.dataAlta))
+      : '';
     return `
       <tr>
         <td>${esc(p.nome)}</td>
