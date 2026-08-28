@@ -170,6 +170,7 @@ let alunosNextCursor = null;
 let alunosHasMore = false;
 let alunosCarregandoTodas = false;
 let alunoEmEdicaoId = null;
+let buscaAlunoTimer = null;
 
 async function initPaginaLancamento() {
   await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
@@ -213,12 +214,16 @@ async function initPaginaLancamento() {
     });
   });
 
-  document.getElementById('busca-aluno')?.addEventListener('input', async (e) => {
-    const termo = e.target.value.trim().toLowerCase();
-    if (termo && alunosHasMore) await carregarTodasPaginasRestantes();
-    const filtrados = termo ? alunos.filter(a => a.nome.toLowerCase().includes(termo)) : alunos;
-    renderTabelaAlunos(filtrados);
-    atualizarBotaoCarregarMais();
+  // Busca vai pro servidor (mesmo padrão de situação/período/plano) em vez
+  // de carregar TODOS os alunos do módulo pra filtrar no navegador — sem
+  // curso selecionado isso podia significar buscar as ~1700 matrículas do
+  // semestre inteiro, página por página, só pra achar "amanda". Debounce de
+  // 300ms pra não disparar 1 busca por tecla digitada.
+  document.getElementById('busca-aluno')?.addEventListener('input', () => {
+    clearTimeout(buscaAlunoTimer);
+    buscaAlunoTimer = setTimeout(() => {
+      if (podeCarregar()) recarregarPrimeiraPaginaAlunos();
+    }, 300);
   });
 
   document.getElementById('btn-carregar-mais')?.addEventListener('click', async () => {
@@ -411,6 +416,8 @@ async function buscarProximaPaginaAlunos(primeira) {
   if (periodo) params.set('periodo', periodo);
   if (situacao) params.set('situacao', situacao);
   if (plano) params.set('planoConfissao', plano);
+  const busca = document.getElementById('busca-aluno')?.value.trim();
+  if (busca) params.set('busca', busca);
   if (!primeira && alunosNextCursor) {
     params.set('cursorNome', alunosNextCursor.nome);
     params.set('cursorId', alunosNextCursor.id);
@@ -439,18 +446,18 @@ function atualizarBotaoCarregarMais() {
   const wrap = document.getElementById('carregar-mais-wrap');
   const btn = document.getElementById('btn-carregar-mais');
   if (!wrap || !btn) return;
-  const buscando = !!document.getElementById('busca-aluno')?.value.trim();
-  wrap.classList.toggle('hidden', !alunosHasMore || buscando);
+  // Busca por nome agora pagina no servidor igual qualquer outro filtro —
+  // não precisa mais esconder "Carregar mais" enquanto busca.
+  wrap.classList.toggle('hidden', !alunosHasMore);
   btn.disabled = false;
   btn.textContent = 'Carregar mais';
 }
 
-async function carregarAlunos() {
+async function recarregarPrimeiraPaginaAlunos() {
   const tbody = document.getElementById('alunos-tbody');
   tbody.innerHTML = `<tr><td colspan="8" class="tabela-msg">Carregando...</td></tr>`;
   alunos = [];
   alunosNextCursor = null;
-  document.getElementById('busca-aluno').value = '';
   try {
     await buscarProximaPaginaAlunos(true);
     renderTabelaAlunos(alunos);
@@ -458,6 +465,13 @@ async function carregarAlunos() {
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="8" class="tabela-msg">Erro ao carregar: ${esc(err.message)}</td></tr>`;
   }
+}
+
+// Troca de módulo/semestre/curso/período/situação/plano limpa uma busca por
+// nome em andamento (o filtro mudou, a busca antiga não faz mais sentido).
+async function carregarAlunos() {
+  document.getElementById('busca-aluno').value = '';
+  await recarregarPrimeiraPaginaAlunos();
 }
 
 function renderTabelaAlunos(lista) {
