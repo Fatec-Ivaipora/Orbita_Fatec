@@ -220,6 +220,37 @@
 .orc-detalhe-resumo span { color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .orc-detalhe-resumo .valor-negativo strong { color: var(--red); }
 
+/* Cotações do lançamento (item x fornecedor) */
+.cotacao-row {
+  display: grid; grid-template-columns: 1fr 160px auto auto; gap: 0.6rem; align-items: center;
+  margin-bottom: 0.5rem;
+}
+.cotacao-row input {
+  padding: 0.6rem 0.8rem; border: 1px solid var(--border-color); border-radius: 8px;
+  font-size: 0.9rem; color: var(--text-main); background: #f8fafc; font-family: inherit;
+}
+.cotacao-row input:focus { outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+.cotacao-row.cotacao-vencedora input { border-color: var(--green); background: #ecfdf5; }
+.cotacao-selo {
+  font-size: 0.72rem; font-weight: 700; color: var(--green); white-space: nowrap; min-width: 70px;
+}
+.cotacao-selo.hidden { visibility: hidden; }
+.cotacao-remover {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border: 1px solid var(--border-color); background: white; border-radius: 8px; cursor: pointer;
+  color: var(--red); font-size: 1rem; line-height: 1;
+}
+.cotacao-remover:hover { background: #fef2f2; }
+
+/* Resumo de cotações recebidas, dentro da célula Item da tabela */
+.lanc-cotacoes-resumo { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem; }
+.lanc-cotacoes-resumo .cotacao-vencedora-nome { color: var(--green); font-weight: 700; }
+.lanc-item-unidade { color: var(--text-secondary); font-weight: 500; }
+
+@media (max-width: 900px) {
+  .cotacao-row { grid-template-columns: 1fr; }
+}
+
 /* Toast */
 .toast {
   position: fixed; bottom: 2rem; right: 2rem; background: #333; color: white; padding: 1rem 1.5rem;
@@ -231,4 +262,74 @@
 
 @media (max-width: 900px) {
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
+}
+
+/* ==========================================
+   Impressão do relatório (relatorio.html) — mesmo padrão já usado em
+   Licitação/Matrículas: o shell do app é flex com altura travada
+   (.layout-main overflow:hidden + .layout-content flex:1 overflow-y:auto),
+   sem esse reset a impressão corta conteúdo fora da 1ª página.
+   ========================================== */
+.print-page { background: transparent; }
+.rel-cabecalho-print {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 2px solid var(--primary-blue);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+.rel-cabecalho-print h1 { margin: 0; font-size: 17px; color: var(--primary-blue); }
+.rel-cabecalho-print p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.rel-data-emissao { font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
+.rel-print-logo { height: 36px; width: auto; }
+
+body.pagina-relatorio .layout-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
+}
+body.pagina-relatorio .layout-content {
+  flex: none;
+  overflow: visible;
+}
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+
+  body.pagina-relatorio .no-print,
+  body.pagina-relatorio .layout-sidebar,
+  body.pagina-relatorio .layout-header { display: none !important; }
+
+  body.pagina-relatorio,
+  body.pagina-relatorio .layout-wrapper,
+  body.pagina-relatorio .layout-main,
+  body.pagina-relatorio .layout-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.pagina-relatorio .print-page {
+    max-width: none;
+    width: auto;
+    margin: 0;
+    padding: 8mm 10mm;
+  }
+
+  .rel-cabecalho-print { display: flex; }
+
+  .print-page, .kpi-grid, .kpi-card { width: 100% !important; box-sizing: border-box; }
+
+  .kpi-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .kpi-card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; padding: 0.75rem 1rem; }
+  .kpi-value { font-size: 1.15rem; }
+  .kpi-label { font-size: 0.68rem; }
+  .kpi-hint { font-size: 0.62rem; }
+
+  .card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px !important; }
+  .data-table { font-size: 0.78rem; }
+  .data-table th, .data-table td { padding: 0.4rem 0.6rem; }
 }

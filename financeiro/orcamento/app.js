@@ -142,11 +142,185 @@ async function initApp(user, role) {
   });
 
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('btn-novo-orcamento').disabled = false;
 
+  if (document.getElementById('orc-grid')) {
+    initPaginaLista();
+  } else if (document.getElementById('orcamento-relatorio-root')) {
+    initPaginaRelatorio();
+  }
+}
+
+async function initPaginaLista() {
+  document.getElementById('btn-novo-orcamento').disabled = false;
   wireEventos();
   await carregarOrcamentos();
   carregarFornecedores();
+  carregarCatalogoItens();
+}
+
+// ==========================================
+// RELATÓRIO IMPRIMÍVEL (relatorio.html) — mesmo padrão de Matrículas/
+// Licitação: cabeçalho com logo só aparece na impressão (@media print),
+// "Imprimir" abre o diálogo do navegador — usuário escolhe "Salvar como PDF".
+// ==========================================
+async function initPaginaRelatorio() {
+  try {
+    orcamentos = await apiFetch('/orcamento/orcamentos');
+  } catch (err) {
+    document.getElementById('relatorio-tbody').innerHTML = `<tr><td colspan="7" class="tabela-msg">Erro ao carregar: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+
+  popularFiltroSetor();
+  popularFiltroSemestre();
+  popularSelectOrcamentoRelatorio();
+
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  ['setor-select', 'semestre-select', 'status-select'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderizarRelatorio);
+  });
+
+  document.getElementById('rel-orcamento-select')?.addEventListener('change', carregarItensRelatorio);
+  document.getElementById('rel-fornecedor-select')?.addEventListener('change', renderizarItensRelatorio);
+
+  document.getElementById('btn-imprimir-relatorio')?.addEventListener('click', () => window.print());
+
+  renderizarRelatorio();
+}
+
+function popularSelectOrcamentoRelatorio() {
+  const select = document.getElementById('rel-orcamento-select');
+  if (!select) return;
+  const atual = select.value;
+  const ordenados = [...orcamentos].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  select.innerHTML = '<option value="">Todos os orçamentos</option>' +
+    ordenados.map(o => `<option value="${o.id}">${esc(o.nome)}</option>`).join('');
+  select.value = ordenados.some(o => o.id === atual) ? atual : '';
+}
+
+// Um orçamento específico selecionado no filtro de cima → troca a visão
+// geral (1 linha por orçamento) pelos itens daquele orçamento, igual o
+// usuário pediu: já está filtrando o que quer imprimir ali em cima, não
+// precisa de um filtro separado embaixo.
+let lancamentosOrcamentoRelatorio = [];
+async function carregarItensRelatorio() {
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  const selectFornecedor = document.getElementById('rel-fornecedor-select');
+  const cardOrcamentos = document.getElementById('relatorio-card-orcamentos');
+  const cardItens = document.getElementById('relatorio-card-itens');
+  const tbody = document.getElementById('rel-itens-tbody');
+
+  if (!orcamentoId) {
+    lancamentosOrcamentoRelatorio = [];
+    selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>';
+    selectFornecedor.disabled = true;
+    cardItens.classList.add('hidden');
+    cardOrcamentos.classList.remove('hidden');
+    renderizarRelatorio();
+    return;
+  }
+
+  cardOrcamentos.classList.add('hidden');
+  cardItens.classList.remove('hidden');
+  tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    lancamentosOrcamentoRelatorio = await apiFetch(`/orcamento/orcamentos/${orcamentoId}/lancamentos`);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+
+  const fornecedores = [...new Set(lancamentosOrcamentoRelatorio.map(l => l.fornecedorFechado).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>' +
+    fornecedores.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  selectFornecedor.disabled = false;
+
+  renderizarItensRelatorio();
+}
+
+function renderizarItensRelatorio() {
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  const fornecedorSelecionado = document.getElementById('rel-fornecedor-select').value;
+  const tbody = document.getElementById('rel-itens-tbody');
+
+  if (!orcamentoId) return;
+
+  const itens = fornecedorSelecionado
+    ? lancamentosOrcamentoRelatorio.filter(l => l.fornecedorFechado === fornecedorSelecionado)
+    : lancamentosOrcamentoRelatorio;
+
+  const orcamento = orcamentos.find(o => o.id === orcamentoId);
+  const total = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
+  document.getElementById('rel-itens-fornecedor').textContent = fornecedorSelecionado || 'Todos os fornecedores';
+  document.getElementById('rel-itens-orcamento').textContent = orcamento ? orcamento.nome : '—';
+  document.getElementById('rel-itens-total').textContent = fmtMoeda(total);
+
+  // KPIs do topo passam a refletir o orçamento selecionado (não faz sentido
+  // mostrar a soma de vários orçamentos enquanto se olha os itens de só um).
+  if (orcamento) atualizarKPIs([orcamento]);
+
+  atualizarLabelImpressaoOrcamento();
+
+  if (!itens.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Nenhum item encontrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = montarLinhasAgrupadasPorFornecedor(itens, false);
+}
+
+// Rótulo do cabeçalho impresso — reflete o que está de fato filtrado/visível
+// no momento, seja a visão geral ou os itens de um orçamento/fornecedor.
+function atualizarLabelImpressaoOrcamento() {
+  const filtroLabel = document.getElementById('print-filtro-label');
+  if (!filtroLabel) return;
+
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  if (orcamentoId) {
+    const orcamento = orcamentos.find(o => o.id === orcamentoId);
+    const fornecedor = document.getElementById('rel-fornecedor-select').value;
+    filtroLabel.textContent = fornecedor
+      ? `${orcamento ? orcamento.nome : ''} — ${fornecedor}`
+      : `${orcamento ? orcamento.nome : ''} — Todos os fornecedores`;
+    return;
+  }
+
+  const setorLabel = document.getElementById('setor-select').selectedOptions[0]?.textContent || 'Todos os setores';
+  const semestreLabel = document.getElementById('semestre-select').selectedOptions[0]?.textContent || 'Todos os períodos';
+  filtroLabel.textContent = `${setorLabel} — ${semestreLabel}`;
+}
+
+function renderizarRelatorio() {
+  const lista = orcamentosFiltrados();
+  atualizarKPIs(lista);
+
+  atualizarLabelImpressaoOrcamento();
+
+  const tbody = document.getElementById('relatorio-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tabela-msg">Nenhum orçamento encontrado com esses filtros.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lista.map(o => {
+    const temPrevisto = o.valorPrevisto !== null && o.valorPrevisto !== undefined;
+    const gasto = o.totalGasto || 0;
+    const saldo = temPrevisto ? (o.saldo !== undefined && o.saldo !== null ? o.saldo : (o.valorPrevisto - gasto)) : null;
+    return `
+      <tr>
+        <td>${esc(o.nome)}</td>
+        <td>${esc(o.setor)}</td>
+        <td>${o.semestre ? esc(o.semestre) : '—'}</td>
+        <td><span class="status-badge status-${o.status}">${o.status === 'aberto' ? 'Em aberto' : 'Fechado'}</span></td>
+        <td>${temPrevisto ? fmtMoeda(o.valorPrevisto) : '—'}</td>
+        <td>${fmtMoeda(gasto)}</td>
+        <td>${saldo !== null ? fmtMoeda(saldo) : '—'}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // Lista de fornecedores compartilhada com o módulo Licitação — só para
@@ -160,6 +334,19 @@ async function carregarFornecedores() {
   } catch (err) {
     // Sem permissão de Licitação ou erro pontual — o campo de fornecedor
     // continua funcionando como texto livre, só sem sugestão.
+  }
+}
+
+// Catálogo de itens recorrentes (Açúcar, Material de limpeza...) — cresce
+// sozinho a cada lançamento com nome novo (ver upsert no backend), só serve
+// de sugestão aqui.
+async function carregarCatalogoItens() {
+  try {
+    const lista = await apiFetch('/orcamento/catalogo-itens');
+    const nomes = lista.map(i => i.nome).filter(Boolean);
+    document.getElementById('catalogo-itens-datalist').innerHTML = nomes.map(n => `<option value="${esc(n)}">`).join('');
+  } catch (err) {
+    // Erro pontual — o campo de item continua funcionando como texto livre.
   }
 }
 
@@ -188,7 +375,10 @@ function popularFiltroSetor() {
   select.innerHTML = '<option value="">Todos os setores</option>' + setores.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   select.value = setores.includes(atual) ? atual : '';
 
-  datalist.innerHTML = setores.map(s => `<option value="${esc(s)}">`).join('');
+  // O datalist de autocomplete só existe no formulário de novo orçamento
+  // (index.html) — no relatório não tem, e sem essa checagem a função
+  // quebrava ali e travava o resto do carregamento da página.
+  if (datalist) datalist.innerHTML = setores.map(s => `<option value="${esc(s)}">`).join('');
 }
 
 function popularFiltroSemestre() {
@@ -204,7 +394,9 @@ function orcamentosFiltrados() {
   const setor = document.getElementById('setor-select').value;
   const semestre = document.getElementById('semestre-select').value;
   const status = document.getElementById('status-select').value;
-  const busca = document.getElementById('busca-orcamento').value.trim().toLowerCase();
+  // Campo de busca só existe na lista (index.html), não no relatório.
+  const buscaInput = document.getElementById('busca-orcamento');
+  const busca = buscaInput ? buscaInput.value.trim().toLowerCase() : '';
 
   return orcamentos.filter(o => {
     if (setor && o.setor !== setor) return false;
@@ -223,15 +415,15 @@ function classeProgresso(previsto, gasto) {
   return '';
 }
 
-function renderizarGrid() {
-  const lista = orcamentosFiltrados();
-  const grid = document.getElementById('orc-grid');
-
-  // KPIs sobre o conjunto filtrado — "Previsto"/"Saldo" só somam quem tem
-  // teto definido (nem todo orçamento tem); "Gasto" soma todo mundo. O
-  // rótulo deixa claro de ONDE vem o valor: nome do orçamento quando o
-  // filtro resulta em um só, ou "N orçamentos" quando é uma soma de vários
-  // — sem isso não dá pra saber se é o previsto de 1 orçamento ou de todos.
+// Compartilhado entre a lista (index.html) e o relatório (relatorio.html) —
+// os dois têm os mesmos ids de KPI, só o que vem embaixo (cards x tabela
+// imprimível) é diferente.
+function atualizarKPIs(lista) {
+  // "Previsto"/"Saldo" só somam quem tem teto definido (nem todo orçamento
+  // tem); "Gasto" soma todo mundo. O rótulo deixa claro de ONDE vem o valor:
+  // nome do orçamento quando o filtro resulta em um só, ou "N orçamentos"
+  // quando é uma soma de vários — sem isso não dá pra saber se é o previsto
+  // de 1 orçamento ou de todos.
   const comPrevisto = lista.filter(o => o.valorPrevisto !== null && o.valorPrevisto !== undefined);
   const totalPrevisto = comPrevisto.reduce((s, o) => s + o.valorPrevisto, 0);
   const totalGasto = lista.reduce((s, o) => s + (o.totalGasto || 0), 0);
@@ -249,6 +441,13 @@ function renderizarGrid() {
   kpiSaldo.classList.toggle('valor-negativo', comPrevisto.length > 0 && saldoGeral < 0);
   document.getElementById('kpi-qtd').textContent = lista.length;
   document.getElementById('kpi-qtd-hint').textContent = comPrevisto.some(o => (o.totalGasto || 0) > o.valorPrevisto) ? 'Há orçamento(s) estourado(s)' : '';
+}
+
+function renderizarGrid() {
+  const lista = orcamentosFiltrados();
+  const grid = document.getElementById('orc-grid');
+
+  atualizarKPIs(lista);
 
   if (!lista.length) {
     grid.innerHTML = '<div class="tabela-msg-grid">Nenhum orçamento encontrado com esses filtros.</div>';
@@ -392,19 +591,17 @@ function atualizarResumoDetalhe(orcamento) {
   }
 }
 
-// Agrupado por fornecedor (em vez de lista única) — é isso que deixa claro
-// "o que vou comprar de cada fornecedor" na hora da compra, em vez de tudo
-// misturado numa tabela só.
-function renderizarLancamentos(lancamentos) {
-  const tbody = document.getElementById('lancamentos-tbody');
-  if (!lancamentos.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum lançamento ainda.</td></tr>';
-    return;
-  }
-
-  const grupos = new Map(); // nome do fornecedor (ou "Sem fornecedor") -> lançamentos[]
+// Agrupado por fornecedor VENCEDOR (não por fornecedor "escolhido à mão") —
+// cada item pode ter tido cotação de vários fornecedores, só a mais barata
+// conta pra compra. É isso que dá a visão "o que comprar de cada empresa"
+// sem misturar tudo numa lista só.
+// Agrupa por fornecedor vencedor e monta as linhas da tabela (cabeçalho de
+// grupo + itens). Reaproveitado pelo modal de detalhe (com Ações) e pelo
+// relatório imprimível (sem Ações — é só visualização/impressão).
+function montarLinhasAgrupadasPorFornecedor(lancamentos, comAcoes) {
+  const grupos = new Map(); // nome do fornecedor vencedor -> lançamentos[]
   lancamentos.forEach(l => {
-    const chave = l.fornecedor || 'Sem fornecedor';
+    const chave = l.fornecedorFechado || 'Sem fornecedor';
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave).push(l);
   });
@@ -415,29 +612,44 @@ function renderizarLancamentos(lancamentos) {
     return a.localeCompare(b, 'pt-BR');
   });
 
-  tbody.innerHTML = nomesOrdenados.map(nome => {
+  const colspan = comAcoes ? 6 : 5;
+  return nomesOrdenados.map(nome => {
     const itens = grupos.get(nome);
-    const subtotal = itens.reduce((s, l) => s + (l.valorTotal || 0), 0);
+    const subtotal = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
     const header = `
       <tr class="lanc-grupo-header">
-        <td colspan="6">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
+        <td colspan="${colspan}">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
       </tr>
     `;
     const linhas = itens.map(l => `
       <tr>
-        <td>${esc(l.descricao)}</td>
+        <td>
+          ${esc(l.itemNome)}${l.unidade ? ` <span class="lanc-item-unidade">(${esc(l.unidade)})</span>` : ''}
+          ${renderizarResumoCotacoes(l)}
+        </td>
         <td>${l.quantidade}</td>
-        <td>${fmtMoeda(l.valorUnitario)}</td>
-        <td>${fmtMoeda(l.valorTotal)}</td>
+        <td>${fmtMoeda(l.valorUnitarioFechado)}</td>
+        <td>${fmtMoeda(l.valorTotalFechado)}</td>
         <td>${l.data ? new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+        ${comAcoes ? `
         <td class="acoes-col action-execute">
           <button type="button" class="btn-icon action-execute" data-editar-lanc="${l.id}" title="Editar">✎</button>
           <button type="button" class="btn-icon action-execute" data-excluir-lanc="${l.id}" title="Excluir">🗑</button>
-        </td>
+        </td>` : ''}
       </tr>
     `).join('');
     return header + linhas;
   }).join('');
+}
+
+function renderizarLancamentos(lancamentos) {
+  const tbody = document.getElementById('lancamentos-tbody');
+  if (!lancamentos.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum item lançado ainda.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = montarLinhasAgrupadasPorFornecedor(lancamentos, true);
 
   tbody.querySelectorAll('[data-editar-lanc]').forEach(btn => {
     btn.addEventListener('click', () => editarLancamento(btn.dataset.editarLanc, lancamentos));
@@ -447,19 +659,35 @@ function renderizarLancamentos(lancamentos) {
   });
 }
 
+function renderizarResumoCotacoes(l) {
+  const cotacoes = l.cotacoes || [];
+  if (cotacoes.length <= 1) return '';
+  const partes = cotacoes
+    .slice()
+    .sort((a, b) => a.valorUnitario - b.valorUnitario)
+    .map(c => c.fornecedor === l.fornecedorFechado
+      ? `<span class="cotacao-vencedora-nome">${esc(c.fornecedor)} ${fmtMoeda(c.valorUnitario)} ✓</span>`
+      : `${esc(c.fornecedor)} ${fmtMoeda(c.valorUnitario)}`);
+  return `<div class="lanc-cotacoes-resumo">${cotacoes.length} cotações: ${partes.join(' · ')}</div>`;
+}
+
 function editarLancamento(id, lancamentos) {
   const lanc = lancamentos.find(l => l.id === id);
   if (!lanc) return;
   lancamentoEmEdicaoId = id;
   document.getElementById('lancamento-id').value = id;
-  document.getElementById('lancamento-descricao').value = lanc.descricao;
-  document.getElementById('lancamento-fornecedor').value = lanc.fornecedor || '';
+  document.getElementById('lancamento-item').value = lanc.itemNome;
   document.getElementById('lancamento-quantidade').value = lanc.quantidade;
-  document.getElementById('lancamento-valor-unitario').value = lanc.valorUnitario;
+  document.getElementById('lancamento-unidade').value = lanc.unidade || '';
   document.getElementById('lancamento-data').value = lanc.data || '';
+
+  limparCotacoes();
+  const cotacoes = (lanc.cotacoes && lanc.cotacoes.length) ? lanc.cotacoes : [{ fornecedor: lanc.fornecedorFechado, valorUnitario: lanc.valorUnitarioFechado }];
+  cotacoes.forEach(c => adicionarLinhaCotacao(c.fornecedor, c.valorUnitario));
+
   document.getElementById('btn-salvar-lancamento').textContent = 'Atualizar gasto';
   document.getElementById('btn-cancelar-lancamento').classList.remove('hidden');
-  document.getElementById('lancamento-descricao').focus();
+  document.getElementById('lancamento-item').focus();
 }
 
 function cancelarEdicaoLancamento() {
@@ -469,29 +697,100 @@ function cancelarEdicaoLancamento() {
   document.getElementById('lancamento-quantidade').value = 1;
   document.getElementById('btn-salvar-lancamento').textContent = 'Lançar gasto';
   document.getElementById('btn-cancelar-lancamento').classList.add('hidden');
+  limparCotacoes();
+  adicionarLinhaCotacao();
+  adicionarLinhaCotacao();
 }
 
 async function excluirLancamento(id) {
-  if (!confirm('Remover este lançamento? O valor volta a somar no saldo do orçamento.')) return;
+  if (!confirm('Remover este item lançado? O valor volta a somar no saldo do orçamento.')) return;
   try {
     await apiFetch(`/orcamento/lancamentos/${id}`, { method: 'DELETE' });
-    showToast('Lançamento removido.');
+    showToast('Item removido.');
     await recarregarDetalheAposMudanca();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
+// ==========================================
+// COTAÇÕES — linhas dinâmicas (fornecedor + valor) dentro do formulário de
+// lançamento. A mais barata é destacada ao vivo enquanto a pessoa digita.
+// ==========================================
+function limparCotacoes() {
+  document.getElementById('cotacoes-lista').innerHTML = '';
+}
+
+function adicionarLinhaCotacao(fornecedor = '', valorUnitario = '') {
+  const lista = document.getElementById('cotacoes-lista');
+  const row = document.createElement('div');
+  row.className = 'cotacao-row';
+  row.innerHTML = `
+    <input type="text" class="cotacao-fornecedor" list="fornecedores-datalist" placeholder="Fornecedor" style="text-transform:uppercase;" value="${esc(fornecedor)}" maxlength="120">
+    <input type="number" class="cotacao-valor" step="0.01" min="0" placeholder="Valor unit. (R$)" value="${valorUnitario === '' ? '' : valorUnitario}">
+    <span class="cotacao-selo hidden">✓ mais barato</span>
+    <button type="button" class="cotacao-remover" title="Remover cotação">×</button>
+  `;
+  lista.appendChild(row);
+
+  row.querySelector('.cotacao-valor').addEventListener('input', atualizarSeloVencedora);
+  row.querySelector('.cotacao-remover').addEventListener('click', () => {
+    row.remove();
+    atualizarSeloVencedora();
+  });
+
+  atualizarSeloVencedora();
+}
+
+function atualizarSeloVencedora() {
+  const linhas = [...document.querySelectorAll('#cotacoes-lista .cotacao-row')];
+  const valores = linhas.map(row => {
+    const v = row.querySelector('.cotacao-valor').value;
+    return v === '' ? null : Number(v);
+  });
+  const validos = valores.filter(v => v !== null && Number.isFinite(v));
+  const menor = validos.length ? Math.min(...validos) : null;
+
+  linhas.forEach((row, i) => {
+    const venceu = menor !== null && valores[i] === menor;
+    row.classList.toggle('cotacao-vencedora', venceu);
+    row.querySelector('.cotacao-selo').classList.toggle('hidden', !venceu);
+  });
+}
+
+function lerCotacoesDoFormulario() {
+  const linhas = [...document.querySelectorAll('#cotacoes-lista .cotacao-row')];
+  const cotacoes = [];
+  for (const row of linhas) {
+    const fornecedor = row.querySelector('.cotacao-fornecedor').value.trim();
+    const valorTexto = row.querySelector('.cotacao-valor').value;
+    if (!fornecedor && valorTexto === '') continue; // linha em branco, ignora
+    if (!fornecedor || valorTexto === '') throw new Error('Preencha fornecedor e valor em todas as cotações (ou remova a linha em branco).');
+    cotacoes.push({ fornecedor, valorUnitario: Number(valorTexto) });
+  }
+  if (!cotacoes.length) throw new Error('Informe ao menos uma cotação.');
+  return cotacoes;
+}
+
 async function salvarLancamento(e) {
   e.preventDefault();
   const id = document.getElementById('lancamento-id').value;
   const orcamentoId = document.getElementById('lancamento-orcamento-id').value;
+
+  let cotacoes;
+  try {
+    cotacoes = lerCotacoesDoFormulario();
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+
   const body = {
-    descricao: document.getElementById('lancamento-descricao').value.trim(),
-    fornecedor: document.getElementById('lancamento-fornecedor').value.trim(),
+    itemNome: document.getElementById('lancamento-item').value.trim(),
     quantidade: Number(document.getElementById('lancamento-quantidade').value),
-    valorUnitario: Number(document.getElementById('lancamento-valor-unitario').value),
-    data: document.getElementById('lancamento-data').value
+    unidade: document.getElementById('lancamento-unidade').value.trim(),
+    data: document.getElementById('lancamento-data').value,
+    cotacoes
   };
 
   try {
@@ -505,6 +804,7 @@ async function salvarLancamento(e) {
     cancelarEdicaoLancamento();
     document.getElementById('lancamento-data').value = new Date().toISOString().slice(0, 10);
     await recarregarDetalheAposMudanca();
+    carregarCatalogoItens();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -588,6 +888,7 @@ function wireEventos() {
 
   document.getElementById('form-lancamento').addEventListener('submit', salvarLancamento);
   document.getElementById('btn-cancelar-lancamento').addEventListener('click', cancelarEdicaoLancamento);
+  document.getElementById('btn-add-cotacao').addEventListener('click', () => adicionarLinhaCotacao());
 
   [document.getElementById('modal-orcamento'), document.getElementById('modal-detalhe')].forEach(overlay => {
     overlay.addEventListener('click', (e) => {
