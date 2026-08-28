@@ -173,6 +173,7 @@ async function initPaginaRelatorio() {
 
   popularFiltroSetor();
   popularFiltroSemestre();
+  popularSelectOrcamentoRelatorio();
 
   const dataEmissao = document.getElementById('print-data-emissao');
   if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
@@ -181,9 +182,82 @@ async function initPaginaRelatorio() {
     document.getElementById(id)?.addEventListener('change', renderizarRelatorio);
   });
 
+  document.getElementById('rel-orcamento-select')?.addEventListener('change', carregarItensRelatorio);
+  document.getElementById('rel-fornecedor-select')?.addEventListener('change', renderizarItensRelatorio);
+
   document.getElementById('btn-imprimir-relatorio')?.addEventListener('click', () => window.print());
 
   renderizarRelatorio();
+}
+
+function popularSelectOrcamentoRelatorio() {
+  const select = document.getElementById('rel-orcamento-select');
+  if (!select) return;
+  const ordenados = [...orcamentos].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  select.innerHTML = '<option value="">Selecione um orçamento...</option>' +
+    ordenados.map(o => `<option value="${o.id}">${esc(o.nome)}</option>`).join('');
+}
+
+// Ao trocar de orçamento, busca os itens dele (1 leitura, só quando a pessoa
+// realmente escolhe um orçamento — não varre tudo de antemão) e monta o
+// filtro de fornecedor com quem realmente venceu algum item ali.
+let lancamentosOrcamentoRelatorio = [];
+async function carregarItensRelatorio() {
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  const selectFornecedor = document.getElementById('rel-fornecedor-select');
+  const tbody = document.getElementById('rel-itens-tbody');
+
+  if (!orcamentoId) {
+    lancamentosOrcamentoRelatorio = [];
+    selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>';
+    selectFornecedor.disabled = true;
+    document.getElementById('rel-itens-cabecalho').style.display = 'none';
+    tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Selecione um orçamento acima pra ver os itens.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    lancamentosOrcamentoRelatorio = await apiFetch(`/orcamento/orcamentos/${orcamentoId}/lancamentos`);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+
+  const fornecedores = [...new Set(lancamentosOrcamentoRelatorio.map(l => l.fornecedorFechado).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>' +
+    fornecedores.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  selectFornecedor.disabled = false;
+
+  renderizarItensRelatorio();
+}
+
+function renderizarItensRelatorio() {
+  const orcamentoId = document.getElementById('rel-orcamento-select').value;
+  const fornecedorSelecionado = document.getElementById('rel-fornecedor-select').value;
+  const tbody = document.getElementById('rel-itens-tbody');
+  const cabecalho = document.getElementById('rel-itens-cabecalho');
+
+  if (!orcamentoId) return;
+
+  const itens = fornecedorSelecionado
+    ? lancamentosOrcamentoRelatorio.filter(l => l.fornecedorFechado === fornecedorSelecionado)
+    : lancamentosOrcamentoRelatorio;
+
+  const orcamento = orcamentos.find(o => o.id === orcamentoId);
+  const total = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
+  document.getElementById('rel-itens-fornecedor').textContent = fornecedorSelecionado || 'Todos os fornecedores';
+  document.getElementById('rel-itens-orcamento').textContent = orcamento ? orcamento.nome : '—';
+  document.getElementById('rel-itens-total').textContent = fmtMoeda(total);
+  cabecalho.style.display = '';
+
+  if (!itens.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="tabela-msg">Nenhum item encontrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = montarLinhasAgrupadasPorFornecedor(itens, false);
 }
 
 function renderizarRelatorio() {
@@ -491,13 +565,10 @@ function atualizarResumoDetalhe(orcamento) {
 // cada item pode ter tido cotação de vários fornecedores, só a mais barata
 // conta pra compra. É isso que dá a visão "o que comprar de cada empresa"
 // sem misturar tudo numa lista só.
-function renderizarLancamentos(lancamentos) {
-  const tbody = document.getElementById('lancamentos-tbody');
-  if (!lancamentos.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum item lançado ainda.</td></tr>';
-    return;
-  }
-
+// Agrupa por fornecedor vencedor e monta as linhas da tabela (cabeçalho de
+// grupo + itens). Reaproveitado pelo modal de detalhe (com Ações) e pelo
+// relatório imprimível (sem Ações — é só visualização/impressão).
+function montarLinhasAgrupadasPorFornecedor(lancamentos, comAcoes) {
   const grupos = new Map(); // nome do fornecedor vencedor -> lançamentos[]
   lancamentos.forEach(l => {
     const chave = l.fornecedorFechado || 'Sem fornecedor';
@@ -511,12 +582,13 @@ function renderizarLancamentos(lancamentos) {
     return a.localeCompare(b, 'pt-BR');
   });
 
-  tbody.innerHTML = nomesOrdenados.map(nome => {
+  const colspan = comAcoes ? 6 : 5;
+  return nomesOrdenados.map(nome => {
     const itens = grupos.get(nome);
     const subtotal = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
     const header = `
       <tr class="lanc-grupo-header">
-        <td colspan="6">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
+        <td colspan="${colspan}">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
       </tr>
     `;
     const linhas = itens.map(l => `
@@ -529,14 +601,25 @@ function renderizarLancamentos(lancamentos) {
         <td>${fmtMoeda(l.valorUnitarioFechado)}</td>
         <td>${fmtMoeda(l.valorTotalFechado)}</td>
         <td>${l.data ? new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+        ${comAcoes ? `
         <td class="acoes-col action-execute">
           <button type="button" class="btn-icon action-execute" data-editar-lanc="${l.id}" title="Editar">✎</button>
           <button type="button" class="btn-icon action-execute" data-excluir-lanc="${l.id}" title="Excluir">🗑</button>
-        </td>
+        </td>` : ''}
       </tr>
     `).join('');
     return header + linhas;
   }).join('');
+}
+
+function renderizarLancamentos(lancamentos) {
+  const tbody = document.getElementById('lancamentos-tbody');
+  if (!lancamentos.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum item lançado ainda.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = montarLinhasAgrupadasPorFornecedor(lancamentos, true);
 
   tbody.querySelectorAll('[data-editar-lanc]').forEach(btn => {
     btn.addEventListener('click', () => editarLancamento(btn.dataset.editarLanc, lancamentos));
