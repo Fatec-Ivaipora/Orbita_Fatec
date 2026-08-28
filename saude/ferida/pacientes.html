@@ -115,6 +115,23 @@
         </div>
     </div>
 
+    <!-- Modal: Dar alta (com data) -->
+    <div id="modal-dar-alta" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Dar alta</h2>
+            <p class="hint">Informe quando a alta aconteceu — não precisa ser hoje, dá pra registrar depois.</p>
+            <input type="hidden" id="alta-paciente-id">
+            <div class="form-group">
+                <label for="alta-data-input">Data da alta</label>
+                <input type="date" id="alta-data-input">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" id="btn-cancelar-alta">Cancelar</button>
+                <button type="button" class="btn primary" id="btn-confirmar-alta">Confirmar alta</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast hidden"></div>
 

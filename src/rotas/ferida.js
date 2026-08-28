@@ -153,12 +153,19 @@ router.put('/pacientes/:id/enfermeiro', verifyToken, checkPermission, async (req
 // PUT /api/ferida/pacientes/:id/alta - Dar alta ou reativar o paciente
 // (aberto a todos os enfermeiros — mesma lógica do endpoint de enfermeiro:
 // troca operacional do dia a dia, não edição do cadastro clínico em si).
+// dataAlta vem da tela como "AAAA-MM-DD" (mesmo formato de dataAtendimento,
+// sem hora) — a alta pode ser registrada depois do dia em que aconteceu de
+// verdade, então não dá pra confiar só no timestamp de "agora" do servidor.
 router.put('/pacientes/:id/alta', verifyToken, checkPermission, async (req, res) => {
     try {
         const alta = req.body.alta === true;
+        const dataAltaInformada = typeof req.body.dataAlta === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.dataAlta)
+            ? req.body.dataAlta
+            : null;
+
         await db.collection(COL_PACIENTES).doc(req.params.id).update({
             alta,
-            dataAlta: alta ? new Date().toISOString() : null,
+            dataAlta: alta ? (dataAltaInformada || new Date().toISOString().slice(0, 10)) : null,
             updatedAt: new Date().toISOString(),
             updatedBy: req.user.uid
         });
