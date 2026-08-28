@@ -142,12 +142,81 @@ async function initApp(user, role) {
   });
 
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('btn-novo-orcamento').disabled = false;
 
+  if (document.getElementById('orc-grid')) {
+    initPaginaLista();
+  } else if (document.getElementById('orcamento-relatorio-root')) {
+    initPaginaRelatorio();
+  }
+}
+
+async function initPaginaLista() {
+  document.getElementById('btn-novo-orcamento').disabled = false;
   wireEventos();
   await carregarOrcamentos();
   carregarFornecedores();
   carregarCatalogoItens();
+}
+
+// ==========================================
+// RELATÓRIO IMPRIMÍVEL (relatorio.html) — mesmo padrão de Matrículas/
+// Licitação: cabeçalho com logo só aparece na impressão (@media print),
+// "Imprimir" abre o diálogo do navegador — usuário escolhe "Salvar como PDF".
+// ==========================================
+async function initPaginaRelatorio() {
+  try {
+    orcamentos = await apiFetch('/orcamento/orcamentos');
+  } catch (err) {
+    document.getElementById('relatorio-tbody').innerHTML = `<tr><td colspan="7" class="tabela-msg">Erro ao carregar: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+
+  popularFiltroSetor();
+  popularFiltroSemestre();
+
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  ['setor-select', 'semestre-select', 'status-select'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderizarRelatorio);
+  });
+
+  document.getElementById('btn-imprimir-relatorio')?.addEventListener('click', () => window.print());
+
+  renderizarRelatorio();
+}
+
+function renderizarRelatorio() {
+  const lista = orcamentosFiltrados();
+  atualizarKPIs(lista);
+
+  const setorLabel = document.getElementById('setor-select').selectedOptions[0]?.textContent || 'Todos os setores';
+  const semestreLabel = document.getElementById('semestre-select').selectedOptions[0]?.textContent || 'Todos os períodos';
+  const filtroLabel = document.getElementById('print-filtro-label');
+  if (filtroLabel) filtroLabel.textContent = `${setorLabel} — ${semestreLabel}`;
+
+  const tbody = document.getElementById('relatorio-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tabela-msg">Nenhum orçamento encontrado com esses filtros.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lista.map(o => {
+    const temPrevisto = o.valorPrevisto !== null && o.valorPrevisto !== undefined;
+    const gasto = o.totalGasto || 0;
+    const saldo = temPrevisto ? (o.saldo !== undefined && o.saldo !== null ? o.saldo : (o.valorPrevisto - gasto)) : null;
+    return `
+      <tr>
+        <td>${esc(o.nome)}</td>
+        <td>${esc(o.setor)}</td>
+        <td>${o.semestre ? esc(o.semestre) : '—'}</td>
+        <td><span class="status-badge status-${o.status}">${o.status === 'aberto' ? 'Em aberto' : 'Fechado'}</span></td>
+        <td>${temPrevisto ? fmtMoeda(o.valorPrevisto) : '—'}</td>
+        <td>${fmtMoeda(gasto)}</td>
+        <td>${saldo !== null ? fmtMoeda(saldo) : '—'}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // Lista de fornecedores compartilhada com o módulo Licitação — só para
@@ -218,7 +287,9 @@ function orcamentosFiltrados() {
   const setor = document.getElementById('setor-select').value;
   const semestre = document.getElementById('semestre-select').value;
   const status = document.getElementById('status-select').value;
-  const busca = document.getElementById('busca-orcamento').value.trim().toLowerCase();
+  // Campo de busca só existe na lista (index.html), não no relatório.
+  const buscaInput = document.getElementById('busca-orcamento');
+  const busca = buscaInput ? buscaInput.value.trim().toLowerCase() : '';
 
   return orcamentos.filter(o => {
     if (setor && o.setor !== setor) return false;
@@ -237,15 +308,15 @@ function classeProgresso(previsto, gasto) {
   return '';
 }
 
-function renderizarGrid() {
-  const lista = orcamentosFiltrados();
-  const grid = document.getElementById('orc-grid');
-
-  // KPIs sobre o conjunto filtrado — "Previsto"/"Saldo" só somam quem tem
-  // teto definido (nem todo orçamento tem); "Gasto" soma todo mundo. O
-  // rótulo deixa claro de ONDE vem o valor: nome do orçamento quando o
-  // filtro resulta em um só, ou "N orçamentos" quando é uma soma de vários
-  // — sem isso não dá pra saber se é o previsto de 1 orçamento ou de todos.
+// Compartilhado entre a lista (index.html) e o relatório (relatorio.html) —
+// os dois têm os mesmos ids de KPI, só o que vem embaixo (cards x tabela
+// imprimível) é diferente.
+function atualizarKPIs(lista) {
+  // "Previsto"/"Saldo" só somam quem tem teto definido (nem todo orçamento
+  // tem); "Gasto" soma todo mundo. O rótulo deixa claro de ONDE vem o valor:
+  // nome do orçamento quando o filtro resulta em um só, ou "N orçamentos"
+  // quando é uma soma de vários — sem isso não dá pra saber se é o previsto
+  // de 1 orçamento ou de todos.
   const comPrevisto = lista.filter(o => o.valorPrevisto !== null && o.valorPrevisto !== undefined);
   const totalPrevisto = comPrevisto.reduce((s, o) => s + o.valorPrevisto, 0);
   const totalGasto = lista.reduce((s, o) => s + (o.totalGasto || 0), 0);
@@ -263,6 +334,13 @@ function renderizarGrid() {
   kpiSaldo.classList.toggle('valor-negativo', comPrevisto.length > 0 && saldoGeral < 0);
   document.getElementById('kpi-qtd').textContent = lista.length;
   document.getElementById('kpi-qtd-hint').textContent = comPrevisto.some(o => (o.totalGasto || 0) > o.valorPrevisto) ? 'Há orçamento(s) estourado(s)' : '';
+}
+
+function renderizarGrid() {
+  const lista = orcamentosFiltrados();
+  const grid = document.getElementById('orc-grid');
+
+  atualizarKPIs(lista);
 
   if (!lista.length) {
     grid.innerHTML = '<div class="tabela-msg-grid">Nenhum orçamento encontrado com esses filtros.</div>';
