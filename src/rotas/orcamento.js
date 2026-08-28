@@ -7,6 +7,7 @@ const checkPermission = verifyToken.requireModulePermission('orcamento');
 
 const COL_ORCAMENTOS = 'financeiro_orcamentos';
 const COL_LANCAMENTOS = 'financeiro_orcamento_lancamentos';
+const COL_CATALOGO = 'financeiro_orcamento_catalogo_itens';
 
 function validarTexto(v, max = 120) {
     return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max;
@@ -14,6 +15,13 @@ function validarTexto(v, max = 120) {
 
 function normalizarTexto(v) {
     return (v || '').toString().trim();
+}
+
+// Item e fornecedor sempre em MAIÚSCULO (mesma regra do módulo Licitação) —
+// senão "Açúcar" e "açúcar" viram duas entradas diferentes no catálogo e
+// quebram o agrupamento por fornecedor.
+function normalizarMaiusculo(v) {
+    return (v || '').toString().trim().toUpperCase();
 }
 
 // Nem todo orçamento tem um teto definido de antemão (na prática do setor,
@@ -160,10 +168,108 @@ router.delete('/orcamentos/:id', verifyToken, checkPermission, async (req, res) 
 });
 
 // ==========================================
-// LANÇAMENTOS — gastos dentro de um orçamento. Cada criação/edição/remoção
-// atualiza totalGasto/saldo do orçamento numa transação. where('orcamentoId')
-// sem orderBy combinado — não precisa de índice composto; ordenação por data
-// é feita em memória (lista pequena por orçamento).
+// CATÁLOGO DE ITENS — produtos que se repetem mês a mês (ex.: "Açúcar",
+// "Material de limpeza"), reaproveitados em qualquer orçamento — evita
+// redigitar/inconsistência de nome toda vez que ela lança o mesmo item de
+// novo. Cresce sozinho: ao lançar um item com nome novo, ele é cadastrado
+// aqui automaticamente (ver upsertItemCatalogo), além de poder ser mantido
+// manualmente por aqui.
+// ==========================================
+router.get('/catalogo-itens', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_CATALOGO).orderBy('nome').get();
+        res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/catalogo-itens', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const nome = normalizarMaiusculo(req.body.nome);
+        const unidade = normalizarTexto(req.body.unidade);
+        if (!validarTexto(nome)) return res.status(400).json({ error: 'Informe o nome do item.' });
+
+        const existente = await db.collection(COL_CATALOGO).where('nome', '==', nome).limit(1).get();
+        if (!existente.empty) return res.status(400).json({ error: 'Já existe um item com esse nome no catálogo.' });
+
+        const docRef = await db.collection(COL_CATALOGO).add({
+            nome, unidade: unidade || null,
+            createdAt: new Date().toISOString(),
+            createdBy: req.user.uid
+        });
+        res.status(201).json({ id: docRef.id, message: 'Item cadastrado no catálogo.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/catalogo-itens/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const nome = normalizarMaiusculo(req.body.nome);
+        const unidade = normalizarTexto(req.body.unidade);
+        if (!validarTexto(nome)) return res.status(400).json({ error: 'Informe o nome do item.' });
+
+        await db.collection(COL_CATALOGO).doc(req.params.id).update({ nome, unidade: unidade || null });
+        res.json({ message: 'Item atualizado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/catalogo-itens/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        await db.collection(COL_CATALOGO).doc(req.params.id).delete();
+        res.json({ message: 'Item removido do catálogo.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Cadastra automaticamente no catálogo um item digitado que ainda não existe
+// lá (comparação case-insensitive pra "Açúcar" e "açúcar" não virarem dois
+// registros). Best-effort — nunca derruba o lançamento por causa disso.
+async function upsertItemCatalogo(nome) {
+    try {
+        const snap = await db.collection(COL_CATALOGO).get();
+        const jaExiste = snap.docs.some(d => (d.data().nome || '').toLowerCase() === nome.toLowerCase());
+        if (!jaExiste) {
+            await db.collection(COL_CATALOGO).add({ nome, unidade: null, createdAt: new Date().toISOString() });
+        }
+    } catch (err) {
+        // silencioso — o catálogo é só uma conveniência de autocomplete
+    }
+}
+
+// Cotação mais barata = a que fecha (regra fixa, sem escolha manual: "o mais
+// barato é o que vai fechar"). Empate pega a primeira cotação informada.
+function escolherMaisBarata(cotacoes) {
+    return cotacoes.reduce((menor, atual) => (atual.valorUnitario < menor.valorUnitario ? atual : menor));
+}
+
+function validarCotacoes(cotacoesInput) {
+    if (!Array.isArray(cotacoesInput) || !cotacoesInput.length) return { erro: 'Informe ao menos uma cotação (fornecedor + valor).' };
+    const cotacoes = [];
+    for (const c of cotacoesInput) {
+        const fornecedor = normalizarMaiusculo(c.fornecedor);
+        const valorUnitario = Number(c.valorUnitario);
+        if (!validarTexto(fornecedor, 120)) return { erro: 'Informe o fornecedor de cada cotação.' };
+        if (!Number.isFinite(valorUnitario) || valorUnitario < 0) return { erro: `Valor unitário inválido para "${fornecedor}".` };
+        cotacoes.push({ fornecedor, valorUnitario });
+    }
+    return { cotacoes };
+}
+
+// ==========================================
+// LANÇAMENTOS — dentro de um orçamento, cada item pode ter cotações de
+// vários fornecedores (ex.: açúcar cotado em 3 mercados); a mais barata
+// fecha automaticamente e é o que conta pro totalGasto/saldo do orçamento.
+// Parecido com a comparação de fornecedores da Licitação, só que interno ao
+// orçamento (sem processo formal de licitação por trás). Cada
+// criação/edição/remoção atualiza totalGasto/saldo numa transação.
+// where('orcamentoId') sem orderBy combinado — não precisa de índice
+// composto; ordenação por data é feita em memória (lista pequena por
+// orçamento).
 // ==========================================
 router.get('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (req, res) => {
     try {
@@ -179,17 +285,20 @@ router.get('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (r
 router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (req, res) => {
     try {
         const orcamentoId = req.params.id;
-        const descricao = normalizarTexto(req.body.descricao);
-        const fornecedor = normalizarTexto(req.body.fornecedor);
+        const itemNome = normalizarMaiusculo(req.body.itemNome);
+        const unidade = normalizarTexto(req.body.unidade);
         const quantidade = req.body.quantidade !== undefined && req.body.quantidade !== '' ? Number(req.body.quantidade) : 1;
-        const valorUnitario = Number(req.body.valorUnitario);
         const data = normalizarTexto(req.body.data) || new Date().toISOString().slice(0, 10);
 
-        if (!validarTexto(descricao, 200)) return res.status(400).json({ error: 'Informe a descrição do gasto.' });
-        if (!Number.isFinite(valorUnitario) || valorUnitario < 0) return res.status(400).json({ error: 'Informe um valor unitário válido.' });
+        if (!validarTexto(itemNome, 150)) return res.status(400).json({ error: 'Informe o nome do item.' });
         if (!Number.isFinite(quantidade) || quantidade <= 0) return res.status(400).json({ error: 'Quantidade deve ser maior que zero.' });
 
-        const valorTotal = Math.round(quantidade * valorUnitario * 100) / 100;
+        const { erro, cotacoes } = validarCotacoes(req.body.cotacoes);
+        if (erro) return res.status(400).json({ error: erro });
+
+        const cotacoesComTotal = cotacoes.map(c => ({ ...c, valorTotal: Math.round(quantidade * c.valorUnitario * 100) / 100 }));
+        const vencedora = escolherMaisBarata(cotacoesComTotal);
+
         const orcamentoRef = db.collection(COL_ORCAMENTOS).doc(orcamentoId);
         const lancamentoRef = db.collection(COL_LANCAMENTOS).doc();
 
@@ -197,11 +306,15 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
             const orcSnap = await tx.get(orcamentoRef);
             if (!orcSnap.exists) throw new Error('Orçamento não encontrado.');
             const orc = orcSnap.data();
-            const novoTotalGasto = (orc.totalGasto || 0) + valorTotal;
+            const novoTotalGasto = (orc.totalGasto || 0) + vencedora.valorTotal;
 
             tx.set(lancamentoRef, {
-                orcamentoId, descricao, fornecedor: fornecedor || null,
-                quantidade, valorUnitario, valorTotal, data,
+                orcamentoId, itemNome, unidade: unidade || null, quantidade,
+                cotacoes: cotacoesComTotal,
+                fornecedorFechado: vencedora.fornecedor,
+                valorUnitarioFechado: vencedora.valorUnitario,
+                valorTotalFechado: vencedora.valorTotal,
+                data,
                 createdAt: new Date().toISOString(),
                 createdBy: req.user.uid
             });
@@ -211,6 +324,7 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
             });
         });
 
+        upsertItemCatalogo(itemNome);
         res.status(201).json({ id: lancamentoRef.id, message: 'Gasto lançado com sucesso.' });
     } catch (err) {
         res.status(err.message === 'Orçamento não encontrado.' ? 404 : 500).json({ error: err.message });
@@ -220,6 +334,7 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
 router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
         const lancamentoRef = db.collection(COL_LANCAMENTOS).doc(req.params.id);
+        let itemNomeParaCatalogo = null;
 
         await db.runTransaction(async (tx) => {
             const lancSnap = await tx.get(lancamentoRef);
@@ -231,23 +346,37 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
             if (!orcSnap.exists) throw new Error('Orçamento não encontrado.');
             const orc = orcSnap.data();
 
-            const descricao = req.body.descricao !== undefined ? normalizarTexto(req.body.descricao) : lanc.descricao;
-            const fornecedor = req.body.fornecedor !== undefined ? normalizarTexto(req.body.fornecedor) : lanc.fornecedor;
+            const itemNome = req.body.itemNome !== undefined ? normalizarMaiusculo(req.body.itemNome) : lanc.itemNome;
+            const unidade = req.body.unidade !== undefined ? normalizarTexto(req.body.unidade) : (lanc.unidade || '');
             const quantidade = req.body.quantidade !== undefined ? Number(req.body.quantidade) : lanc.quantidade;
-            const valorUnitario = req.body.valorUnitario !== undefined ? Number(req.body.valorUnitario) : lanc.valorUnitario;
             const data = req.body.data !== undefined ? normalizarTexto(req.body.data) : lanc.data;
 
-            if (!validarTexto(descricao, 200)) throw new Error('Informe a descrição do gasto.');
-            if (!Number.isFinite(valorUnitario) || valorUnitario < 0) throw new Error('Informe um valor unitário válido.');
+            if (!validarTexto(itemNome, 150)) throw new Error('Informe o nome do item.');
             if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade deve ser maior que zero.');
 
-            const valorTotalNovo = Math.round(quantidade * valorUnitario * 100) / 100;
-            const novoTotalGasto = (orc.totalGasto || 0) - (lanc.valorTotal || 0) + valorTotalNovo;
+            const cotacoesInput = req.body.cotacoes !== undefined ? req.body.cotacoes : lanc.cotacoes;
+            const { erro, cotacoes } = validarCotacoes(cotacoesInput);
+            if (erro) throw new Error(erro);
 
-            tx.update(lancamentoRef, { descricao, fornecedor: fornecedor || null, quantidade, valorUnitario, valorTotal: valorTotalNovo, data });
+            const cotacoesComTotal = cotacoes.map(c => ({ ...c, valorTotal: Math.round(quantidade * c.valorUnitario * 100) / 100 }));
+            const vencedora = escolherMaisBarata(cotacoesComTotal);
+
+            const novoTotalGasto = (orc.totalGasto || 0) - (lanc.valorTotalFechado || 0) + vencedora.valorTotal;
+
+            tx.update(lancamentoRef, {
+                itemNome, unidade: unidade || null, quantidade,
+                cotacoes: cotacoesComTotal,
+                fornecedorFechado: vencedora.fornecedor,
+                valorUnitarioFechado: vencedora.valorUnitario,
+                valorTotalFechado: vencedora.valorTotal,
+                data
+            });
             tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
+
+            itemNomeParaCatalogo = itemNome;
         });
 
+        if (itemNomeParaCatalogo) upsertItemCatalogo(itemNomeParaCatalogo);
         res.json({ message: 'Lançamento atualizado.' });
     } catch (err) {
         res.status(err.message.includes('não encontrado') ? 404 : 400).json({ error: err.message });
@@ -267,7 +396,7 @@ router.delete('/lancamentos/:id', verifyToken, checkPermission, async (req, res)
             const orcSnap = await tx.get(orcamentoRef);
             if (orcSnap.exists) {
                 const orc = orcSnap.data();
-                const novoTotalGasto = Math.max(0, (orc.totalGasto || 0) - (lanc.valorTotal || 0));
+                const novoTotalGasto = Math.max(0, (orc.totalGasto || 0) - (lanc.valorTotalFechado || 0));
                 tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
             }
             tx.delete(lancamentoRef);

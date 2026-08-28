@@ -147,6 +147,7 @@ async function initApp(user, role) {
   wireEventos();
   await carregarOrcamentos();
   carregarFornecedores();
+  carregarCatalogoItens();
 }
 
 // Lista de fornecedores compartilhada com o módulo Licitação — só para
@@ -160,6 +161,19 @@ async function carregarFornecedores() {
   } catch (err) {
     // Sem permissão de Licitação ou erro pontual — o campo de fornecedor
     // continua funcionando como texto livre, só sem sugestão.
+  }
+}
+
+// Catálogo de itens recorrentes (Açúcar, Material de limpeza...) — cresce
+// sozinho a cada lançamento com nome novo (ver upsert no backend), só serve
+// de sugestão aqui.
+async function carregarCatalogoItens() {
+  try {
+    const lista = await apiFetch('/orcamento/catalogo-itens');
+    const nomes = lista.map(i => i.nome).filter(Boolean);
+    document.getElementById('catalogo-itens-datalist').innerHTML = nomes.map(n => `<option value="${esc(n)}">`).join('');
+  } catch (err) {
+    // Erro pontual — o campo de item continua funcionando como texto livre.
   }
 }
 
@@ -392,19 +406,20 @@ function atualizarResumoDetalhe(orcamento) {
   }
 }
 
-// Agrupado por fornecedor (em vez de lista única) — é isso que deixa claro
-// "o que vou comprar de cada fornecedor" na hora da compra, em vez de tudo
-// misturado numa tabela só.
+// Agrupado por fornecedor VENCEDOR (não por fornecedor "escolhido à mão") —
+// cada item pode ter tido cotação de vários fornecedores, só a mais barata
+// conta pra compra. É isso que dá a visão "o que comprar de cada empresa"
+// sem misturar tudo numa lista só.
 function renderizarLancamentos(lancamentos) {
   const tbody = document.getElementById('lancamentos-tbody');
   if (!lancamentos.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum lançamento ainda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum item lançado ainda.</td></tr>';
     return;
   }
 
-  const grupos = new Map(); // nome do fornecedor (ou "Sem fornecedor") -> lançamentos[]
+  const grupos = new Map(); // nome do fornecedor vencedor -> lançamentos[]
   lancamentos.forEach(l => {
-    const chave = l.fornecedor || 'Sem fornecedor';
+    const chave = l.fornecedorFechado || 'Sem fornecedor';
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave).push(l);
   });
@@ -417,7 +432,7 @@ function renderizarLancamentos(lancamentos) {
 
   tbody.innerHTML = nomesOrdenados.map(nome => {
     const itens = grupos.get(nome);
-    const subtotal = itens.reduce((s, l) => s + (l.valorTotal || 0), 0);
+    const subtotal = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
     const header = `
       <tr class="lanc-grupo-header">
         <td colspan="6">${esc(nome)} <span>· ${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span></td>
@@ -425,10 +440,13 @@ function renderizarLancamentos(lancamentos) {
     `;
     const linhas = itens.map(l => `
       <tr>
-        <td>${esc(l.descricao)}</td>
+        <td>
+          ${esc(l.itemNome)}${l.unidade ? ` <span class="lanc-item-unidade">(${esc(l.unidade)})</span>` : ''}
+          ${renderizarResumoCotacoes(l)}
+        </td>
         <td>${l.quantidade}</td>
-        <td>${fmtMoeda(l.valorUnitario)}</td>
-        <td>${fmtMoeda(l.valorTotal)}</td>
+        <td>${fmtMoeda(l.valorUnitarioFechado)}</td>
+        <td>${fmtMoeda(l.valorTotalFechado)}</td>
         <td>${l.data ? new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
         <td class="acoes-col action-execute">
           <button type="button" class="btn-icon action-execute" data-editar-lanc="${l.id}" title="Editar">✎</button>
@@ -447,19 +465,35 @@ function renderizarLancamentos(lancamentos) {
   });
 }
 
+function renderizarResumoCotacoes(l) {
+  const cotacoes = l.cotacoes || [];
+  if (cotacoes.length <= 1) return '';
+  const partes = cotacoes
+    .slice()
+    .sort((a, b) => a.valorUnitario - b.valorUnitario)
+    .map(c => c.fornecedor === l.fornecedorFechado
+      ? `<span class="cotacao-vencedora-nome">${esc(c.fornecedor)} ${fmtMoeda(c.valorUnitario)} ✓</span>`
+      : `${esc(c.fornecedor)} ${fmtMoeda(c.valorUnitario)}`);
+  return `<div class="lanc-cotacoes-resumo">${cotacoes.length} cotações: ${partes.join(' · ')}</div>`;
+}
+
 function editarLancamento(id, lancamentos) {
   const lanc = lancamentos.find(l => l.id === id);
   if (!lanc) return;
   lancamentoEmEdicaoId = id;
   document.getElementById('lancamento-id').value = id;
-  document.getElementById('lancamento-descricao').value = lanc.descricao;
-  document.getElementById('lancamento-fornecedor').value = lanc.fornecedor || '';
+  document.getElementById('lancamento-item').value = lanc.itemNome;
   document.getElementById('lancamento-quantidade').value = lanc.quantidade;
-  document.getElementById('lancamento-valor-unitario').value = lanc.valorUnitario;
+  document.getElementById('lancamento-unidade').value = lanc.unidade || '';
   document.getElementById('lancamento-data').value = lanc.data || '';
+
+  limparCotacoes();
+  const cotacoes = (lanc.cotacoes && lanc.cotacoes.length) ? lanc.cotacoes : [{ fornecedor: lanc.fornecedorFechado, valorUnitario: lanc.valorUnitarioFechado }];
+  cotacoes.forEach(c => adicionarLinhaCotacao(c.fornecedor, c.valorUnitario));
+
   document.getElementById('btn-salvar-lancamento').textContent = 'Atualizar gasto';
   document.getElementById('btn-cancelar-lancamento').classList.remove('hidden');
-  document.getElementById('lancamento-descricao').focus();
+  document.getElementById('lancamento-item').focus();
 }
 
 function cancelarEdicaoLancamento() {
@@ -469,29 +503,100 @@ function cancelarEdicaoLancamento() {
   document.getElementById('lancamento-quantidade').value = 1;
   document.getElementById('btn-salvar-lancamento').textContent = 'Lançar gasto';
   document.getElementById('btn-cancelar-lancamento').classList.add('hidden');
+  limparCotacoes();
+  adicionarLinhaCotacao();
+  adicionarLinhaCotacao();
 }
 
 async function excluirLancamento(id) {
-  if (!confirm('Remover este lançamento? O valor volta a somar no saldo do orçamento.')) return;
+  if (!confirm('Remover este item lançado? O valor volta a somar no saldo do orçamento.')) return;
   try {
     await apiFetch(`/orcamento/lancamentos/${id}`, { method: 'DELETE' });
-    showToast('Lançamento removido.');
+    showToast('Item removido.');
     await recarregarDetalheAposMudanca();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
+// ==========================================
+// COTAÇÕES — linhas dinâmicas (fornecedor + valor) dentro do formulário de
+// lançamento. A mais barata é destacada ao vivo enquanto a pessoa digita.
+// ==========================================
+function limparCotacoes() {
+  document.getElementById('cotacoes-lista').innerHTML = '';
+}
+
+function adicionarLinhaCotacao(fornecedor = '', valorUnitario = '') {
+  const lista = document.getElementById('cotacoes-lista');
+  const row = document.createElement('div');
+  row.className = 'cotacao-row';
+  row.innerHTML = `
+    <input type="text" class="cotacao-fornecedor" list="fornecedores-datalist" placeholder="Fornecedor" style="text-transform:uppercase;" value="${esc(fornecedor)}" maxlength="120">
+    <input type="number" class="cotacao-valor" step="0.01" min="0" placeholder="Valor unit. (R$)" value="${valorUnitario === '' ? '' : valorUnitario}">
+    <span class="cotacao-selo hidden">✓ mais barato</span>
+    <button type="button" class="cotacao-remover" title="Remover cotação">×</button>
+  `;
+  lista.appendChild(row);
+
+  row.querySelector('.cotacao-valor').addEventListener('input', atualizarSeloVencedora);
+  row.querySelector('.cotacao-remover').addEventListener('click', () => {
+    row.remove();
+    atualizarSeloVencedora();
+  });
+
+  atualizarSeloVencedora();
+}
+
+function atualizarSeloVencedora() {
+  const linhas = [...document.querySelectorAll('#cotacoes-lista .cotacao-row')];
+  const valores = linhas.map(row => {
+    const v = row.querySelector('.cotacao-valor').value;
+    return v === '' ? null : Number(v);
+  });
+  const validos = valores.filter(v => v !== null && Number.isFinite(v));
+  const menor = validos.length ? Math.min(...validos) : null;
+
+  linhas.forEach((row, i) => {
+    const venceu = menor !== null && valores[i] === menor;
+    row.classList.toggle('cotacao-vencedora', venceu);
+    row.querySelector('.cotacao-selo').classList.toggle('hidden', !venceu);
+  });
+}
+
+function lerCotacoesDoFormulario() {
+  const linhas = [...document.querySelectorAll('#cotacoes-lista .cotacao-row')];
+  const cotacoes = [];
+  for (const row of linhas) {
+    const fornecedor = row.querySelector('.cotacao-fornecedor').value.trim();
+    const valorTexto = row.querySelector('.cotacao-valor').value;
+    if (!fornecedor && valorTexto === '') continue; // linha em branco, ignora
+    if (!fornecedor || valorTexto === '') throw new Error('Preencha fornecedor e valor em todas as cotações (ou remova a linha em branco).');
+    cotacoes.push({ fornecedor, valorUnitario: Number(valorTexto) });
+  }
+  if (!cotacoes.length) throw new Error('Informe ao menos uma cotação.');
+  return cotacoes;
+}
+
 async function salvarLancamento(e) {
   e.preventDefault();
   const id = document.getElementById('lancamento-id').value;
   const orcamentoId = document.getElementById('lancamento-orcamento-id').value;
+
+  let cotacoes;
+  try {
+    cotacoes = lerCotacoesDoFormulario();
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+
   const body = {
-    descricao: document.getElementById('lancamento-descricao').value.trim(),
-    fornecedor: document.getElementById('lancamento-fornecedor').value.trim(),
+    itemNome: document.getElementById('lancamento-item').value.trim(),
     quantidade: Number(document.getElementById('lancamento-quantidade').value),
-    valorUnitario: Number(document.getElementById('lancamento-valor-unitario').value),
-    data: document.getElementById('lancamento-data').value
+    unidade: document.getElementById('lancamento-unidade').value.trim(),
+    data: document.getElementById('lancamento-data').value,
+    cotacoes
   };
 
   try {
@@ -505,6 +610,7 @@ async function salvarLancamento(e) {
     cancelarEdicaoLancamento();
     document.getElementById('lancamento-data').value = new Date().toISOString().slice(0, 10);
     await recarregarDetalheAposMudanca();
+    carregarCatalogoItens();
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -588,6 +694,7 @@ function wireEventos() {
 
   document.getElementById('form-lancamento').addEventListener('submit', salvarLancamento);
   document.getElementById('btn-cancelar-lancamento').addEventListener('click', cancelarEdicaoLancamento);
+  document.getElementById('btn-add-cotacao').addEventListener('click', () => adicionarLinhaCotacao());
 
   [document.getElementById('modal-orcamento'), document.getElementById('modal-detalhe')].forEach(overlay => {
     overlay.addEventListener('click', (e) => {
