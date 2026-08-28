@@ -271,7 +271,10 @@ function popularFiltroSetor() {
   select.innerHTML = '<option value="">Todos os setores</option>' + setores.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   select.value = setores.includes(atual) ? atual : '';
 
-  datalist.innerHTML = setores.map(s => `<option value="${esc(s)}">`).join('');
+  // O datalist de autocomplete só existe no formulário de novo orçamento
+  // (index.html) — no relatório não tem, e sem essa checagem a função
+  // quebrava ali e travava o resto do carregamento da página.
+  if (datalist) datalist.innerHTML = setores.map(s => `<option value="${esc(s)}">`).join('');
 }
 
 function popularFiltroSemestre() {
