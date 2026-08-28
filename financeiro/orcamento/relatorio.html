@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Orçamento - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css">
+</head>
+<body class="pagina-relatorio">
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="orcamento-relatorio-root">
+                <div class="page-header no-print">
+                    <div>
+                        <h1 class="page-title">Relatório de Orçamento</h1>
+                        <p class="page-subtitle">Previsto x gasto por orçamento, pronto pra imprimir/exportar em PDF</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/orcamento/index.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                        <button type="button" class="btn-primary" id="btn-imprimir-relatorio">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir / Salvar PDF
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-bar no-print">
+                    <select class="select-filter" id="setor-select">
+                        <option value="">Todos os setores</option>
+                    </select>
+                    <select class="select-filter" id="semestre-select">
+                        <option value="">Todos os períodos</option>
+                    </select>
+                    <select class="select-filter" id="status-select">
+                        <option value="aberto">Em aberto</option>
+                        <option value="encerrado">Fechados</option>
+                        <option value="todos" selected>Todos</option>
+                    </select>
+                    <select class="select-filter" id="rel-orcamento-select">
+                        <option value="">Todos os orçamentos</option>
+                    </select>
+                    <select class="select-filter" id="rel-fornecedor-select" disabled>
+                        <option value="">Todos os fornecedores</option>
+                    </select>
+                </div>
+
+                <div class="print-page">
+                    <div class="rel-cabecalho-print">
+                        <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                        <div>
+                            <h1>Relatório de Orçamento</h1>
+                            <p id="print-filtro-label">Todos os setores — Todos os períodos</p>
+                        </div>
+                        <div class="rel-data-emissao" id="print-data-emissao"></div>
+                    </div>
+
+                    <div class="kpi-grid" id="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-label" id="kpi-previsto-label">Previsto</div>
+                            <div class="kpi-value" id="kpi-previsto">R$ 0,00</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label" id="kpi-gasto-label">Gasto</div>
+                            <div class="kpi-value" id="kpi-gasto">R$ 0,00</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label" id="kpi-saldo-label">Saldo</div>
+                            <div class="kpi-value" id="kpi-saldo">R$ 0,00</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Orçamentos</div>
+                            <div class="kpi-value" id="kpi-qtd">0</div>
+                            <div class="kpi-hint" id="kpi-qtd-hint"></div>
+                        </div>
+                    </div>
+
+                    <!-- Nenhum orçamento específico selecionado: visão geral (1 linha por orçamento) -->
+                    <div class="card" id="relatorio-card-orcamentos">
+                        <h3 class="card-secao-titulo">Orçamentos</h3>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Setor</th>
+                                        <th>Período</th>
+                                        <th>Status</th>
+                                        <th>Previsto</th>
+                                        <th>Gasto</th>
+                                        <th>Saldo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="relatorio-tbody">
+                                    <tr><td colspan="7" class="tabela-msg">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Um orçamento selecionado no filtro: itens dele (por fornecedor) -->
+                    <div class="card hidden" id="relatorio-card-itens">
+                        <h3 class="card-secao-titulo">Itens do orçamento</h3>
+                        <div id="rel-itens-cabecalho" style="padding: 0 1.5rem 1rem;">
+                            <div class="orc-detalhe-resumo" style="margin:0;">
+                                <div><span>Comprar com</span><strong id="rel-itens-fornecedor">—</strong></div>
+                                <div><span>Orçamento</span><strong id="rel-itens-orcamento">—</strong></div>
+                                <div><span>Total</span><strong id="rel-itens-total">R$ 0,00</strong></div>
+                            </div>
+                        </div>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Qtd</th>
+                                        <th>Vlr. Unit.</th>
+                                        <th>Total</th>
+                                        <th>Data</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rel-itens-tbody">
+                                    <tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/orcamento/app.js"></script>
+</body>
+</html>
