@@ -69,21 +69,24 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('usuarios'), as
 // POST /api/usuarios - Cria no Firebase Auth e no Firestore
 router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
-        const { nome, email, senha, role } = req.body;
-        
+        const { nome, email, senha, role, curso } = req.body;
+
         // 1. Cria usuário no Firebase Authentication via Admin SDK
         const userRecord = await auth.createUser({
             email,
             password: senha,
             displayName: nome
         });
-        
+
         // 2. Salva o documento no Firestore
         const userData = {
             uid: userRecord.uid,
             name: nome,
             email,
             role,
+            // Curso vinculado só faz sentido pro Coordenador — é o que
+            // restringe quais avaliações docentes ele cria/enxerga.
+            curso: role === 'coordenador' ? (curso || null) : null,
             ativo: true,
             primeiroAcesso: true, // Força a troca de senha no primeiro acesso
             createdAt: new Date().toISOString(),
@@ -100,8 +103,14 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), a
 // PUT /api/usuarios/:uid/role
 router.put('/:uid/role', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
-        const { role } = req.body;
-        await db.collection('users').doc(req.params.uid).update({ role });
+        const { role, curso } = req.body;
+        // Curso vinculado só faz sentido pro Coordenador — limpa o campo ao
+        // trocar pra qualquer outro cargo, senão um vínculo antigo poderia
+        // vazar caso a pessoa volte a ser Coordenador depois.
+        await db.collection('users').doc(req.params.uid).update({
+            role,
+            curso: role === 'coordenador' ? (curso || null) : null
+        });
         res.json({ message: 'Nível atualizado com sucesso!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
