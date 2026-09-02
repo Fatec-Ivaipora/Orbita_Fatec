@@ -1,0 +1,799 @@
+/* avaliacao-docente.css - Estilo Premium Órbita FATEC */
+:root {
+  --primary-blue: #0F4EB8;
+  --secondary-blue: #1E63D6;
+  --bg-color: #F4F7FB;
+  --card-bg: #FFFFFF;
+  --text-main: #0B1F33;
+  --text-secondary: #64748B;
+  --border-color: #E5E7EB;
+  --accent-orange: #EB7025;
+  --green: #10B981;
+  --yellow: #F59E0B;
+  --red: #EF4444;
+}
+
+/* =====================================
+   ESTILOS DE BOTÕES PREMIUM
+===================================== */
+.btn-primary {
+  background: var(--primary-blue);
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary:hover {
+  background: var(--secondary-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 78, 184, 0.35);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #f1f5f9;
+  color: var(--primary-blue);
+  transition: all 0.2s ease;
+}
+
+.btn-sm:hover {
+  background: #e2e8f0;
+}
+
+.btn-sm.danger {
+  background: #fee2e2;
+  color: var(--red);
+}
+
+.btn-sm.danger:hover {
+  background: #fca5a5;
+  color: #991b1b;
+}
+
+/* =====================================
+   TABELA PREMIUM
+===================================== */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th, .data-table td {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.data-table th {
+  background-color: #f8fafc;
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.data-table tr {
+  transition: background-color 0.2s ease;
+}
+
+.data-table tr:hover {
+  background-color: #f8fafc;
+}
+
+.data-table td strong {
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* Badge de nota */
+.badge-nota {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: inline-block;
+  border: 1px solid transparent;
+}
+
+.badge-nota.boa {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--green);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.badge-nota.media {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--yellow);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.badge-nota.baixa {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--red);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.badge-nota.na {
+  background: rgba(100, 116, 139, 0.1);
+  color: var(--text-secondary);
+  border-color: rgba(100, 116, 139, 0.2);
+}
+
+/* =====================================
+   MODAL PREMIUM
+===================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 20, 38, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-content {
+  background: white;
+  padding: 2.5rem 2rem;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  transform: translateY(0) scale(1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-content-wide {
+  max-width: 760px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.modal-content-xl {
+  max-width: 900px;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .modal-content-xl {
+    max-width: 95vw;
+  }
+}
+
+/* =====================================
+   NOMES DOS ALUNOS (etapa 1)
+===================================== */
+.alunos-nomes-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .alunos-nomes-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.alunos-nomes-container .form-group {
+  margin-bottom: 1rem;
+}
+
+/* =====================================
+   BARRA DE PROGRESSO DO QUESTIONÁRIO
+===================================== */
+.questionario-progress {
+  margin: -0.5rem 0 2rem;
+}
+
+#questionario-step-label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.questionario-progress-bar {
+  height: 8px;
+  background: #eef2f7;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.questionario-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-blue), var(--secondary-blue));
+  border-radius: 20px;
+  transition: width 0.3s ease;
+}
+
+.questionario-step {
+  min-height: 320px;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 1rem;
+  color: var(--text-main);
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.questionario-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 1.5rem 0 1.25rem;
+}
+
+.questionario-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: -0.5rem 0 1.5rem;
+}
+
+.badge-status {
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  display: inline-block;
+  border: 1px solid transparent;
+}
+
+.badge-status.pendente {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--yellow);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.badge-status.concluida {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--green);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* =====================================
+   QUESTIONÁRIO — ESCALA LIKERT
+===================================== */
+.pergunta-item {
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.pergunta-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* As perguntas abertas (11/12) ficam num bloco separado logo após a
+   pergunta 10 (fora do #perguntas-container) — precisa de respiro extra
+   pra não parecer grudado nela. */
+.questionario-abertas {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.pergunta-item textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 1rem;
+  color: var(--text-main);
+  background: #f8fafc;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.pergunta-item textarea:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.pergunta-texto {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text-main);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+.escala-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pergunta-obs {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  background: #f8fafc;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.pergunta-obs:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.detalhe-obs {
+  font-style: italic;
+  margin-top: 0.35rem !important;
+}
+
+.escala-opcao {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 1rem;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: #f8fafc;
+}
+
+.escala-opcao:hover {
+  border-color: var(--primary-blue);
+}
+
+.escala-opcao input {
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-blue);
+  flex-shrink: 0;
+}
+
+.escala-opcao:has(input:checked) {
+  border-color: var(--primary-blue);
+  background: rgba(15, 78, 184, 0.08);
+  color: var(--primary-blue);
+  font-weight: 600;
+}
+
+/* =====================================
+   MODAL DE DETALHES (somente leitura)
+===================================== */
+.detalhes-content {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.detalhe-header {
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.detalhe-header p {
+  margin: 0.15rem 0;
+}
+
+.detalhe-pergunta {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.detalhe-pergunta strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  margin-bottom: 0.35rem;
+}
+
+.detalhe-pergunta p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+}
+
+.modal-overlay.hidden .modal-content {
+  transform: translateY(20px) scale(0.95);
+}
+
+#modal-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--bg-color);
+  padding-bottom: 1rem;
+}
+
+/* =====================================
+   PAGE HEADER PREMIUM
+===================================== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border-color);
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.25rem;
+  }
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 1rem;
+  color: var(--text-main);
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* =====================================
+   BARRA DE FILTROS
+===================================== */
+.filters-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.7rem 1rem 0.7rem 2.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  background: white;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.select-filter {
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  background: white;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  min-width: 180px;
+}
+
+.select-filter:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+
+.btn-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: #f8fafc;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.btn-clear-filters:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: var(--red);
+}
+
+/* =====================================
+   ABAS (Minhas Avaliações / Painel do Diretor)
+===================================== */
+.tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: var(--card-bg);
+  padding: 0.4rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  width: fit-content;
+}
+
+.tab-btn {
+  padding: 0.7rem 1.4rem;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: #f8fafc;
+  color: var(--text-main);
+}
+
+.tab-btn.active {
+  background: var(--primary-blue);
+  color: white;
+  box-shadow: 0 4px 15px rgba(15, 78, 184, 0.3);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================
+   PAINEL DO DIRETOR — DASHBOARD
+===================================== */
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dash-card {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.dash-card-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dash-card-value {
+  color: var(--text-main);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+/* Legenda discreta explicando o que cada valor da escala vale na nota,
+   pra "Nota: 3.6" fazer sentido sem poluir os cards do dashboard. */
+.nota-legenda {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin: -0.75rem 0 1.5rem;
+  line-height: 1.5;
+}
+
+/* Ícone "ⓘ" nos cabeçalhos Nota/Média — tooltip nativo (title) com a mesma
+   explicação, sem ocupar espaço extra na tabela. */
+.info-tip {
+  cursor: help;
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0 0 1rem;
+}
+
+.tab-content .card {
+  margin-bottom: 1.5rem;
+}
+
+.tab-content .card:has(.data-table) {
+  padding: 0;
+}
+
+.tab-content .card .data-table th:first-child,
+.tab-content .card .data-table td:first-child {
+  padding-left: 1.5rem;
+}
+
+.tab-content .card .section-title {
+  padding: 1.25rem 1.5rem 0;
+}

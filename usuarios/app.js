@@ -80,6 +80,28 @@ const PERM_MODULES = Object.values(MODULES).filter(m => !['dashboard', 'fidelida
 // Filtro de tópico/categoria ativo na grade de acessos
 let filtroCategoria = 'todos';
 
+// Cursos da FATEC IVP — usado pra vincular o Coordenador ao curso que ele
+// avalia em Avaliação Docente (cada coordenador só cria/vê avaliações do
+// próprio curso vinculado aqui).
+const CURSOS_FATEC = [
+  { id: 'agronegocio', name: 'Agronegócio' },
+  { id: 'agronomia', name: 'Agronomia' },
+  { id: 'arquitetura-urbanismo', name: 'Arquitetura e Urbanismo' },
+  { id: 'biomedicina', name: 'Biomedicina' },
+  { id: 'contabeis', name: 'Ciências Contábeis' },
+  { id: 'direito', name: 'Direito' },
+  { id: 'rh', name: 'Recursos Humanos' },
+  { id: 'enfermagem', name: 'Enfermagem' },
+  { id: 'engenharia-civil', name: 'Engenharia Civil' },
+  { id: 'fisioterapia', name: 'Fisioterapia' },
+  { id: 'gestao-comercial', name: 'Gestão Comercial' },
+  { id: 'gestao-financeira', name: 'Gestão Financeira' },
+  { id: 'medicina', name: 'Medicina' },
+  { id: 'medicina-veterinaria', name: 'Medicina Veterinária' },
+  { id: 'pedagogia', name: 'Pedagogia' },
+  { id: 'psicologia', name: 'Psicologia' }
+];
+
 // ---- Elements ----
 const authGuard    = document.getElementById('auth-guard');
 const mainContent  = document.getElementById('main-content');
@@ -182,6 +204,8 @@ function initPage() {
 
   setupMainTabs();
   aplicarGatingAdmL1();
+  renderCursoOptions();
+  setupCursoToggle();
 }
 
 // Gerência de acessos é exclusiva do ADM N1: esconde a aba para os demais
@@ -321,6 +345,30 @@ function updateRoleSelects() {
   if (editRadios) {
     editRadios.innerHTML = allRoles.map(r => renderRoleOption(r, 'edit-role')).join('');
   }
+}
+
+// ================================================================
+//  CURSO VINCULADO AO COORDENADOR (Avaliação Docente)
+// ================================================================
+function renderCursoOptions() {
+  const options = '<option value="">Selecione um curso</option>' +
+    CURSOS_FATEC.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const novoCurso = document.getElementById('novo-curso');
+  const editCurso = document.getElementById('edit-curso');
+  if (novoCurso) novoCurso.innerHTML = options;
+  if (editCurso) editCurso.innerHTML = options;
+}
+
+function setupCursoToggle() {
+  document.getElementById('novo-role-options')?.addEventListener('change', (e) => {
+    if (e.target.name !== 'novo-role') return;
+    document.getElementById('novo-curso-group')?.classList.toggle('hidden', e.target.value !== 'coordenador');
+  });
+
+  document.getElementById('edit-role-options')?.addEventListener('change', (e) => {
+    if (e.target.name !== 'edit-role') return;
+    document.getElementById('edit-curso-group')?.classList.toggle('hidden', e.target.value !== 'coordenador');
+  });
 }
 
 function renderRoles(list) {
@@ -548,6 +596,7 @@ async function salvarNovoCargo(e) {
 function abrirModalNovo() {
   document.getElementById('form-novo-usuario').reset();
   document.getElementById('form-error').classList.add('hidden');
+  document.getElementById('novo-curso-group')?.classList.add('hidden');
   abrirModal('modal-novo');
 }
 
@@ -562,6 +611,11 @@ function abrirModalEditar(uid, name, role, email) {
   // Set role
   const radio = document.querySelector(`input[name="edit-role"][value="${role}"]`);
   if (radio) radio.checked = true;
+
+  // Set curso vinculado (só relevante pra Coordenador)
+  document.getElementById('edit-curso-group')?.classList.toggle('hidden', role !== 'coordenador');
+  const editCursoSelect = document.getElementById('edit-curso');
+  if (editCursoSelect) editCursoSelect.value = user.curso || '';
 
   // Set status
   const isAtivo = user.ativo !== false;
@@ -869,13 +923,21 @@ async function criarUsuario(e) {
   const email = document.getElementById('novo-email').value.trim();
   const senha = document.getElementById('novo-senha').value;
   const role  = document.querySelector('input[name="novo-role"]:checked')?.value || 'ti';
-  
+  const curso = document.getElementById('novo-curso')?.value || '';
+
   const errEl = document.getElementById('form-error');
   const btn   = document.getElementById('btn-salvar-novo');
   const text  = document.getElementById('salvar-text');
   const spin  = document.getElementById('salvar-spinner');
 
   errEl.classList.add('hidden');
+
+  if (role === 'coordenador' && !curso) {
+    errEl.textContent = 'Selecione o curso vinculado ao Coordenador.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
   btn.disabled  = true;
   text.textContent = 'Criando...';
   spin.classList.remove('hidden');
@@ -883,7 +945,7 @@ async function criarUsuario(e) {
   try {
     await apiFetch('/usuarios', {
       method: 'POST',
-      body: JSON.stringify({ nome, email, senha, role })
+      body: JSON.stringify({ nome, email, senha, role, curso: role === 'coordenador' ? curso : '' })
     });
 
     fecharModal('modal-novo');
@@ -907,10 +969,19 @@ async function salvarRole() {
   const newRole = document.querySelector('input[name="edit-role"]:checked')?.value;
   if (!uid || !newRole) return;
 
+  const curso = document.getElementById('edit-curso')?.value || '';
+  if (newRole === 'coordenador' && !curso) {
+    showToast('❌ Selecione o curso vinculado ao Coordenador.', 'error');
+    return;
+  }
+
   const btn = document.getElementById('btn-salvar-role');
   btn.disabled = true; btn.textContent = 'Salvando...';
   try {
-    await apiFetch(`/usuarios/${uid}/role`, { method: 'PUT', body: JSON.stringify({ role: newRole }) });
+    await apiFetch(`/usuarios/${uid}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role: newRole, curso: newRole === 'coordenador' ? curso : '' })
+    });
     showToast(`✅ Nível alterado para ${ROLE_LABEL[newRole]}`, 'success');
   } catch (err) {
     showToast(`❌ Erro ao salvar: ${err.message}`, 'error');

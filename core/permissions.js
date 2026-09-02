@@ -117,17 +117,24 @@ export const MODULES = {
     title: "Orçamento",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
     url: "/financeiro/orcamento/index.html"
+  },
+  "avaliacao-docente": {
+    id: "avaliacao-docente",
+    category: "admin",
+    title: "Avaliação Docente",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+    url: "/avaliacao-docente/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente"]
   },
   ti: {
     label: "T.I.",
@@ -146,7 +153,7 @@ export const ROLE_PERMISSIONS = {
   // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade"]
+    modules: ["dashboard", "fidelidade", "avaliacao-docente"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da

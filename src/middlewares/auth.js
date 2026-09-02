@@ -161,7 +161,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 3,
                 matriculas: 3,
-                orcamento: 3
+                orcamento: 3,
+                'avaliacao-docente': 3
             },
             ti: {
                 emprestimo: 3,
@@ -174,7 +175,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 3,
                 licitacao: 1,
                 matriculas: 1,
-                orcamento: 1
+                orcamento: 1,
+                'avaliacao-docente': 1
             },
             rh: {
                 emprestimo: 1,
@@ -187,7 +189,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 1,
                 matriculas: 1,
-                orcamento: 1
+                orcamento: 1,
+                'avaliacao-docente': 1
             },
             financeiro: {
                 emprestimo: 1,
@@ -200,10 +203,15 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 3,
                 matriculas: 3,
-                orcamento: 3
+                orcamento: 3,
+                'avaliacao-docente': 1
             },
             // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
             // tarefa exclusiva do Financeiro. Orçamento segue a mesma regra.
+            // Avaliação Docente é o módulo exclusivo do coordenador pra
+            // avaliar seus próprios professores (nível 3 = pode criar/editar,
+            // mas a rota só deixa ele enxergar/mexer nas avaliações que ele
+            // mesmo criou — ver `apenasProprias` em src/rotas/avaliacao-docente.js).
             coordenador: {
                 emprestimo: 1,
                 usuarios: 1,
@@ -215,7 +223,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 1,
                 matriculas: 1,
-                orcamento: 1
+                orcamento: 1,
+                'avaliacao-docente': 3
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -230,7 +239,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 1,
                 matriculas: 3,
-                orcamento: 1
+                orcamento: 1,
+                'avaliacao-docente': 1
             },
             visitante: {
                 emprestimo: 2,
@@ -243,7 +253,8 @@ const requireModulePermission = (moduleName) => {
                 acessos: 1,
                 licitacao: 1,
                 matriculas: 1,
-                orcamento: 1
+                orcamento: 1,
+                'avaliacao-docente': 1
             }
         };
 
