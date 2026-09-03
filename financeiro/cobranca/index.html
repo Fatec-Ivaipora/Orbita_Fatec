@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cobrança - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/cobranca/cobranca.css">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Cobrança</h1>
+                        <p class="page-subtitle">Inadimplência dos alunos (dado ao vivo do Edubox) e histórico de negociação/advocacia</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn-secondary action-execute" id="btn-importar-csv">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Importar advocacia (CSV)
+                        </button>
+                        <a class="btn-secondary" href="/financeiro/cobranca/relatorio.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
+                            Relatório
+                        </a>
+                    </div>
+                </div>
+
+                <div class="kpi-grid" id="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Alunos inadimplentes</div>
+                        <div class="kpi-value" id="kpi-alunos">—</div>
+                        <div class="kpi-hint" id="kpi-parcelas-hint"></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Valor total em aberto</div>
+                        <div class="kpi-value" id="kpi-valor">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">1-30 / 31-60 dias</div>
+                        <div class="kpi-value kpi-value-sm" id="kpi-faixa-inicial">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">61-90 / 90+ dias</div>
+                        <div class="kpi-value kpi-value-sm" id="kpi-faixa-final">—</div>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select class="select-filter" id="curso-select">
+                        <option value="">Todos os cursos</option>
+                    </select>
+                    <select class="select-filter" id="semestre-select">
+                        <option value="">Todos os semestres</option>
+                    </select>
+                    <select class="select-filter" id="faixa-select">
+                        <option value="">Todas as faixas de atraso</option>
+                        <option value="1-30">1-30 dias</option>
+                        <option value="31-60">31-60 dias</option>
+                        <option value="61-90">61-90 dias</option>
+                        <option value="90+">90+ dias</option>
+                    </select>
+                    <div class="search-wrap">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" class="search-input" id="busca-aluno" placeholder="Buscar aluno pelo nome...">
+                    </div>
+                    <button class="btn-primary" id="btn-buscar">Buscar</button>
+                </div>
+
+                <div class="card">
+                    <div class="tabela-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Aluno</th>
+                                    <th>Curso</th>
+                                    <th>Parcelas</th>
+                                    <th>Valor em aberto</th>
+                                    <th>Dias de atraso</th>
+                                    <th>Última ação</th>
+                                    <th class="acoes-col">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lista-tbody">
+                                <tr><td colspan="7" class="tabela-msg">Escolha um curso ou semestre e clique em "Buscar".</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="paginacao" id="paginacao"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Histórico e registro de ação -->
+    <div id="modal-acao" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="acao-aluno-nome">Aluno</h2>
+            <p class="modal-subtitle" id="acao-aluno-meta">Curso</p>
+
+            <div class="card-secao-titulo" style="padding:0; margin-bottom:0.75rem;">Histórico de ações</div>
+            <div id="acao-historico" class="acao-historico">Carregando...</div>
+
+            <form id="form-acao" class="action-execute">
+                <input type="hidden" id="acao-codcli">
+                <input type="hidden" id="acao-nome">
+                <div class="form-group">
+                    <label>Tipo de ação</label>
+                    <select id="acao-tipo" required>
+                        <option value="contato">Contato (telefone/WhatsApp)</option>
+                        <option value="negociacao">Negociação</option>
+                        <option value="enviado_advocacia">Enviado à advocacia</option>
+                        <option value="acordo_judicial">Acordo judicial</option>
+                        <option value="quitado_manual">Quitado (registro manual)</option>
+                        <option value="outro">Outro</option>
+                    </select>
+                </div>
+                <div class="form-group hidden" id="acao-escritorio-wrap">
+                    <label>Escritório / Advogada(o)</label>
+                    <input type="text" id="acao-escritorio" maxlength="120" placeholder="Ex.: Dra. Fulana de Tal">
+                </div>
+                <div class="form-group">
+                    <label>Observações</label>
+                    <textarea id="acao-observacoes" maxlength="500"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-fechar-acao">Fechar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-acao">Registrar ação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Importar CSV (advocacia/judicial) -->
+    <div id="modal-import" class="modal-overlay hidden action-execute">
+        <div class="modal-content modal-content-lg">
+            <h2>Importar advocacia (CSV)</h2>
+            <p class="modal-subtitle">Não existe controle jurídico no Edubox — envie sua própria planilha de alunos já encaminhados ao escritório. Colunas esperadas: <code>nome, cpf, escritorio, tipo, observacoes</code> (só <code>nome</code> é obrigatório; <code>tipo</code> aceita <code>enviado_advocacia</code> ou <code>acordo_judicial</code>, padrão enviado_advocacia; <code>cpf</code> é usado pra achar o aluno no Edubox — sem ele o registro fica sem vínculo automático).</p>
+
+            <input type="file" id="csv-input" accept=".csv,text/csv" class="csv-input">
+
+            <div id="import-preview" class="hidden">
+                <div class="import-resumo" id="import-resumo"></div>
+                <div class="tabela-wrap" style="max-height: 340px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="import-check-all" checked></th>
+                                <th>Nome</th>
+                                <th>CPF</th>
+                                <th>Escritório</th>
+                                <th>Tipo</th>
+                                <th>No Edubox</th>
+                            </tr>
+                        </thead>
+                        <tbody id="import-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-import">Cancelar</button>
+                    <button type="button" class="btn-primary" id="btn-confirmar-import">Importar selecionados</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/cobranca/app.js"></script>
+</body>
+</html>

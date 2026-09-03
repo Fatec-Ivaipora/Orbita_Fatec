@@ -162,7 +162,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 3,
                 matriculas: 3,
                 orcamento: 3,
-                'avaliacao-docente': 3
+                'avaliacao-docente': 3,
+                cobranca: 1 // "Cobrança" é exclusivo do Financeiro, nem ADM N2 vê (31/08)
             },
             ti: {
                 emprestimo: 3,
@@ -176,7 +177,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 1,
                 matriculas: 1,
                 orcamento: 1,
-                'avaliacao-docente': 1
+                'avaliacao-docente': 1,
+                cobranca: 1
             },
             rh: {
                 emprestimo: 1,
@@ -190,7 +192,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 1,
                 matriculas: 1,
                 orcamento: 1,
-                'avaliacao-docente': 1
+                'avaliacao-docente': 1,
+                cobranca: 1
             },
             financeiro: {
                 emprestimo: 1,
@@ -204,14 +207,16 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 3,
                 matriculas: 3,
                 orcamento: 3,
-                'avaliacao-docente': 1
+                'avaliacao-docente': 1,
+                cobranca: 3
             },
             // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
-            // tarefa exclusiva do Financeiro. Orçamento segue a mesma regra.
-            // Avaliação Docente é o módulo exclusivo do coordenador pra
-            // avaliar seus próprios professores (nível 3 = pode criar/editar,
-            // mas a rota só deixa ele enxergar/mexer nas avaliações que ele
-            // mesmo criou — ver `apenasProprias` em src/rotas/avaliacao-docente.js).
+            // tarefa exclusiva do Financeiro. Orçamento e Cobrança seguem a
+            // mesma regra. Avaliação Docente é o módulo exclusivo do
+            // coordenador pra avaliar seus próprios professores (nível 3 =
+            // pode criar/editar, mas a rota só deixa ele enxergar/mexer nas
+            // avaliações que ele mesmo criou — ver `apenasProprias` em
+            // src/rotas/avaliacao-docente.js).
             coordenador: {
                 emprestimo: 1,
                 usuarios: 1,
@@ -224,7 +229,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 1,
                 matriculas: 1,
                 orcamento: 1,
-                'avaliacao-docente': 3
+                'avaliacao-docente': 3,
+                cobranca: 1
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -240,7 +246,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 1,
                 matriculas: 3,
                 orcamento: 1,
-                'avaliacao-docente': 1
+                'avaliacao-docente': 1,
+                cobranca: 1
             },
             visitante: {
                 emprestimo: 2,
@@ -254,7 +261,8 @@ const requireModulePermission = (moduleName) => {
                 licitacao: 1,
                 matriculas: 1,
                 orcamento: 1,
-                'avaliacao-docente': 1
+                'avaliacao-docente': 1,
+                cobranca: 1
             }
         };
 

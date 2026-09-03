@@ -124,10 +124,23 @@ export const MODULES = {
     title: "Avaliação Docente",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
     url: "/avaliacao-docente/index.html"
+  },
+  cobranca: {
+    id: "cobranca",
+    category: "financeiro",
+    title: "Cobrança",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4.9" y1="4.9" x2="7" y2="7"/></svg>`,
+    url: "/financeiro/cobranca/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
+  // "Cobrança" (inadimplência) é exclusivo do cargo Financeiro — não entra
+  // aqui nem no ADM N2, a pedido do usuário (31/08). Fica de fora do menu
+  // lateral e da grade padrão de Gerência de Acessos pra esses cargos;
+  // ADM N1 continua com bypass total no backend (`requireModulePermission`
+  // sempre libera `adm_l1`, é assim pra todo módulo do sistema, não dá pra
+  // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
     modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente"]
@@ -146,7 +159,7 @@ export const ROLE_PERMISSIONS = {
   },
   financeiro: {
     label: "Financeiro",
-    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento"]
+    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento", "cobranca"]
   },
   // Coordenador perdeu acesso à Licitação (18/08) — passou a ser tarefa
   // exclusiva do Financeiro, pra não misturar semestre ativo entre uma
