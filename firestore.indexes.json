@@ -145,6 +145,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "financeiro_cobranca_acoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "codcli",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

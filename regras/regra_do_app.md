@@ -111,6 +111,32 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-08-31] Novo módulo: Cobrança (inadimplência + controle de advocacia)
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/src/db-edubox.js` (reconecta ao Postgres do Edubox, mesmo padrão do extinto módulo CPA — ver remoção em 2026-08-10 — mas agora no banco `edubox` **ao vivo**, não `edubox_old`: testado em 2026-08-31, `edubox_old` estava ~3 meses desatualizado, inaceitável para inadimplência)
+  - `/src/rotas/cobranca.js` (`GET /resumo`, `GET /cursos`, `GET /semestres`, `GET /parcelas` — lista de alunos com parcela vencida em aberto, agrupada por aluno+curso, dias de atraso calculados como `current_date - venctr` porque o campo `ddvctr` do Edubox não é confiável — testado com parcelas vencidas há 126 a 2785 dias sempre retornando `0`/`null`; `GET/POST /acoes` e `POST /acoes/importar-csv` — histórico de contato/negociação/advocacia, gravado só no Firestore, coleção `financeiro_cobranca_acoes`)
+  - `/financeiro/cobranca/` (`index.html`, `app.js`, `cobranca.css`, `relatorio.html`) — segue o padrão visual/estrutural de `financeiro/orcamento`
+- Arquivos alterados:
+  - `/package.json` (nova dependência `pg`)
+  - `.env`, `.env_exemplo` (`EDUBOX_HOST`/`PORT`/`DATABASE`/`USER`/`PASSWORD` — mesmas chaves que existiam antes do CPA, `.env` real não versionado)
+  - `/api/index.js` (`require`/`app.use` da rota `/api/cobranca`)
+  - `/core/permissions.js` (novo módulo `cobranca`, categoria `financeiro`, **exclusivo do cargo `financeiro`** — a pedido do usuário, nem `adm_l2` vê no menu; `adm_l1` não está na lista mas mantém o bypass de Super Admin do backend, que vale pra todo módulo do sistema, não só este)
+  - `/src/middlewares/auth.js` (chave `cobranca` no `defaultPermissions`: `financeiro: 3`, todos os outros cargos `1` — inclusive `adm_l2`, diferente do padrão de `licitacao`/`orcamento` que ele também acessa)
+  - `/firestore.indexes.json` (índice composto novo `financeiro_cobranca_acoes` (`codcli` ASC, `criadoEm` DESC), necessário pro histórico de ações por aluno — **precisa rodar `firebase deploy --only firestore:indexes` manualmente**, não foi deployado automaticamente)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário (Financeiro) — inadimplência hoje só é visível "por dentro" do Edubox, sem filtro por curso/semestre, sem histórico de negociação e sem rastro de quais dívidas já foram encaminhadas ao escritório de advocacia (o financeiro às vezes manda um aluno pro jurídico fazer acordo). Situação real em 2026-08-31: 716 alunos com parcela vencida em aberto, R$ 2.832.150,73 total, dívida remontando até 2010.
+- Impacto/riscos a observar:
+  - **Banco compartilhado entre instituições**: mesmo risco já documentado na criação do CPA — o Postgres do Edubox é usado por ~32 outras instituições. Toda query em `cobranca.js` faz `INNER JOIN` até `tac_curso` (`tfi_ctreceber → tac_matricula → tac_turma → tac_curso`), inclusive em `/semestres` e `/acoes/importar-csv`. Não trocar por `LEFT JOIN` nem remover achando redundante.
+  - **`semctr` inconsistente**: o mesmo semestre aparece gravado ora como `"2026/2"`, ora como `"2026-2"` no Edubox. O filtro (`condicaoSemestre` em `cobranca.js`) normaliza barra↔traço dos dois lados antes de comparar, e `/semestres` já devolve só a forma com `/` (deduplicada) — se algum dia trocar essa lógica, testar com um curso que tenha as duas variantes (ex.: qualquer parcela vencida de 2026.2).
+  - **Controle jurídico é só do Órbita Fatec**: conferido em `information_schema` — o Edubox não tem nenhuma tabela/coluna de advocacia/processo judicial. Todo o histórico de "enviado à advocacia"/"acordo judicial" fica na coleção Firestore `financeiro_cobranca_acoes`, sem nenhuma tentativa de inferir isso do lado do Edubox.
+  - **Importação CSV sem CPF fica sem vínculo automático**: `POST /acoes/importar-csv` só acha o `codcli` no Edubox quando a planilha traz CPF; sem CPF, o registro é salvo mesmo assim (com `codcli: null`, pelo nome digitado), mas não aparece automaticamente ligado a nenhum aluno na lista principal — só via busca manual.
+  - **Dado sensível (LGPD)**: nome, CPF, contato e situação financeira de aluno. Mesmo cuidado já registrado no módulo Ferida — não expor CPF completo desnecessariamente, e o acesso já fica restrito aos mesmos cargos financeiros que veem Licitação/Orçamento.
+  - **Pool de 5 conexões**: `/parcelas` exige curso ou semestre selecionado antes de rodar (erro 400 sem isso) — evita que a tela sem filtro nenhum martele o pool compartilhado do Edubox.
+- Como testar: Logar como `financeiro`; abrir "Cobrança" (categoria Financeiro); escolher um curso ou semestre e clicar em "Buscar"; conferir que os dias de atraso batem com o vencimento mostrado; abrir o histórico de um aluno e registrar uma ação de teste (ex.: "Enviado à advocacia" com um nome de escritório fictício); conferir que vira badge na listagem; testar "Importar advocacia (CSV)" com um arquivo pequeno (`nome,cpf,escritorio` no cabeçalho); logar como `adm_l2`, `ti` ou `coordenador` e confirmar que "Cobrança" não aparece no menu (só `financeiro` — e `adm_l1` via bypass de Super Admin, se acessar a URL direto).
+- Como reverter: `git revert` deste commit remove os arquivos e os registros de permissão (as credenciais do Edubox no `.env` real não são tocadas pelo revert, já que não ficam versionadas — remover manualmente se for realmente desligar o módulo).
+
 ### [2026-08-10] Otimizações de performance para mobile (compressão, cache, assets)
 - Autor: Claude Code
 - Branch: main
