@@ -137,6 +137,8 @@ async function initApp(user, role) {
     initPaginaLancamento();
   } else if (document.getElementById('matriculas-relatorio-root')) {
     initPaginaRelatorio();
+  } else if (document.getElementById('matriculas-aluno-indica-root')) {
+    initPaginaAlunoIndica();
   }
 }
 
@@ -511,6 +513,65 @@ function renderTabelaAlunos(lista) {
   }));
 }
 
+// ==========================================
+// "ALUNO INDICA" — busca o veterano por nome (entre os já matriculados no
+// módulo/semestre do calouro que está sendo cadastrado) e guarda
+// id+nome do escolhido. `null` explícito quando a pessoa limpa a seleção,
+// pra dar pra desfazer um "indica" cadastrado errado.
+// ==========================================
+let alunoIndicadoPor = null; // { id, nome } | null
+let indicadoPorDebounce = null;
+
+function renderChipIndicadoPor() {
+  const chip = document.getElementById('aluno-indicado-por-chip');
+  const busca = document.getElementById('aluno-indicado-por-busca');
+  document.getElementById('aluno-indicado-por-id').value = alunoIndicadoPor?.id || '';
+  if (alunoIndicadoPor) {
+    chip.innerHTML = `<span class="indicado-por-selecionado">${esc(alunoIndicadoPor.nome)} <button type="button" id="btn-limpar-indicado-por">✕</button></span>`;
+    chip.classList.remove('hidden');
+    busca.classList.add('hidden');
+    document.getElementById('btn-limpar-indicado-por').addEventListener('click', () => {
+      alunoIndicadoPor = null;
+      busca.value = '';
+      renderChipIndicadoPor();
+    });
+  } else {
+    chip.classList.add('hidden');
+    chip.innerHTML = '';
+    busca.classList.remove('hidden');
+  }
+}
+
+async function buscarVeteranosParaIndicacao(termo) {
+  const resultados = document.getElementById('aluno-indicado-por-resultados');
+  if (!termo || termo.trim().length < 2) { resultados.classList.add('hidden'); return; }
+  try {
+    const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado, busca: termo.trim(), pageSize: '8' });
+    const resp = await apiFetch(`/matriculas/alunos?${params.toString()}`);
+    const candidatos = resp.alunos.filter(a => a.id !== alunoEmEdicaoId); // aluno não pode indicar a si mesmo
+    if (!candidatos.length) {
+      resultados.innerHTML = '<div class="autocomplete-vazio">Nenhum aluno encontrado com esse nome neste módulo/semestre.</div>';
+    } else {
+      resultados.innerHTML = candidatos.map(a => `
+        <div class="autocomplete-item" data-id="${a.id}" data-nome="${esc(a.nome)}">
+          <strong>${esc(a.nome)}</strong>
+          <span>${esc(a.curso)} — ${esc(a.periodo || '')}</span>
+        </div>
+      `).join('');
+      resultados.querySelectorAll('.autocomplete-item').forEach(item => {
+        item.addEventListener('click', () => {
+          alunoIndicadoPor = { id: item.dataset.id, nome: item.dataset.nome };
+          resultados.classList.add('hidden');
+          renderChipIndicadoPor();
+        });
+      });
+    }
+    resultados.classList.remove('hidden');
+  } catch (err) {
+    resultados.classList.add('hidden');
+  }
+}
+
 function setupModalAluno() {
   const modal = document.getElementById('modal-aluno');
   if (!modal) return;
@@ -518,6 +579,16 @@ function setupModalAluno() {
   document.getElementById('btn-novo-aluno')?.addEventListener('click', () => abrirModalAluno(null));
   document.getElementById('btn-cancelar-aluno')?.addEventListener('click', () => modal.classList.add('hidden'));
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('aluno-indicado-por-busca')?.addEventListener('input', (e) => {
+    clearTimeout(indicadoPorDebounce);
+    const termo = e.target.value;
+    indicadoPorDebounce = setTimeout(() => buscarVeteranosParaIndicacao(termo), 300);
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('aluno-indicado-por-resultados');
+    if (wrap && !wrap.contains(e.target) && e.target.id !== 'aluno-indicado-por-busca') wrap.classList.add('hidden');
+  });
 
   document.getElementById('form-aluno')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -534,7 +605,9 @@ function setupModalAluno() {
         telefone: document.getElementById('aluno-telefone').value,
         situacao: document.getElementById('aluno-situacao').value,
         planoConfissao: document.getElementById('aluno-plano').value,
-        observacoes: document.getElementById('aluno-observacoes').value
+        observacoes: document.getElementById('aluno-observacoes').value,
+        indicadoPorAlunoId: alunoIndicadoPor?.id || null,
+        indicadoPorNome: alunoIndicadoPor?.nome || null
       };
       if (moduloSelecionado === 'fatec') {
         payload.cursoId = cursoSel.value;
@@ -579,7 +652,30 @@ function abrirModalAluno(aluno) {
   const selectCursoAluno = document.getElementById('aluno-curso');
   if (selectCursoAluno) selectCursoAluno.value = aluno?.cursoId || cursoSelecionadoId || '';
 
+  alunoIndicadoPor = aluno?.indicadoPorAlunoId ? { id: aluno.indicadoPorAlunoId, nome: aluno.indicadoPorNome || '' } : null;
+  document.getElementById('aluno-indicado-por-busca').value = '';
+  document.getElementById('aluno-indicado-por-resultados').classList.add('hidden');
+  renderChipIndicadoPor();
+  carregarAlunosIndicados(aluno?.id || null);
+
   document.getElementById('modal-aluno').classList.remove('hidden');
+}
+
+// Mostra pra quem tá editando um veterano quantos calouros ele já indicou —
+// só existe pra aluno já salvo (precisa do id pra consultar).
+async function carregarAlunosIndicados(alunoId) {
+  const wrap = document.getElementById('aluno-indicou-wrap');
+  const lista = document.getElementById('aluno-indicou-lista');
+  if (!alunoId) { wrap.classList.add('hidden'); return; }
+  try {
+    const { total, indicados } = await apiFetch(`/matriculas/alunos/${alunoId}/indicados`);
+    if (!total) { wrap.classList.add('hidden'); return; }
+    lista.innerHTML = `<strong style="color:var(--text-main);">${total} aluno(s) indicado(s):</strong><br>` +
+      indicados.map(i => `${esc(i.nome)} — ${esc(i.curso)} (${esc(i.semestre)})`).join('<br>');
+    wrap.classList.remove('hidden');
+  } catch (err) {
+    wrap.classList.add('hidden');
+  }
 }
 
 // ==========================================
@@ -752,6 +848,112 @@ function renderRelatorio(dados) {
     .filter(p => (porPlano[p] || 0) > 0)
     .map(p => `<tr><td>${esc(p)}</td><td>${porPlano[p] || 0}</td></tr>`)
     .join('') || '<tr><td colspan="2" class="tabela-msg">Nenhum aluno lançado para esse módulo/semestre ainda.</td></tr>';
+}
+
+// ==========================================
+// ALUNO INDICA (aluno-indica.html) — ranking de quem já indicou calouro,
+// quantos e quem. Mesmo padrão de módulo/semestre/curso da tela de relatório.
+// ==========================================
+let indicaEmAndamento = Promise.resolve();
+
+async function initPaginaAlunoIndica() {
+  const selectModulo = document.getElementById('indica-modulo-select');
+  const selectSemestre = document.getElementById('indica-semestre-select');
+  const selectCurso = document.getElementById('indica-curso-select');
+
+  await carregarCursosFatec();
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  await popularSelectSemestres(selectSemestre);
+  atualizarVisibilidadeCursoIndica();
+  atualizarLabelImpressaoIndica();
+
+  selectModulo?.addEventListener('change', () => {
+    if (selectCurso) selectCurso.value = '';
+    atualizarVisibilidadeCursoIndica();
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+  selectSemestre?.addEventListener('change', () => {
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+  selectCurso?.addEventListener('change', () => {
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  document.getElementById('btn-imprimir-indica')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Preparando...';
+    try {
+      await indicaEmAndamento;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = textoOriginal;
+    }
+    window.print();
+  });
+
+  indicaEmAndamento = carregarAlunoIndica();
+  await indicaEmAndamento;
+}
+
+function atualizarVisibilidadeCursoIndica() {
+  const isFatec = document.getElementById('indica-modulo-select')?.value !== 'medicina';
+  document.getElementById('indica-curso-select')?.classList.toggle('hidden', !isFatec);
+}
+
+function atualizarLabelImpressaoIndica() {
+  const label = document.getElementById('print-filtro-label-indica');
+  if (!label) return;
+  const moduloValor = document.getElementById('indica-modulo-select')?.value;
+  const modulo = moduloValor === 'medicina' ? 'Medicina' : 'Fatec';
+  const semestre = document.getElementById('indica-semestre-select')?.value || '';
+  const partes = [modulo];
+  if (moduloValor !== 'medicina') {
+    const cursoSelect = document.getElementById('indica-curso-select');
+    const cursoNome = cursoSelect?.value ? cursoSelect.selectedOptions[0]?.textContent : 'Todos os cursos';
+    partes.push(cursoNome);
+  }
+  partes.push(semestre);
+  label.textContent = partes.filter(Boolean).join(' — ');
+}
+
+async function carregarAlunoIndica() {
+  const modulo = document.getElementById('indica-modulo-select')?.value || 'fatec';
+  const semestre = document.getElementById('indica-semestre-select')?.value || '2026.2';
+  const cursoId = document.getElementById('indica-curso-select')?.value;
+  const tbody = document.getElementById('indica-tbody');
+  tbody.innerHTML = '<tr><td colspan="3" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    const params = new URLSearchParams({ modulo, semestre });
+    if (cursoId) params.set('cursoId', cursoId);
+    const { totalIndicacoes, veteranosQueIndicaram, veteranos } = await apiFetch(`/matriculas/aluno-indica?${params.toString()}`);
+    document.getElementById('indica-kpi-veteranos').textContent = veteranosQueIndicaram;
+    document.getElementById('indica-kpi-total').textContent = totalIndicacoes;
+
+    if (!veteranos.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="tabela-msg">Ninguém indicou calouro nesse módulo/semestre ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = veteranos.map(v => `
+      <tr>
+        <td>${esc(v.veteranoNome)}</td>
+        <td>${v.quantidade}</td>
+        <td>${v.indicados.map(i => `${esc(i.nome)} (${esc(i.curso)})`).join(', ')}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
 }
 
 // ==========================================

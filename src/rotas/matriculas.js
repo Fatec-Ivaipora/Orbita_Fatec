@@ -148,7 +148,7 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
 
 router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes } = req.body;
+        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
         const semestre = (req.body.semestre || '').trim();
 
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
@@ -172,6 +172,12 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             planoConfissao: planoConfissao || 'Não',
             observacoes: (observacoes || '').trim(),
             semestre,
+            // "Aluno indica": um veterano já matriculado indicou esse calouro —
+            // guarda o id do documento do veterano (pra montar o relatório de
+            // quem ele indicou) e o nome denormalizado (exibição rápida sem
+            // precisar buscar o documento do veterano de novo).
+            indicadoPorAlunoId: indicadoPorAlunoId ? String(indicadoPorAlunoId) : null,
+            indicadoPorNome: indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             updatedAt: new Date().toISOString()
@@ -185,8 +191,12 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
 
 router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes } = req.body;
+        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
         const dados = { updatedAt: new Date().toISOString() };
+        if (indicadoPorAlunoId !== undefined) {
+            dados.indicadoPorAlunoId = indicadoPorAlunoId ? String(indicadoPorAlunoId) : null;
+            dados.indicadoPorNome = indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null;
+        }
 
         if (nome !== undefined) {
             if (!nome.trim()) return res.status(400).json({ error: 'Informe o nome do aluno.' });
@@ -219,6 +229,21 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
 
         await db.collection(COL_ALUNOS).doc(req.params.id).update(dados);
         res.json({ message: 'Aluno atualizado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// "Aluno indica" — quantos calouros esse veterano (aluno :id) já indicou e
+// quem são. Consulta por igualdade num campo só (indicadoPorAlunoId), sem
+// orderBy combinado — não precisa de índice composto novo.
+router.get('/alunos/:id/indicados', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_ALUNOS).where('indicadoPorAlunoId', '==', req.params.id).get();
+        const indicados = snap.docs
+            .map(d => ({ id: d.id, nome: d.data().nome, curso: d.data().curso, semestre: d.data().semestre, situacao: d.data().situacao }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        res.json({ total: indicados.length, indicados });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -278,6 +303,44 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             situacoes: SITUACOES,
             planosConfissao: PLANOS_CONFISSAO
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// ALUNO INDICA — ranking de quem já indicou calouro, com quantos e quem.
+// Mesma query base do /relatorio (módulo+semestre), agrupando em memória
+// pelos alunos daquele semestre que têm `indicadoPorAlunoId` preenchido —
+// o veterano em si pode ser de outro semestre (não filtra por isso).
+// ==========================================
+router.get('/aluno-indica', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { modulo, semestre, cursoId } = req.query;
+        if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+
+        let query = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        const snap = await query.get();
+
+        const porVeterano = new Map(); // veteranoId -> { veteranoNome, indicados: [] }
+        let totalIndicacoes = 0;
+        snap.forEach(doc => {
+            const a = doc.data();
+            if (!a.indicadoPorAlunoId) return;
+            totalIndicacoes++;
+            if (!porVeterano.has(a.indicadoPorAlunoId)) {
+                porVeterano.set(a.indicadoPorAlunoId, { veteranoId: a.indicadoPorAlunoId, veteranoNome: a.indicadoPorNome || '(nome não registrado)', indicados: [] });
+            }
+            porVeterano.get(a.indicadoPorAlunoId).indicados.push({ id: doc.id, nome: a.nome, curso: a.curso, situacao: a.situacao });
+        });
+
+        const veteranos = [...porVeterano.values()]
+            .map(v => ({ ...v, quantidade: v.indicados.length, indicados: v.indicados.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+            .sort((a, b) => b.quantidade - a.quantidade || a.veteranoNome.localeCompare(b.veteranoNome, 'pt-BR'));
+
+        res.json({ totalIndicacoes, veteranosQueIndicaram: veteranos.length, veteranos });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
