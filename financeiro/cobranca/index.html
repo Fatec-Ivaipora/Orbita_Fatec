@@ -21,9 +21,13 @@
                 <div class="page-header">
                     <div>
                         <h1 class="page-title">Cobrança</h1>
-                        <p class="page-subtitle">Inadimplência dos alunos (dado ao vivo do Edubox) e histórico de negociação/advocacia</p>
+                        <p class="page-subtitle">Inadimplência dos alunos (planilha do financeiro, cadastro manual daqui pra frente) e histórico de negociação/advocacia</p>
                     </div>
                     <div class="page-header-actions">
+                        <button class="btn-primary action-execute" id="btn-novo-caso">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Novo caso
+                        </button>
                         <button class="btn-secondary action-execute" id="btn-importar-csv">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                             Importar advocacia (CSV)
@@ -31,6 +35,10 @@
                         <a class="btn-secondary" href="/financeiro/cobranca/relatorio.html">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
                             Relatório
+                        </a>
+                        <a class="btn-secondary" href="/financeiro/cobranca/comparativo.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            Comparativo mensal
                         </a>
                     </div>
                 </div>
@@ -40,6 +48,8 @@
                         <div class="kpi-label">Alunos inadimplentes</div>
                         <div class="kpi-value" id="kpi-alunos">—</div>
                         <div class="kpi-hint" id="kpi-parcelas-hint"></div>
+                        <div class="kpi-hint" id="kpi-situacao-hint"></div>
+                        <div class="kpi-hint" id="kpi-modelo-hint"></div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Valor total em aberto</div>
@@ -53,6 +63,11 @@
                         <div class="kpi-label">61-90 / 90+ dias</div>
                         <div class="kpi-value kpi-value-sm" id="kpi-faixa-final">—</div>
                     </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Advogado FATEC / Débito judicial</div>
+                        <div class="kpi-value kpi-value-sm" id="kpi-juridico">—</div>
+                        <div class="kpi-hint">Clique no filtro "jurídico" abaixo pra ver a lista</div>
+                    </div>
                 </div>
 
                 <div class="filters-bar">
@@ -61,6 +76,17 @@
                     </select>
                     <select class="select-filter" id="semestre-select">
                         <option value="">Todos os semestres</option>
+                    </select>
+                    <select class="select-filter" id="situacao-select">
+                        <option value="">Todas as situações</option>
+                    </select>
+                    <select class="select-filter" id="modelo-select">
+                        <option value="">Todos os modelos</option>
+                    </select>
+                    <select class="select-filter" id="juridico-select">
+                        <option value="">Todos (jurídico ou não)</option>
+                        <option value="advogado">Advogado FATEC</option>
+                        <option value="judicial">Débito judicial</option>
                     </select>
                     <select class="select-filter" id="faixa-select">
                         <option value="">Todas as faixas de atraso</option>
@@ -83,6 +109,8 @@
                                 <tr>
                                     <th>Aluno</th>
                                     <th>Curso</th>
+                                    <th>Situação</th>
+                                    <th>Jurídico</th>
                                     <th>Parcelas</th>
                                     <th>Valor em aberto</th>
                                     <th>Dias de atraso</th>
@@ -91,7 +119,7 @@
                                 </tr>
                             </thead>
                             <tbody id="lista-tbody">
-                                <tr><td colspan="7" class="tabela-msg">Escolha um curso ou semestre e clique em "Buscar".</td></tr>
+                                <tr><td colspan="9" class="tabela-msg">Escolha um curso ou semestre e clique em "Buscar".</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -111,7 +139,7 @@
             <div id="acao-historico" class="acao-historico">Carregando...</div>
 
             <form id="form-acao" class="action-execute">
-                <input type="hidden" id="acao-codcli">
+                <input type="hidden" id="acao-cpf">
                 <input type="hidden" id="acao-nome">
                 <div class="form-group">
                     <label>Tipo de ação</label>
@@ -144,7 +172,7 @@
     <div id="modal-import" class="modal-overlay hidden action-execute">
         <div class="modal-content modal-content-lg">
             <h2>Importar advocacia (CSV)</h2>
-            <p class="modal-subtitle">Não existe controle jurídico no Edubox — envie sua própria planilha de alunos já encaminhados ao escritório. Colunas esperadas: <code>nome, cpf, escritorio, tipo, observacoes</code> (só <code>nome</code> é obrigatório; <code>tipo</code> aceita <code>enviado_advocacia</code> ou <code>acordo_judicial</code>, padrão enviado_advocacia; <code>cpf</code> é usado pra achar o aluno no Edubox — sem ele o registro fica sem vínculo automático).</p>
+            <p class="modal-subtitle">Envie sua planilha de alunos já encaminhados ao escritório. Colunas esperadas: <code>nome, cpf, escritorio, tipo, observacoes</code> (só <code>nome</code> é obrigatório; <code>tipo</code> aceita <code>enviado_advocacia</code> ou <code>acordo_judicial</code>, padrão enviado_advocacia; <code>cpf</code> é usado pra achar o aluno já cadastrado em Cobrança — sem ele o registro fica sem vínculo automático).</p>
 
             <input type="file" id="csv-input" accept=".csv,text/csv" class="csv-input">
 
@@ -159,7 +187,7 @@
                                 <th>CPF</th>
                                 <th>Escritório</th>
                                 <th>Tipo</th>
-                                <th>No Edubox</th>
+                                <th>Já cadastrado</th>
                             </tr>
                         </thead>
                         <tbody id="import-tbody"></tbody>
@@ -170,6 +198,141 @@
                     <button type="button" class="btn-primary" id="btn-confirmar-import">Importar selecionados</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar dados do aluno (nome/CPF/celular/situação — vale pra todas as parcelas dele) -->
+    <div id="modal-aluno" class="modal-overlay hidden action-execute">
+        <div class="modal-content">
+            <h2>Editar aluno</h2>
+            <p class="modal-subtitle">Esses dados são do aluno, não de uma parcela só — a alteração vale pra todas as parcelas dele (em qualquer curso). Mudar a situação registra automaticamente no histórico de ações.</p>
+
+            <form id="form-aluno">
+                <input type="hidden" id="aluno-cpf-original">
+                <div class="form-group">
+                    <label>Nome do aluno</label>
+                    <input type="text" id="aluno-nome" maxlength="150" required>
+                </div>
+                <div class="form-group">
+                    <label>CPF</label>
+                    <input type="text" id="aluno-cpf" maxlength="14" placeholder="000.000.000-00">
+                </div>
+                <div class="form-group">
+                    <label>Celular</label>
+                    <input type="text" id="aluno-celular" maxlength="20">
+                </div>
+                <div class="form-group">
+                    <label>Situação da matrícula</label>
+                    <select id="aluno-situacao" required>
+                        <option value="Ativo">Ativo</option>
+                        <option value="Trancamento">Trancamento</option>
+                        <option value="Desistência">Desistência</option>
+                        <option value="Concluído">Concluído</option>
+                        <option value="Cancelado">Cancelado</option>
+                        <option value="Pendente">Pendente</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-fechar-aluno">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-aluno">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Novo caso / editar caso -->
+    <div id="modal-caso" class="modal-overlay hidden action-execute">
+        <div class="modal-content modal-content-lg">
+            <h2 id="caso-modal-titulo">Novo caso de cobrança</h2>
+            <p class="modal-subtitle">Cadastro manual — a partir da importação da planilha, é por aqui que novos casos e parcelas entram.</p>
+
+            <div id="caso-selecionar-parcela" class="hidden" style="margin-bottom:1rem;">
+                <div class="card-secao-titulo" style="padding:0;">Este aluno tem mais de uma parcela neste curso — escolha qual editar:</div>
+                <div id="caso-lista-parcelas" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem;"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-selecionar-parcela">Cancelar</button>
+                </div>
+            </div>
+
+            <form id="form-caso">
+                <input type="hidden" id="caso-id">
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Nome do aluno</label>
+                        <input type="text" id="caso-nome" maxlength="150" required>
+                    </div>
+                    <div class="form-group">
+                        <label>CPF</label>
+                        <input type="text" id="caso-cpf" maxlength="14" placeholder="000.000.000-00">
+                    </div>
+                </div>
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Curso</label>
+                        <input type="text" id="caso-curso" maxlength="120" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Celular</label>
+                        <input type="text" id="caso-celular" maxlength="20">
+                    </div>
+                </div>
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Situação da matrícula</label>
+                        <select id="caso-situacao" required>
+                            <option value="Ativo">Ativo</option>
+                            <option value="Trancamento">Trancamento</option>
+                            <option value="Desistência">Desistência</option>
+                            <option value="Concluído">Concluído</option>
+                            <option value="Cancelado">Cancelado</option>
+                            <option value="Pendente">Pendente</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Plano / negociação</label>
+                        <input type="text" id="caso-plano" maxlength="120" placeholder="Ex.: RENEGOCIAÇÃO GRADUAÇÃO">
+                    </div>
+                </div>
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Vencimento</label>
+                        <input type="date" id="caso-vencimento" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Semestre (editável)</label>
+                        <input type="text" id="caso-semestre" maxlength="10" placeholder="Ex.: 2026/2">
+                    </div>
+                </div>
+                <div class="form-grid-3">
+                    <div class="form-group">
+                        <label>Valor bruto</label>
+                        <input type="number" id="caso-valor-bruto" step="0.01" min="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Desconto</label>
+                        <input type="number" id="caso-desconto" step="0.01" min="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Multa + juros</label>
+                        <input type="number" id="caso-multa-juros" step="0.01" min="0" value="0">
+                    </div>
+                </div>
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Valor a pagar</label>
+                        <input type="number" id="caso-valor-a-pagar" step="0.01" min="0" placeholder="Calculado se deixar em branco">
+                    </div>
+                    <div class="form-group">
+                        <label>Valor já pago</label>
+                        <input type="number" id="caso-valor-pago" step="0.01" min="0" value="0">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-fechar-caso">Cancelar</button>
+                    <button type="button" class="btn-secondary hidden" id="btn-excluir-caso" style="margin-right:auto;">Excluir caso</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-caso">Salvar</button>
+                </div>
+            </form>
         </div>
     </div>
 
