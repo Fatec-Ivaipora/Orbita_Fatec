@@ -143,6 +143,17 @@
 .faixa-61-90 { background: #ffedd5; color: #c2410c; }
 .faixa-90-mais { background: #fee2e2; color: #b91c1c; }
 
+/* Situação de matrícula */
+.situacao-badge {
+  display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+}
+.situacao-ativo { background: #d1fae5; color: #047857; }
+.situacao-trancamento { background: #fef3c7; color: #92400e; }
+.situacao-desistencia, .situacao-cancelado { background: #fee2e2; color: #b91c1c; }
+.situacao-concluido { background: #e0f2fe; color: #075985; }
+.situacao-pendente { background: #f1f5f9; color: var(--text-secondary); }
+
 /* Ação de cobrança (badge + histórico) */
 .acao-badge {
   display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 20px;
@@ -151,6 +162,7 @@
 .badge-contato { background: #e0f2fe; color: #075985; }
 .badge-negociacao { background: #fef3c7; color: #92400e; }
 .badge-advocacia { background: #ede9fe; color: var(--purple); }
+.badge-judicial { background: #fee2e2; color: #b91c1c; }
 .badge-quitado { background: #d1fae5; color: #047857; }
 .badge-outro { background: #f1f5f9; color: var(--text-secondary); }
 
@@ -177,6 +189,10 @@
 .modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 1.25rem; }
 .modal-subtitle code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
 
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 1rem; }
+@media (max-width: 640px) { .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; } }
+
 .form-group { margin-bottom: 1.1rem; }
 .form-group label {
   display: block; margin-bottom: 0.4rem; color: var(--text-secondary); font-weight: 600;
@@ -196,6 +212,36 @@
 /* Importação de CSV */
 .csv-input { margin-bottom: 1rem; width: 100%; }
 .import-resumo { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; }
+
+/* Comparativo mensal (comparativo.html) */
+.comp-legenda { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+.comp-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.comp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.comp-dot-ativos { background: var(--green); }
+.comp-dot-juridico { background: var(--purple); }
+.comp-dot-inativos { background: var(--red); }
+
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
+.comp-card {
+  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+.comp-mes { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.15rem; }
+.comp-total { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.75rem; }
+.comp-bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #eef2f7; margin-bottom: 0.75rem; }
+.comp-bar-seg { height: 100%; }
+.comp-bar-ativos { background: var(--green); }
+.comp-bar-juridico { background: var(--purple); }
+.comp-bar-inativos { background: var(--red); }
+.comp-valores { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.82rem; color: var(--text-secondary); }
+.comp-valores strong { color: var(--text-main); }
+.comp-obs { margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border-color); font-size: 0.78rem; color: var(--text-secondary); font-style: italic; }
+
+@media print {
+  .comp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .comp-card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; padding: 0.75rem 1rem; }
+  .comp-total { font-size: 1.1rem; }
+}
 
 /* Toast */
 .toast {
