@@ -111,6 +111,48 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Matrículas: filtro de Período vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` + `matriculas.css` — o `<select>` de Período (só deixava escolher um por vez) virou um dropdown com checkbox por período (1º-12º + DP), "Marcar todos"/"Desmarcar todos" e botão mostrando quantos estão marcados — mesmo comportamento do filtro de coluna do Excel. Guarda só quem foi DESMARCADO (`periodosDesmarcados`), não quem está marcado, então a lista nunca fica "traduzida errado" se mudar de módulo.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `periodos` (plural, separado por vírgula) além do `periodo` (singular) que já existia; contagem usa `where('periodo','in',[...])` do Firestore.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — queria selecionar todos os períodos de uma vez e ir desmarcando os que não quer ver, em vez de escolher um por vez.
+- Impacto/riscos a observar:
+  - **Só a tela principal de Matrículas** (`index.html`) foi alterada — o filtro de período da tela "Virar Semestre" (`vs-periodo-filtro`) continua sendo um `<select>` normal, não fazia parte do pedido.
+  - **Quando tudo está marcado, o filtro não é aplicado** (equivalente a "Todos os períodos" de antes) — isso inclui aluno com período em branco. Assim que a pessoa desmarca QUALQUER período, só quem está marcado aparece — aluno com período em branco some da lista nesse caso (não existe uma opção "(em branco)" no filtro, mesma limitação que o Excel teria sem essa opção).
+- Como testar: abrir Matrículas, clicar no filtro de Período, desmarcar alguns períodos e conferir que a lista e o contador de registros atualizam sozinhos; clicar "Marcar todos"/"Desmarcar todos" e conferir o texto do botão ("Todos os períodos" / "N período(s) selecionado(s)" / "Nenhum período").
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
+### [2026-09-04] Secretaria Acadêmica: "Relatório DP" some do menu do cargo `sec` (bug) + novos logins
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/core/permissions.js` — `sec.modules` estava sem `"relatorio-dp"`, mesmo o cargo já tendo nível 3 pra esse módulo configurado no documento `config/permissions` do Firestore (usado pela tela "Gerência de Acessos") — o link "Relatório DP" nunca aparecia no menu de ninguém com cargo Secretaria, mesmo quem já tinha acesso liberado. Mesma classe de bug já corrigida antes pro cargo `financeiro` (matrículas/cobrança em 2026-09-04) — aqui a causa é a lista estática do menu, não o documento de permissões (que já estava certo).
+- Tipo: Correção de bug (menu escondendo módulo já liberado)
+- Motivo: Pedido do usuário — Ediane, Brenda, Hemilly (já tinham login), Dyenyffer e Maria Eduarda (logins novos) precisavam ver Relatório de Matrículas e Relatório DP.
+- Impacto/riscos a observar:
+  - **Não fica registrado em código quem tem qual acesso individual** — os dois usuários novos (Dyenyffer, Maria Eduarda) e o ajuste de nível "leitor" (Hemilly, Dyenyffer) foram feitos direto no Firestore (`users/{uid}` e `users/{uid}.permissoes`), não há arquivo/commit que documente isso — só esta entrada do changelog.
+  - **E-mails fictícios**: a pedido do usuário, Dyenyffer e Maria Eduarda foram cadastradas com e-mail fictício `@orbita.com.br` (não é domínio institucional real) e senha temporária `primeironome@26` — force login e troca de senha no 1º acesso já é o padrão do sistema (`primeiroAcesso: true`).
+- Como testar: logar como Ediane/Brenda (cargo `sec`, sem override) e conferir que "Relatório DP" aparece no menu; logar como Hemilly/Dyenyffer e confirmar que Matrículas abre em modo leitura (sem botão de cadastrar/editar) mas Relatório DP abre completo.
+- Como reverter: `git revert` deste commit volta a esconder "Relatório DP" do menu de todo o cargo Secretaria (não só dessas 5 pessoas) — os logins/permissões criados no Firestore não são desfeitos pelo revert (teria que desativar as contas manualmente se for o caso).
+
+### [2026-09-04] Orçamento: cada colaboradora vê só o próprio, Chefe de Setor (Lisa) vê de todo mundo
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/orcamento.js` — `GET /orcamentos` e `GET /orcamentos/setores` filtram por `createdBy === uid` da requisição, exceto pra quem é `adm_l1`/`adm_l2` ou tem `chefeDeSetor: true` (mesmo flag já usado pra restringir exclusão — Lisa, do Financeiro, já tinha essa flag). `PUT /orcamentos/:id`, `GET/POST /orcamentos/:id/lancamentos` e `PUT/DELETE /lancamentos/:id` agora checam que quem está mexendo é a dona do orçamento (ou chefe/admin) antes de aplicar — antes dava pra editar/lançar gasto em orçamento de qualquer colega só sabendo o id, mesmo sem aparecer na lista dela. `POST /orcamentos` grava `createdByNome` (nome de quem criou), pra quem vê "de todo mundo" saber de quem é cada um.
+  - `/financeiro/orcamento/app.js` — mostra o nome de quem cadastrou como uma tag no card do orçamento (só aparece quando o campo existe — orçamentos antigos, criados antes desta mudança, não têm essa tag).
+- Tipo: Mudança de permissão/escopo de dados
+- Motivo: Pedido do usuário — "a página de orçamento precisa ser individual pra cada colaboradora e a Lisa como responsável vê de todo mundo".
+- Impacto/riscos a observar:
+  - **Orçamentos já existentes**: só 2 no banco no momento desta mudança, ambos criados pela própria Lisa — não precisou de backfill de `createdByNome` (fica em branco nos 2 antigos, sem problema porque quem vê "todo mundo" já sabe que são dela).
+  - **Chave de "vê tudo" é o mesmo flag `chefeDeSetor`** usado no módulo inteiro do sistema (Painel do Setor, Quadro de Avisos, exclusão de orçamento) — não é exclusivo de Orçamento; se um dia outra pessoa virar Chefe de Setor do Financeiro, ela também passa a ver o orçamento de todo mundo automaticamente, o que é o comportamento esperado.
+  - **Catálogo de itens continua compartilhado** (`financeiro_orcamento_catalogo_itens`) — não faz parte do escopo individual, é intencional (autocomplete de nome de item vale pra todo mundo do setor).
+- Como testar: Logar como uma colaboradora sem `chefeDeSetor` (ex.: Vanessa ou Maria Juliete) e conferir que só aparece o que ela mesma cadastrou; logar como Lisa e conferir que aparece tudo, com o nome de quem cadastrou em cada card; tentar editar/lançar gasto num orçamento de outra pessoa direto pela URL/API e confirmar erro 403.
+- Como reverter: `git revert` deste commit volta a mostrar todo mundo pra todo mundo (comportamento antigo). O campo `createdByNome` gravado nos orçamentos criados enquanto essa mudança estava ativa não é apagado pelo revert (inofensivo, só não é mais lido em lugar nenhum).
+
 ### [2026-09-04] Matrículas: novo campo "Aluno Indica" (veterano indica calouro) + relatório de ranking
 - Autor: Claude Code
 - Branch: main

@@ -167,6 +167,13 @@ let semestreSelecionado = '2026.2';
 let cursoSelecionadoId = null;
 let cursoSelecionadoNome = null;
 
+// Filtro de período tipo Excel: começa com tudo marcado (equivale a "sem
+// filtro"); guarda só quem foi DESMARCADO, não quem está marcado — assim,
+// se a lista de períodos mudar (Fatec x Medicina), o que nunca foi
+// desmarcado continua marcado automaticamente.
+const TODOS_OS_PERIODOS = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
+let periodosDesmarcados = new Set();
+
 let alunos = [];
 let alunosNextCursor = null;
 let alunosHasMore = false;
@@ -177,6 +184,7 @@ let buscaAlunoTimer = null;
 async function initPaginaLancamento() {
   await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
   popularSelectsOpcoes();
+  setupPeriodoMultiSelect();
   await popularSelectSemestres(document.getElementById('semestre-select'));
   semestreSelecionado = document.getElementById('semestre-select')?.value || semestreSelecionado;
 
@@ -210,7 +218,7 @@ async function initPaginaLancamento() {
     else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
-  ['periodo-filtro', 'situacao-filtro', 'plano-filtro'].forEach(id => {
+  ['situacao-filtro', 'plano-filtro'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     });
@@ -282,10 +290,10 @@ async function atualizarContadorRegistros() {
   try {
     const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado });
     if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
-    const periodo = document.getElementById('periodo-filtro')?.value;
+    const periodos = periodosFiltroAtual();
     const situacao = document.getElementById('situacao-filtro')?.value;
     const plano = document.getElementById('plano-filtro')?.value;
-    if (periodo) params.set('periodo', periodo);
+    if (periodos.length) params.set('periodos', periodos.join(','));
     if (situacao) params.set('situacao', situacao);
     if (plano) params.set('planoConfissao', plano);
 
@@ -359,15 +367,7 @@ function popularSelectsOpcoes() {
       cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
-  // Fatec vai até o 10º período (+ "DP" de dependência); Medicina até o 12º —
-  // lista única cobrindo os dois, filtrar por um período que não existe no
-  // módulo atual simplesmente não retorna ninguém.
-  const periodoFiltro = document.getElementById('periodo-filtro');
-  if (periodoFiltro) {
-    const periodos = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
-    periodoFiltro.innerHTML = '<option value="">Todos os períodos</option>' +
-      periodos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
-  }
+  montarPeriodoMultiSelect();
 
   const situacaoFiltro = document.getElementById('situacao-filtro');
   if (situacaoFiltro) {
@@ -394,6 +394,73 @@ function popularSelectsOpcoes() {
   }
 }
 
+// Fatec vai até o 10º período (+ "DP" de dependência); Medicina até o 12º —
+// lista única cobrindo os dois, filtrar por um período que não existe no
+// módulo atual simplesmente não retorna ninguém.
+// Monta o filtro de período tipo Excel: abre com tudo marcado, "Marcar
+// todos"/"Desmarcar todos" e uma caixinha por período — a pessoa desmarca
+// o que não quer ver, igual num filtro de coluna de planilha.
+function montarPeriodoMultiSelect() {
+  const opcoesEl = document.getElementById('periodo-opcoes');
+  if (!opcoesEl) return;
+  opcoesEl.innerHTML = TODOS_OS_PERIODOS.map(p => `
+    <label>
+      <input type="checkbox" class="periodo-checkbox" value="${esc(p)}" ${periodosDesmarcados.has(p) ? '' : 'checked'}>
+      ${esc(p)}
+    </label>
+  `).join('');
+  atualizarBotaoPeriodo();
+}
+
+function atualizarBotaoPeriodo() {
+  const btn = document.getElementById('periodo-btn');
+  if (!btn) return;
+  const marcados = TODOS_OS_PERIODOS.length - periodosDesmarcados.size;
+  if (periodosDesmarcados.size === 0) btn.textContent = 'Todos os períodos';
+  else if (marcados === 0) btn.textContent = 'Nenhum período';
+  else btn.textContent = `${marcados} período(s) selecionado(s)`;
+}
+
+// Lista de períodos a mandar pro servidor — vazio significa "sem filtro"
+// (todos marcados), pra não esconder aluno com período em branco.
+function periodosFiltroAtual() {
+  if (periodosDesmarcados.size === 0) return [];
+  return TODOS_OS_PERIODOS.filter(p => !periodosDesmarcados.has(p));
+}
+
+function setupPeriodoMultiSelect() {
+  const wrap = document.getElementById('periodo-multiselect');
+  const btn = document.getElementById('periodo-btn');
+  const panel = document.getElementById('periodo-panel');
+  const opcoesEl = document.getElementById('periodo-opcoes');
+  if (!wrap || !btn || !panel || !opcoesEl) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.classList.add('hidden');
+  });
+
+  wrap.querySelectorAll('.multi-select-acoes button').forEach(acaoBtn => {
+    acaoBtn.addEventListener('click', () => {
+      periodosDesmarcados = acaoBtn.dataset.acao === 'nenhum' ? new Set(TODOS_OS_PERIODOS) : new Set();
+      montarPeriodoMultiSelect();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    });
+  });
+
+  opcoesEl.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('periodo-checkbox')) return;
+    const valor = e.target.value;
+    if (e.target.checked) periodosDesmarcados.delete(valor);
+    else periodosDesmarcados.add(valor);
+    atualizarBotaoPeriodo();
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+  });
+}
+
 // Grupo de badge por SITUAÇÃO — cor por significado (ok/alerta/crítica/neutra),
 // não por valor individual, senão vira uma cor aleatória por texto.
 const SITUACAO_GRUPO = {
@@ -412,10 +479,10 @@ async function buscarProximaPaginaAlunos(primeira) {
   params.set('modulo', moduloSelecionado);
   params.set('semestre', semestreSelecionado);
   if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
-  const periodo = document.getElementById('periodo-filtro')?.value;
+  const periodos = periodosFiltroAtual();
   const situacao = document.getElementById('situacao-filtro')?.value;
   const plano = document.getElementById('plano-filtro')?.value;
-  if (periodo) params.set('periodo', periodo);
+  if (periodos.length) params.set('periodos', periodos.join(','));
   if (situacao) params.set('situacao', situacao);
   if (plano) params.set('planoConfissao', plano);
   const busca = document.getElementById('busca-aluno')?.value.trim();

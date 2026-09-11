@@ -175,7 +175,7 @@ export const ROLE_PERMISSIONS = {
   // a ler a permissão real do Firestore.
   sec: {
     label: "Secretaria",
-    modules: ["dashboard", "fidelidade", "matriculas"]
+    modules: ["dashboard", "fidelidade", "matriculas", "relatorio-dp"]
   },
   visitante: {
     label: "Visitante",
