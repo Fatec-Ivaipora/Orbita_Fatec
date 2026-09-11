@@ -309,6 +309,11 @@
 .cotacao-melhor { background: #ecfdf5; }
 .cotacao-melhor .cotacao-total { color: var(--green); }
 
+.cotacao-link-wrap { display: flex; gap: 0.4rem; align-items: center; }
+.cotacao-link-wrap input { flex: 1; min-width: 0; }
+.cotacao-abrir-link { width: 32px; height: 32px; flex-shrink: 0; }
+.cotacao-abrir-link:disabled { opacity: 0.35; cursor: not-allowed; }
+
 /* Toast */
 .toast {
   position: fixed; bottom: 2rem; right: 2rem; background: #333; color: white; padding: 1rem 1.5rem;

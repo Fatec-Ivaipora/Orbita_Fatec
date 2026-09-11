@@ -111,6 +111,19 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Licitação: ajusta o link por cotação (só mostra o mais barato na lista, link clicável no modal)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/licitacao/app.js` — a lista de itens agora mostra o 🔗 da cotação MAIS BARATA (ao lado do nome da empresa, não do badge "Fechado" — antes era o link de quem fechou, não mais); pra ver o link de qualquer outra empresa (inclusive a que fechou, se for diferente da mais barata), abre o modal de Cotações (💰), onde todas aparecem. Nesse modal, cada linha ganhou um botãozinho 🔗 do lado do campo de link que abre a URL direto numa aba nova (sem precisar copiar/colar) — fica desabilitado enquanto o campo está vazio.
+  - `/financeiro/licitacao/licitacao.css` — estilo do botão de abrir link dentro do modal de cotações.
+- Tipo: Ajuste de UX (refinamento do que foi feito nesta mesma sessão)
+- Motivo: Pedido do usuário — só queria ver o link da cotação mais barata na lista principal; o link das outras empresas (inclusive a que fechou, se pagou mais caro) fica dentro do modal de cotações mesmo, só que agora clicável.
+- Impacto/riscos a observar:
+  - Não mexeu no cadastro de item em si — o campo de link do item (`linkReferencia`, referência geral/observação) é outra funcionalidade, já existia antes desta sessão e continua do jeito que estava, a pedido do usuário.
+- Como testar: abrir Licitação, item com 2+ cotações e links diferentes — conferir que só o 🔗 da mais barata aparece na lista; abrir "Cotações" (💰) e clicar no botão ao lado do campo de link de qualquer empresa pra abrir a página numa aba nova.
+- Como reverter: `git revert` deste commit volta pro comportamento do commit anterior (link do fornecedor fechado, sem botão de abrir no modal).
+
 ### [2026-09-11] Licitação: link do produto por cotação (conferir se fechou com a mais cara)
 - Autor: Claude Code
 - Branch: main
