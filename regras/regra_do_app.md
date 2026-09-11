@@ -109,7 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
-## 8. Histórico de alterações
+### [2026-09-11] Matrículas: busca de "Aluno Indica" corrigida — não achava veterano de semestre anterior
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/app.js` — `buscarVeteranosParaIndicacao` agora busca o nome em TODOS os semestres já cadastrados no sistema (`GET /matriculas/config/semestres`, cacheado em memória), em paralelo, e junta os resultados (mais recente primeiro) — antes só buscava no semestre do calouro sendo cadastrado. Cada resultado da busca agora mostra também o semestre, pra diferenciar quando o mesmo nome aparece em mais de um.
+  - `/financeiro/matriculas/index.html` — texto de ajuda embaixo do campo atualizado ("...em qualquer semestre").
+- Tipo: Correção de bug
+- Motivo: Bug real relatado pelo usuário — cadastrando calouro no semestre 2027.1 (recém-aberto), o veterano que indicou ainda só existia em 2026.2 (não passou pelo "Virar Semestre" ainda) e não aparecia na busca. Confirmado com dado real (aluna existia em 2026.1/2026.2, ausente em 2027.1 — não aparecia antes da correção, aparece agora).
+- Impacto/riscos a observar:
+  - Cada semestre é uma requisição própria (paralelas) — com poucos semestres cadastrados (hoje: 2026.1, 2026.2, 2027.1) o custo é baixo; se a lista de semestres crescer muito ao longo dos anos, reconsiderar limitar a busca aos últimos N semestres.
+- Como testar: cadastrar um calouro no semestre mais recente e buscar por um veterano que só existe num semestre anterior (ainda não migrado) — deve aparecer normalmente agora, com o semestre dele ao lado do nome.
+- Como reverter: `git revert` deste commit volta a buscar só no semestre do calouro sendo cadastrado (reintroduz o bug relatado).
 
 ### [2026-09-11] Licitação: ajusta o link por cotação (só mostra o mais barato na lista, link clicável no modal)
 - Autor: Claude Code

@@ -672,20 +672,52 @@ function renderChipIndicadoPor() {
   }
 }
 
+// Lista de semestres já existentes no sistema (busca uma vez só e guarda —
+// não muda durante a sessão) — usada pra buscar o veterano em TODOS os
+// semestres, não só o do calouro sendo cadastrado. Sem isso, um veterano que
+// ainda não foi "virado" pro semestre novo (comum logo que abre um semestre)
+// nunca aparecia na busca.
+let semestresParaBuscaVeterano = null;
+async function listaSemestresParaBuscaVeterano() {
+  if (semestresParaBuscaVeterano) return semestresParaBuscaVeterano;
+  try {
+    const { semestres } = await apiFetch('/matriculas/config/semestres');
+    semestresParaBuscaVeterano = semestres;
+  } catch (err) {
+    semestresParaBuscaVeterano = [semestreSelecionado];
+  }
+  return semestresParaBuscaVeterano;
+}
+
 async function buscarVeteranosParaIndicacao(termo) {
   const resultados = document.getElementById('aluno-indicado-por-resultados');
   if (!termo || termo.trim().length < 2) { resultados.classList.add('hidden'); return; }
   try {
-    const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado, busca: termo.trim(), pageSize: '8' });
-    const resp = await apiFetch(`/matriculas/alunos?${params.toString()}`);
-    const candidatos = resp.alunos.filter(a => a.id !== alunoEmEdicaoId); // aluno não pode indicar a si mesmo
+    const semestres = await listaSemestresParaBuscaVeterano();
+    // Busca em todos os semestres em paralelo (lista é pequena, poucas
+    // dezenas no máximo) e junta os resultados — o mesmo termo pode achar
+    // gente em semestres diferentes.
+    const porSemestre = await Promise.all(semestres.map(async (semestre) => {
+      const params = new URLSearchParams({ modulo: moduloSelecionado, semestre, busca: termo.trim(), pageSize: '8' });
+      try {
+        const resp = await apiFetch(`/matriculas/alunos?${params.toString()}`);
+        return resp.alunos;
+      } catch (err) {
+        return [];
+      }
+    }));
+    const candidatos = porSemestre.flat()
+      .filter(a => a.id !== alunoEmEdicaoId) // aluno não pode indicar a si mesmo
+      .sort((a, b) => (b.semestre || '').localeCompare(a.semestre || '')) // semestre mais recente primeiro
+      .slice(0, 8);
+
     if (!candidatos.length) {
-      resultados.innerHTML = '<div class="autocomplete-vazio">Nenhum aluno encontrado com esse nome neste módulo/semestre.</div>';
+      resultados.innerHTML = '<div class="autocomplete-vazio">Nenhum aluno encontrado com esse nome neste módulo.</div>';
     } else {
       resultados.innerHTML = candidatos.map(a => `
         <div class="autocomplete-item" data-id="${a.id}" data-nome="${esc(a.nome)}">
           <strong>${esc(a.nome)}</strong>
-          <span>${esc(a.curso)} — ${esc(a.periodo || '')}</span>
+          <span>${esc(a.curso)} — ${esc(a.periodo || '')} — ${esc(a.semestre)}</span>
         </div>
       `).join('');
       resultados.querySelectorAll('.autocomplete-item').forEach(item => {
