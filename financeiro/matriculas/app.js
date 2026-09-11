@@ -526,10 +526,12 @@ function setupSituacaoMultiSelect() {
 // não por valor individual, senão vira uma cor aleatória por texto.
 const SITUACAO_GRUPO = {
   'Matrícula Nova - Assinada': 'ok', 'Rematrícula Assinada': 'ok', 'Formando': 'ok',
+  'Matrícula Nova - Retorno Assinada': 'ok', 'Matrícula Nova - Transferência Assinada': 'ok',
   'Matrícula Nova': 'alerta', 'Pendência Financeira': 'alerta', 'Não Assinou': 'alerta',
+  'Matrícula Nova - Retorno': 'alerta', 'Matrícula Nova - Transferência': 'alerta',
   'Cancelou': 'critica', 'Trancou': 'critica', '1ª Evasão': 'critica', '2ª Evasão': 'critica',
   'Desistente': 'critica', 'Reprovado': 'critica',
-  'Transferência': 'neutra', 'Retorno': 'neutra', 'Mudança de Curso': 'neutra'
+  'Transferência': 'neutra', 'Mudança de Curso': 'neutra'
 };
 function situacaoBadgeClasse(situacao) {
   return `situacao-${SITUACAO_GRUPO[situacao] || 'neutra'}`;

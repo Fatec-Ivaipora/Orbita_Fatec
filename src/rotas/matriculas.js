@@ -14,10 +14,19 @@ const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 // isso que substitui a bagunça de digitação da planilha original (variações
 // como "Cancelou2025.2", "Trancou.2026.1", "Matrícula Nova – Assinada" com
 // travessão diferente). Semestre já é campo próprio, então não entra aqui.
+// "Retorno" (sozinho) foi removido a pedido do usuário (setor Financeiro,
+// Lisa — 2026-09-11): não tinha esse controle na planilha original, mas o
+// setor quer separar melhor esse ano se o retorno/transferência já foi
+// assinado ou não — mesma ideia do par "Matrícula Nova"/"Matrícula Nova -
+// Assinada" que já existia. Registros antigos com situação "Retorno" (19
+// alunos, todos de fatec/2026.1) não foram migrados — ficam como histórico,
+// só não aparecem mais como opção pra escolher num cadastro novo.
 const SITUACOES = [
     'Matrícula Nova', 'Matrícula Nova - Assinada', 'Rematrícula Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     'Pendência Financeira', 'Não Assinou', 'Cancelou', 'Trancou',
-    '1ª Evasão', '2ª Evasão', 'Transferência', 'Retorno', 'Reprovado',
+    '1ª Evasão', '2ª Evasão', 'Transferência', 'Reprovado',
     'Mudança de Curso', 'Formando', 'Desistente'
 ];
 

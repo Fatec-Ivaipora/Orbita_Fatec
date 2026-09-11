@@ -111,6 +111,20 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Matrículas: lista de Situações — remove "Retorno", adiciona 4 novas (pedido da Lisa/Financeiro)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/matriculas.js` — `SITUACOES` perde `'Retorno'` e ganha `'Matrícula Nova - Retorno'`, `'Matrícula Nova - Retorno Assinada'`, `'Matrícula Nova - Transferência'`, `'Matrícula Nova - Transferência Assinada'` (mesmo padrão do par já existente `'Matrícula Nova'`/`'Matrícula Nova - Assinada'`). `'Transferência'` (sozinho) foi mantido — só "Retorno" foi removido, a pedido explícito do usuário.
+  - `/financeiro/matriculas/app.js` — `SITUACAO_GRUPO` (cor do badge) atualizado: as duas variantes "Assinada" entram no grupo `ok` (verde), as duas sem "Assinada" entram no grupo `alerta` (amarelo), removida a entrada de `'Retorno'`.
+- Tipo: Mudança de dado/vocabulário controlado
+- Motivo: Pedido do usuário (conversa com a Lisa, Financeiro) — "Retorno" não vinha da planilha original; a partir de 2026 querem separar se o retorno ou a transferência já foi assinado ou não, mesma lógica já usada pra "Matrícula Nova".
+- Impacto/riscos a observar:
+  - **19 alunos com situação "Retorno" não foram migrados** (todos de `fatec`/semestre `2026.1`) — ficam como estão, é histórico de antes dessa mudança; "Retorno" só não aparece mais como opção pra escolher num cadastro NOVO ou editado. Se algum dia abrir um desses 19 pra editar, o campo de situação vai aparecer vazio até escolher uma das opções válidas atuais.
+  - **`'Transferência'` (sozinho) continua na lista** — não foi pedido remover, só "Retorno".
+- Como testar: abrir Matrículas, cadastrar/editar um aluno e conferir que "Retorno" sumiu do select e as 4 novas opções aparecem; escolher uma delas e conferir a cor do badge (Assinada = verde, sem Assinada = amarelo) na lista.
+- Como reverter: `git revert` deste commit volta a lista de situações ao estado anterior — não mexe nos 19 registros antigos (não foram tocados por essa mudança).
+
 ### [2026-09-11] Matrículas: filtro de Situação também vira multi-seleção tipo Excel
 - Autor: Claude Code
 - Branch: main
