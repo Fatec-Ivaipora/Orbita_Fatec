@@ -459,6 +459,22 @@ function melhorCotacao(item) {
 
 // O campo aceita tanto um link real quanto uma observação livre (ex.: "Local",
 // pra compras que não são online) — só vira <a> clicável se parecer uma URL de verdade.
+// Link do produto da empresa com quem fechou (se ela cotou com link) — dá
+// pra conferir a página do produto mesmo quando o fechamento NÃO foi com a
+// cotação mais barata (o link some das outras cotações da tela, mas fica
+// registrado por fornecedor desde a cotação — ver renderLinhasCotacoes).
+function linkCotacaoFechada(item) {
+  if (item.status !== 'fechado' || !item.fornecedorFechadoId) return '';
+  const cotacao = (item.cotacoes || []).find(c => c.fornecedorId === item.fornecedorFechadoId);
+  if (!cotacao || !cotacao.link) return '';
+  const menor = melhorCotacao(item);
+  const fechouComMaisCaro = menor && menor.fornecedorId !== item.fornecedorFechadoId;
+  const titulo = fechouComMaisCaro
+    ? `Ver produto — fechou com ${esc(item.fornecedorFechadoNome || 'esta empresa')} mesmo não sendo a cotação mais barata`
+    : 'Ver produto da empresa que fechou';
+  return ` <a href="${esc(cotacao.link)}" target="_blank" rel="noopener" title="${titulo}" class="item-link">🔗${fechouComMaisCaro ? '⚠️' : ''}</a>`;
+}
+
 function renderLinkReferencia(valor) {
   if (!valor) return '';
   if (/^https?:\/\//i.test(valor.trim())) {
@@ -500,7 +516,7 @@ function renderTabelaItens(lista) {
         <td class="no-coordenador">${melhor ? esc(melhor.fornecedorNome) : '—'}</td>
         <td>
           ${item.status === 'fechado'
-            ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>`
+            ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>${linkCotacaoFechada(item)}`
             : `<span class="status-badge status-pendente">Pendente</span>`}
         </td>
         <td class="acoes-col">
@@ -641,7 +657,11 @@ function setupModalCotacoes() {
   document.getElementById('btn-salvar-cotacoes')?.addEventListener('click', async () => {
     const linhas = [...document.querySelectorAll('#lista-cotacoes .cotacao-linha')];
     const cotacoes = linhas
-      .map(l => ({ fornecedorId: l.dataset.fornecedorId, valorUnitario: l.querySelector('input').value }))
+      .map(l => ({
+        fornecedorId: l.dataset.fornecedorId,
+        valorUnitario: l.querySelector('.cotacao-valor').value,
+        link: l.querySelector('.cotacao-link').value.trim()
+      }))
       .filter(c => c.valorUnitario !== '');
 
     const btn = document.getElementById('btn-salvar-cotacoes');
@@ -681,7 +701,7 @@ async function abrirModalCotacoes(id) {
   if (!fornecedores.length) await carregarFornecedores();
 
   const cotacoesPorFornecedor = {};
-  (item.cotacoes || []).forEach(c => { cotacoesPorFornecedor[c.fornecedorId] = c.valorUnitario; });
+  (item.cotacoes || []).forEach(c => { cotacoesPorFornecedor[c.fornecedorId] = { valorUnitario: c.valorUnitario, link: c.link || '' }; });
 
   renderLinhasCotacoes(item, cotacoesPorFornecedor);
   modal.classList.remove('hidden');
@@ -693,18 +713,22 @@ function renderLinhasCotacoes(item, cotacoesPorFornecedor) {
     lista.innerHTML = '<p class="tabela-msg">Nenhum fornecedor cadastrado. Cadastre em "Fornecedores" primeiro.</p>';
     return;
   }
-  lista.innerHTML = fornecedores.map(f => `
+  lista.innerHTML = fornecedores.map(f => {
+    const atual = cotacoesPorFornecedor[f.id] || {};
+    return `
     <div class="cotacao-linha" data-fornecedor-id="${f.id}">
       <span class="cotacao-nome">${esc(f.nome)}</span>
-      <input type="number" step="0.01" min="0" placeholder="Valor unitário" value="${cotacoesPorFornecedor[f.id] ?? ''}">
+      <input type="number" class="cotacao-valor" step="0.01" min="0" placeholder="Valor unitário" value="${atual.valorUnitario ?? ''}">
+      <input type="url" class="cotacao-link" placeholder="Link do produto (opcional)" value="${esc(atual.link || '')}">
       <span class="cotacao-total">—</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const atualizarTotais = () => {
     const linhas = [...lista.querySelectorAll('.cotacao-linha')];
     let menor = Infinity, linhaMenor = null;
     linhas.forEach(l => {
-      const v = parseFloat(l.querySelector('input').value);
+      const v = parseFloat(l.querySelector('.cotacao-valor').value);
       const totalEl = l.querySelector('.cotacao-total');
       l.classList.remove('cotacao-melhor');
       if (!isNaN(v) && v >= 0) {
@@ -718,7 +742,7 @@ function renderLinhasCotacoes(item, cotacoesPorFornecedor) {
     if (linhaMenor) linhaMenor.classList.add('cotacao-melhor');
   };
 
-  lista.querySelectorAll('input').forEach(inp => inp.addEventListener('input', atualizarTotais));
+  lista.querySelectorAll('.cotacao-valor').forEach(inp => inp.addEventListener('input', atualizarTotais));
   atualizarTotais();
 }
 
