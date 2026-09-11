@@ -163,7 +163,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 3,
                 orcamento: 3,
                 'avaliacao-docente': 3,
-                cobranca: 1 // "Cobrança" é exclusivo do Financeiro, nem ADM N2 vê (31/08)
+                cobranca: 1, // "Cobrança" é exclusivo do Financeiro, nem ADM N2 vê (31/08)
+                'banco-med-fatec': 3
             },
             ti: {
                 emprestimo: 3,
@@ -178,7 +179,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 1,
                 orcamento: 1,
                 'avaliacao-docente': 1,
-                cobranca: 1
+                cobranca: 1,
+                'banco-med-fatec': 1
             },
             rh: {
                 emprestimo: 1,
@@ -193,7 +195,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 1,
                 orcamento: 1,
                 'avaliacao-docente': 1,
-                cobranca: 1
+                cobranca: 1,
+                'banco-med-fatec': 1
             },
             financeiro: {
                 emprestimo: 1,
@@ -208,7 +211,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 3,
                 orcamento: 3,
                 'avaliacao-docente': 1,
-                cobranca: 3
+                cobranca: 3,
+                'banco-med-fatec': 1
             },
             // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
             // tarefa exclusiva do Financeiro. Orçamento e Cobrança seguem a
@@ -230,7 +234,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 1,
                 orcamento: 1,
                 'avaliacao-docente': 3,
-                cobranca: 1
+                cobranca: 1,
+                'banco-med-fatec': 1
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -247,7 +252,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 3,
                 orcamento: 1,
                 'avaliacao-docente': 1,
-                cobranca: 1
+                cobranca: 1,
+                'banco-med-fatec': 1
             },
             visitante: {
                 emprestimo: 2,
@@ -262,7 +268,8 @@ const requireModulePermission = (moduleName) => {
                 matriculas: 1,
                 orcamento: 1,
                 'avaliacao-docente': 1,
-                cobranca: 1
+                cobranca: 1,
+                'banco-med-fatec': 1
             }
         };
 

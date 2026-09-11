@@ -111,6 +111,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Novo módulo: Banco MED-FATEC (banco de questões da Medicina)
+- Autor: trabalho já estava em andamento no diretório quando esta sessão começou (não foi escrito por este agente) — commitado/subido a pedido do usuário.
+- Branch: main
+- Arquivos criados:
+  - `/banco-med-fatec/` (`index.html`, `app.js`, `banco-med-fatec.css`) — tela de categorias/disciplinas, cadastro de questões (múltipla escolha única/múltipla, verdadeiro/falso) e montagem de provas.
+  - `/src/rotas/banco-med-fatec.js` — CRUD de categorias, questões e provas (coleções `banco_med_categorias`, `banco_med_questoes`, `banco_med_provas`); `GET /provas/:id/exportar` gera XML no formato Moodle pra importar a prova como questionário no AVA.
+  - `/src/utils/moodleXml.js` — gerador do XML Moodle reaproveitado pelo endpoint de exportação.
+  - `/img/medfatec-logo.png` — logo do módulo.
+- Arquivos alterados:
+  - `/api/index.js` — `require`/`app.use` da rota `/api/banco-med-fatec`.
+  - `/core/permissions.js` — nova categoria "Medicina", módulo `banco-med-fatec` no menu, liberado pra `adm_l1`/`adm_l2`.
+  - `/src/middlewares/auth.js` — nível padrão de `banco-med-fatec` por cargo (3 pra quem é de Medicina/Admin, 1 pros demais).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — subir esse trabalho que já estava pronto no diretório.
+- Impacto/riscos a observar:
+  - **Não revisado a fundo por este agente** — o código foi escrito por outra sessão/pessoa antes desta conversa; só foi conferido sintaticamente (todos os arquivos passam `node -c`/check de módulo ES) antes de commitar, sem revisão funcional linha a linha.
+  - **Limite de 950KB por imagem em base64** (`MAX_IMG_BASE64`), mesmo padrão já usado no módulo Ferida pra não estourar o limite de 1 MiB por documento do Firestore.
+- Como testar: logar como `adm_l1`/`adm_l2`, abrir "BANCO MED-FATEC" no menu (categoria Medicina), cadastrar uma categoria, uma questão e montar uma prova; exportar a prova e conferir o XML gerado.
+- Como reverter: `git revert` deste commit remove o módulo inteiro (arquivos + rotas + permissões).
+
 ### [2026-09-11] Matrículas: lista de Situações — remove "Retorno", adiciona 4 novas (pedido da Lisa/Financeiro)
 - Autor: Claude Code
 - Branch: main
