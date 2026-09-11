@@ -66,7 +66,11 @@
           <!-- ============ VIEW: PROVAS ============ -->
           <section id="bmf-view-provas" class="bmf-view hidden">
             <div class="bmf-toolbar">
-              <div></div>
+              <div class="bmf-filters">
+                <select id="bmf-prova-filtro-periodo">
+                  <option value="">Todos os períodos</option>
+                </select>
+              </div>
               <button class="btn-primary action-execute" id="bmf-btn-nova-prova">+ Nova Prova</button>
             </div>
 
@@ -91,22 +95,31 @@
               </div>
 
               <div class="bmf-form-row">
+                <div class="form-group" style="flex:0 0 140px;">
+                  <label class="form-label">Período <span style="color:red">*</span></label>
+                  <select id="bmf-q-periodo" class="form-control" required>
+                    <option value="">Período</option>
+                  </select>
+                </div>
                 <div class="form-group" style="flex:1;">
                   <label class="form-label">Disciplina <span style="color:red">*</span></label>
                   <div style="display:flex; gap:0.5rem;">
-                    <select id="bmf-q-categoria" class="form-control" required style="flex:1;"></select>
+                    <select id="bmf-q-categoria" class="form-control" required style="flex:1;">
+                      <option value="">Selecione o período primeiro</option>
+                    </select>
                     <button type="button" id="bmf-btn-add-categoria" class="btn btn-secondary" style="width:44px; flex-shrink:0;" title="Criar nova disciplina">+</button>
                   </div>
                 </div>
-                <div class="form-group" style="flex:1;">
-                  <label class="form-label">Dificuldade <span style="color:red">*</span></label>
-                  <select id="bmf-q-dificuldade" class="form-control" required>
-                    <option value="facil">Fácil</option>
-                    <option value="media">Média</option>
-                    <option value="intermediaria">Intermediária</option>
-                    <option value="dificil">Difícil</option>
-                  </select>
-                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Dificuldade <span style="color:red">*</span></label>
+                <select id="bmf-q-dificuldade" class="form-control" required>
+                  <option value="facil">Fácil</option>
+                  <option value="media">Média</option>
+                  <option value="intermediaria">Intermediária</option>
+                  <option value="dificil">Difícil</option>
+                </select>
               </div>
 
               <div id="bmf-nova-categoria-group" class="form-group hidden" style="border:1.5px dashed var(--border-color); padding:0.75rem; border-radius:10px;">
@@ -175,13 +188,29 @@
           <div class="modal-box">
             <h3 style="font-weight:800; margin-bottom:1.25rem;">Nova Prova</h3>
             <form id="bmf-form-prova-novo">
-              <div class="form-group">
-                <label class="form-label">Nome da prova <span style="color:red">*</span></label>
-                <input type="text" id="bmf-p-nome" class="form-control" placeholder="Ex: PROVA T2-2" required>
+              <div class="bmf-form-row">
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Nome da prova <span style="color:red">*</span></label>
+                  <input type="text" id="bmf-p-nome" class="form-control" placeholder="Ex: PROVA T2-2" required>
+                </div>
+                <div class="form-group" style="flex:0 0 120px;">
+                  <label class="form-label">Semestre <span style="color:red">*</span></label>
+                  <input type="text" id="bmf-p-semestre" class="form-control" placeholder="Ex: 2026.1" required>
+                </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">Disciplina <span style="color:red">*</span></label>
-                <select id="bmf-p-categoria" class="form-control" required></select>
+              <div class="bmf-form-row">
+                <div class="form-group" style="flex:0 0 140px;">
+                  <label class="form-label">Período <span style="color:red">*</span></label>
+                  <select id="bmf-p-periodo" class="form-control" required>
+                    <option value="">Período</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Disciplina <span style="color:red">*</span></label>
+                  <select id="bmf-p-categoria" class="form-control" required>
+                    <option value="">Selecione o período primeiro</option>
+                  </select>
+                </div>
               </div>
               <div style="display:flex; gap:1rem; margin-top:1rem;">
                 <button type="button" class="btn btn-secondary" id="bmf-btn-cancelar-prova-novo" style="flex:1;">Cancelar</button>

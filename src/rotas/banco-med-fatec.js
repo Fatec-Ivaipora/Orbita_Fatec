@@ -66,6 +66,7 @@ router.post('/categorias', verifyToken, checkPermission, async (req, res) => {
         const newDoc = db.collection(COL_CATEGORIAS).doc();
         await newDoc.set({
             nome,
+            nomeBreve: req.body.nomeBreve ? String(req.body.nomeBreve).trim() : '',
             periodo,
             criadoPor: req.user.uid,
             criadoPorNome: req.user.name || req.user.email || 'Professor',
@@ -179,12 +180,15 @@ router.get('/provas', verifyToken, checkPermission, async (req, res) => {
 router.post('/provas', verifyToken, checkPermission, async (req, res) => {
     try {
         const nome = String(req.body.nome || '').trim();
+        const semestre = String(req.body.semestre || '').trim();
         if (!nome) return res.status(400).json({ error: 'Informe o nome da prova.' });
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre de aplicação da prova (ex: 2026.1).' });
         if (!req.body.categoriaId) return res.status(400).json({ error: 'Selecione a categoria/disciplina da prova.' });
 
         const newDoc = db.collection(COL_PROVAS).doc();
         await newDoc.set({
             nome,
+            semestre,
             categoriaId: req.body.categoriaId,
             questoesIds: Array.isArray(req.body.questoesIds) ? req.body.questoesIds : [],
             criadoPor: req.user.uid,
@@ -210,6 +214,7 @@ router.put('/provas/:id', verifyToken, checkPermission, async (req, res) => {
 
         await docRef.update({
             nome,
+            semestre: req.body.semestre !== undefined ? String(req.body.semestre).trim() : snap.data().semestre,
             categoriaId: req.body.categoriaId || snap.data().categoriaId,
             questoesIds: Array.isArray(req.body.questoesIds) ? req.body.questoesIds : snap.data().questoesIds,
             updatedAt: new Date().toISOString()
