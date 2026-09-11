@@ -482,6 +482,9 @@ function abrirModalNovaProva() {
   }
   document.getElementById('bmf-form-prova-novo').reset();
   popularDisciplinasDoPeriodo('bmf-p-categoria', '');
+  // Sugere o semestre corrente (jan-jun = .1, jul-dez = .2) — o professor pode trocar.
+  const hoje = new Date();
+  document.getElementById('bmf-p-semestre').value = `${hoje.getFullYear()}.${hoje.getMonth() < 6 ? '1' : '2'}`;
   document.getElementById('bmf-modal-prova-novo').classList.add('active');
 }
 function fecharModalNovaProva() {

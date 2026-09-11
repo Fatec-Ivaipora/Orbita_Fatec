@@ -459,20 +459,13 @@ function melhorCotacao(item) {
 
 // O campo aceita tanto um link real quanto uma observação livre (ex.: "Local",
 // pra compras que não são online) — só vira <a> clicável se parecer uma URL de verdade.
-// Link do produto da empresa com quem fechou (se ela cotou com link) — dá
-// pra conferir a página do produto mesmo quando o fechamento NÃO foi com a
-// cotação mais barata (o link some das outras cotações da tela, mas fica
-// registrado por fornecedor desde a cotação — ver renderLinhasCotacoes).
-function linkCotacaoFechada(item) {
-  if (item.status !== 'fechado' || !item.fornecedorFechadoId) return '';
-  const cotacao = (item.cotacoes || []).find(c => c.fornecedorId === item.fornecedorFechadoId);
-  if (!cotacao || !cotacao.link) return '';
-  const menor = melhorCotacao(item);
-  const fechouComMaisCaro = menor && menor.fornecedorId !== item.fornecedorFechadoId;
-  const titulo = fechouComMaisCaro
-    ? `Ver produto — fechou com ${esc(item.fornecedorFechadoNome || 'esta empresa')} mesmo não sendo a cotação mais barata`
-    : 'Ver produto da empresa que fechou';
-  return ` <a href="${esc(cotacao.link)}" target="_blank" rel="noopener" title="${titulo}" class="item-link">🔗${fechouComMaisCaro ? '⚠️' : ''}</a>`;
+// Na lista principal só mostra o link da cotação MAIS BARATA (referência
+// rápida, sem precisar abrir o modal) — os links das outras empresas ficam
+// só dentro do modal de Cotações (💰), que já mostra todas juntas.
+function linkMelhorCotacao(item) {
+  const melhor = melhorCotacao(item);
+  if (!melhor || !melhor.link) return '';
+  return ` <a href="${esc(melhor.link)}" target="_blank" rel="noopener" title="Ver produto — cotação mais barata (${esc(melhor.fornecedorNome)})" class="item-link">🔗</a>`;
 }
 
 function renderLinkReferencia(valor) {
@@ -513,10 +506,10 @@ function renderTabelaItens(lista) {
         <td>${esc(item.professor || '—')}</td>
         <td class="no-coordenador">${(item.cotacoes || []).length}</td>
         <td class="valor-menor no-coordenador">${melhor ? fmtMoeda(melhor.valorTotal) : '—'}</td>
-        <td class="no-coordenador">${melhor ? esc(melhor.fornecedorNome) : '—'}</td>
+        <td class="no-coordenador">${melhor ? esc(melhor.fornecedorNome) : '—'}${linkMelhorCotacao(item)}</td>
         <td>
           ${item.status === 'fechado'
-            ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>${linkCotacaoFechada(item)}`
+            ? `<span class="status-badge status-fechado" title="Fechado com ${esc(item.fornecedorFechadoNome || '')}">Fechado — ${esc(item.fornecedorFechadoNome || '')}</span>`
             : `<span class="status-badge status-pendente">Pendente</span>`}
         </td>
         <td class="acoes-col">
@@ -719,10 +712,25 @@ function renderLinhasCotacoes(item, cotacoesPorFornecedor) {
     <div class="cotacao-linha" data-fornecedor-id="${f.id}">
       <span class="cotacao-nome">${esc(f.nome)}</span>
       <input type="number" class="cotacao-valor" step="0.01" min="0" placeholder="Valor unitário" value="${atual.valorUnitario ?? ''}">
-      <input type="url" class="cotacao-link" placeholder="Link do produto (opcional)" value="${esc(atual.link || '')}">
+      <div class="cotacao-link-wrap">
+        <input type="url" class="cotacao-link" placeholder="Link do produto (opcional)" value="${esc(atual.link || '')}">
+        <button type="button" class="btn-icon cotacao-abrir-link" title="Abrir o link" ${atual.link ? '' : 'disabled'}>🔗</button>
+      </div>
       <span class="cotacao-total">—</span>
     </div>`;
   }).join('');
+
+  // Abre o link direto (sem precisar copiar/colar) — habilita/desabilita o
+  // botão conforme a pessoa digita ou apaga o campo.
+  lista.querySelectorAll('.cotacao-linha').forEach(linha => {
+    const inputLink = linha.querySelector('.cotacao-link');
+    const btnAbrir = linha.querySelector('.cotacao-abrir-link');
+    inputLink.addEventListener('input', () => { btnAbrir.disabled = !inputLink.value.trim(); });
+    btnAbrir.addEventListener('click', () => {
+      const url = inputLink.value.trim();
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+  });
 
   const atualizarTotais = () => {
     const linhas = [...lista.querySelectorAll('.cotacao-linha')];
