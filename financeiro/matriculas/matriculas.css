@@ -84,6 +84,35 @@
 }
 .select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
 
+/* Filtro multi-seleção estilo Excel (ex.: Período) */
+.multi-select { position: relative; display: inline-block; }
+.multi-select-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; text-align: left; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+}
+.multi-select-btn::after { content: "▾"; margin-left: auto; color: var(--text-secondary); font-size: 0.75rem; }
+.multi-select-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 220px;
+  background: white; border: 1px solid var(--border-color); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.multi-select-acoes {
+  display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.multi-select-acoes button {
+  background: none; border: none; color: var(--primary-blue); font-weight: 600; font-size: 0.8rem;
+  cursor: pointer; padding: 0; font-family: inherit;
+}
+.multi-select-acoes button:hover { text-decoration: underline; }
+.multi-select-opcoes { max-height: 260px; overflow-y: auto; padding: 0.4rem 0; }
+.multi-select-opcoes label {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.9rem; font-size: 0.88rem;
+  color: var(--text-main); cursor: pointer;
+}
+.multi-select-opcoes label:hover { background: #f8fafc; }
+.multi-select-opcoes input[type="checkbox"] { cursor: pointer; }
+
 .semestre-badge {
   display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1rem;
   border-radius: 8px; background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.85rem;

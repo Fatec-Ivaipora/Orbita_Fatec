@@ -111,6 +111,20 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Matrículas: filtro de Período vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` + `matriculas.css` — o `<select>` de Período (só deixava escolher um por vez) virou um dropdown com checkbox por período (1º-12º + DP), "Marcar todos"/"Desmarcar todos" e botão mostrando quantos estão marcados — mesmo comportamento do filtro de coluna do Excel. Guarda só quem foi DESMARCADO (`periodosDesmarcados`), não quem está marcado, então a lista nunca fica "traduzida errado" se mudar de módulo.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `periodos` (plural, separado por vírgula) além do `periodo` (singular) que já existia; contagem usa `where('periodo','in',[...])` do Firestore.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — queria selecionar todos os períodos de uma vez e ir desmarcando os que não quer ver, em vez de escolher um por vez.
+- Impacto/riscos a observar:
+  - **Só a tela principal de Matrículas** (`index.html`) foi alterada — o filtro de período da tela "Virar Semestre" (`vs-periodo-filtro`) continua sendo um `<select>` normal, não fazia parte do pedido.
+  - **Quando tudo está marcado, o filtro não é aplicado** (equivalente a "Todos os períodos" de antes) — isso inclui aluno com período em branco. Assim que a pessoa desmarca QUALQUER período, só quem está marcado aparece — aluno com período em branco some da lista nesse caso (não existe uma opção "(em branco)" no filtro, mesma limitação que o Excel teria sem essa opção).
+- Como testar: abrir Matrículas, clicar no filtro de Período, desmarcar alguns períodos e conferir que a lista e o contador de registros atualizam sozinhos; clicar "Marcar todos"/"Desmarcar todos" e conferir o texto do botão ("Todos os períodos" / "N período(s) selecionado(s)" / "Nenhum período").
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
 ### [2026-09-04] Secretaria Acadêmica: "Relatório DP" some do menu do cargo `sec` (bug) + novos logins
 - Autor: Claude Code
 - Branch: main

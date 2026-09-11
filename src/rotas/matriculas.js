@@ -54,6 +54,11 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
 
         const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ALUNOS_PAGE_SIZE_PADRAO, 200);
         const busca = (req.query.busca || '').trim().toLowerCase();
+        // "periodos" (plural, separado por vírgula) é o filtro tipo Excel da
+        // tela — só um subconjunto dos períodos marcados. Mantém "periodo"
+        // (singular) por retrocompatibilidade, mas o front atual só manda
+        // "periodos" quando a pessoa desmarca algum item da lista.
+        const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
 
         // Filtros de situação/plano/nome são aplicados em memória durante a
         // paginação (mesmo padrão do "pula item fechado" já usado em
@@ -69,6 +74,7 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
             (!situacao || a.situacao === situacao) &&
             (!planoConfissao || a.planoConfissao === planoConfissao) &&
             (!periodo || a.periodo === periodo) &&
+            (!periodos.length || periodos.includes(a.periodo)) &&
             (!busca || (a.nome || '').toLowerCase().includes(busca));
 
         let cursor = (req.query.cursorNome && req.query.cursorId)
@@ -123,6 +129,11 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
+        // Lista de períodos marcados (filtro tipo Excel) — Firestore aceita
+        // até 30 valores no "in", a lista de períodos possíveis (1º-12º + DP)
+        // nunca chega perto disso.
+        const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
+
         const base = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
 
         let filtrada = base;
@@ -130,7 +141,8 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
         if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
         if (planoConfissao) filtrada = filtrada.where('planoConfissao', '==', planoConfissao);
         if (periodo) filtrada = filtrada.where('periodo', '==', periodo);
-        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo);
+        if (periodos.length) filtrada = filtrada.where('periodo', 'in', periodos);
+        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo || periodos.length);
 
         const [totalSnap, filtradaSnap] = await Promise.all([
             base.count().get(),

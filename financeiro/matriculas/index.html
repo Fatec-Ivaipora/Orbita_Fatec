@@ -59,9 +59,16 @@
                     <select class="select-filter" id="curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
-                    <select class="select-filter" id="periodo-filtro">
-                        <option value="">Todos os períodos</option>
-                    </select>
+                    <div class="multi-select" id="periodo-multiselect">
+                        <button type="button" class="select-filter multi-select-btn" id="periodo-btn">Todos os períodos</button>
+                        <div class="multi-select-panel hidden" id="periodo-panel">
+                            <div class="multi-select-acoes">
+                                <button type="button" data-acao="todos">Marcar todos</button>
+                                <button type="button" data-acao="nenhum">Desmarcar todos</button>
+                            </div>
+                            <div class="multi-select-opcoes" id="periodo-opcoes"></div>
+                        </div>
+                    </div>
                     <select class="select-filter" id="situacao-filtro">
                         <option value="">Todas as situações</option>
                     </select>
