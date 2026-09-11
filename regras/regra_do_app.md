@@ -111,6 +111,20 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Matrículas: filtro de Situação também vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` — mesmo tratamento dado ao filtro de Período (ver entrada anterior) aplicado agora ao filtro de Situação: checkbox por situação, "Marcar todos"/"Desmarcar todos", contador no botão. Lista de opções vem de `opcoes.situacoes` (carregada do servidor), não é fixa como a de período.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `situacoes` (plural, separado por vírgula) além do `situacao` (singular) existente. Como o Firestore só aceita UM operador `in` por consulta, quando período E situação vêm marcados ao mesmo tempo a rota de contagem lê os documentos (já filtrados por módulo/semestre/curso/plano) e conta em memória, em vez de usar `count()` puro nos dois — único jeito de combinar dois filtros "tipo Excel" na mesma contagem.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — mesmo comportamento do filtro de Período, agora pro de Situação.
+- Impacto/riscos a observar:
+  - **Contagem com período + situação marcados ao mesmo tempo** deixa de ser uma leitura de agregação pura e passa a ler os documentos do módulo/semestre (a coleção é da ordem de 1500-1800 por semestre) — mais caro que antes, mas só acontece quando os dois filtros tipo Excel estão ativos ao mesmo tempo.
+  - Só a tela principal de Matrículas foi alterada — o filtro de situação da tela "Virar Semestre" (`vs-situacao-filtro`) continua um `<select>` normal.
+- Como testar: abrir Matrículas, desmarcar algumas situações no filtro, conferir lista e contador; combinar com filtro de período marcado também e conferir que os dois se aplicam juntos.
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
 ### [2026-09-11] Matrículas: filtro de Período vira multi-seleção tipo Excel
 - Autor: Claude Code
 - Branch: main
