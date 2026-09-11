@@ -111,6 +111,21 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Licitação: link do produto por cotação (conferir se fechou com a mais cara)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/financeiro.js` — `calcularCotacoes` passa a aceitar/gravar `link` por cotação (junto com `fornecedorId`/`valorUnitario`/`valorTotal`), usado por `PUT /itens/:id/cotacoes`. As 3 rotas que RECONSTROEM a cotação do fornecedor na hora de fechar (`POST /fechamento/confirmar`, `POST /fechamento/confirmar-com-desconto`, `PUT /fechamento/:id/valor`) agora preservam o `link` que já existia naquela cotação — sem isso, fechar apagava a referência do produto.
+  - `/financeiro/licitacao/app.js` — modal de cotações ganha um campo "Link do produto" por fornecedor (opcional); na tabela de itens, quando um item fechado tem link registrado na cotação vencedora, mostra um 🔗 clicável ao lado do badge "Fechado — Empresa" — e se a empresa fechada NÃO for a mais barata cotada, o ícone vem com ⚠️ e o título deixa isso explícito.
+  - `/financeiro/licitacao/licitacao.css` — grid da linha de cotação passa de 3 pra 4 colunas (nome / valor / link / total).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — quando um item tem mais de uma cotação e o "patrão" decide fechar com a mais cara, precisava dar pra ver o link do produto dela pra conferir/justificar a escolha.
+- Impacto/riscos a observar:
+  - **Campo opcional** — cotação sem link continua funcionando normal, só não mostra o ícone.
+  - **Só aparece o link da empresa que FECHOU**, não de todas as concorrentes ao mesmo tempo na tabela principal (ficam salvas em `item.cotacoes[].link`, visíveis reabrindo o modal de cotações desse item).
+- Como testar: abrir Licitação, cadastrar um item, abrir "Cotações", preencher valor + link de 2+ fornecedores, fechar (na tela de Fechamento) com o fornecedor que NÃO é o mais barato, e conferir que aparece 🔗⚠️ ao lado do "Fechado" na lista de itens, com o link certo.
+- Como reverter: `git revert` deste commit — cotações que já tinham link gravado ficam com o campo no Firestore, só não é mais lido/exibido em lugar nenhum (inofensivo).
+
 ### [2026-09-11] Novo módulo: Banco MED-FATEC (banco de questões da Medicina)
 - Autor: trabalho já estava em andamento no diretório quando esta sessão começou (não foi escrito por este agente) — commitado/subido a pedido do usuário.
 - Branch: main

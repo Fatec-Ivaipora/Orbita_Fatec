@@ -288,7 +288,11 @@ function calcularCotacoes(cotacoesInput, quantidade, fornecedoresPorId) {
                 fornecedorId: c.fornecedorId,
                 fornecedorNome: fornecedor ? fornecedor.nome : (c.fornecedorNome || ''),
                 valorUnitario,
-                valorTotal: Math.round(valorUnitario * quantidade * 100) / 100
+                valorTotal: Math.round(valorUnitario * quantidade * 100) / 100,
+                // Link do produto do concorrente (opcional) — serve pra conferir
+                // depois, sobretudo quando o fechamento acaba não sendo com a
+                // cotação mais barata.
+                link: (c.link || '').toString().trim()
             };
         })
         .filter(c => !isNaN(c.valorUnitario) && c.valorUnitario >= 0);
@@ -864,8 +868,12 @@ router.post('/fechamento/confirmar', verifyToken, checkPermission, bloquearCoord
             const valorTotal = parseFloat(f.valorTotal);
             if (isNaN(valorUnitario) || isNaN(valorTotal)) { erros.push({ itemId: f.itemId, error: 'Valor inválido.' }); continue; }
 
+            // Preserva o link do produto já cotado por essa empresa (se tinha) —
+            // fechar não pode apagar essa referência, é justamente o que
+            // permite conferir depois se fechou com a empresa mais cara.
+            const linkCotacaoOriginal = (item.cotacoes || []).find(c => c.fornecedorId === fornecedorId)?.link || '';
             const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== fornecedorId);
-            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario, valorTotal });
+            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario, valorTotal, link: linkCotacaoOriginal });
 
             // Guarda o estado de ANTES do fechamento (cotações e status originais)
             // pra "reabrir" conseguir desfazer de verdade — sem isso, reabrir só
@@ -945,7 +953,7 @@ router.post('/fechamento/confirmar-com-desconto', verifyToken, checkPermission, 
             totalFinal += valorTotalFinal;
 
             const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== fornecedorId);
-            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario: valorUnitarioFinal, valorTotal: valorTotalFinal });
+            cotacoes.push({ fornecedorId, fornecedorNome, valorUnitario: valorUnitarioFinal, valorTotal: valorTotalFinal, link: cotacaoOriginal.link || '' });
 
             await doc.ref.update({
                 cotacoes,
@@ -994,8 +1002,9 @@ router.put('/fechamento/:id/valor', verifyToken, checkPermission, bloquearCoorde
         if (isNaN(valorUnitario) || valorUnitario < 0) return res.status(400).json({ error: 'Informe um valor unitário válido.' });
         const valorTotal = Math.round(valorUnitario * item.quantidade * 100) / 100;
 
+        const linkCotacaoFechada = (item.cotacoes || []).find(c => c.fornecedorId === item.fornecedorFechadoId)?.link || '';
         const cotacoes = (item.cotacoes || []).filter(c => c.fornecedorId !== item.fornecedorFechadoId);
-        cotacoes.push({ fornecedorId: item.fornecedorFechadoId, fornecedorNome: item.fornecedorFechadoNome, valorUnitario, valorTotal });
+        cotacoes.push({ fornecedorId: item.fornecedorFechadoId, fornecedorNome: item.fornecedorFechadoNome, valorUnitario, valorTotal, link: linkCotacaoFechada });
 
         await db.collection(COL_ITENS).doc(req.params.id).update({
             cotacoes,

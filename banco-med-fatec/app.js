@@ -118,7 +118,8 @@ const TIPO_LABEL = {
 
 function nomeCategoria(id) {
   const c = categorias.find(c => c.id === id);
-  return c ? `${c.periodo}º Período · ${c.nome}` : '—';
+  if (!c) return '—';
+  return `${c.periodo}º Período · ${c.nome}${c.nomeBreve ? ` (${c.nomeBreve})` : ''}`;
 }
 
 // ================================================================
@@ -142,69 +143,80 @@ async function carregarTudo() {
 function ordinal(n) { return `${n}º`; }
 
 // Popula os selects de "Período" (1º a 12º, grade da Medicina) usados no
-// filtro do banco e na criação rápida de disciplina.
+// filtro do banco e nos formulários de questão/prova/nova disciplina.
 function popularSelectsPeriodo() {
-  [document.getElementById('bmf-filtro-periodo'), document.getElementById('bmf-q-categoria-nova-periodo')].forEach(sel => {
+  const ids = ['bmf-filtro-periodo', 'bmf-q-periodo', 'bmf-p-periodo', 'bmf-q-categoria-nova-periodo', 'bmf-prova-filtro-periodo'];
+  ids.map(id => document.getElementById(id)).forEach(sel => {
     if (!sel || sel.dataset.montado) return;
     for (let p = 1; p <= 12; p++) {
       const opt = document.createElement('option');
       opt.value = String(p);
-      opt.textContent = sel.id === 'bmf-filtro-periodo' ? `${ordinal(p)} Período` : `${ordinal(p)} Per.`;
+      opt.textContent = sel.id === 'bmf-q-categoria-nova-periodo' ? `${ordinal(p)} Per.` : `${ordinal(p)} Período`;
       sel.appendChild(opt);
     }
     sel.dataset.montado = '1';
   });
 }
 
-// Disciplinas agrupadas por período (<optgroup>) — reflete a grade real do
-// curso em vez de uma lista solta, que era o que confundia (feedback do
-// professor: "tem as disciplinas por período das turmas").
+// Filtro do banco: disciplinas agrupadas por período (<optgroup>) — dá pra
+// ver tudo de uma vez, já filtrado se um período específico for escolhido.
 function popularSelectsCategoria() {
-  const selects = [
-    document.getElementById('bmf-filtro-categoria'),
-    document.getElementById('bmf-q-categoria'),
-    document.getElementById('bmf-p-categoria')
-  ];
+  const sel = document.getElementById('bmf-filtro-categoria');
   const filtroPeriodo = document.getElementById('bmf-filtro-periodo').value;
+  const valorAtual = sel.value;
+  sel.innerHTML = '<option value="">Todas as disciplinas</option>';
 
-  selects.forEach(sel => {
-    if (!sel) return;
-    const isFiltro = sel.id === 'bmf-filtro-categoria';
-    const valorAtual = sel.value;
-    sel.innerHTML = isFiltro ? '<option value="">Todas as disciplinas</option>' : '';
-
-    // Sem nenhuma disciplina cadastrada ainda, o select ficaria vazio (nada
-    // pra clicar) — deixa isso explícito em vez de simplesmente não mostrar nada.
-    if (!isFiltro && categorias.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = 'Nenhuma disciplina cadastrada ainda';
-      opt.disabled = true;
-      opt.selected = true;
-      sel.appendChild(opt);
-    }
-
-    const porPeriodo = new Map();
-    categorias.forEach(c => {
-      if (isFiltro && filtroPeriodo && String(c.periodo) !== filtroPeriodo) return;
-      if (!porPeriodo.has(c.periodo)) porPeriodo.set(c.periodo, []);
-      porPeriodo.get(c.periodo).push(c);
-    });
-
-    [...porPeriodo.keys()].sort((a, b) => a - b).forEach(periodo => {
-      const group = document.createElement('optgroup');
-      group.label = `${ordinal(periodo)} Período`;
-      porPeriodo.get(periodo).forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.nome;
-        group.appendChild(opt);
-      });
-      sel.appendChild(group);
-    });
-
-    if (valorAtual && [...sel.options].some(o => o.value === valorAtual)) sel.value = valorAtual;
+  const porPeriodo = new Map();
+  categorias.forEach(c => {
+    if (filtroPeriodo && String(c.periodo) !== filtroPeriodo) return;
+    if (!porPeriodo.has(c.periodo)) porPeriodo.set(c.periodo, []);
+    porPeriodo.get(c.periodo).push(c);
   });
+
+  [...porPeriodo.keys()].sort((a, b) => a - b).forEach(periodo => {
+    const group = document.createElement('optgroup');
+    group.label = `${ordinal(periodo)} Período`;
+    porPeriodo.get(periodo).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.nomeBreve ? `${c.nome} (${c.nomeBreve})` : c.nome;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  });
+
+  if (valorAtual && [...sel.options].some(o => o.value === valorAtual)) sel.value = valorAtual;
+}
+
+// Formulários de questão/prova: fluxo em cascata — escolhe o período
+// primeiro, o select de disciplina já filtra sozinho pra só aquele período
+// (pedido do professor: "ela seleciona o período aí já traz as disciplinas
+// corretas daquele período", em vez de rolar uma lista longa de todas).
+function popularDisciplinasDoPeriodo(selectDisciplinaId, periodo, valorParaSelecionar) {
+  const sel = document.getElementById(selectDisciplinaId);
+  sel.innerHTML = '';
+
+  if (!periodo) {
+    sel.innerHTML = '<option value="">Selecione o período primeiro</option>';
+    return;
+  }
+
+  const daPeriodo = categorias.filter(c => String(c.periodo) === String(periodo));
+  if (!daPeriodo.length) {
+    sel.innerHTML = '<option value="" disabled selected>Nenhuma disciplina cadastrada neste período</option>';
+    return;
+  }
+
+  daPeriodo.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nomeBreve ? `${c.nome} (${c.nomeBreve})` : c.nome;
+    sel.appendChild(opt);
+  });
+
+  if (valorParaSelecionar && daPeriodo.some(c => c.id === valorParaSelecionar)) {
+    sel.value = valorParaSelecionar;
+  }
 }
 
 // ================================================================
@@ -267,17 +279,29 @@ function renderQuestoes() {
 // ================================================================
 //  RENDER: PROVAS
 // ================================================================
+function provasFiltradas() {
+  const periodo = document.getElementById('bmf-prova-filtro-periodo').value;
+  return provas.filter(p => {
+    if (periodo && String(nomeCategoriaObj(p.categoriaId)?.periodo) !== periodo) return false;
+    return true;
+  });
+}
+
 function renderProvas() {
   const grid = document.getElementById('bmf-provas-grid');
   const vazio = document.getElementById('bmf-provas-vazio');
+  const lista = provasFiltradas();
   grid.innerHTML = '';
-  vazio.classList.toggle('hidden', provas.length > 0);
+  vazio.classList.toggle('hidden', lista.length > 0);
 
-  provas.forEach(p => {
+  lista.forEach(p => {
     const card = document.createElement('div');
     card.className = 'bmf-prova-card';
     const totalExport = (p.exportacoes || []).length;
     card.innerHTML = `
+      <div class="bmf-q-card-top">
+        ${p.semestre ? `<span class="bmf-badge bmf-badge-tipo">${esc(p.semestre)}</span>` : ''}
+      </div>
       <h4>${esc(p.nome)}</h4>
       <p class="bmf-q-meta">${esc(nomeCategoria(p.categoriaId))}</p>
       <p class="bmf-q-meta">${(p.questoesIds || []).length} questão(ões) selecionada(s)</p>
@@ -348,6 +372,7 @@ function limparFormQuestao() {
   document.getElementById('bmf-q-id').value = '';
   document.getElementById('bmf-q-erro').classList.add('hidden');
   document.getElementById('bmf-nova-categoria-group').classList.add('hidden');
+  popularDisciplinasDoPeriodo('bmf-q-categoria', '');
   imagemAtual = null;
   document.getElementById('bmf-q-imagem-preview').classList.add('hidden');
   document.getElementById('bmf-q-imagem-input').value = '';
@@ -365,7 +390,11 @@ function abrirModalQuestao(id) {
     titulo.textContent = 'Editar Questão';
     document.getElementById('bmf-q-id').value = q.id;
     document.getElementById('bmf-q-titulo').value = q.titulo;
-    document.getElementById('bmf-q-categoria').value = q.categoriaId;
+    const categoriaAtual = nomeCategoriaObj(q.categoriaId);
+    if (categoriaAtual) {
+      document.getElementById('bmf-q-periodo').value = String(categoriaAtual.periodo);
+      popularDisciplinasDoPeriodo('bmf-q-categoria', categoriaAtual.periodo, q.categoriaId);
+    }
     document.getElementById('bmf-q-dificuldade').value = q.dificuldade;
     document.getElementById('bmf-q-tipo').value = q.tipoMoodle;
     document.getElementById('bmf-q-enunciado').value = q.enunciadoHtml;
@@ -452,6 +481,7 @@ function abrirModalNovaProva() {
     return;
   }
   document.getElementById('bmf-form-prova-novo').reset();
+  popularDisciplinasDoPeriodo('bmf-p-categoria', '');
   document.getElementById('bmf-modal-prova-novo').classList.add('active');
 }
 function fecharModalNovaProva() {
@@ -465,6 +495,7 @@ async function criarProva(e) {
       method: 'POST',
       body: JSON.stringify({
         nome: document.getElementById('bmf-p-nome').value.trim(),
+        semestre: document.getElementById('bmf-p-semestre').value.trim(),
         categoriaId: document.getElementById('bmf-p-categoria').value,
         questoesIds: []
       })
@@ -600,6 +631,12 @@ function bindEventos() {
   document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
   document.getElementById('bmf-btn-cancelar-questao').addEventListener('click', fecharModalQuestao);
   document.getElementById('bmf-form-questao').addEventListener('submit', salvarQuestao);
+  document.getElementById('bmf-q-periodo').addEventListener('change', (e) => {
+    popularDisciplinasDoPeriodo('bmf-q-categoria', e.target.value);
+  });
+  document.getElementById('bmf-p-periodo').addEventListener('change', (e) => {
+    popularDisciplinasDoPeriodo('bmf-p-categoria', e.target.value);
+  });
   document.getElementById('bmf-q-tipo').addEventListener('change', ajustarEditorPorTipo);
   document.getElementById('bmf-btn-add-alternativa').addEventListener('click', () => {
     const tipoRadio = document.getElementById('bmf-q-tipo').value === 'multichoice_unica';
@@ -621,7 +658,10 @@ function bindEventos() {
       const resp = await apiFetch('/banco-med-fatec/categorias', { method: 'POST', body: JSON.stringify({ nome, periodo }) });
       categorias.push({ id: resp.id, nome, periodo });
       popularSelectsCategoria();
-      document.getElementById('bmf-q-categoria').value = resp.id;
+      // A disciplina nova nasce no período que acabou de ser escolhido —
+      // reflete isso no seletor de período/disciplina do formulário da questão.
+      document.getElementById('bmf-q-periodo').value = String(periodo);
+      popularDisciplinasDoPeriodo('bmf-q-categoria', periodo, resp.id);
       document.getElementById('bmf-q-categoria-nova').value = '';
       document.getElementById('bmf-q-categoria-nova-periodo').value = '';
       document.getElementById('bmf-nova-categoria-group').classList.add('hidden');
@@ -648,6 +688,7 @@ function bindEventos() {
     document.getElementById('bmf-q-imagem-preview').classList.add('hidden');
   });
 
+  document.getElementById('bmf-prova-filtro-periodo').addEventListener('change', renderProvas);
   document.getElementById('bmf-btn-nova-prova').addEventListener('click', abrirModalNovaProva);
   document.getElementById('bmf-btn-cancelar-prova-novo').addEventListener('click', fecharModalNovaProva);
   document.getElementById('bmf-form-prova-novo').addEventListener('submit', criarProva);
