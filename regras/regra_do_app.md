@@ -111,6 +111,54 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-09-11] Novo módulo: Banco MED-FATEC (banco de questões da Medicina)
+- Autor: trabalho já estava em andamento no diretório quando esta sessão começou (não foi escrito por este agente) — commitado/subido a pedido do usuário.
+- Branch: main
+- Arquivos criados:
+  - `/banco-med-fatec/` (`index.html`, `app.js`, `banco-med-fatec.css`) — tela de categorias/disciplinas, cadastro de questões (múltipla escolha única/múltipla, verdadeiro/falso) e montagem de provas.
+  - `/src/rotas/banco-med-fatec.js` — CRUD de categorias, questões e provas (coleções `banco_med_categorias`, `banco_med_questoes`, `banco_med_provas`); `GET /provas/:id/exportar` gera XML no formato Moodle pra importar a prova como questionário no AVA.
+  - `/src/utils/moodleXml.js` — gerador do XML Moodle reaproveitado pelo endpoint de exportação.
+  - `/img/medfatec-logo.png` — logo do módulo.
+- Arquivos alterados:
+  - `/api/index.js` — `require`/`app.use` da rota `/api/banco-med-fatec`.
+  - `/core/permissions.js` — nova categoria "Medicina", módulo `banco-med-fatec` no menu, liberado pra `adm_l1`/`adm_l2`.
+  - `/src/middlewares/auth.js` — nível padrão de `banco-med-fatec` por cargo (3 pra quem é de Medicina/Admin, 1 pros demais).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — subir esse trabalho que já estava pronto no diretório.
+- Impacto/riscos a observar:
+  - **Não revisado a fundo por este agente** — o código foi escrito por outra sessão/pessoa antes desta conversa; só foi conferido sintaticamente (todos os arquivos passam `node -c`/check de módulo ES) antes de commitar, sem revisão funcional linha a linha.
+  - **Limite de 950KB por imagem em base64** (`MAX_IMG_BASE64`), mesmo padrão já usado no módulo Ferida pra não estourar o limite de 1 MiB por documento do Firestore.
+- Como testar: logar como `adm_l1`/`adm_l2`, abrir "BANCO MED-FATEC" no menu (categoria Medicina), cadastrar uma categoria, uma questão e montar uma prova; exportar a prova e conferir o XML gerado.
+- Como reverter: `git revert` deste commit remove o módulo inteiro (arquivos + rotas + permissões).
+
+### [2026-09-11] Matrículas: lista de Situações — remove "Retorno", adiciona 4 novas (pedido da Lisa/Financeiro)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/matriculas.js` — `SITUACOES` perde `'Retorno'` e ganha `'Matrícula Nova - Retorno'`, `'Matrícula Nova - Retorno Assinada'`, `'Matrícula Nova - Transferência'`, `'Matrícula Nova - Transferência Assinada'` (mesmo padrão do par já existente `'Matrícula Nova'`/`'Matrícula Nova - Assinada'`). `'Transferência'` (sozinho) foi mantido — só "Retorno" foi removido, a pedido explícito do usuário.
+  - `/financeiro/matriculas/app.js` — `SITUACAO_GRUPO` (cor do badge) atualizado: as duas variantes "Assinada" entram no grupo `ok` (verde), as duas sem "Assinada" entram no grupo `alerta` (amarelo), removida a entrada de `'Retorno'`.
+- Tipo: Mudança de dado/vocabulário controlado
+- Motivo: Pedido do usuário (conversa com a Lisa, Financeiro) — "Retorno" não vinha da planilha original; a partir de 2026 querem separar se o retorno ou a transferência já foi assinado ou não, mesma lógica já usada pra "Matrícula Nova".
+- Impacto/riscos a observar:
+  - **19 alunos com situação "Retorno" não foram migrados** (todos de `fatec`/semestre `2026.1`) — ficam como estão, é histórico de antes dessa mudança; "Retorno" só não aparece mais como opção pra escolher num cadastro NOVO ou editado. Se algum dia abrir um desses 19 pra editar, o campo de situação vai aparecer vazio até escolher uma das opções válidas atuais.
+  - **`'Transferência'` (sozinho) continua na lista** — não foi pedido remover, só "Retorno".
+- Como testar: abrir Matrículas, cadastrar/editar um aluno e conferir que "Retorno" sumiu do select e as 4 novas opções aparecem; escolher uma delas e conferir a cor do badge (Assinada = verde, sem Assinada = amarelo) na lista.
+- Como reverter: `git revert` deste commit volta a lista de situações ao estado anterior — não mexe nos 19 registros antigos (não foram tocados por essa mudança).
+
+### [2026-09-11] Matrículas: filtro de Situação também vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` — mesmo tratamento dado ao filtro de Período (ver entrada anterior) aplicado agora ao filtro de Situação: checkbox por situação, "Marcar todos"/"Desmarcar todos", contador no botão. Lista de opções vem de `opcoes.situacoes` (carregada do servidor), não é fixa como a de período.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `situacoes` (plural, separado por vírgula) além do `situacao` (singular) existente. Como o Firestore só aceita UM operador `in` por consulta, quando período E situação vêm marcados ao mesmo tempo a rota de contagem lê os documentos (já filtrados por módulo/semestre/curso/plano) e conta em memória, em vez de usar `count()` puro nos dois — único jeito de combinar dois filtros "tipo Excel" na mesma contagem.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — mesmo comportamento do filtro de Período, agora pro de Situação.
+- Impacto/riscos a observar:
+  - **Contagem com período + situação marcados ao mesmo tempo** deixa de ser uma leitura de agregação pura e passa a ler os documentos do módulo/semestre (a coleção é da ordem de 1500-1800 por semestre) — mais caro que antes, mas só acontece quando os dois filtros tipo Excel estão ativos ao mesmo tempo.
+  - Só a tela principal de Matrículas foi alterada — o filtro de situação da tela "Virar Semestre" (`vs-situacao-filtro`) continua um `<select>` normal.
+- Como testar: abrir Matrículas, desmarcar algumas situações no filtro, conferir lista e contador; combinar com filtro de período marcado também e conferir que os dois se aplicam juntos.
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
 ### [2026-09-11] Matrículas: filtro de Período vira multi-seleção tipo Excel
 - Autor: Claude Code
 - Branch: main

@@ -69,9 +69,16 @@
                             <div class="multi-select-opcoes" id="periodo-opcoes"></div>
                         </div>
                     </div>
-                    <select class="select-filter" id="situacao-filtro">
-                        <option value="">Todas as situações</option>
-                    </select>
+                    <div class="multi-select" id="situacao-multiselect">
+                        <button type="button" class="select-filter multi-select-btn" id="situacao-btn">Todas as situações</button>
+                        <div class="multi-select-panel hidden" id="situacao-panel">
+                            <div class="multi-select-acoes">
+                                <button type="button" data-acao="todos">Marcar todos</button>
+                                <button type="button" data-acao="nenhum">Desmarcar todos</button>
+                            </div>
+                            <div class="multi-select-opcoes" id="situacao-opcoes"></div>
+                        </div>
+                    </div>
                     <select class="select-filter" id="plano-filtro">
                         <option value="">Todos os planos/confissão</option>
                     </select>

@@ -174,6 +174,9 @@ let cursoSelecionadoNome = null;
 const TODOS_OS_PERIODOS = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
 let periodosDesmarcados = new Set();
 
+// Mesma ideia pro filtro de Situação — guarda só quem foi desmarcado.
+let situacoesDesmarcadas = new Set();
+
 let alunos = [];
 let alunosNextCursor = null;
 let alunosHasMore = false;
@@ -185,6 +188,7 @@ async function initPaginaLancamento() {
   await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
   popularSelectsOpcoes();
   setupPeriodoMultiSelect();
+  setupSituacaoMultiSelect();
   await popularSelectSemestres(document.getElementById('semestre-select'));
   semestreSelecionado = document.getElementById('semestre-select')?.value || semestreSelecionado;
 
@@ -218,7 +222,7 @@ async function initPaginaLancamento() {
     else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
-  ['situacao-filtro', 'plano-filtro'].forEach(id => {
+  ['plano-filtro'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     });
@@ -291,10 +295,10 @@ async function atualizarContadorRegistros() {
     const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado });
     if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
     const periodos = periodosFiltroAtual();
-    const situacao = document.getElementById('situacao-filtro')?.value;
+    const situacoes = situacoesFiltroAtual();
     const plano = document.getElementById('plano-filtro')?.value;
     if (periodos.length) params.set('periodos', periodos.join(','));
-    if (situacao) params.set('situacao', situacao);
+    if (situacoes.length) params.set('situacoes', situacoes.join(','));
     if (plano) params.set('planoConfissao', plano);
 
     const { total, filtrados } = await apiFetch(`/matriculas/alunos/contagem?${params.toString()}`);
@@ -369,11 +373,7 @@ function popularSelectsOpcoes() {
 
   montarPeriodoMultiSelect();
 
-  const situacaoFiltro = document.getElementById('situacao-filtro');
-  if (situacaoFiltro) {
-    situacaoFiltro.innerHTML = '<option value="">Todas as situações</option>' +
-      opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  }
+  montarSituacaoMultiSelect();
   const planoFiltro = document.getElementById('plano-filtro');
   if (planoFiltro) {
     planoFiltro.innerHTML = '<option value="">Todos os planos/confissão</option>' +
@@ -461,14 +461,77 @@ function setupPeriodoMultiSelect() {
   });
 }
 
+// Mesmo filtro tipo Excel, agora pra Situação — lista vem de opcoes.situacoes
+// (carregada do servidor), não é fixa como a de período.
+function montarSituacaoMultiSelect() {
+  const opcoesEl = document.getElementById('situacao-opcoes');
+  if (!opcoesEl) return;
+  opcoesEl.innerHTML = opcoes.situacoes.map(s => `
+    <label>
+      <input type="checkbox" class="situacao-checkbox" value="${esc(s)}" ${situacoesDesmarcadas.has(s) ? '' : 'checked'}>
+      ${esc(s)}
+    </label>
+  `).join('');
+  atualizarBotaoSituacao();
+}
+
+function atualizarBotaoSituacao() {
+  const btn = document.getElementById('situacao-btn');
+  if (!btn) return;
+  const marcados = opcoes.situacoes.length - situacoesDesmarcadas.size;
+  if (situacoesDesmarcadas.size === 0) btn.textContent = 'Todas as situações';
+  else if (marcados === 0) btn.textContent = 'Nenhuma situação';
+  else btn.textContent = `${marcados} situação(ões) selecionada(s)`;
+}
+
+function situacoesFiltroAtual() {
+  if (situacoesDesmarcadas.size === 0) return [];
+  return opcoes.situacoes.filter(s => !situacoesDesmarcadas.has(s));
+}
+
+function setupSituacaoMultiSelect() {
+  const wrap = document.getElementById('situacao-multiselect');
+  const btn = document.getElementById('situacao-btn');
+  const panel = document.getElementById('situacao-panel');
+  const opcoesEl = document.getElementById('situacao-opcoes');
+  if (!wrap || !btn || !panel || !opcoesEl) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.classList.add('hidden');
+  });
+
+  wrap.querySelectorAll('.multi-select-acoes button').forEach(acaoBtn => {
+    acaoBtn.addEventListener('click', () => {
+      situacoesDesmarcadas = acaoBtn.dataset.acao === 'nenhum' ? new Set(opcoes.situacoes) : new Set();
+      montarSituacaoMultiSelect();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    });
+  });
+
+  opcoesEl.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('situacao-checkbox')) return;
+    const valor = e.target.value;
+    if (e.target.checked) situacoesDesmarcadas.delete(valor);
+    else situacoesDesmarcadas.add(valor);
+    atualizarBotaoSituacao();
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+  });
+}
+
 // Grupo de badge por SITUAÇÃO — cor por significado (ok/alerta/crítica/neutra),
 // não por valor individual, senão vira uma cor aleatória por texto.
 const SITUACAO_GRUPO = {
   'Matrícula Nova - Assinada': 'ok', 'Rematrícula Assinada': 'ok', 'Formando': 'ok',
+  'Matrícula Nova - Retorno Assinada': 'ok', 'Matrícula Nova - Transferência Assinada': 'ok',
   'Matrícula Nova': 'alerta', 'Pendência Financeira': 'alerta', 'Não Assinou': 'alerta',
+  'Matrícula Nova - Retorno': 'alerta', 'Matrícula Nova - Transferência': 'alerta',
   'Cancelou': 'critica', 'Trancou': 'critica', '1ª Evasão': 'critica', '2ª Evasão': 'critica',
   'Desistente': 'critica', 'Reprovado': 'critica',
-  'Transferência': 'neutra', 'Retorno': 'neutra', 'Mudança de Curso': 'neutra'
+  'Transferência': 'neutra', 'Mudança de Curso': 'neutra'
 };
 function situacaoBadgeClasse(situacao) {
   return `situacao-${SITUACAO_GRUPO[situacao] || 'neutra'}`;
@@ -480,10 +543,10 @@ async function buscarProximaPaginaAlunos(primeira) {
   params.set('semestre', semestreSelecionado);
   if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
   const periodos = periodosFiltroAtual();
-  const situacao = document.getElementById('situacao-filtro')?.value;
+  const situacoes = situacoesFiltroAtual();
   const plano = document.getElementById('plano-filtro')?.value;
   if (periodos.length) params.set('periodos', periodos.join(','));
-  if (situacao) params.set('situacao', situacao);
+  if (situacoes.length) params.set('situacoes', situacoes.join(','));
   if (plano) params.set('planoConfissao', plano);
   const busca = document.getElementById('busca-aluno')?.value.trim();
   if (busca) params.set('busca', busca);

@@ -1,0 +1,252 @@
+/* ÓRBITA — BANCO MED-FATEC */
+
+:root {
+  /* Cores extraídas direto do logo MED FATEC (clínica) — separadas da
+     marca institucional geral (--primary-blue/--secondary-blue). */
+  --med-azul-escuro: #004F9F;
+  --med-azul-claro: #009FE3;
+}
+
+.mod-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 5rem;
+}
+
+.bmf-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.bmf-brand img {
+  height: 44px;
+  width: auto;
+}
+
+/* ---- Botões / Form (mesmo padrão dos demais módulos) ---- */
+.btn {
+  padding: 0.85rem 1.1rem;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--med-azul-claro), var(--med-azul-escuro));
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 79, 159, 0.25);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(0, 79, 159, 0.32); }
+
+.btn-secondary {
+  background: rgba(3, 20, 38, 0.03);
+  color: var(--text-main);
+  border: 1.5px solid var(--border-color);
+}
+.btn-secondary:hover { background: rgba(3, 20, 38, 0.06); }
+
+.form-group { margin-bottom: 1.25rem; text-align: left; }
+.form-label { display: block; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.45rem; }
+.form-control {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: #F8FAFC;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.92rem;
+  outline: none;
+  transition: all 0.2s;
+}
+.form-control:focus { border-color: var(--med-azul-claro); background: #fff; }
+
+.bmf-form-row { display: flex; gap: 1rem; }
+.bmf-form-erro {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #B91C1C;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* ---- Modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: rgba(3, 20, 38, 0.6);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+.modal-overlay.active { display: flex !important; }
+.modal-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(3, 20, 38, 0.2);
+  margin: auto;
+}
+.bmf-modal-lg { max-width: 720px; }
+
+/* ---- Tabs ---- */
+.bmf-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1.5px solid var(--border-color);
+}
+.bmf-tab-btn {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: none;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1.5px;
+}
+.bmf-tab-btn.active {
+  color: var(--med-azul-escuro);
+  border-bottom-color: var(--med-azul-claro);
+}
+
+.bmf-view.hidden { display: none; }
+
+/* ---- Toolbar ---- */
+.bmf-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.bmf-toolbar .btn-primary { width: auto; padding-left: 1.5rem; padding-right: 1.5rem; }
+.bmf-filters { display: flex; gap: 0.75rem; flex-wrap: wrap; flex: 1; }
+.bmf-filters select, .bmf-filters input {
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  background: #fff;
+  color: var(--text-main);
+}
+.bmf-filters input { flex: 1; min-width: 180px; }
+
+/* ---- Grid de questões ---- */
+.bmf-questoes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+.bmf-q-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: 0 2px 10px rgba(3, 20, 38, 0.04);
+}
+.bmf-q-card h4 { font-size: 1rem; font-weight: 800; color: var(--text-main); line-height: 1.3; }
+.bmf-q-card-top { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.bmf-q-meta { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; }
+.bmf-q-snippet { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; }
+.bmf-q-actions { display: flex; gap: 0.6rem; margin-top: auto; padding-top: 0.5rem; }
+.bmf-q-actions .btn { padding: 0.55rem 0.8rem; font-size: 0.8rem; }
+
+.bmf-badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.bmf-badge-facil { background: rgba(52, 179, 160, 0.14); color: #1B7A6C; }
+.bmf-badge-media { background: rgba(0, 159, 227, 0.14); color: var(--med-azul-escuro); }
+.bmf-badge-intermediaria { background: rgba(245, 158, 11, 0.14); color: #92650A; }
+.bmf-badge-dificil { background: rgba(239, 68, 68, 0.12); color: #B91C1C; }
+.bmf-badge-tipo { background: rgba(3, 20, 38, 0.06); color: var(--text-secondary); }
+
+.bmf-empty { text-align: center; color: var(--text-secondary); padding: 3rem 1rem; font-weight: 600; }
+
+/* ---- Editor de alternativas ---- */
+.bmf-alt-linha { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.bmf-alt-linha .bmf-alt-texto { flex: 1; }
+.bmf-alt-linha input[type="checkbox"],
+.bmf-alt-linha input[type="radio"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--med-azul-claro); }
+
+.bmf-imagem-preview { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+.bmf-imagem-preview img { max-width: 280px; max-height: 200px; border-radius: 10px; border: 1px solid var(--border-color); }
+.bmf-imagem-preview .btn { width: auto; padding: 0.5rem 0.9rem; font-size: 0.8rem; }
+
+/* ---- Provas ---- */
+.bmf-provas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+.bmf-prova-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  box-shadow: 0 2px 10px rgba(3, 20, 38, 0.04);
+}
+.bmf-prova-card h4 { font-weight: 800; color: var(--text-main); }
+.bmf-prova-card .bmf-q-actions { margin-top: 0.75rem; }
+.bmf-prova-card .btn { width: auto; }
+
+.bmf-prova-questoes-lista {
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.bmf-prova-q-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.bmf-prova-q-linha:last-child { border-bottom: none; }
+.bmf-prova-q-linha:hover { background: rgba(3, 20, 38, 0.02); }
+.bmf-prova-q-linha input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--med-azul-claro); flex-shrink: 0; }
+.bmf-prova-q-titulo { flex: 1; font-weight: 600; color: var(--text-main); }
+
+@media (max-width: 720px) {
+  .bmf-form-row { flex-direction: column; gap: 0; }
+  .bmf-toolbar { flex-direction: column; align-items: stretch; }
+  .modal-box { padding: 1.25rem; }
+}

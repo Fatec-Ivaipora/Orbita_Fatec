@@ -14,10 +14,19 @@ const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 // isso que substitui a bagunça de digitação da planilha original (variações
 // como "Cancelou2025.2", "Trancou.2026.1", "Matrícula Nova – Assinada" com
 // travessão diferente). Semestre já é campo próprio, então não entra aqui.
+// "Retorno" (sozinho) foi removido a pedido do usuário (setor Financeiro,
+// Lisa — 2026-09-11): não tinha esse controle na planilha original, mas o
+// setor quer separar melhor esse ano se o retorno/transferência já foi
+// assinado ou não — mesma ideia do par "Matrícula Nova"/"Matrícula Nova -
+// Assinada" que já existia. Registros antigos com situação "Retorno" (19
+// alunos, todos de fatec/2026.1) não foram migrados — ficam como histórico,
+// só não aparecem mais como opção pra escolher num cadastro novo.
 const SITUACOES = [
     'Matrícula Nova', 'Matrícula Nova - Assinada', 'Rematrícula Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     'Pendência Financeira', 'Não Assinou', 'Cancelou', 'Trancou',
-    '1ª Evasão', '2ª Evasão', 'Transferência', 'Retorno', 'Reprovado',
+    '1ª Evasão', '2ª Evasão', 'Transferência', 'Reprovado',
     'Mudança de Curso', 'Formando', 'Desistente'
 ];
 
@@ -59,6 +68,9 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         // (singular) por retrocompatibilidade, mas o front atual só manda
         // "periodos" quando a pessoa desmarca algum item da lista.
         const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
+        // "situacoes" (plural) é o mesmo filtro tipo Excel, agora pra
+        // situação — mantém "situacao" (singular) por retrocompatibilidade.
+        const situacoes = (req.query.situacoes || '').split(',').map(s => s.trim()).filter(Boolean);
 
         // Filtros de situação/plano/nome são aplicados em memória durante a
         // paginação (mesmo padrão do "pula item fechado" já usado em
@@ -72,6 +84,7 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         // direto pros que batem, sem round-trip HTTP por página.
         const passaNoFiltro = (a) =>
             (!situacao || a.situacao === situacao) &&
+            (!situacoes.length || situacoes.includes(a.situacao)) &&
             (!planoConfissao || a.planoConfissao === planoConfissao) &&
             (!periodo || a.periodo === periodo) &&
             (!periodos.length || periodos.includes(a.periodo)) &&
@@ -129,28 +142,43 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
-        // Lista de períodos marcados (filtro tipo Excel) — Firestore aceita
-        // até 30 valores no "in", a lista de períodos possíveis (1º-12º + DP)
-        // nunca chega perto disso.
+        // Listas marcadas (filtro tipo Excel) — Firestore aceita até 30
+        // valores no "in", as listas possíveis (períodos, situações) nunca
+        // chegam perto disso. Mas só dá pra usar UM "in" por consulta — se
+        // período E situação vierem marcados ao mesmo tempo, não dá pra
+        // combinar os dois "in" na mesma query de contagem; nesse caso lê os
+        // documentos (já filtrados por módulo/semestre/curso/plano) e conta
+        // em memória, em vez de usar count() puro.
         const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
+        const situacoes = (req.query.situacoes || '').split(',').map(s => s.trim()).filter(Boolean);
 
         const base = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
 
         let filtrada = base;
         if (cursoId) filtrada = filtrada.where('cursoId', '==', cursoId);
-        if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
         if (planoConfissao) filtrada = filtrada.where('planoConfissao', '==', planoConfissao);
+        if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
         if (periodo) filtrada = filtrada.where('periodo', '==', periodo);
-        if (periodos.length) filtrada = filtrada.where('periodo', 'in', periodos);
-        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo || periodos.length);
+        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo || periodos.length || situacoes.length);
 
-        const [totalSnap, filtradaSnap] = await Promise.all([
-            base.count().get(),
-            temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
-        ]);
-
-        const total = totalSnap.data().count;
-        const filtrados = temFiltroExtra ? filtradaSnap.data().count : total;
+        let total, filtrados;
+        if (periodos.length && situacoes.length) {
+            const [totalSnap, docsSnap] = await Promise.all([base.count().get(), filtrada.get()]);
+            total = totalSnap.data().count;
+            filtrados = docsSnap.docs.filter(d => {
+                const a = d.data();
+                return periodos.includes(a.periodo) && situacoes.includes(a.situacao);
+            }).length;
+        } else {
+            if (periodos.length) filtrada = filtrada.where('periodo', 'in', periodos);
+            if (situacoes.length) filtrada = filtrada.where('situacao', 'in', situacoes);
+            const [totalSnap, filtradaSnap] = await Promise.all([
+                base.count().get(),
+                temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
+            ]);
+            total = totalSnap.data().count;
+            filtrados = temFiltroExtra ? filtradaSnap.data().count : total;
+        }
 
         res.json({ total, filtrados });
     } catch (err) {
