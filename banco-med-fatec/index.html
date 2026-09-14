@@ -7,7 +7,7 @@
   <title>BANCO MED-FATEC · Órbita - FatecIVP</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
-  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=7">
+  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=9">
 </head>
 
 <body>
@@ -34,6 +34,7 @@
             <button class="bmf-tab-btn active" data-tab="banco">Banco de Questões</button>
             <button class="bmf-tab-btn" data-tab="provas">Provas</button>
             <button class="bmf-tab-btn" data-tab="revisao">Revisão de Importação <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
+            <button class="bmf-tab-btn" data-tab="colinha">Colinha ENAMED</button>
           </div>
 
           <!-- ============ VIEW: BANCO DE QUESTÕES ============ -->
@@ -45,6 +46,9 @@
                 </select>
                 <select id="bmf-filtro-categoria">
                   <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="bmf-filtro-area-enamed">
+                  <option value="">Todas as áreas ENAMED</option>
                 </select>
                 <select id="bmf-filtro-dificuldade">
                   <option value="">Todas as dificuldades</option>
@@ -117,6 +121,46 @@
             <p id="bmf-revisao-vazio" class="bmf-empty hidden">Nada pendente de revisão no momento.</p>
           </section>
 
+          <!-- ============ VIEW: COLINHA ENAMED ============ -->
+          <section id="bmf-view-colinha" class="bmf-view hidden">
+            <p style="color:var(--text-secondary); margin-bottom:1.25rem; font-size:0.9rem;">As 7 áreas do ENAMED cruzam disciplinas e períodos diferentes — esta referência mostra onde cada disciplina da grade normalmente se encaixa. Ao confirmar a disciplina de uma questão, o sistema já sugere a área automaticamente com base nessa mesma tabela.</p>
+
+            <div class="bmf-colinha-grid">
+              <div class="bmf-colinha-area" style="--area-cor:#2F6FA8;">
+                <h4>Clínica Médica</h4>
+                <ul><li><b>6º-7º</b> Saúde do Adulto e do Idoso I/II</li><li><b>8º</b> Cuidado Paliativo e Dor</li><li><b>8º</b> Medicina de Urgência e Emergência</li><li><b>11º-12º</b> Internato Clínica Médica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#A2543B;">
+                <h4>Cirurgia</h4>
+                <ul><li><b>5º-6º</b> Clínica Cirúrgica I/II</li><li><b>5º-6º</b> Habilidades Cirúrgicas I/II</li><li><b>11º-12º</b> Internato Clínica Cirúrgica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#4B8F63;">
+                <h4>Pediatria</h4>
+                <ul><li><b>5º-6º</b> Saúde da Criança e do Adolescente I/II</li><li><b>9º-10º</b> Internato Pediatria I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#9A4F76;">
+                <h4>Ginecologia e Obstetrícia</h4>
+                <ul><li><b>7º-8º</b> Saúde da Mulher I/II</li><li><b>9º-10º</b> Internato Gin. e Obstetrícia I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#6E63A6;">
+                <h4>Saúde Mental</h4>
+                <ul><li><b>4º</b> Neurociência e Comportamento <i>(base)</i></li><li><b>5º</b> Saúde Mental</li><li><b>10º</b> Internato II — Saúde Mental</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#B98A2E;">
+                <h4>Medicina de Família e Comunidade</h4>
+                <ul><li><b>1º-8º</b> Saúde, Comunidade e Integralidade do Cuidado I a VIII</li><li><b>9º-10º</b> Internato Atenção Básica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#3F8686;">
+                <h4>Medicina Preventiva e Social</h4>
+                <ul><li><b>1º-3º</b> Projetos e Temas Integradores em Saúde I a III</li><li><b>7º</b> Medicina Legal · Saúde Global</li><li><b>8º</b> Saúde do Trabalhador</li><li><b>10º</b> Internato II — Saúde Coletiva</li></ul>
+              </div>
+              <div class="bmf-colinha-area bmf-colinha-transversal" style="--area-cor:#7A756A;">
+                <h4>Transversais / base — sem área fixa</h4>
+                <ul><li>Habilidades Clínicas I-VI · Sistemas Morfofisiológicos I-III · Patologia Clínica I-V</li><li>Medicina Baseada em Evidências I/II · Mecanismos de Defesas e Doenças</li><li>Interações Terapêuticas I/II · Oncogênese e Toxicologia · Medicina por Imagem</li><li>Optativas · Eletivos · Internato Urgência e Emergência I/II</li></ul>
+              </div>
+            </div>
+          </section>
+
         </main>
 
         <!-- ============ MODAL: QUESTÃO ============ -->
@@ -186,6 +230,13 @@
                       <option value="verdadeiro_falso">Verdadeiro / Falso</option>
                     </select>
                   </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Área ENAMED (opcional)</label>
+                  <select id="bmf-q-area-enamed" class="form-control">
+                    <option value="">Nenhuma</option>
+                  </select>
                 </div>
               </div>
 
@@ -263,20 +314,37 @@
                   <input type="text" id="bmf-p-semestre" class="form-control" placeholder="Ex: 2026.1" required>
                 </div>
               </div>
-              <div class="bmf-form-row">
+              <div class="bmf-tipo-prova-toggle">
+                <button type="button" class="bmf-tipo-prova-btn active" data-tipo="disciplina">Por disciplina</button>
+                <button type="button" class="bmf-tipo-prova-btn" data-tipo="enamed">Simulado ENAMED (por área)</button>
+              </div>
+              <input type="hidden" id="bmf-p-tipo" value="disciplina">
+
+              <div id="bmf-p-grupo-disciplina" class="bmf-form-row">
                 <div class="form-group" style="flex:0 0 140px;">
                   <label class="form-label">Período <span style="color:red">*</span></label>
-                  <select id="bmf-p-periodo" class="form-control" required>
+                  <select id="bmf-p-periodo" class="form-control">
                     <option value="">Período</option>
                   </select>
                 </div>
                 <div class="form-group" style="flex:1;">
                   <label class="form-label">Disciplina <span style="color:red">*</span></label>
-                  <select id="bmf-p-categoria" class="form-control" required>
+                  <select id="bmf-p-categoria" class="form-control">
                     <option value="">Selecione o período primeiro</option>
                   </select>
                 </div>
               </div>
+
+              <div id="bmf-p-grupo-enamed" class="form-group hidden">
+                <label class="form-label">Área ENAMED <span style="color:red">*</span></label>
+                <select id="bmf-p-area-enamed" class="form-control">
+                  <option value="">Selecione a área</option>
+                </select>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.4rem;">Puxa questões de qualquer disciplina/período marcadas com essa área — pra montar um simulado no estilo ENAMED.</p>
+              </div>
+
+              <p class="bmf-form-erro hidden" id="bmf-p-erro"></p>
+
               <div style="display:flex; gap:1rem; margin-top:1rem;">
                 <button type="button" class="btn btn-secondary" id="bmf-btn-cancelar-prova-novo" style="flex:1;">Cancelar</button>
                 <button type="submit" class="btn btn-primary" style="flex:1;">Criar Prova</button>
@@ -332,11 +400,29 @@
           </div>
         </div>
 
+        <div id="bmf-modal-resultado-importacao" class="modal-overlay">
+          <div class="modal-box">
+            <div class="bmf-resultado-header">
+              <h3 class="bmf-modal-titulo">Importação concluída</h3>
+              <p id="bmf-resultado-importacao-resumo" class="bmf-resultado-resumo"></p>
+            </div>
+
+            <div id="bmf-resultado-importacao-lista" class="bmf-resultado-lista"></div>
+
+            <p class="bmf-resultado-dica">Confira a aba "Revisão de Importação" pra confirmar a disciplina de cada lote antes de publicar.</p>
+
+            <div class="bmf-modal-acoes">
+              <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-resultado-importacao">Fechar</button>
+              <button type="button" class="btn btn-primary" id="bmf-btn-ir-revisao-resultado">Ir para Revisão de Importação</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <script type="module" src="/banco-med-fatec/app.js?v=8"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=13"></script>
 </body>
 
 </html>

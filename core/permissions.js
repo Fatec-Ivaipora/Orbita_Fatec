@@ -185,6 +185,14 @@ export const ROLE_PERMISSIONS = {
     label: "Secretaria",
     modules: ["dashboard", "fidelidade", "matriculas", "relatorio-dp"]
   },
+  // Coordenação da Medicina — só enxerga o Banco de Questões (MED FATEC),
+  // nenhum outro módulo administrativo. Cargo dedicado (em vez de dar
+  // banco-med-fatec pro cargo "coordenador" geral) pra não vazar acesso
+  // pra coordenadores de outros cursos.
+  coord_medicina: {
+    label: "Coordenação Medicina",
+    modules: ["dashboard", "fidelidade", "banco-med-fatec"]
+  },
   visitante: {
     label: "Visitante",
     modules: ["dashboard", "fidelidade"]
