@@ -7,7 +7,7 @@
   <title>BANCO MED-FATEC · Órbita - FatecIVP</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
-  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=7">
+  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=8">
 </head>
 
 <body>
@@ -45,6 +45,9 @@
                 </select>
                 <select id="bmf-filtro-categoria">
                   <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="bmf-filtro-area-enamed">
+                  <option value="">Todas as áreas ENAMED</option>
                 </select>
                 <select id="bmf-filtro-dificuldade">
                   <option value="">Todas as dificuldades</option>
@@ -187,6 +190,13 @@
                     </select>
                   </div>
                 </div>
+
+                <div class="form-group">
+                  <label class="form-label">Área ENAMED (opcional)</label>
+                  <select id="bmf-q-area-enamed" class="form-control">
+                    <option value="">Nenhuma</option>
+                  </select>
+                </div>
               </div>
 
               <div class="bmf-form-secao">
@@ -263,20 +273,37 @@
                   <input type="text" id="bmf-p-semestre" class="form-control" placeholder="Ex: 2026.1" required>
                 </div>
               </div>
-              <div class="bmf-form-row">
+              <div class="bmf-tipo-prova-toggle">
+                <button type="button" class="bmf-tipo-prova-btn active" data-tipo="disciplina">Por disciplina</button>
+                <button type="button" class="bmf-tipo-prova-btn" data-tipo="enamed">Simulado ENAMED (por área)</button>
+              </div>
+              <input type="hidden" id="bmf-p-tipo" value="disciplina">
+
+              <div id="bmf-p-grupo-disciplina" class="bmf-form-row">
                 <div class="form-group" style="flex:0 0 140px;">
                   <label class="form-label">Período <span style="color:red">*</span></label>
-                  <select id="bmf-p-periodo" class="form-control" required>
+                  <select id="bmf-p-periodo" class="form-control">
                     <option value="">Período</option>
                   </select>
                 </div>
                 <div class="form-group" style="flex:1;">
                   <label class="form-label">Disciplina <span style="color:red">*</span></label>
-                  <select id="bmf-p-categoria" class="form-control" required>
+                  <select id="bmf-p-categoria" class="form-control">
                     <option value="">Selecione o período primeiro</option>
                   </select>
                 </div>
               </div>
+
+              <div id="bmf-p-grupo-enamed" class="form-group hidden">
+                <label class="form-label">Área ENAMED <span style="color:red">*</span></label>
+                <select id="bmf-p-area-enamed" class="form-control">
+                  <option value="">Selecione a área</option>
+                </select>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.4rem;">Puxa questões de qualquer disciplina/período marcadas com essa área — pra montar um simulado no estilo ENAMED.</p>
+              </div>
+
+              <p class="bmf-form-erro hidden" id="bmf-p-erro"></p>
+
               <div style="display:flex; gap:1rem; margin-top:1rem;">
                 <button type="button" class="btn btn-secondary" id="bmf-btn-cancelar-prova-novo" style="flex:1;">Cancelar</button>
                 <button type="submit" class="btn btn-primary" style="flex:1;">Criar Prova</button>
@@ -332,11 +359,29 @@
           </div>
         </div>
 
+        <div id="bmf-modal-resultado-importacao" class="modal-overlay">
+          <div class="modal-box">
+            <div class="bmf-resultado-header">
+              <h3 class="bmf-modal-titulo">Importação concluída</h3>
+              <p id="bmf-resultado-importacao-resumo" class="bmf-resultado-resumo"></p>
+            </div>
+
+            <div id="bmf-resultado-importacao-lista" class="bmf-resultado-lista"></div>
+
+            <p class="bmf-resultado-dica">Confira a aba "Revisão de Importação" pra confirmar a disciplina de cada lote antes de publicar.</p>
+
+            <div class="bmf-modal-acoes">
+              <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-resultado-importacao">Fechar</button>
+              <button type="button" class="btn btn-primary" id="bmf-btn-ir-revisao-resultado">Ir para Revisão de Importação</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <script type="module" src="/banco-med-fatec/app.js?v=8"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=10"></script>
 </body>
 
 </html>

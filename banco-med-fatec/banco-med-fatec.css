@@ -528,6 +528,65 @@
 }
 .bmf-revisao-descartar:hover { color: #B91C1C; }
 
+/* ---- Modal de resultado da importação (substitui o alert() nativo) ---- */
+.bmf-resultado-header { margin-bottom: 1rem; }
+.bmf-resultado-resumo { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem; }
+
+.bmf-resultado-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+
+.bmf-resultado-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(52, 179, 160, 0.08);
+}
+.bmf-resultado-item .bmf-icon { color: #1B7A6C; margin-top: 0.1rem; }
+.bmf-resultado-item.bmf-resultado-erro { background: rgba(239, 68, 68, 0.08); }
+.bmf-resultado-item.bmf-resultado-erro .bmf-icon { color: #B91C1C; }
+
+.bmf-resultado-item-titulo { font-weight: 700; font-size: 0.92rem; color: var(--text-main); }
+.bmf-resultado-item-detalhe { font-size: 0.85rem; color: var(--text-main); margin-top: 0.15rem; }
+.bmf-resultado-item-arquivo { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem; }
+
+/* ---- Toggle "Por disciplina" x "Simulado ENAMED" na Nova Prova ---- */
+.bmf-tipo-prova-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.1rem;
+  background: rgba(0, 79, 159, 0.06);
+  padding: 0.3rem;
+  border-radius: 10px;
+}
+.bmf-tipo-prova-btn {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.bmf-tipo-prova-btn.active { background: #fff; color: var(--med-azul-escuro); box-shadow: 0 1px 4px rgba(3, 20, 38, 0.12); }
+
+.bmf-resultado-dica {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.1rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 720px) {
   .bmf-form-row { flex-direction: column; gap: 0; }
   .bmf-toolbar { flex-direction: column; align-items: stretch; }

@@ -125,6 +125,19 @@ let provas = [];
 let imagemAtual = null; // { nome, dataUrl } | null
 let provaEmEdicao = null; // prova sendo montada no modal
 
+// As 7 áreas de formação do ENAMED — espelha AREAS_ENAMED do backend
+// (src/rotas/banco-med-fatec.js). Cruza disciplina/período de propósito:
+// é assim que a matriz do ENAMED organiza a prova.
+const AREAS_ENAMED = [
+  'Clínica Médica',
+  'Cirurgia',
+  'Pediatria',
+  'Ginecologia e Obstetrícia',
+  'Saúde Mental',
+  'Medicina de Família e Comunidade',
+  'Medicina Preventiva e Social'
+];
+
 const DIFICULDADE_LABEL = { facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' };
 const TIPO_LABEL = {
   multichoice_unica: 'Múltipla escolha (uma correta)',
@@ -137,7 +150,9 @@ const ICONS = {
   editar: '<svg class="bmf-icon" viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 0 1 4 4L7 21l-4 1 1-4Z"/></svg>',
   excluir: '<svg class="bmf-icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
   imagem: '<svg class="bmf-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>',
-  montar: '<svg class="bmf-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+  montar: '<svg class="bmf-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  sucesso: '<svg class="bmf-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>',
+  alerta: '<svg class="bmf-icon" viewBox="0 0 24 24"><path d="M12 3l10 18H2Z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.2" x2="12" y2="17.2"/></svg>'
 };
 
 function nomeCategoria(id) {
@@ -153,14 +168,31 @@ async function carregarQuestoesRevisao() {
   questoesRevisao = await apiFetch('/banco-med-fatec/questoes?status=revisao_importacao');
 }
 
-async function carregarQuestoesDoPeriodo(periodo) {
-  questoesBanco = periodo
-    ? await apiFetch(`/banco-med-fatec/questoes?periodo=${encodeURIComponent(periodo)}&status=publicada`)
-    : [];
+// Lê os filtros de período e área ENAMED (os dois pedem ao servidor, os
+// demais — disciplina/dificuldade/busca — só refinam em memória) e busca só
+// se pelo menos um dos dois estiver escolhido. Área ENAMED cruza disciplinas
+// e períodos de propósito (é assim que o ENAMED organiza a prova), então
+// dá pra montar um simulado sem escolher período nenhum.
+async function carregarQuestoesBanco() {
+  const periodo = document.getElementById('bmf-filtro-periodo').value;
+  const area = document.getElementById('bmf-filtro-area-enamed').value;
+  if (!periodo && !area) { questoesBanco = []; return; }
+
+  const params = new URLSearchParams({ status: 'publicada' });
+  if (periodo) params.set('periodo', periodo);
+  if (area) params.set('areaEnamed', area);
+  questoesBanco = await apiFetch(`/banco-med-fatec/questoes?${params.toString()}`);
 }
 
 async function carregarQuestoesDaCategoria(categoriaId) {
   questoesProvaAtual = await apiFetch(`/banco-med-fatec/questoes?categoriaId=${encodeURIComponent(categoriaId)}&status=publicada`);
+}
+
+// Simulado ENAMED: puxa questões de qualquer disciplina/período que tenham
+// essa área marcada — mesma ideia do carregarQuestoesDaCategoria acima, só
+// que filtrando pela área em vez da disciplina.
+async function carregarQuestoesDaArea(areaEnamed) {
+  questoesProvaAtual = await apiFetch(`/banco-med-fatec/questoes?areaEnamed=${encodeURIComponent(areaEnamed)}&status=publicada`);
 }
 
 // Recarrega categorias/provas/fila-de-revisão (sempre leves) e, só se já
@@ -175,8 +207,7 @@ async function carregarTudo() {
     await carregarQuestoesRevisao();
     popularSelectsCategoria();
 
-    const periodoAtual = document.getElementById('bmf-filtro-periodo').value;
-    await carregarQuestoesDoPeriodo(periodoAtual);
+    await carregarQuestoesBanco();
 
     renderQuestoes();
     renderProvas();
@@ -200,6 +231,22 @@ function popularSelectsPeriodo() {
       opt.textContent = sel.id === 'bmf-q-categoria-nova-periodo' ? `${ordinal(p)} Per.` : `${ordinal(p)} Período`;
       sel.appendChild(opt);
     }
+    sel.dataset.montado = '1';
+  });
+}
+
+// Popula os selects de "Área ENAMED" (filtro do banco, form de questão e
+// form de nova prova) — mesma lista fixa nos três, igual período.
+function popularSelectsAreaEnamed() {
+  const ids = ['bmf-filtro-area-enamed', 'bmf-q-area-enamed', 'bmf-p-area-enamed'];
+  ids.map(id => document.getElementById(id)).forEach(sel => {
+    if (!sel || sel.dataset.montado) return;
+    AREAS_ENAMED.forEach(area => {
+      const opt = document.createElement('option');
+      opt.value = area;
+      opt.textContent = area;
+      sel.appendChild(opt);
+    });
     sel.dataset.montado = '1';
   });
 }
@@ -298,12 +345,13 @@ function renderQuestoes() {
   const grid = document.getElementById('bmf-questoes-grid');
   const vazio = document.getElementById('bmf-questoes-vazio');
 
-  // Sem período escolhido ainda, não tem o que listar (e não fomos buscar
-  // nada no servidor) — pede pra escolher em vez de mostrar "vazio".
+  // Sem período nem área ENAMED escolhidos ainda, não tem o que listar (e
+  // não fomos buscar nada no servidor) — pede pra escolher em vez de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
-  if (!periodoEscolhido) {
+  const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
+  if (!periodoEscolhido && !areaEscolhida) {
     grid.innerHTML = '';
-    vazio.textContent = 'Selecione um período acima pra ver as questões daquele período.';
+    vazio.textContent = 'Selecione um período ou uma área ENAMED acima pra ver as questões.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -373,6 +421,9 @@ function renderBarraSelecao() {
 function provasFiltradas() {
   const periodo = document.getElementById('bmf-prova-filtro-periodo').value;
   return provas.filter(p => {
+    // Simulado ENAMED não pertence a um período só (cruza vários) — sempre
+    // aparece, independente do filtro de período escolhido.
+    if (p.tipo === 'enamed') return true;
     if (periodo && String(nomeCategoriaObj(p.categoriaId)?.periodo) !== periodo) return false;
     return true;
   });
@@ -393,9 +444,10 @@ function renderProvas() {
       <div class="bmf-prova-row-main">
         <div class="bmf-q-row-badges">
           ${p.semestre ? `<span class="bmf-badge bmf-badge-tipo">${esc(p.semestre)}</span>` : ''}
+          ${p.tipo === 'enamed' ? '<span class="bmf-badge bmf-badge-tipo">Simulado ENAMED</span>' : ''}
         </div>
         <div class="bmf-prova-row-titulo">${esc(p.nome)}</div>
-        <div class="bmf-prova-row-meta">${esc(nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''}</div>
+        <div class="bmf-prova-row-meta">${esc(p.tipo === 'enamed' ? p.areaEnamed : nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''}</div>
       </div>
       <div class="bmf-prova-row-acoes">
         <button class="btn btn-secondary bmf-btn-montar-prova action-execute" data-id="${p.id}">
@@ -499,6 +551,7 @@ function abrirModalQuestao(id) {
     }
     document.getElementById('bmf-q-dificuldade').value = q.dificuldade;
     document.getElementById('bmf-q-tipo').value = q.tipoMoodle;
+    document.getElementById('bmf-q-area-enamed').value = q.areaEnamed || '';
     document.getElementById('bmf-q-enunciado').value = q.enunciadoHtml;
     document.getElementById('bmf-q-justificativa').value = q.justificativa || '';
     document.getElementById('bmf-q-fonte').value = q.fonte || '';
@@ -544,6 +597,7 @@ async function salvarQuestao(e) {
     categoriaId: document.getElementById('bmf-q-categoria').value,
     dificuldade: document.getElementById('bmf-q-dificuldade').value,
     tipoMoodle: document.getElementById('bmf-q-tipo').value,
+    areaEnamed: document.getElementById('bmf-q-area-enamed').value,
     enunciadoHtml: sanitizeHTML(document.getElementById('bmf-q-enunciado').value.trim()).replace(/\n/g, '<br>'),
     alternativas: lerAlternativasDoForm(),
     justificativa: sanitizeHTML(document.getElementById('bmf-q-justificativa').value.trim()).replace(/\n/g, '<br>'),
@@ -583,12 +637,23 @@ async function excluirQuestao(id) {
 // ela é criada — sem precisar reabrir "Montar Prova" pra selecioná-las de novo.
 let questoesParaNovaProva = null;
 
+// Alterna entre "Por disciplina" (categoria+período, como sempre foi) e
+// "Simulado ENAMED" (só a área, cruzando período/disciplina) — troca qual
+// grupo de campos fica visível e o valor guardado no input hidden bmf-p-tipo.
+function selecionarTipoProva(tipo) {
+  document.getElementById('bmf-p-tipo').value = tipo;
+  document.querySelectorAll('.bmf-tipo-prova-btn').forEach(b => b.classList.toggle('active', b.dataset.tipo === tipo));
+  document.getElementById('bmf-p-grupo-disciplina').classList.toggle('hidden', tipo !== 'disciplina');
+  document.getElementById('bmf-p-grupo-enamed').classList.toggle('hidden', tipo !== 'enamed');
+}
+
 function abrirModalNovaProva(prefill) {
   if (categorias.length === 0) {
     alert('Ainda não há nenhuma disciplina cadastrada. Cadastre uma disciplina primeiro pela aba "Banco de Questões" (botão "+ Nova Questão" → "+" ao lado de Disciplina).');
     return;
   }
   document.getElementById('bmf-form-prova-novo').reset();
+  selecionarTipoProva('disciplina');
   questoesParaNovaProva = prefill?.questoesIds || null;
   if (prefill?.categoriaId) {
     const cat = nomeCategoriaObj(prefill.categoriaId);
@@ -610,6 +675,20 @@ function fecharModalNovaProva() {
 
 async function criarProva(e) {
   e.preventDefault();
+  const erroEl = document.getElementById('bmf-p-erro');
+  const tipo = document.getElementById('bmf-p-tipo').value;
+  const categoriaId = document.getElementById('bmf-p-categoria').value;
+  const areaEnamed = document.getElementById('bmf-p-area-enamed').value;
+
+  if (tipo === 'disciplina' && !categoriaId) {
+    if (erroEl) { erroEl.textContent = 'Selecione a disciplina da prova.'; erroEl.classList.remove('hidden'); }
+    return;
+  }
+  if (tipo === 'enamed' && !areaEnamed) {
+    if (erroEl) { erroEl.textContent = 'Selecione a área ENAMED da prova.'; erroEl.classList.remove('hidden'); }
+    return;
+  }
+
   try {
     const questoesIds = questoesParaNovaProva || [];
     await apiFetch('/banco-med-fatec/provas', {
@@ -617,7 +696,9 @@ async function criarProva(e) {
       body: JSON.stringify({
         nome: document.getElementById('bmf-p-nome').value.trim(),
         semestre: document.getElementById('bmf-p-semestre').value.trim(),
-        categoriaId: document.getElementById('bmf-p-categoria').value,
+        tipo,
+        categoriaId: tipo === 'disciplina' ? categoriaId : undefined,
+        areaEnamed: tipo === 'enamed' ? areaEnamed : undefined,
         questoesIds
       })
     });
@@ -734,7 +815,8 @@ function renderListaSelecaoQuestoes() {
   const disponiveis = questoesProvaAtual.filter(q => !busca || q.titulo.toLowerCase().includes(busca));
 
   if (!questoesProvaAtual.length) {
-    lista.innerHTML = `<p class="bmf-empty" style="padding:1.5rem;">Ainda não há questões cadastradas em "${esc(nomeCategoria(provaEmEdicao.categoriaId))}". Cadastre questões dessa disciplina na aba Banco de Questões.</p>`;
+    const rotuloVazio = provaEmEdicao.tipo === 'enamed' ? `área "${esc(provaEmEdicao.areaEnamed)}"` : `disciplina "${esc(nomeCategoria(provaEmEdicao.categoriaId))}"`;
+    lista.innerHTML = `<p class="bmf-empty" style="padding:1.5rem;">Ainda não há questões marcadas com essa ${rotuloVazio}. Cadastre/marque questões na aba Banco de Questões.</p>`;
     return;
   }
 
@@ -781,14 +863,19 @@ async function abrirModalMontarProva(id) {
   provaEmEdicao = provas.find(p => p.id === id);
   if (!provaEmEdicao) return;
   selecaoProvaAtual = new Set(provaEmEdicao.questoesIds || []);
-  document.getElementById('bmf-prova-montar-titulo').textContent = `Montar Prova — ${provaEmEdicao.nome} (${nomeCategoria(provaEmEdicao.categoriaId)})`;
+  const rotuloEscopo = provaEmEdicao.tipo === 'enamed' ? provaEmEdicao.areaEnamed : nomeCategoria(provaEmEdicao.categoriaId);
+  document.getElementById('bmf-prova-montar-titulo').textContent = `Montar Prova — ${provaEmEdicao.nome} (${rotuloEscopo})`;
   document.getElementById('bmf-prova-busca').value = '';
   document.getElementById('bmf-prova-qtd-input').value = '';
   document.getElementById('bmf-prova-erro').classList.add('hidden');
   document.getElementById('bmf-modal-prova-montar').classList.add('active');
   document.getElementById('bmf-prova-questoes-lista').innerHTML = '<p class="bmf-empty" style="padding:1.5rem;">Carregando questões…</p>';
   try {
-    await carregarQuestoesDaCategoria(provaEmEdicao.categoriaId);
+    if (provaEmEdicao.tipo === 'enamed') {
+      await carregarQuestoesDaArea(provaEmEdicao.areaEnamed);
+    } else {
+      await carregarQuestoesDaCategoria(provaEmEdicao.categoriaId);
+    }
   } catch (err) {
     questoesProvaAtual = [];
   }
@@ -1052,13 +1139,13 @@ async function importarArquivosAva(fileList) {
   const arquivos = [...fileList];
   if (!arquivos.length) return;
 
-  const resumo = [];
+  const itens = [];
   for (const file of arquivos) {
     try {
       const texto = await file.text();
       const grupos = await parseMoodleXml(texto);
       if (!grupos.length) {
-        resumo.push(`${file.name}: nenhuma questão de tipo suportado encontrada.`);
+        itens.push({ arquivo: file.name, falhou: true, mensagem: 'Nenhuma questão de tipo suportado encontrada.' });
         continue;
       }
 
@@ -1070,22 +1157,67 @@ async function importarArquivosAva(fileList) {
           method: 'POST',
           body: JSON.stringify({ categoriaSugeridaTexto: grupo.categoriaSugeridaTexto, questoes: grupo.questoes })
         });
-        const rotulo = grupo.categoriaSugeridaTexto ? `"${grupo.categoriaSugeridaTexto}"` : '(sem categoria)';
-        let linha = `${file.name} — ${rotulo}: ${resp.criadas} questão(ões) importada(s)`;
-        if (resp.duplicadas && resp.duplicadas.length) linha += `, ${resp.duplicadas.length} já existente(s) no banco (ignorada(s))`;
-        if (resp.erros && resp.erros.length) linha += `, ${resp.erros.length} com erro (ver console)`;
-        if (resp.duplicadas && resp.duplicadas.length) console.info(`Duplicatas ignoradas em ${file.name} / ${rotulo}:`, resp.duplicadas);
-        if (resp.erros && resp.erros.length) console.warn(`Erros ao importar ${file.name} / ${rotulo}:`, resp.erros);
-        resumo.push(linha);
+        if (resp.duplicadas && resp.duplicadas.length) console.info(`Duplicatas ignoradas em ${file.name} / ${grupo.categoriaSugeridaTexto}:`, resp.duplicadas);
+        if (resp.erros && resp.erros.length) console.warn(`Erros ao importar ${file.name} / ${grupo.categoriaSugeridaTexto}:`, resp.erros);
+        itens.push({
+          arquivo: file.name,
+          categoria: grupo.categoriaSugeridaTexto || '(sem categoria)',
+          criadas: resp.criadas || 0,
+          duplicadas: (resp.duplicadas || []).length,
+          erros: (resp.erros || []).length
+        });
       }
     } catch (err) {
-      resumo.push(`${file.name}: falhou — ${err.message}`);
+      itens.push({ arquivo: file.name, falhou: true, mensagem: err.message });
     }
   }
 
-  alert(`Importação concluída:\n\n${resumo.join('\n')}\n\nConfira a aba "Revisão de Importação" pra confirmar a disciplina de cada lote.`);
+  mostrarResultadoImportacao(itens);
   await carregarTudo();
-  document.querySelector('.bmf-tab-btn[data-tab="revisao"]')?.click();
+}
+
+// Modal de resultado da importação — substitui o alert() nativo por um
+// resumo com um card por disciplina/arquivo, fácil de escanear quando o
+// professor importa vários arquivos/categorias de uma vez.
+function mostrarResultadoImportacao(itens) {
+  const lista = document.getElementById('bmf-resultado-importacao-lista');
+  const totalCriadas = itens.reduce((acc, it) => acc + (it.criadas || 0), 0);
+
+  lista.innerHTML = itens.map(it => {
+    if (it.falhou) {
+      return `
+        <div class="bmf-resultado-item bmf-resultado-erro">
+          ${ICONS.alerta}
+          <div>
+            <div class="bmf-resultado-item-titulo">${esc(it.arquivo)}</div>
+            <div class="bmf-resultado-item-detalhe">Falhou — ${esc(it.mensagem)}</div>
+          </div>
+        </div>`;
+    }
+    const detalhes = [`${it.criadas} questão(ões) importada(s)`];
+    if (it.duplicadas) detalhes.push(`${it.duplicadas} já existente(s) no banco (ignorada${it.duplicadas > 1 ? 's' : ''})`);
+    if (it.erros) detalhes.push(`${it.erros} com erro (ver console)`);
+    return `
+      <div class="bmf-resultado-item">
+        ${ICONS.sucesso}
+        <div>
+          <div class="bmf-resultado-item-titulo">${esc(it.categoria)}</div>
+          <div class="bmf-resultado-item-detalhe">${esc(detalhes.join(' · '))}</div>
+          <div class="bmf-resultado-item-arquivo">${esc(it.arquivo)}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('bmf-resultado-importacao-resumo').textContent = totalCriadas
+    ? `${totalCriadas} questão(ões) no total, aguardando revisão.`
+    : 'Nenhuma questão nova foi importada.';
+
+  document.getElementById('bmf-modal-resultado-importacao').classList.add('active');
+}
+
+function fecharModalResultadoImportacao(irParaRevisao) {
+  document.getElementById('bmf-modal-resultado-importacao').classList.remove('active');
+  if (irParaRevisao) document.querySelector('.bmf-tab-btn[data-tab="revisao"]')?.click();
 }
 
 // ================================================================
@@ -1211,7 +1343,8 @@ function fecharModalAtivoComEsc() {
     ['bmf-modal-questao', fecharModalQuestao],
     ['bmf-modal-prova-novo', fecharModalNovaProva],
     ['bmf-modal-prova-montar', fecharModalMontarProva],
-    ['bmf-modal-adicionar-prova', fecharModalAdicionarProva]
+    ['bmf-modal-adicionar-prova', fecharModalAdicionarProva],
+    ['bmf-modal-resultado-importacao', () => fecharModalResultadoImportacao(false)]
   ];
   for (const [id, fechar] of mapa) {
     const modal = document.getElementById(id);
@@ -1239,7 +1372,13 @@ function bindEventos() {
     popularSelectsCategoria();
     const grid = document.getElementById('bmf-questoes-grid');
     grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesDoPeriodo(document.getElementById('bmf-filtro-periodo').value);
+    await carregarQuestoesBanco();
+    renderQuestoes();
+  });
+  document.getElementById('bmf-filtro-area-enamed').addEventListener('change', async () => {
+    const grid = document.getElementById('bmf-questoes-grid');
+    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+    await carregarQuestoesBanco();
     renderQuestoes();
   });
   document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
@@ -1335,6 +1474,9 @@ function bindEventos() {
   document.getElementById('bmf-btn-fechar-adicionar-prova').addEventListener('click', fecharModalAdicionarProva);
   document.getElementById('bmf-btn-cancelar-prova-novo').addEventListener('click', fecharModalNovaProva);
   document.getElementById('bmf-form-prova-novo').addEventListener('submit', criarProva);
+  document.querySelectorAll('.bmf-tipo-prova-btn').forEach(btn => {
+    btn.addEventListener('click', () => selecionarTipoProva(btn.dataset.tipo));
+  });
 
   document.getElementById('bmf-prova-busca').addEventListener('input', renderListaSelecaoQuestoes);
   document.getElementById('bmf-prova-selecionar-todas').addEventListener('click', () => selecionarTodasVisiveis(true));
@@ -1348,6 +1490,9 @@ function bindEventos() {
   document.getElementById('bmf-btn-salvar-selecao').addEventListener('click', salvarSelecaoProva);
   document.getElementById('bmf-btn-exportar-prova').addEventListener('click', exportarProva);
   document.getElementById('bmf-btn-excluir-prova').addEventListener('click', excluirProva);
+
+  document.getElementById('bmf-btn-fechar-resultado-importacao').addEventListener('click', () => fecharModalResultadoImportacao(false));
+  document.getElementById('bmf-btn-ir-revisao-resultado').addEventListener('click', () => fecharModalResultadoImportacao(true));
 }
 
 // ================================================================
@@ -1372,6 +1517,7 @@ async function initApp(user, role) {
 
   bindEventos();
   popularSelectsPeriodo();
+  popularSelectsAreaEnamed();
   ajustarEditorPorTipo();
   await carregarTudo();
 }
