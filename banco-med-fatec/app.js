@@ -552,6 +552,10 @@ function limparFormQuestao() {
   document.getElementById('bmf-q-imagem-input').value = '';
   document.getElementById('bmf-q-imagem-nome').textContent = 'Escolher imagem…';
   renderAlternativasEditor([{ texto: '', correta: false }, { texto: '', correta: false }], 'multichoice_unica');
+  // bmf-q-enunciado/justificativa são <div contenteditable>, não <textarea> —
+  // form.reset() não limpa eles, tem que zerar na mão.
+  document.getElementById('bmf-q-enunciado').innerHTML = '';
+  document.getElementById('bmf-q-justificativa').innerHTML = '';
 }
 
 function abrirModalQuestao(id) {
@@ -573,8 +577,8 @@ function abrirModalQuestao(id) {
     document.getElementById('bmf-q-dificuldade').value = q.dificuldade;
     document.getElementById('bmf-q-tipo').value = q.tipoMoodle;
     document.getElementById('bmf-q-area-enamed').value = q.areaEnamed || '';
-    document.getElementById('bmf-q-enunciado').value = q.enunciadoHtml;
-    document.getElementById('bmf-q-justificativa').value = q.justificativa || '';
+    document.getElementById('bmf-q-enunciado').innerHTML = q.enunciadoHtml || '';
+    document.getElementById('bmf-q-justificativa').innerHTML = q.justificativa || '';
     document.getElementById('bmf-q-fonte').value = q.fonte || '';
     renderAlternativasEditor(q.alternativas, q.tipoMoodle);
     if (q.tipoMoodle === 'verdadeiro_falso') ajustarEditorPorTipo();
@@ -619,9 +623,9 @@ async function salvarQuestao(e) {
     dificuldade: document.getElementById('bmf-q-dificuldade').value,
     tipoMoodle: document.getElementById('bmf-q-tipo').value,
     areaEnamed: document.getElementById('bmf-q-area-enamed').value,
-    enunciadoHtml: sanitizeHTML(document.getElementById('bmf-q-enunciado').value.trim()).replace(/\n/g, '<br>'),
+    enunciadoHtml: sanitizeHTML(document.getElementById('bmf-q-enunciado').innerHTML.trim()),
     alternativas: lerAlternativasDoForm(),
-    justificativa: sanitizeHTML(document.getElementById('bmf-q-justificativa').value.trim()).replace(/\n/g, '<br>'),
+    justificativa: sanitizeHTML(document.getElementById('bmf-q-justificativa').innerHTML.trim()),
     fonte: document.getElementById('bmf-q-fonte').value.trim(),
     imagem: imagemAtual
   };
@@ -1016,11 +1020,43 @@ function normalizarTexto(s) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+// Numeral romano guarda info importante (é o que diferencia "Saúde,
+// Comunidade... I" de "...II" etc) mesmo sendo curto — não pode ser
+// descartado junto com conectivos tipo "E"/"DE"/"DO".
+const ROMANOS_DISCIPLINA = new Set(['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']);
+function tokenizarTexto(s) {
+  return (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter(w => w.length >= 3 || ROMANOS_DISCIPLINA.has(w));
+}
+
+// Sugere a disciplina comparando PALAVRAS do nome completo (não a abreviação
+// — "FORM.DES.ENV.HUM." nunca aparece como pedaço literal de "Formação,
+// Desenvolvimento e Envelhecimento Humano", então comparar substring contra
+// o nomeBreve praticamente nunca batia). Exige pelo menos 2 palavras em
+// comum e pelo menos metade das palavras da disciplina batendo; se mais de
+// uma disciplina empata no placar (ex.: "Saúde, Comunidade..." sem o
+// numeral do período no texto importado), não arrisca palpite — deixa em
+// branco pro professor escolher.
 function sugerirCategoria(categoriaSugeridaTexto) {
-  const alvo = normalizarTexto(categoriaSugeridaTexto);
-  if (!alvo) return null;
-  const candidata = categorias.find(c => c.nomeBreve && c.nomeBreve.length >= 3 && alvo.includes(normalizarTexto(c.nomeBreve)));
-  return candidata || null;
+  const tokensAlvo = new Set(tokenizarTexto(categoriaSugeridaTexto));
+  if (!tokensAlvo.size) return null;
+
+  let melhorScore = 0;
+  let empatados = [];
+  categorias.forEach(c => {
+    const tokensNome = tokenizarTexto(c.nome);
+    if (!tokensNome.length) return;
+    const bateram = tokensNome.filter(t => tokensAlvo.has(t)).length;
+    if (bateram < 2) return;
+    const score = bateram / tokensNome.length;
+    if (score < 0.5) return;
+    if (score > melhorScore) { melhorScore = score; empatados = [c]; }
+    else if (score === melhorScore) { empatados.push(c); }
+  });
+  return empatados.length === 1 ? empatados[0] : null;
 }
 
 async function extrairImagemDoMoodle(questionEl) {
@@ -1043,6 +1079,38 @@ async function extrairImagemDoMoodle(questionEl) {
 
 // Remove a <img> que aponta pro @@PLUGINFILE@@ (a imagem já vira o campo
 // `imagem` separado do nosso schema, não fica solta dentro do enunciado).
+// Quando o professor cola de Word/Google Docs no editor do Moodle, o HTML
+// vem cheio de lixo de formatação (style="mso-fareast-font-family: Aptos...",
+// comentários condicionais <!--[if ...]-->, spans vazios) que o Moodle
+// preserva ao pé da letra na exportação. Isso não muda o conteúdo da
+// questão, só a marcação — aqui a gente tira o lixo e mantém a estrutura
+// (parágrafo, negrito, lista, imagem).
+function limparHtmlColado(html) {
+  if (!html) return html;
+  const div = document.createElement('div');
+  div.innerHTML = html;
+
+  // comentários condicionais do Word (<!--[if ...]-->...<!--[endif]-->)
+  const comentarios = [];
+  const walker = document.createTreeWalker(div, NodeFilter.SHOW_COMMENT);
+  let noAtual;
+  while ((noAtual = walker.nextNode())) comentarios.push(noAtual);
+  comentarios.forEach(c => c.remove());
+
+  div.querySelectorAll('*').forEach(el => {
+    el.removeAttribute('style');
+    el.removeAttribute('lang');
+    el.removeAttribute('class');
+    // span sem nenhum atributo (sobrou só carregando o style que já tiramos)
+    // não serve mais pra nada — troca o span pelos filhos dele direto.
+    if (el.tagName === 'SPAN' && el.attributes.length === 0) {
+      el.replaceWith(...el.childNodes);
+    }
+  });
+
+  return div.innerHTML.replace(/<p>\s*<\/p>/gi, '').trim();
+}
+
 function removerImgPluginfile(html) {
   return (html || '')
     .replace(/<img[^>]*@@PLUGINFILE@@[^>]*>/gi, '')
@@ -1100,7 +1168,7 @@ async function questaoMoodleParaSchema(questionEl) {
   const titulo = textoDe(questionEl, 'name > text').trim() || '(sem título)';
   const enunciadoBruto = textoDe(questionEl, 'questiontext > text');
   const imagem = await extrairImagemDoMoodle(questionEl);
-  const enunciadoHtml = removerImgPluginfile(enunciadoBruto);
+  const enunciadoHtml = limparHtmlColado(removerImgPluginfile(enunciadoBruto));
   const justificativa = textoDe(questionEl, 'generalfeedback > text').trim();
 
   // Round-trip: se veio de uma exportação nossa, os tags/rodapé de FONTE já
@@ -1145,7 +1213,7 @@ async function questaoMoodleParaSchema(questionEl) {
     titulo,
     enunciadoHtml,
     imagem,
-    justificativa: justificativaSemFonte,
+    justificativa: limparHtmlColado(justificativaSemFonte),
     fonte,
     dificuldade,
     elaboradoPor,
@@ -1246,6 +1314,8 @@ async function importarArquivosAva(fileList) {
 function mostrarResultadoImportacao(itens) {
   const lista = document.getElementById('bmf-resultado-importacao-lista');
   const totalCriadas = itens.reduce((acc, it) => acc + (it.criadas || 0), 0);
+  const totalDuplicadas = itens.reduce((acc, it) => acc + (it.duplicadas || 0), 0);
+  const totalErros = itens.reduce((acc, it) => acc + (it.erros || 0), 0);
 
   lista.innerHTML = itens.map(it => {
     if (it.falhou) {
@@ -1272,9 +1342,11 @@ function mostrarResultadoImportacao(itens) {
       </div>`;
   }).join('');
 
-  document.getElementById('bmf-resultado-importacao-resumo').textContent = totalCriadas
-    ? `${totalCriadas} questão(ões) no total, aguardando revisão.`
-    : 'Nenhuma questão nova foi importada.';
+  const resumoPartes = [];
+  resumoPartes.push(totalCriadas ? `${totalCriadas} nova(s), aguardando revisão` : 'Nenhuma questão nova importada');
+  if (totalDuplicadas) resumoPartes.push(`${totalDuplicadas} já existia(m) no banco e foi(ram) ignorada(s)`);
+  if (totalErros) resumoPartes.push(`${totalErros} com erro`);
+  document.getElementById('bmf-resultado-importacao-resumo').textContent = resumoPartes.join(' · ') + '.';
 
   document.getElementById('bmf-modal-resultado-importacao').classList.add('active');
 }
@@ -1474,6 +1546,17 @@ function bindEventos() {
     }
   });
   document.getElementById('bmf-btn-cancelar-questao').addEventListener('click', fecharModalQuestao);
+
+  // Barra de ferramentas do editor (negrito/itálico/lista) — mousedown com
+  // preventDefault pra não perder a seleção de texto antes do execCommand rodar.
+  document.querySelectorAll('.bmf-rte-btn').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      const alvoId = btn.closest('.bmf-rte-toolbar').dataset.alvo;
+      document.getElementById(alvoId).focus();
+      document.execCommand(btn.dataset.cmd, false, null);
+    });
+  });
   document.getElementById('bmf-form-questao').addEventListener('submit', salvarQuestao);
   document.getElementById('bmf-q-periodo').addEventListener('change', (e) => {
     popularDisciplinasDoPeriodo('bmf-q-categoria', e.target.value);

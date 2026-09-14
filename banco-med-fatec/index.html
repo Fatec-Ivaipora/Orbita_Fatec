@@ -7,7 +7,7 @@
   <title>BANCO MED-FATEC · Órbita - FatecIVP</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
-  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=9">
+  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=12">
 </head>
 
 <body>
@@ -245,7 +245,12 @@
 
                 <div class="form-group">
                   <label class="form-label">Caso clínico e pergunta <span style="color:red">*</span></label>
-                  <textarea id="bmf-q-enunciado" class="form-control" rows="4" placeholder="Descreva o caso clínico e a pergunta..." required></textarea>
+                  <div class="bmf-rte-toolbar" data-alvo="bmf-q-enunciado">
+                    <button type="button" class="bmf-rte-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">☰</button>
+                  </div>
+                  <div id="bmf-q-enunciado" class="form-control bmf-rte" contenteditable="true" data-placeholder="Descreva o caso clínico e a pergunta..."></div>
                 </div>
 
                 <div class="form-group">
@@ -277,10 +282,15 @@
               </div>
 
               <div class="bmf-form-secao">
-                <div class="bmf-form-secao-titulo">Explicação (opcional)</div>
+                <div class="bmf-form-secao-titulo">Explicação</div>
                 <div class="form-group">
-                  <label class="form-label">Justificativa</label>
-                  <textarea id="bmf-q-justificativa" class="form-control" rows="3" placeholder="Explicação da resposta correta..."></textarea>
+                  <label class="form-label">Justificativa <span style="color:red">*</span></label>
+                  <div class="bmf-rte-toolbar" data-alvo="bmf-q-justificativa">
+                    <button type="button" class="bmf-rte-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">☰</button>
+                  </div>
+                  <div id="bmf-q-justificativa" class="form-control bmf-rte" contenteditable="true" data-placeholder="Explicação da resposta correta..."></div>
                 </div>
 
                 <div class="form-group">
@@ -422,7 +432,7 @@
     </div>
   </div>
 
-  <script type="module" src="/banco-med-fatec/app.js?v=14"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=19"></script>
 </body>
 
 </html>
