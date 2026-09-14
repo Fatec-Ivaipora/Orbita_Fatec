@@ -41,6 +41,19 @@ async function periodoDaCategoria(categoriaId) {
     return snap.exists ? (snap.data().periodo ?? null) : null;
 }
 
+// Período + área ENAMED "padrão" da disciplina (campo areaEnamedPadrao em
+// banco_med_categorias, setado uma vez via script de migração a partir da
+// colinha disciplina→área). Usado pra sugerir a área automaticamente quando
+// uma questão importada é resolvida ou uma questão nova não vem com área
+// marcada manualmente — evita ter que marcar questão por questão.
+async function dadosDaCategoria(categoriaId) {
+    if (!categoriaId) return { periodo: null, areaEnamedPadrao: null };
+    const snap = await db.collection(COL_CATEGORIAS).doc(categoriaId).get();
+    if (!snap.exists) return { periodo: null, areaEnamedPadrao: null };
+    const v = snap.data();
+    return { periodo: v.periodo ?? null, areaEnamedPadrao: v.areaEnamedPadrao ?? null };
+}
+
 function validarQuestao(body) {
     if (!body.titulo || !String(body.titulo).trim()) return 'Informe o título da questão.';
     if (!body.categoriaId) return 'Selecione a categoria/disciplina da questão.';
@@ -125,6 +138,26 @@ router.post('/categorias', verifyToken, checkPermission, async (req, res) => {
 // QUESTÕES (banco compartilhado)
 // ==========================================
 
+// GET /questoes/contagem-dificuldade — total de questões publicadas por
+// dificuldade, pro filtro do Banco de Questões mostrar "Fácil (23)" etc. Usa
+// count() agregado (não lê os documentos), mesmo padrão da contagem por
+// disciplina — não pesa na economia de leitura do banco.
+router.get('/questoes/contagem-dificuldade', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const contagens = {};
+        await Promise.all(DIFICULDADES_VALIDAS.map(async (dif) => {
+            const agg = await db.collection(COL_QUESTOES)
+                .where('dificuldade', '==', dif)
+                .where('status', '==', 'publicada')
+                .count().get();
+            contagens[dif] = agg.data().count;
+        }));
+        res.json(contagens);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /questoes — SEMPRE espera pelo menos um filtro (periodo, categoriaId
 // ou status) vindo do cliente. O banco pode crescer bastante (importação do
 // AVA traz dezenas por vez), então nunca lemos a coleção inteira aqui — só o
@@ -152,14 +185,16 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
-        const periodo = await periodoDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
 
         const newDoc = db.collection(COL_QUESTOES).doc();
         await newDoc.set({
             titulo: String(titulo).trim(),
             categoriaId,
             periodo,
-            areaEnamed: areaEnamed || null,
+            // Se o professor não marcou a área manualmente, usa a área padrão
+            // da disciplina (colinha ENAMED) — ele ainda pode trocar depois.
+            areaEnamed: areaEnamed || areaEnamedPadrao || null,
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -190,13 +225,13 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
-        const periodo = await periodoDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
 
         await docRef.update({
             titulo: String(titulo).trim(),
             categoriaId,
             periodo,
-            areaEnamed: areaEnamed || null,
+            areaEnamed: areaEnamed || areaEnamedPadrao || null,
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -325,7 +360,7 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
     try {
         const { categoriaId } = req.body;
         if (!categoriaId) return res.status(400).json({ error: 'Selecione a disciplina antes de confirmar.' });
-        const periodo = await periodoDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
 
         const snap = await db.collection(COL_QUESTOES)
             .where('loteId', '==', req.params.loteId)
@@ -334,7 +369,10 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         if (snap.empty) return res.status(404).json({ error: 'Lote de importação não encontrado (ou já resolvido).' });
 
         const batch = db.batch();
-        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, periodo, status: 'publicada', updatedAt: new Date().toISOString() }));
+        // Questão importada do AVA nunca vem com área ENAMED (o Moodle não tem
+        // esse campo) — herda a área padrão da disciplina escolhida aqui, pra
+        // não deixar o professor tendo que marcar uma por uma.
+        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, periodo, areaEnamed: areaEnamedPadrao, status: 'publicada', updatedAt: new Date().toISOString() }));
         await batch.commit();
 
         res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });

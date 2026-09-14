@@ -168,6 +168,21 @@ async function carregarQuestoesRevisao() {
   questoesRevisao = await apiFetch('/banco-med-fatec/questoes?status=revisao_importacao');
 }
 
+// Mostra quantas questões publicadas o banco tem em cada dificuldade, direto
+// nas opções do filtro (ex.: "Fácil (23)") — usa count() agregado no
+// servidor, não lê os documentos, então não pesa na economia do banco.
+async function atualizarContagemDificuldade() {
+  try {
+    const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-dificuldade');
+    document.querySelectorAll('#bmf-filtro-dificuldade option[value]:not([value=""])').forEach(opt => {
+      const label = DIFICULDADE_LABEL[opt.value] || opt.value;
+      opt.textContent = `${label} (${contagem[opt.value] || 0})`;
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 // Lê os filtros de período e área ENAMED (os dois pedem ao servidor, os
 // demais — disciplina/dificuldade/busca — só refinam em memória) e busca só
 // se pelo menos um dos dois estiver escolhido. Área ENAMED cruza disciplinas
@@ -206,6 +221,7 @@ async function carregarTudo() {
     ]);
     await carregarQuestoesRevisao();
     popularSelectsCategoria();
+    atualizarContagemDificuldade();
 
     await carregarQuestoesBanco();
 
@@ -1037,6 +1053,43 @@ function tagDoMoodle(questionEl, prefixo) {
 
 const DIFICULDADE_POR_LABEL = { 'Fácil': 'facil', 'Média': 'media', 'Intermediária': 'intermediaria', 'Difícil': 'dificil' };
 
+// O Moodle NÃO tem campo nativo de dificuldade — quando existe, é um texto
+// que o próprio professor escreveu à mão em algum campo (geralmente o
+// "Comentário geral", que só o professor vê, nunca o aluno), sem padrão
+// fixo. Isso só ajuda nos poucos casos em que alguém seguiu esse formato —
+// pra maioria das questões exportadas direto do AVA não tem essa informação
+// em lugar nenhum, e "média" continua sendo o padrão razoável.
+const DIFICULDADE_POR_TEXTO_LIVRE = {
+  'facil': 'facil', 'fácil': 'facil',
+  'media': 'media', 'média': 'media',
+  'intermediaria': 'intermediaria', 'intermediária': 'intermediaria',
+  'dificil': 'dificil', 'difícil': 'dificil'
+};
+
+// Padrão mais comum encontrado no banco real: a dificuldade vem colada no
+// FINAL do título da questão, depois de um traço/travessão — ex.: "TBL -
+// Ossos do Membro Superior – Intermediária", "Músculos do Membro Inferior -
+// difícil". Nada a ver com o bloco "Categoria de dificuldade:" (mais raro).
+const RE_DIFICULDADE_NO_TITULO = /[-–—:]\s*(fácil|facil|média|media|intermediária|intermediaria|difícil|dificil)\s*$/i;
+function dificuldadeDoTitulo(titulo) {
+  const m = RE_DIFICULDADE_NO_TITULO.exec((titulo || '').trim());
+  return m ? DIFICULDADE_POR_TEXTO_LIVRE[m[1].toLowerCase()] : null;
+}
+
+function extrairMetadadoDoTextoLivre(...camposHtml) {
+  const div = document.createElement('div');
+  div.innerHTML = camposHtml.filter(Boolean).join('\n');
+  const plano = div.textContent;
+
+  const difMatch = /dificuldade[^:]{0,40}:\s*(fácil|facil|intermediária|intermediaria|difícil|dificil|média|media)/i.exec(plano);
+  const autorMatch = /elaborado por:\s*([^\n\r]+)/i.exec(plano);
+
+  return {
+    dificuldade: difMatch ? DIFICULDADE_POR_TEXTO_LIVRE[difMatch[1].toLowerCase()] : null,
+    autor: autorMatch ? autorMatch[1].trim() : null
+  };
+}
+
 async function questaoMoodleParaSchema(questionEl) {
   const tipo = questionEl.getAttribute('type');
   const titulo = textoDe(questionEl, 'name > text').trim() || '(sem título)';
@@ -1051,9 +1104,15 @@ async function questaoMoodleParaSchema(questionEl) {
   const fonte = fonteMatch ? fonteMatch[1].trim() : '';
   const justificativaSemFonte = fonteMatch ? justificativa.slice(0, fonteMatch.index).trim() : justificativa;
 
+  // 1) tag do Moodle no formato que a gente mesmo gera (round-trip de uma
+  //    exportação nossa); 2) dificuldade colada no final do título (padrão
+  //    mais comum no banco real, ex. "... - Intermediária"); 3) texto livre
+  //    tipo "Categoria de dificuldade (...): fácil" no comentário geral;
+  //    4) "média" como padrão, quando nada disso aparece.
+  const metadado = extrairMetadadoDoTextoLivre(enunciadoBruto, justificativa);
   const dificuldadeLabel = tagDoMoodle(questionEl, 'dificuldade');
-  const dificuldade = DIFICULDADE_POR_LABEL[dificuldadeLabel] || 'media';
-  const elaboradoPor = tagDoMoodle(questionEl, 'autor') || 'Importado do AVA';
+  const dificuldade = DIFICULDADE_POR_LABEL[dificuldadeLabel] || dificuldadeDoTitulo(titulo) || metadado.dificuldade || 'media';
+  const elaboradoPor = tagDoMoodle(questionEl, 'autor') || metadado.autor || 'Importado do AVA';
 
   const alternativas = [...questionEl.querySelectorAll(':scope > answer')].map(a => {
     const fraction = parseFloat(a.getAttribute('fraction') || '0');
@@ -1365,6 +1424,7 @@ function bindEventos() {
       document.getElementById('bmf-view-banco').classList.toggle('hidden', tab !== 'banco');
       document.getElementById('bmf-view-provas').classList.toggle('hidden', tab !== 'provas');
       document.getElementById('bmf-view-revisao').classList.toggle('hidden', tab !== 'revisao');
+      document.getElementById('bmf-view-colinha').classList.toggle('hidden', tab !== 'colinha');
     });
   });
 
