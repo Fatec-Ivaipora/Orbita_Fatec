@@ -17,6 +17,16 @@ const TIPOS_VALIDOS = ['multichoice_unica', 'multichoice_multipla', 'verdadeiro_
 // no módulo Ferida para imagens comprimidas no navegador.
 const MAX_IMG_BASE64 = 950000;
 
+// Resolve o período (1-12) da disciplina, pra gravar de forma denormalizada
+// em cada questão — sem isso, filtrar o banco por período no GET /questoes
+// exigiria ler a coleção inteira e cruzar com categorias no código (o custo
+// de leitura que estávamos tentando evitar).
+async function periodoDaCategoria(categoriaId) {
+    if (!categoriaId) return null;
+    const snap = await db.collection(COL_CATEGORIAS).doc(categoriaId).get();
+    return snap.exists ? (snap.data().periodo ?? null) : null;
+}
+
 function validarQuestao(body) {
     if (!body.titulo || !String(body.titulo).trim()) return 'Informe o título da questão.';
     if (!body.categoriaId) return 'Selecione a categoria/disciplina da questão.';
@@ -82,9 +92,18 @@ router.post('/categorias', verifyToken, checkPermission, async (req, res) => {
 // QUESTÕES (banco compartilhado)
 // ==========================================
 
+// GET /questoes — SEMPRE espera pelo menos um filtro (periodo, categoriaId
+// ou status) vindo do cliente. O banco pode crescer bastante (importação do
+// AVA traz dezenas por vez), então nunca lemos a coleção inteira aqui — só o
+// pedaço que a tela realmente precisa mostrar naquele momento.
 router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
     try {
-        const snap = await db.collection(COL_QUESTOES).get();
+        let query = db.collection(COL_QUESTOES);
+        if (req.query.periodo) query = query.where('periodo', '==', parseInt(req.query.periodo, 10));
+        if (req.query.categoriaId) query = query.where('categoriaId', '==', req.query.categoriaId);
+        if (req.query.status) query = query.where('status', '==', req.query.status);
+
+        const snap = await query.get();
         const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
@@ -99,11 +118,13 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem } = req.body;
+        const periodo = await periodoDaCategoria(categoriaId);
 
         const newDoc = db.collection(COL_QUESTOES).doc();
         await newDoc.set({
             titulo: String(titulo).trim(),
             categoriaId,
+            periodo,
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -134,10 +155,12 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem } = req.body;
+        const periodo = await periodoDaCategoria(categoriaId);
 
         await docRef.update({
             titulo: String(titulo).trim(),
             categoriaId,
+            periodo,
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -180,19 +203,46 @@ function validarQuestaoImportada(q) {
     return null;
 }
 
+// Normaliza título+enunciado pra comparação de duplicata: tira tag HTML,
+// acento e espaço extra. Duas questões só contam como "a mesma" se título E
+// enunciado baterem depois dessa normalização — evita falso-positivo entre
+// questões parecidas mas com enunciados diferentes.
+function normalizarComparacao(str) {
+    return String(str || '')
+        .replace(/<[^>]+>/g, ' ')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+function chaveDuplicata(q) {
+    return `${normalizarComparacao(q.titulo)}|${normalizarComparacao(q.enunciadoHtml)}`;
+}
+
 router.post('/questoes/importar-lote', verifyToken, checkPermission, async (req, res) => {
     try {
         const categoriaSugeridaTexto = String(req.body.categoriaSugeridaTexto || '').trim();
         const questoesRecebidas = Array.isArray(req.body.questoes) ? req.body.questoes : [];
         if (!questoesRecebidas.length) return res.status(400).json({ error: 'Nenhuma questão encontrada nesse arquivo.' });
 
+        // Todo o banco (publicada ou ainda em revisão) entra na comparação —
+        // não faz sentido reimportar uma questão que já está esperando revisão.
+        const existentesSnap = await db.collection(COL_QUESTOES).get();
+        const chavesExistentes = new Set(existentesSnap.docs.map(d => chaveDuplicata(d.data())));
+
         const loteId = db.collection(COL_QUESTOES).doc().id;
         const erros = [];
+        const duplicadas = [];
         const validas = [];
 
         questoesRecebidas.forEach(q => {
             const erro = validarQuestaoImportada(q);
             if (erro) { erros.push({ titulo: q.titulo || '(sem título)', motivo: erro }); return; }
+
+            const chave = chaveDuplicata(q);
+            if (chavesExistentes.has(chave)) { duplicadas.push(q.titulo || '(sem título)'); return; }
+            chavesExistentes.add(chave); // pega duplicata repetida dentro do próprio arquivo também
+
             validas.push(q);
         });
 
@@ -226,7 +276,7 @@ router.post('/questoes/importar-lote', verifyToken, checkPermission, async (req,
             await batch.commit();
         }
 
-        res.status(201).json({ loteId, criadas: validas.length, erros });
+        res.status(201).json({ loteId, criadas: validas.length, duplicadas, erros });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -239,6 +289,7 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
     try {
         const { categoriaId } = req.body;
         if (!categoriaId) return res.status(400).json({ error: 'Selecione a disciplina antes de confirmar.' });
+        const periodo = await periodoDaCategoria(categoriaId);
 
         const snap = await db.collection(COL_QUESTOES)
             .where('loteId', '==', req.params.loteId)
@@ -247,7 +298,7 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         if (snap.empty) return res.status(404).json({ error: 'Lote de importação não encontrado (ou já resolvido).' });
 
         const batch = db.batch();
-        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, status: 'publicada', updatedAt: new Date().toISOString() }));
+        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, periodo, status: 'publicada', updatedAt: new Date().toISOString() }));
         await batch.commit();
 
         res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });
