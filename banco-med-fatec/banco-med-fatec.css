@@ -536,9 +536,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  max-height: 320px;
-  overflow-y: auto;
   margin-bottom: 1rem;
+  /* Sem max-height/scroll próprio de propósito — cresce com o conteúdo e
+     deixa o modal (.modal-box, que já tem max-height:90vh + scroll) rolar
+     como um todo, em vez de uma caixinha pequena dentro de outra. */
 }
 
 .bmf-resultado-item {
@@ -556,6 +557,39 @@
 .bmf-resultado-item-titulo { font-weight: 700; font-size: 0.92rem; color: var(--text-main); }
 .bmf-resultado-item-detalhe { font-size: 0.85rem; color: var(--text-main); margin-top: 0.15rem; }
 .bmf-resultado-item-arquivo { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem; }
+
+/* ---- Editor de enunciado/justificativa: mostra o texto formatado (negrito,
+   lista) em vez das tags HTML cruas, e cresce sozinho com o conteúdo (é uma
+   div contenteditable, não uma textarea — sem altura fixa forçando rolagem
+   interna; o modal já rola como um todo quando fica alto). ---- */
+.bmf-rte-toolbar {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+.bmf-rte-btn {
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bmf-rte-btn:hover { border-color: var(--med-azul-claro); color: var(--med-azul-escuro); }
+.bmf-rte {
+  min-height: 110px;
+  line-height: 1.5;
+}
+.bmf-rte:focus { outline: none; border-color: var(--med-azul-claro); }
+.bmf-rte:empty::before { content: attr(data-placeholder); color: var(--text-secondary); }
+.bmf-rte p:first-child { margin-top: 0; }
+.bmf-rte p:last-child { margin-bottom: 0; }
+.bmf-rte ul { padding-left: 1.4rem; margin: 0.4rem 0; }
 
 /* ---- Colinha ENAMED (referência disciplina → área) ---- */
 .bmf-colinha-grid {

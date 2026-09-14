@@ -82,7 +82,7 @@ export const orbitaLimiter = new RateLimiter();
 export function sanitizeHTML(html) {
   if (!html) return '';
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  const allowedTags = ['B', 'U', 'I', 'UL', 'LI', 'BR', 'DIV', 'SPAN', 'P'];
+  const allowedTags = ['B', 'STRONG', 'U', 'I', 'EM', 'UL', 'LI', 'BR', 'DIV', 'SPAN', 'P'];
   
   function clean(node) {
     for (let i = node.childNodes.length - 1; i >= 0; i--) {

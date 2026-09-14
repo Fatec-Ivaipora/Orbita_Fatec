@@ -60,6 +60,7 @@ function validarQuestao(body) {
     if (!DIFICULDADES_VALIDAS.includes(body.dificuldade)) return 'Selecione uma dificuldade válida.';
     if (!TIPOS_VALIDOS.includes(body.tipoMoodle)) return 'Selecione um tipo de questão válido.';
     if (!body.enunciadoHtml || !String(body.enunciadoHtml).trim()) return 'Informe o enunciado da questão.';
+    if (!body.justificativa || !String(body.justificativa).trim()) return 'Informe a justificativa da resposta correta.';
     if (!Array.isArray(body.alternativas) || body.alternativas.length < 2) return 'Informe pelo menos duas alternativas.';
     if (!body.alternativas.some(a => a.correta)) return 'Marque ao menos uma alternativa como correta.';
     if (body.tipoMoodle === 'multichoice_unica' && body.alternativas.filter(a => a.correta).length !== 1) {
