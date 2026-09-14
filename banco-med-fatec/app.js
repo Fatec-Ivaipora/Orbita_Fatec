@@ -183,19 +183,22 @@ async function atualizarContagemDificuldade() {
   }
 }
 
-// Lê os filtros de período e área ENAMED (os dois pedem ao servidor, os
-// demais — disciplina/dificuldade/busca — só refinam em memória) e busca só
-// se pelo menos um dos dois estiver escolhido. Área ENAMED cruza disciplinas
-// e períodos de propósito (é assim que o ENAMED organiza a prova), então
-// dá pra montar um simulado sem escolher período nenhum.
+// Lê os filtros de período, área ENAMED e dificuldade (os três pedem ao
+// servidor — disciplina/busca só refinam em memória) e busca se pelo menos
+// um deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
+// propósito (é assim que o ENAMED organiza a prova), e dificuldade sozinha
+// também cruza tudo (ex.: "ver todas as fáceis do banco") — nenhum dos três
+// depende do período estar selecionado.
 async function carregarQuestoesBanco() {
   const periodo = document.getElementById('bmf-filtro-periodo').value;
   const area = document.getElementById('bmf-filtro-area-enamed').value;
-  if (!periodo && !area) { questoesBanco = []; return; }
+  const dificuldade = document.getElementById('bmf-filtro-dificuldade').value;
+  if (!periodo && !area && !dificuldade) { questoesBanco = []; return; }
 
   const params = new URLSearchParams({ status: 'publicada' });
   if (periodo) params.set('periodo', periodo);
   if (area) params.set('areaEnamed', area);
+  if (dificuldade) params.set('dificuldade', dificuldade);
   questoesBanco = await apiFetch(`/banco-med-fatec/questoes?${params.toString()}`);
 }
 
@@ -361,13 +364,15 @@ function renderQuestoes() {
   const grid = document.getElementById('bmf-questoes-grid');
   const vazio = document.getElementById('bmf-questoes-vazio');
 
-  // Sem período nem área ENAMED escolhidos ainda, não tem o que listar (e
-  // não fomos buscar nada no servidor) — pede pra escolher em vez de mostrar "vazio".
+  // Sem período, área ENAMED nem dificuldade escolhidos ainda, não tem o que
+  // listar (e não fomos buscar nada no servidor) — pede pra escolher em vez
+  // de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
   const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
-  if (!periodoEscolhido && !areaEscolhida) {
+  const dificuldadeEscolhida = document.getElementById('bmf-filtro-dificuldade').value;
+  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida) {
     grid.innerHTML = '';
-    vazio.textContent = 'Selecione um período ou uma área ENAMED acima pra ver as questões.';
+    vazio.textContent = 'Selecione um período, uma área ENAMED ou uma dificuldade acima pra ver as questões.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -395,7 +400,7 @@ function renderQuestoes() {
           <span class="bmf-badge bmf-badge-tipo">${q.imagem ? ICONS.imagem : ''}${TIPO_LABEL[q.tipoMoodle] || q.tipoMoodle}</span>
         </div>
         <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
-        <div class="bmf-q-row-meta">${esc(nomeCategoria(q.categoriaId))} · por ${esc(q.elaboradoPor || '—')}</div>
+        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))} · por ${esc(q.elaboradoPor || '—')}</div>
       </div>
       <div class="bmf-q-row-actions">
         <button class="bmf-icon-btn bmf-btn-editar-questao action-execute" data-id="${q.id}" title="Editar questão">${ICONS.editar}</button>
@@ -1442,7 +1447,12 @@ function bindEventos() {
     renderQuestoes();
   });
   document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
-  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', renderQuestoes);
+  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', async () => {
+    const grid = document.getElementById('bmf-questoes-grid');
+    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+    await carregarQuestoesBanco();
+    renderQuestoes();
+  });
   document.getElementById('bmf-filtro-busca').addEventListener('input', renderQuestoes);
 
   document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));

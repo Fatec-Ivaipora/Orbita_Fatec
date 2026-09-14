@@ -168,6 +168,7 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (req.query.periodo) query = query.where('periodo', '==', parseInt(req.query.periodo, 10));
         if (req.query.categoriaId) query = query.where('categoriaId', '==', req.query.categoriaId);
         if (req.query.areaEnamed) query = query.where('areaEnamed', '==', req.query.areaEnamed);
+        if (req.query.dificuldade) query = query.where('dificuldade', '==', req.query.dificuldade);
         if (req.query.status) query = query.where('status', '==', req.query.status);
 
         const snap = await query.get();
