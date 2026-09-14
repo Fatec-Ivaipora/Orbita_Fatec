@@ -225,7 +225,8 @@ function popularSelectsCategoria() {
     porPeriodo.get(periodo).forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
-      opt.textContent = c.nomeBreve ? `${c.nome} (${c.nomeBreve})` : c.nome;
+      const rotulo = c.nomeBreve ? `${c.nome} (${c.nomeBreve})` : c.nome;
+      opt.textContent = `${rotulo} — ${c.totalQuestoes || 0} questão(ões)`;
       group.appendChild(opt);
     });
     sel.appendChild(group);
