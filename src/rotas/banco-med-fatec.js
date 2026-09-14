@@ -58,6 +58,18 @@ router.get('/categorias', verifyToken, checkPermission, async (req, res) => {
         // Ordena por período (1º a 12º) e, dentro do mesmo período, por nome —
         // reflete a grade real do curso (série/semestre), não ordem alfabética solta.
         categorias.sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome));
+
+        // Contagem de questões publicadas por disciplina — usa count() agregado
+        // (não lê os documentos, só o total), pra mostrar na lista sem quebrar a
+        // economia de leitura do banco.
+        await Promise.all(categorias.map(async (c) => {
+            const agg = await db.collection(COL_QUESTOES)
+                .where('categoriaId', '==', c.id)
+                .where('status', '==', 'publicada')
+                .count().get();
+            c.totalQuestoes = agg.data().count;
+        }));
+
         res.json(categorias);
     } catch (err) {
         res.status(500).json({ error: err.message });
