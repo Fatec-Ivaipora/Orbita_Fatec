@@ -131,8 +131,44 @@
   color: var(--med-azul-escuro);
   border-bottom-color: var(--med-azul-claro);
 }
+.bmf-tab-badge {
+  display: inline-block;
+  background: #EF4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.35rem;
+}
 
 .bmf-view.hidden { display: none; }
+
+/* ---- Revisão de Importação ---- */
+.bmf-revisao-grupo {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 2px 10px rgba(3, 20, 38, 0.04);
+}
+.bmf-revisao-grupo h4 { font-weight: 800; margin-bottom: 0.25rem; }
+.bmf-revisao-grupo .bmf-q-meta { margin-bottom: 0.75rem; }
+.bmf-revisao-lista-titulos {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.bmf-revisao-lista-titulos div { padding: 0.15rem 0; }
+.bmf-revisao-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
+.bmf-revisao-acoes > div { flex: 1; min-width: 140px; }
+.bmf-revisao-acoes .btn { width: auto; padding: 0.7rem 1rem; }
 
 /* ---- Toolbar ---- */
 .bmf-toolbar {

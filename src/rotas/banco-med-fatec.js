@@ -163,12 +163,137 @@ router.delete('/questoes/:id', verifyToken, checkPermission, async (req, res) =>
 });
 
 // ==========================================
-// PROVAS (conjunto de questões salvo, exportável)
+// IMPORTAÇÃO DO AVA (Moodle XML já parseado no navegador)
 // ==========================================
+// O parsing do XML acontece no cliente (DOMParser) — aqui só recebemos as
+// questões já normalizadas pro nosso formato. Toda questão importada entra
+// com status 'revisao_importacao' (nunca aparece no banco/prova até alguém
+// confirmar manualmente a disciplina correta — pedido do professor: "põe
+// numa fila de revisão").
+
+function validarQuestaoImportada(q) {
+    if (!q.titulo || !String(q.titulo).trim()) return 'Questão sem título.';
+    if (!TIPOS_VALIDOS.includes(q.tipoMoodle)) return `Tipo de questão inválido para "${q.titulo}".`;
+    if (!Array.isArray(q.alternativas) || q.alternativas.length < 2) return `Alternativas insuficientes em "${q.titulo}".`;
+    if (!q.alternativas.some(a => a.correta)) return `Nenhuma alternativa correta identificada em "${q.titulo}".`;
+    if (q.imagem && q.imagem.dataUrl && q.imagem.dataUrl.length > MAX_IMG_BASE64) return `Imagem grande demais em "${q.titulo}".`;
+    return null;
+}
+
+router.post('/questoes/importar-lote', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const categoriaSugeridaTexto = String(req.body.categoriaSugeridaTexto || '').trim();
+        const questoesRecebidas = Array.isArray(req.body.questoes) ? req.body.questoes : [];
+        if (!questoesRecebidas.length) return res.status(400).json({ error: 'Nenhuma questão encontrada nesse arquivo.' });
+
+        const loteId = db.collection(COL_QUESTOES).doc().id;
+        const erros = [];
+        const validas = [];
+
+        questoesRecebidas.forEach(q => {
+            const erro = validarQuestaoImportada(q);
+            if (erro) { erros.push({ titulo: q.titulo || '(sem título)', motivo: erro }); return; }
+            validas.push(q);
+        });
+
+        // Firestore aceita no máx. 500 operações por batch — corta em pedaços
+        // por segurança (um arquivo de disciplina real dificilmente chega perto disso).
+        for (let i = 0; i < validas.length; i += 400) {
+            const pedaco = validas.slice(i, i + 400);
+            const batch = db.batch();
+            pedaco.forEach(q => {
+                const ref = db.collection(COL_QUESTOES).doc();
+                batch.set(ref, {
+                    titulo: String(q.titulo).trim(),
+                    categoriaId: null,
+                    categoriaSugeridaTexto,
+                    loteId,
+                    dificuldade: DIFICULDADES_VALIDAS.includes(q.dificuldade) ? q.dificuldade : 'media',
+                    tipoMoodle: q.tipoMoodle,
+                    enunciadoHtml: q.enunciadoHtml || '',
+                    alternativas: q.alternativas.map(a => ({ texto: String(a.texto || ''), correta: !!a.correta })),
+                    justificativa: q.justificativa || '',
+                    fonte: q.fonte || '',
+                    imagem: (q.imagem && q.imagem.dataUrl) ? { nome: q.imagem.nome || 'imagem', dataUrl: q.imagem.dataUrl } : null,
+                    status: 'revisao_importacao',
+                    elaboradoPor: q.elaboradoPor || 'Importado do AVA',
+                    criadoPor: req.user.uid,
+                    criadoPorNome: req.user.name || req.user.email || 'Professor',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+            });
+            await batch.commit();
+        }
+
+        res.status(201).json({ loteId, criadas: validas.length, erros });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /questoes/lote/:loteId/resolver — confirma a disciplina certa pra
+// todas as questões daquele lote de importação de uma vez, e elas passam a
+// aparecer no banco normal.
+router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { categoriaId } = req.body;
+        if (!categoriaId) return res.status(400).json({ error: 'Selecione a disciplina antes de confirmar.' });
+
+        const snap = await db.collection(COL_QUESTOES)
+            .where('loteId', '==', req.params.loteId)
+            .where('status', '==', 'revisao_importacao')
+            .get();
+        if (snap.empty) return res.status(404).json({ error: 'Lote de importação não encontrado (ou já resolvido).' });
+
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, status: 'publicada', updatedAt: new Date().toISOString() }));
+        await batch.commit();
+
+        res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /questoes/lote/:loteId — descarta o lote inteiro (o professor
+// decidiu que essas questões importadas não devem entrar no banco).
+router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_QUESTOES)
+            .where('loteId', '==', req.params.loteId)
+            .where('status', '==', 'revisao_importacao')
+            .get();
+        if (snap.empty) return res.status(404).json({ error: 'Lote de importação não encontrado (ou já resolvido).' });
+
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+
+        res.json({ message: 'Lote descartado.', removidas: snap.size });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// PROVAS (privada por professor — só quem criou vê/mexe; o banco de
+// questões continua compartilhado. Pedido do professor: "restrito a cada
+// professor as provas que eu criei, só eu vejo, pra não ficar poluído a
+// tela" — ADM N1 é a única exceção, mesmo bypass de todo módulo do sistema.)
+// ==========================================
+
+function apenasProprias(role) {
+    return role !== 'adm_l1';
+}
 
 router.get('/provas', verifyToken, checkPermission, async (req, res) => {
     try {
-        const snap = await db.collection(COL_PROVAS).get();
+        let query = db.collection(COL_PROVAS);
+        if (apenasProprias(req.user.role)) {
+            query = query.where('criadoPor', '==', req.user.uid);
+        }
+        const snap = await query.get();
         const provas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         provas.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(provas);
@@ -208,6 +333,9 @@ router.put('/provas/:id', verifyToken, checkPermission, async (req, res) => {
         const docRef = db.collection(COL_PROVAS).doc(req.params.id);
         const snap = await docRef.get();
         if (!snap.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
+        if (apenasProprias(req.user.role) && snap.data().criadoPor !== req.user.uid) {
+            return res.status(403).json({ error: 'Você só pode editar as provas que você mesmo criou.' });
+        }
 
         const nome = String(req.body.nome || '').trim();
         if (!nome) return res.status(400).json({ error: 'Informe o nome da prova.' });
@@ -227,7 +355,15 @@ router.put('/provas/:id', verifyToken, checkPermission, async (req, res) => {
 
 router.delete('/provas/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        await db.collection(COL_PROVAS).doc(req.params.id).delete();
+        const docRef = db.collection(COL_PROVAS).doc(req.params.id);
+        if (apenasProprias(req.user.role)) {
+            const snap = await docRef.get();
+            if (!snap.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
+            if (snap.data().criadoPor !== req.user.uid) {
+                return res.status(403).json({ error: 'Você só pode remover as provas que você mesmo criou.' });
+            }
+        }
+        await docRef.delete();
         res.json({ message: 'Prova removida.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -241,6 +377,9 @@ router.get('/provas/:id/exportar', verifyToken, checkPermission, async (req, res
         const docRef = db.collection(COL_PROVAS).doc(req.params.id);
         const snap = await docRef.get();
         if (!snap.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
+        if (apenasProprias(req.user.role) && snap.data().criadoPor !== req.user.uid) {
+            return res.status(403).json({ error: 'Você só pode exportar as provas que você mesmo criou.' });
+        }
         const prova = snap.data();
 
         if (!prova.questoesIds || !prova.questoesIds.length) {

@@ -70,7 +70,10 @@ async function apiDownload(endpoint) {
 
 // ---- Compressão de imagem no navegador (mesmo padrão do módulo Ferida) ----
 const LIMITE_BASE64 = 950000;
-function comprimirImagem(file) {
+
+// Núcleo comum: recebe a imagem já como data URL e comprime em cascata até
+// caber no limite de 1 MiB do documento do Firestore.
+function comprimirDataUrl(dataUrl) {
   const tentativas = [
     { dim: 1600, q: 0.85 },
     { dim: 1400, q: 0.72 },
@@ -79,24 +82,31 @@ function comprimirImagem(file) {
     { dim: 800, q: 0.45 }
   ];
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        for (const t of tentativas) {
-          const scale = Math.min(1, t.dim / Math.max(img.width, img.height));
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', t.q);
-          if (dataUrl.length <= LIMITE_BASE64) return resolve(dataUrl);
-        }
-        reject(new Error('Imagem grande demais mesmo após compressão.'));
-      };
-      img.onerror = () => reject(new Error('Arquivo de imagem inválido.'));
-      img.src = reader.result;
+    const img = new Image();
+    img.onload = () => {
+      // Já cabe sem precisar reprocessar (ex.: imagem pequena vinda do Moodle)
+      if (dataUrl.length <= LIMITE_BASE64 && /^data:image\/jpeg/.test(dataUrl)) return resolve(dataUrl);
+      for (const t of tentativas) {
+        const scale = Math.min(1, t.dim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const out = canvas.toDataURL('image/jpeg', t.q);
+        if (out.length <= LIMITE_BASE64) return resolve(out);
+      }
+      reject(new Error('Imagem grande demais mesmo após compressão.'));
     };
+    img.onerror = () => reject(new Error('Não foi possível carregar a imagem.'));
+    img.src = dataUrl;
+  });
+}
+
+// Upload manual (input type=file) — lê o arquivo e delega a compressão.
+function comprimirImagem(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => comprimirDataUrl(reader.result).then(resolve, reject);
     reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
     reader.readAsDataURL(file);
   });
@@ -135,6 +145,7 @@ async function carregarTudo() {
     popularSelectsCategoria();
     renderQuestoes();
     renderProvas();
+    renderRevisao();
   } catch (err) {
     console.error(err);
   }
@@ -229,6 +240,10 @@ function questoesFiltradas() {
   const busca = document.getElementById('bmf-filtro-busca').value.trim().toLowerCase();
 
   return questoes.filter(q => {
+    // Questão importada aguardando confirmação de disciplina não aparece no
+    // banco principal nem pode entrar em prova — só some da fila quando
+    // alguém confirma na aba Revisão de Importação.
+    if (q.status === 'revisao_importacao') return false;
     if (periodo && String(nomeCategoriaObj(q.categoriaId)?.periodo) !== periodo) return false;
     if (cat && q.categoriaId !== cat) return false;
     if (dif && q.dificuldade !== dif) return false;
@@ -613,6 +628,280 @@ async function excluirProva() {
 }
 
 // ================================================================
+//  IMPORTAÇÃO DO AVA (Moodle XML)
+// ================================================================
+// Parsing 100% no navegador (DOMParser, nativo) — evita mandar pro
+// servidor um arquivo que pode vir gigante (imagem embutida em base64
+// dentro do XML costuma pesar muito mais que o resto do arquivo inteiro).
+// Só o resultado já normalizado (e a imagem já recomprimida) vai pra API.
+
+function textoDe(el, seletor) {
+  const alvo = el.querySelector(seletor);
+  return alvo ? alvo.textContent : '';
+}
+
+// Tira acento/pontuação/maiúsculas — usado só pra sugerir a disciplina
+// mais provável (o professor sempre confirma antes de valer).
+function normalizarTexto(s) {
+  return (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function sugerirCategoria(categoriaSugeridaTexto) {
+  const alvo = normalizarTexto(categoriaSugeridaTexto);
+  if (!alvo) return null;
+  const candidata = categorias.find(c => c.nomeBreve && c.nomeBreve.length >= 3 && alvo.includes(normalizarTexto(c.nomeBreve)));
+  return candidata || null;
+}
+
+async function extrairImagemDoMoodle(questionEl) {
+  const fileEl = questionEl.querySelector('questiontext > file');
+  if (!fileEl) return null;
+  const nome = fileEl.getAttribute('name') || 'imagem';
+  const base64 = (fileEl.textContent || '').trim();
+  if (!base64) return null;
+  const ext = (nome.split('.').pop() || 'jpg').toLowerCase();
+  const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const dataUrl = `data:${mime};base64,${base64}`;
+  try {
+    const comprimida = await comprimirDataUrl(dataUrl);
+    return { nome: nome.replace(/\.[^.]+$/, ''), dataUrl: comprimida };
+  } catch (err) {
+    console.warn('Não deu pra comprimir imagem importada:', nome, err.message);
+    return null;
+  }
+}
+
+// Remove a <img> que aponta pro @@PLUGINFILE@@ (a imagem já vira o campo
+// `imagem` separado do nosso schema, não fica solta dentro do enunciado).
+function removerImgPluginfile(html) {
+  return (html || '')
+    .replace(/<img[^>]*@@PLUGINFILE@@[^>]*>/gi, '')
+    .replace(/<p>\s*<\/p>/gi, '') // some o parágrafo que só existia pra segurar a imagem
+    .trim();
+}
+
+function tagDoMoodle(questionEl, prefixo) {
+  const tags = [...questionEl.querySelectorAll('tags > tag > text')].map(t => t.textContent);
+  const achada = tags.find(t => t.startsWith(`${prefixo}:`));
+  return achada ? achada.slice(prefixo.length + 1) : '';
+}
+
+const DIFICULDADE_POR_LABEL = { 'Fácil': 'facil', 'Média': 'media', 'Intermediária': 'intermediaria', 'Difícil': 'dificil' };
+
+async function questaoMoodleParaSchema(questionEl) {
+  const tipo = questionEl.getAttribute('type');
+  const titulo = textoDe(questionEl, 'name > text').trim() || '(sem título)';
+  const enunciadoBruto = textoDe(questionEl, 'questiontext > text');
+  const imagem = await extrairImagemDoMoodle(questionEl);
+  const enunciadoHtml = removerImgPluginfile(enunciadoBruto);
+  const justificativa = textoDe(questionEl, 'generalfeedback > text').trim();
+
+  // Round-trip: se veio de uma exportação nossa, os tags/rodapé de FONTE já
+  // estão no formato que a gente mesmo gera — aproveita em vez de perder.
+  const fonteMatch = /<p><em>FONTE:\s*(.*?)<\/em><\/p>\s*$/i.exec(justificativa);
+  const fonte = fonteMatch ? fonteMatch[1].trim() : '';
+  const justificativaSemFonte = fonteMatch ? justificativa.slice(0, fonteMatch.index).trim() : justificativa;
+
+  const dificuldadeLabel = tagDoMoodle(questionEl, 'dificuldade');
+  const dificuldade = DIFICULDADE_POR_LABEL[dificuldadeLabel] || 'media';
+  const elaboradoPor = tagDoMoodle(questionEl, 'autor') || 'Importado do AVA';
+
+  const alternativas = [...questionEl.querySelectorAll(':scope > answer')].map(a => {
+    const fraction = parseFloat(a.getAttribute('fraction') || '0');
+    const textoAlt = document.createElement('div');
+    textoAlt.innerHTML = textoDe(a, 'text');
+    return { texto: textoAlt.textContent.trim(), correta: fraction > 0 };
+  });
+
+  let tipoMoodle;
+  if (tipo === 'truefalse') {
+    tipoMoodle = 'verdadeiro_falso';
+  } else if (tipo === 'multichoiceset') {
+    tipoMoodle = 'multichoice_multipla';
+  } else {
+    tipoMoodle = 'multichoice_unica';
+  }
+
+  // truefalse do Moodle vem como respostas "true"/"false" — normaliza pro
+  // texto Verdadeiro/Falso que o resto do app espera pra esse tipo.
+  const alternativasFinal = tipoMoodle === 'verdadeiro_falso'
+    ? alternativas.map(a => ({ texto: a.texto === 'true' ? 'Verdadeiro' : 'Falso', correta: a.correta }))
+    : alternativas;
+
+  return {
+    titulo,
+    enunciadoHtml,
+    imagem,
+    justificativa: justificativaSemFonte,
+    fonte,
+    dificuldade,
+    elaboradoPor,
+    tipoMoodle,
+    alternativas: alternativasFinal
+  };
+}
+
+async function parseMoodleXml(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Arquivo XML inválido ou corrompido.');
+
+  const todasQuestoes = [...doc.querySelectorAll('quiz > question')];
+  const categoriaEl = todasQuestoes.find(q => q.getAttribute('type') === 'category');
+  let categoriaSugeridaTexto = '';
+  if (categoriaEl) {
+    const bruto = textoDe(categoriaEl, 'category > text');
+    categoriaSugeridaTexto = bruto.replace(/^\$module\$\/top\//, '').replace(/^\$course\$\/top\//, '').trim();
+  }
+
+  const questoesReais = todasQuestoes.filter(q => TIPOS_MOODLE_SUPORTADOS.includes(q.getAttribute('type')));
+  const questoes = [];
+  for (const qEl of questoesReais) {
+    questoes.push(await questaoMoodleParaSchema(qEl));
+  }
+  return { categoriaSugeridaTexto, questoes };
+}
+
+const TIPOS_MOODLE_SUPORTADOS = ['multichoice', 'multichoiceset', 'truefalse'];
+
+async function importarArquivosAva(fileList) {
+  const arquivos = [...fileList];
+  if (!arquivos.length) return;
+
+  const resumo = [];
+  for (const file of arquivos) {
+    try {
+      const texto = await file.text();
+      const { categoriaSugeridaTexto, questoes: questoesParsed } = await parseMoodleXml(texto);
+      if (!questoesParsed.length) {
+        resumo.push(`${file.name}: nenhuma questão de tipo suportado encontrada.`);
+        continue;
+      }
+      const resp = await apiFetch('/banco-med-fatec/questoes/importar-lote', {
+        method: 'POST',
+        body: JSON.stringify({ categoriaSugeridaTexto, questoes: questoesParsed })
+      });
+      let linha = `${file.name}: ${resp.criadas} questão(ões) importada(s)`;
+      if (resp.erros && resp.erros.length) linha += `, ${resp.erros.length} com erro (ver console)`;
+      if (resp.erros && resp.erros.length) console.warn(`Erros ao importar ${file.name}:`, resp.erros);
+      resumo.push(linha);
+    } catch (err) {
+      resumo.push(`${file.name}: falhou — ${err.message}`);
+    }
+  }
+
+  alert(`Importação concluída:\n\n${resumo.join('\n')}\n\nConfira a aba "Revisão de Importação" pra confirmar a disciplina de cada lote.`);
+  await carregarTudo();
+  document.querySelector('.bmf-tab-btn[data-tab="revisao"]')?.click();
+}
+
+// ================================================================
+//  RENDER: REVISÃO DE IMPORTAÇÃO
+// ================================================================
+function lotesPendentes() {
+  const porLote = new Map();
+  questoes.filter(q => q.status === 'revisao_importacao').forEach(q => {
+    if (!porLote.has(q.loteId)) porLote.set(q.loteId, { loteId: q.loteId, categoriaSugeridaTexto: q.categoriaSugeridaTexto, questoes: [] });
+    porLote.get(q.loteId).questoes.push(q);
+  });
+  return [...porLote.values()];
+}
+
+function renderRevisao() {
+  const lotes = lotesPendentes();
+  const lista = document.getElementById('bmf-revisao-lista');
+  const vazio = document.getElementById('bmf-revisao-vazio');
+  const badge = document.getElementById('bmf-revisao-badge');
+
+  badge.classList.toggle('hidden', lotes.length === 0);
+  badge.textContent = String(lotes.length);
+  vazio.classList.toggle('hidden', lotes.length > 0);
+  lista.innerHTML = '';
+
+  lotes.forEach(lote => {
+    const grupo = document.createElement('div');
+    grupo.className = 'bmf-revisao-grupo';
+    const sugestao = sugerirCategoria(lote.categoriaSugeridaTexto);
+    grupo.innerHTML = `
+      <h4>${esc(lote.categoriaSugeridaTexto || '(categoria não identificada no arquivo)')}</h4>
+      <p class="bmf-q-meta">${lote.questoes.length} questão(ões) importada(s) aguardando confirmação de disciplina</p>
+      <div class="bmf-revisao-lista-titulos">
+        ${lote.questoes.map(q => `<div>• ${esc(q.titulo)}</div>`).join('')}
+      </div>
+      <div class="bmf-revisao-acoes">
+        <div>
+          <label class="form-label" style="font-size:0.75rem;">Período</label>
+          <select class="form-control bmf-revisao-periodo"><option value="">Período</option></select>
+        </div>
+        <div>
+          <label class="form-label" style="font-size:0.75rem;">Disciplina</label>
+          <select class="form-control bmf-revisao-categoria"><option value="">Selecione o período primeiro</option></select>
+        </div>
+        <button type="button" class="btn btn-secondary bmf-btn-descartar-lote action-execute">Descartar Lote</button>
+        <button type="button" class="btn btn-primary bmf-btn-confirmar-lote action-execute">Confirmar Disciplina</button>
+      </div>
+    `;
+    lista.appendChild(grupo);
+
+    const selPeriodo = grupo.querySelector('.bmf-revisao-periodo');
+    const selCategoria = grupo.querySelector('.bmf-revisao-categoria');
+    for (let p = 1; p <= 12; p++) {
+      const opt = document.createElement('option');
+      opt.value = String(p);
+      opt.textContent = `${ordinal(p)} Período`;
+      selPeriodo.appendChild(opt);
+    }
+    if (sugestao) {
+      selPeriodo.value = String(sugestao.periodo);
+      popularDisciplinasEmSelect(selCategoria, sugestao.periodo, sugestao.id);
+    }
+    selPeriodo.addEventListener('change', () => popularDisciplinasEmSelect(selCategoria, selPeriodo.value));
+
+    grupo.querySelector('.bmf-btn-confirmar-lote').addEventListener('click', async () => {
+      const categoriaId = selCategoria.value;
+      if (!categoriaId) { alert('Selecione a disciplina antes de confirmar.'); return; }
+      try {
+        await apiFetch(`/banco-med-fatec/questoes/lote/${lote.loteId}/resolver`, {
+          method: 'PUT',
+          body: JSON.stringify({ categoriaId })
+        });
+        await carregarTudo();
+      } catch (err) {
+        alert('Erro ao confirmar: ' + err.message);
+      }
+    });
+
+    grupo.querySelector('.bmf-btn-descartar-lote').addEventListener('click', async () => {
+      if (!confirm(`Descartar as ${lote.questoes.length} questões deste lote? Essa ação não pode ser desfeita.`)) return;
+      try {
+        await apiFetch(`/banco-med-fatec/questoes/lote/${lote.loteId}`, { method: 'DELETE' });
+        await carregarTudo();
+      } catch (err) {
+        alert('Erro ao descartar: ' + err.message);
+      }
+    });
+  });
+}
+
+// Igual a popularDisciplinasDoPeriodo, mas recebendo o <select> direto (os
+// cards de revisão são criados dinamicamente, sem id fixo por elemento).
+function popularDisciplinasEmSelect(sel, periodo, valorParaSelecionar) {
+  sel.innerHTML = '';
+  if (!periodo) { sel.innerHTML = '<option value="">Selecione o período primeiro</option>'; return; }
+  const daPeriodo = categorias.filter(c => String(c.periodo) === String(periodo));
+  if (!daPeriodo.length) { sel.innerHTML = '<option value="" disabled selected>Nenhuma disciplina cadastrada neste período</option>'; return; }
+  daPeriodo.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nomeBreve ? `${c.nome} (${c.nomeBreve})` : c.nome;
+    sel.appendChild(opt);
+  });
+  if (valorParaSelecionar && daPeriodo.some(c => c.id === valorParaSelecionar)) sel.value = valorParaSelecionar;
+}
+
+// ================================================================
 //  EVENTOS
 // ================================================================
 function bindEventos() {
@@ -623,6 +912,7 @@ function bindEventos() {
       const tab = btn.dataset.tab;
       document.getElementById('bmf-view-banco').classList.toggle('hidden', tab !== 'banco');
       document.getElementById('bmf-view-provas').classList.toggle('hidden', tab !== 'provas');
+      document.getElementById('bmf-view-revisao').classList.toggle('hidden', tab !== 'revisao');
     });
   });
 
@@ -632,6 +922,23 @@ function bindEventos() {
   document.getElementById('bmf-filtro-busca').addEventListener('input', renderQuestoes);
 
   document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
+  document.getElementById('bmf-btn-importar-ava').addEventListener('click', () => {
+    document.getElementById('bmf-importar-ava-input').click();
+  });
+  document.getElementById('bmf-importar-ava-input').addEventListener('change', async (e) => {
+    const arquivos = e.target.files;
+    if (!arquivos.length) return;
+    const btn = document.getElementById('bmf-btn-importar-ava');
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+    try {
+      await importarArquivosAva(arquivos);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⬆ Importar do AVA';
+      e.target.value = '';
+    }
+  });
   document.getElementById('bmf-btn-cancelar-questao').addEventListener('click', fecharModalQuestao);
   document.getElementById('bmf-form-questao').addEventListener('submit', salvarQuestao);
   document.getElementById('bmf-q-periodo').addEventListener('change', (e) => {
