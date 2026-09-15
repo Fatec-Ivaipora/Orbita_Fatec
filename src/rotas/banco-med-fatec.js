@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const { gerarMoodleXml } = require('../utils/moodleXml');
+const { classificarAreaEnamed } = require('../utils/classificarAreaEnamed');
 
 const COL_CATEGORIAS = 'banco_med_categorias';
 const COL_QUESTOES = 'banco_med_questoes';
@@ -46,12 +47,36 @@ async function periodoDaCategoria(categoriaId) {
 // colinha disciplina→área). Usado pra sugerir a área automaticamente quando
 // uma questão importada é resolvida ou uma questão nova não vem com área
 // marcada manualmente — evita ter que marcar questão por questão.
+// Sem acento, minúsculo — usado tanto pra normalizar o termo buscado quanto
+// pra gerar os tokens de cada título.
+function normalizarBusca(s) {
+    return String(s || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
+// Palavras do título (>=2 letras), sem repetir — guardadas em
+// `tituloBuscaTokens` pra buscar com `array-contains`. Busca por PREFIXO do
+// título inteiro não funcionava (a maioria dos títulos começa com "TBL -",
+// "2025.1 -" etc., então a palavra procurada quase nunca é o início literal
+// do título) — palavra exata em qualquer posição resolve isso. Limitação:
+// só acha por palavra inteira (buscar "col" não acha "coluna"). Combina
+// título + nome da disciplina — o professor busca "habilidades" esperando
+// achar tanto pelo título da questão quanto pela disciplina "Habilidades
+// Clínicas", não só uma coisa ou só a outra.
+function tokensDeBusca(...textos) {
+    return [...new Set(
+        textos.filter(Boolean).flatMap(t => normalizarBusca(t).split(/[^a-z0-9]+/)).filter(w => w.length >= 2)
+    )];
+}
+
 async function dadosDaCategoria(categoriaId) {
-    if (!categoriaId) return { periodo: null, areaEnamedPadrao: null };
+    if (!categoriaId) return { periodo: null, areaEnamedPadrao: null, nome: null };
     const snap = await db.collection(COL_CATEGORIAS).doc(categoriaId).get();
-    if (!snap.exists) return { periodo: null, areaEnamedPadrao: null };
+    if (!snap.exists) return { periodo: null, areaEnamedPadrao: null, nome: null };
     const v = snap.data();
-    return { periodo: v.periodo ?? null, areaEnamedPadrao: v.areaEnamedPadrao ?? null };
+    return { periodo: v.periodo ?? null, areaEnamedPadrao: v.areaEnamedPadrao ?? null, nome: v.nome ?? null };
 }
 
 function validarQuestao(body) {
@@ -159,6 +184,26 @@ router.get('/questoes/contagem-dificuldade', verifyToken, checkPermission, async
     }
 });
 
+// GET /questoes/contagem-area-enamed — total de questões publicadas por área
+// ENAMED (mesmo padrão de count() agregado). Usado na aba "Questões ENAMED"
+// pra mostrar quanto cada área já tem de conteúdo real, não só a referência
+// estática de qual disciplina cai em qual área.
+router.get('/questoes/contagem-area-enamed', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const contagens = {};
+        await Promise.all(AREAS_ENAMED.map(async (area) => {
+            const agg = await db.collection(COL_QUESTOES)
+                .where('areaEnamed', '==', area)
+                .where('status', '==', 'publicada')
+                .count().get();
+            contagens[area] = agg.data().count;
+        }));
+        res.json(contagens);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /questoes — SEMPRE espera pelo menos um filtro (periodo, categoriaId
 // ou status) vindo do cliente. O banco pode crescer bastante (importação do
 // AVA traz dezenas por vez), então nunca lemos a coleção inteira aqui — só o
@@ -171,6 +216,13 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (req.query.areaEnamed) query = query.where('areaEnamed', '==', req.query.areaEnamed);
         if (req.query.dificuldade) query = query.where('dificuldade', '==', req.query.dificuldade);
         if (req.query.status) query = query.where('status', '==', req.query.status);
+        if (req.query.busca) {
+            // array-contains só aceita 1 valor — usa a primeira palavra
+            // significativa do que foi digitado; o resto da frase (se
+            // houver) é refinado em memória no cliente.
+            const primeiraPalavra = normalizarBusca(req.query.busca).split(/[^a-z0-9]+/).find(w => w.length >= 2);
+            if (primeiraPalavra) query = query.where('tituloBuscaTokens', 'array-contains', primeiraPalavra);
+        }
 
         const snap = await query.get();
         const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -187,16 +239,19 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
-        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao, nome: nomeDaCategoria } = await dadosDaCategoria(categoriaId);
 
         const newDoc = db.collection(COL_QUESTOES).doc();
         await newDoc.set({
             titulo: String(titulo).trim(),
+            tituloBusca: normalizarBusca(titulo),
+            tituloBuscaTokens: tokensDeBusca(titulo, nomeDaCategoria),
             categoriaId,
             periodo,
-            // Se o professor não marcou a área manualmente, usa a área padrão
-            // da disciplina (colinha ENAMED) — ele ainda pode trocar depois.
-            areaEnamed: areaEnamed || areaEnamedPadrao || null,
+            // Se o professor não marcou a área manualmente: usa a área padrão
+            // da disciplina (colinha ENAMED) se ela tiver uma fixa, senão
+            // tenta classificar pelo conteúdo (disciplina transversal).
+            areaEnamed: areaEnamed || areaEnamedPadrao || classificarAreaEnamed(titulo, enunciadoHtml, justificativa),
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -227,13 +282,15 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
-        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao, nome: nomeDaCategoria } = await dadosDaCategoria(categoriaId);
 
         await docRef.update({
             titulo: String(titulo).trim(),
+            tituloBusca: normalizarBusca(titulo),
+            tituloBuscaTokens: tokensDeBusca(titulo, nomeDaCategoria),
             categoriaId,
             periodo,
-            areaEnamed: areaEnamed || areaEnamedPadrao || null,
+            areaEnamed: areaEnamed || areaEnamedPadrao || classificarAreaEnamed(titulo, enunciadoHtml, justificativa),
             dificuldade,
             tipoMoodle,
             enunciadoHtml,
@@ -328,6 +385,8 @@ router.post('/questoes/importar-lote', verifyToken, checkPermission, async (req,
                 const ref = db.collection(COL_QUESTOES).doc();
                 batch.set(ref, {
                     titulo: String(q.titulo).trim(),
+                    tituloBusca: normalizarBusca(q.titulo),
+                    tituloBuscaTokens: tokensDeBusca(q.titulo), // ainda sem disciplina (revisão) — o resolver soma o nome dela depois
                     categoriaId: null,
                     categoriaSugeridaTexto,
                     loteId,
@@ -362,7 +421,8 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
     try {
         const { categoriaId } = req.body;
         if (!categoriaId) return res.status(400).json({ error: 'Selecione a disciplina antes de confirmar.' });
-        const { periodo, areaEnamedPadrao } = await dadosDaCategoria(categoriaId);
+        const { periodo, areaEnamedPadrao, nome: nomeDaCategoria } = await dadosDaCategoria(categoriaId);
+        const tokensDaDisciplina = tokensDeBusca(nomeDaCategoria);
 
         const snap = await db.collection(COL_QUESTOES)
             .where('loteId', '==', req.params.loteId)
@@ -372,9 +432,21 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
 
         const batch = db.batch();
         // Questão importada do AVA nunca vem com área ENAMED (o Moodle não tem
-        // esse campo) — herda a área padrão da disciplina escolhida aqui, pra
-        // não deixar o professor tendo que marcar uma por uma.
-        snap.docs.forEach(doc => batch.update(doc.ref, { categoriaId, periodo, areaEnamed: areaEnamedPadrao, status: 'publicada', updatedAt: new Date().toISOString() }));
+        // esse campo). Se a disciplina escolhida tem área fixa, usa ela; se é
+        // transversal (cobre várias áreas — Sistemas Morfofisiológicos,
+        // Patologia Clínica etc.), tenta classificar cada questão pelo próprio
+        // conteúdo (título+enunciado). Nem sempre acha uma área confiável —
+        // aí fica em branco mesmo, o professor ajusta na mão se quiser.
+        snap.docs.forEach(doc => {
+            const q = doc.data();
+            const areaEnamed = areaEnamedPadrao || classificarAreaEnamed(q.titulo, q.enunciadoHtml, q.justificativa);
+            const dados = { categoriaId, periodo, areaEnamed, status: 'publicada', updatedAt: new Date().toISOString() };
+            // soma as palavras do nome da disciplina às que já tinha (do
+            // título) — busca por "habilidades" já acha por disciplina,
+            // não só pelo título específico da questão.
+            if (tokensDaDisciplina.length) dados.tituloBuscaTokens = admin.firestore.FieldValue.arrayUnion(...tokensDaDisciplina);
+            batch.update(doc.ref, dados);
+        });
         await batch.commit();
 
         res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });

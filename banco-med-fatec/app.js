@@ -171,6 +171,37 @@ async function carregarQuestoesRevisao() {
 // Mostra quantas questões publicadas o banco tem em cada dificuldade, direto
 // nas opções do filtro (ex.: "Fácil (23)") — usa count() agregado no
 // servidor, não lê os documentos, então não pesa na economia do banco.
+// Mesmas cores usadas nos cards de referência da aba "Questões ENAMED".
+const AREA_COR = {
+  'Clínica Médica': '#2F6FA8',
+  'Cirurgia': '#A2543B',
+  'Pediatria': '#4B8F63',
+  'Ginecologia e Obstetrícia': '#9A4F76',
+  'Saúde Mental': '#6E63A6',
+  'Medicina de Família e Comunidade': '#B98A2E',
+  'Medicina Preventiva e Social': '#3F8686'
+};
+
+// Contagem real de questões publicadas por área ENAMED — mostra o quanto o
+// banco já tem de conteúdo em cada área, não só a referência estática de
+// disciplina→área.
+async function carregarContagemAreaEnamed() {
+  const grid = document.getElementById('bmf-area-contagem-grid');
+  grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+  try {
+    const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-area-enamed');
+    grid.innerHTML = AREAS_ENAMED.map(area => `
+      <div class="bmf-area-contagem-card" style="--area-cor:${AREA_COR[area]};">
+        <div class="bmf-area-contagem-numero">${contagem[area] || 0}</div>
+        <div class="bmf-area-contagem-nome">${esc(area)}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    grid.innerHTML = '<p class="bmf-empty">Não deu pra carregar a contagem agora.</p>';
+    console.error(err);
+  }
+}
+
 async function atualizarContagemDificuldade() {
   try {
     const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-dificuldade');
@@ -184,22 +215,45 @@ async function atualizarContagemDificuldade() {
 }
 
 // Lê os filtros de período, área ENAMED e dificuldade (os três pedem ao
-// servidor — disciplina/busca só refinam em memória) e busca se pelo menos
-// um deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
-// propósito (é assim que o ENAMED organiza a prova), e dificuldade sozinha
-// também cruza tudo (ex.: "ver todas as fáceis do banco") — nenhum dos três
-// depende do período estar selecionado.
+// servidor — só a disciplina refina em memória) e busca se pelo menos um
+// deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
+// propósito (é assim que o ENAMED organiza a prova), dificuldade sozinha
+// também cruza tudo (ex.: "ver todas as fáceis do banco"), e busca por
+// título funciona sozinha via busca por prefixo (tituloBusca) — nenhum dos
+// quatro depende do período estar selecionado.
 async function carregarQuestoesBanco() {
   const periodo = document.getElementById('bmf-filtro-periodo').value;
   const area = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldade = document.getElementById('bmf-filtro-dificuldade').value;
-  if (!periodo && !area && !dificuldade) { questoesBanco = []; return; }
+  const busca = document.getElementById('bmf-filtro-busca').value.trim();
+  if (!periodo && !area && !dificuldade && busca.length < 2) { questoesBanco = []; return; }
 
   const params = new URLSearchParams({ status: 'publicada' });
   if (periodo) params.set('periodo', periodo);
   if (area) params.set('areaEnamed', area);
   if (dificuldade) params.set('dificuldade', dificuldade);
+  if (busca.length >= 2) params.set('busca', busca);
   questoesBanco = await apiFetch(`/banco-med-fatec/questoes?${params.toString()}`);
+}
+
+// Recarrega a lista e re-renderiza, sempre deixando algum retorno visível —
+// zero resultado ("nenhuma questão com esses filtros") ou erro de verdade
+// (sessão expirada, falha de rede) nunca ficam em branco sem explicação.
+async function atualizarListaQuestoes() {
+  const grid = document.getElementById('bmf-questoes-grid');
+  const vazio = document.getElementById('bmf-questoes-vazio');
+  grid.innerHTML = '';
+  vazio.classList.add('hidden');
+  grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+  try {
+    await carregarQuestoesBanco();
+    renderQuestoes();
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = '';
+    vazio.textContent = `Não deu pra carregar as questões agora (${err.message}). Tenta recarregar a página — se a sessão expirou, um novo login resolve.`;
+    vazio.classList.remove('hidden');
+  }
 }
 
 async function carregarQuestoesDaCategoria(categoriaId) {
@@ -335,18 +389,30 @@ function popularDisciplinasDoPeriodo(selectDisciplinaId, periodo, valorParaSelec
 // ================================================================
 //  RENDER: BANCO DE QUESTÕES
 // ================================================================
+// Tira acento pra comparar — o servidor já busca por tituloBusca sem acento
+// (prefixo), então esse refino em memória tem que ignorar acento também,
+// senão esconde de novo resultado que o servidor já tinha trazido certo.
+function semAcento(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function questoesFiltradas() {
   // questoesBanco já vem do servidor filtrado por período + status=publicada
   // — aqui só refinamos dentro do que já está em memória (disciplina/
   // dificuldade/busca não precisam de nova ida ao Firestore).
   const cat = document.getElementById('bmf-filtro-categoria').value;
   const dif = document.getElementById('bmf-filtro-dificuldade').value;
-  const busca = document.getElementById('bmf-filtro-busca').value.trim().toLowerCase();
+  const busca = semAcento(document.getElementById('bmf-filtro-busca').value.trim().toLowerCase());
 
   return questoesBanco.filter(q => {
     if (cat && q.categoriaId !== cat) return false;
     if (dif && q.dificuldade !== dif) return false;
-    if (busca && !(`${q.titulo} ${q.elaboradoPor}`.toLowerCase().includes(busca))) return false;
+    // Inclui o nome da disciplina aqui também — o servidor já busca por
+    // título+disciplina (tituloBuscaTokens), então esse refino em memória
+    // precisa considerar os mesmos campos, senão descarta de novo quem só
+    // batia pela disciplina (ex.: busca "habilidades" achando questões da
+    // disciplina "Habilidades Clínicas" cujo título não menciona a palavra).
+    if (busca && !semAcento(`${q.titulo} ${q.elaboradoPor} ${nomeCategoria(q.categoriaId)}`.toLowerCase()).includes(busca)) return false;
     return true;
   });
 }
@@ -364,15 +430,16 @@ function renderQuestoes() {
   const grid = document.getElementById('bmf-questoes-grid');
   const vazio = document.getElementById('bmf-questoes-vazio');
 
-  // Sem período, área ENAMED nem dificuldade escolhidos ainda, não tem o que
-  // listar (e não fomos buscar nada no servidor) — pede pra escolher em vez
-  // de mostrar "vazio".
+  // Sem período, área ENAMED, dificuldade nem busca (2+ letras), não tem o
+  // que listar (e não fomos buscar nada no servidor) — pede pra escolher em
+  // vez de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
   const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldadeEscolhida = document.getElementById('bmf-filtro-dificuldade').value;
-  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida) {
+  const buscaEscolhida = document.getElementById('bmf-filtro-busca').value.trim();
+  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida && buscaEscolhida.length < 2) {
     grid.innerHTML = '';
-    vazio.textContent = 'Selecione um período, uma área ENAMED ou uma dificuldade acima pra ver as questões.';
+    vazio.textContent = 'Selecione um período, uma área ENAMED, uma dificuldade, ou busque por título acima.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -386,7 +453,11 @@ function renderQuestoes() {
   [...questoesSelecionadas].forEach(id => { if (!idsVisiveis.has(id)) questoesSelecionadas.delete(id); });
 
   grid.innerHTML = '';
-  vazio.textContent = 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
+  const algumFiltroAtivo = periodoEscolhido || areaEscolhida || dificuldadeEscolhida || buscaEscolhida.length >= 2 ||
+    document.getElementById('bmf-filtro-categoria').value;
+  vazio.textContent = algumFiltroAtivo
+    ? 'Nenhuma questão encontrada com esses filtros. Tenta ajustar período/disciplina/área/dificuldade ou o termo buscado.'
+    : 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
   vazio.classList.toggle('hidden', lista.length > 0);
 
   lista.forEach(q => {
@@ -398,6 +469,7 @@ function renderQuestoes() {
         <div class="bmf-q-row-badges">
           <span class="bmf-badge bmf-badge-${q.dificuldade}">${DIFICULDADE_LABEL[q.dificuldade] || q.dificuldade}</span>
           <span class="bmf-badge bmf-badge-tipo">${q.imagem ? ICONS.imagem : ''}${TIPO_LABEL[q.tipoMoodle] || q.tipoMoodle}</span>
+          ${q.areaEnamed ? `<span class="bmf-badge bmf-badge-area">${esc(q.areaEnamed)}</span>` : ''}
         </div>
         <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
         <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))} · por ${esc(q.elaboradoPor || '—')}</div>
@@ -1480,12 +1552,37 @@ function fecharModalAtivoComEsc() {
     ['bmf-modal-prova-novo', fecharModalNovaProva],
     ['bmf-modal-prova-montar', fecharModalMontarProva],
     ['bmf-modal-adicionar-prova', fecharModalAdicionarProva],
-    ['bmf-modal-resultado-importacao', () => fecharModalResultadoImportacao(false)]
+    ['bmf-modal-resultado-importacao', () => fecharModalResultadoImportacao(false)],
+    ['bmf-modal-relatorio', fecharModalRelatorio]
   ];
   for (const [id, fechar] of mapa) {
     const modal = document.getElementById(id);
     if (modal && modal.classList.contains('active')) { fechar(); return; }
   }
+}
+
+// Relatório do banco: período/disciplina/total de questões — reaproveita o
+// totalQuestoes que o GET /categorias já traz (count() agregado no
+// servidor), sem precisar de outra ida ao Firestore.
+function abrirModalRelatorio() {
+  const corpo = document.getElementById('bmf-relatorio-corpo');
+  const total = categorias.reduce((acc, c) => acc + (c.totalQuestoes || 0), 0);
+  document.getElementById('bmf-relatorio-resumo').textContent =
+    `${total} questão(ões) publicada(s) no banco, em ${categorias.length} disciplina(s) cadastrada(s).`;
+
+  corpo.innerHTML = categorias.length
+    ? categorias.map(c => `
+        <tr>
+          <td>${ordinal(c.periodo)}</td>
+          <td>${esc(c.nome)}</td>
+          <td>${c.totalQuestoes || 0}</td>
+        </tr>`).join('') + `<tr class="bmf-relatorio-total"><td colspan="2">Total</td><td>${total}</td></tr>`
+    : '<tr class="bmf-relatorio-vazia"><td colspan="3">Nenhuma disciplina cadastrada ainda.</td></tr>';
+
+  document.getElementById('bmf-modal-relatorio').classList.add('active');
+}
+function fecharModalRelatorio() {
+  document.getElementById('bmf-modal-relatorio').classList.remove('active');
 }
 
 function bindEventos() {
@@ -1502,30 +1599,22 @@ function bindEventos() {
       document.getElementById('bmf-view-provas').classList.toggle('hidden', tab !== 'provas');
       document.getElementById('bmf-view-revisao').classList.toggle('hidden', tab !== 'revisao');
       document.getElementById('bmf-view-colinha').classList.toggle('hidden', tab !== 'colinha');
+      if (tab === 'colinha') carregarContagemAreaEnamed();
     });
   });
 
   document.getElementById('bmf-filtro-periodo').addEventListener('change', async () => {
     popularSelectsCategoria();
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
+    await atualizarListaQuestoes();
   });
-  document.getElementById('bmf-filtro-area-enamed').addEventListener('change', async () => {
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
-  });
+  document.getElementById('bmf-filtro-area-enamed').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
-  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', async () => {
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
+  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', atualizarListaQuestoes);
+  let debounceBusca;
+  document.getElementById('bmf-filtro-busca').addEventListener('input', () => {
+    clearTimeout(debounceBusca);
+    debounceBusca = setTimeout(atualizarListaQuestoes, 350);
   });
-  document.getElementById('bmf-filtro-busca').addEventListener('input', renderQuestoes);
 
   document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
   document.getElementById('bmf-btn-importar-ava').addEventListener('click', () => {
@@ -1646,6 +1735,9 @@ function bindEventos() {
 
   document.getElementById('bmf-btn-fechar-resultado-importacao').addEventListener('click', () => fecharModalResultadoImportacao(false));
   document.getElementById('bmf-btn-ir-revisao-resultado').addEventListener('click', () => fecharModalResultadoImportacao(true));
+
+  document.getElementById('bmf-btn-relatorio').addEventListener('click', abrirModalRelatorio);
+  document.getElementById('bmf-btn-fechar-relatorio').addEventListener('click', fecharModalRelatorio);
 }
 
 // ================================================================
