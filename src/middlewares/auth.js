@@ -273,6 +273,23 @@ const requireModulePermission = (moduleName) => {
                 cobranca: 1,
                 'banco-med-fatec': 3
             },
+            // Professor da Medicina — mesmo nível de acesso do coord_medicina.
+            professor_medicina: {
+                emprestimo: 1,
+                usuarios: 1,
+                'carga-horaria': 1,
+                ferida: 1,
+                'almoxarifado-feridas': 1,
+                'almoxarifado-saude': 1,
+                'relatorio-dp': 1,
+                acessos: 1,
+                licitacao: 1,
+                matriculas: 1,
+                orcamento: 1,
+                'avaliacao-docente': 1,
+                cobranca: 1,
+                'banco-med-fatec': 3
+            },
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,

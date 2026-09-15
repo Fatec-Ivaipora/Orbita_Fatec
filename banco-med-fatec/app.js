@@ -18,6 +18,14 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   : '/api';
 
 let currentUser = null;
+let currentRole = null;
+// Só coordenação/ADM veem quem elaborou cada questão — pedido explícito
+// (14/09): professor ver o que outro professor cadastrou é antiético, ele só
+// pode ver o que ele mesmo lançou e o que tem disponível no banco (sem saber
+// de quem é). Espelha podeVerAutoria() do backend (src/rotas/banco-med-fatec.js).
+function podeVerAutoria() {
+  return currentRole === 'adm_l1' || currentRole === 'coord_medicina';
+}
 
 async function apiFetch(endpoint, options = {}) {
   let token = '';
@@ -118,6 +126,7 @@ function comprimirImagem(file) {
 // memória (economia de leitura no Firestore: o banco cresce bastante com
 // as importações do AVA).
 let categorias = [];
+let professores = []; // [{uid, nome}] — quem tem login no banco (professor_medicina + coord_medicina), pro filtro "ver questões de um professor"
 let questoesBanco = [];      // questões "publicada" do período escolhido no filtro do Banco de Questões
 let questoesRevisao = [];    // questões status=revisao_importacao (fila de revisão — sempre carregada, é pequena)
 let questoesProvaAtual = []; // questões da disciplina da prova aberta em "Montar Prova" (carregado ao abrir o modal)
@@ -168,9 +177,44 @@ async function carregarQuestoesRevisao() {
   questoesRevisao = await apiFetch('/banco-med-fatec/questoes?status=revisao_importacao');
 }
 
+async function carregarProfessores() {
+  professores = await apiFetch('/banco-med-fatec/professores');
+}
+
 // Mostra quantas questões publicadas o banco tem em cada dificuldade, direto
 // nas opções do filtro (ex.: "Fácil (23)") — usa count() agregado no
 // servidor, não lê os documentos, então não pesa na economia do banco.
+// Mesmas cores usadas nos cards de referência da aba "Questões ENAMED".
+const AREA_COR = {
+  'Clínica Médica': '#2F6FA8',
+  'Cirurgia': '#A2543B',
+  'Pediatria': '#4B8F63',
+  'Ginecologia e Obstetrícia': '#9A4F76',
+  'Saúde Mental': '#6E63A6',
+  'Medicina de Família e Comunidade': '#B98A2E',
+  'Medicina Preventiva e Social': '#3F8686'
+};
+
+// Contagem real de questões publicadas por área ENAMED — mostra o quanto o
+// banco já tem de conteúdo em cada área, não só a referência estática de
+// disciplina→área.
+async function carregarContagemAreaEnamed() {
+  const grid = document.getElementById('bmf-area-contagem-grid');
+  grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+  try {
+    const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-area-enamed');
+    grid.innerHTML = AREAS_ENAMED.map(area => `
+      <div class="bmf-area-contagem-card" style="--area-cor:${AREA_COR[area]};">
+        <div class="bmf-area-contagem-numero">${contagem[area] || 0}</div>
+        <div class="bmf-area-contagem-nome">${esc(area)}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    grid.innerHTML = '<p class="bmf-empty">Não deu pra carregar a contagem agora.</p>';
+    console.error(err);
+  }
+}
+
 async function atualizarContagemDificuldade() {
   try {
     const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-dificuldade');
@@ -184,22 +228,47 @@ async function atualizarContagemDificuldade() {
 }
 
 // Lê os filtros de período, área ENAMED e dificuldade (os três pedem ao
-// servidor — disciplina/busca só refinam em memória) e busca se pelo menos
-// um deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
-// propósito (é assim que o ENAMED organiza a prova), e dificuldade sozinha
-// também cruza tudo (ex.: "ver todas as fáceis do banco") — nenhum dos três
-// depende do período estar selecionado.
+// servidor — só a disciplina refina em memória) e busca se pelo menos um
+// deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
+// propósito (é assim que o ENAMED organiza a prova), dificuldade sozinha
+// também cruza tudo (ex.: "ver todas as fáceis do banco"), e busca por
+// título funciona sozinha via busca por prefixo (tituloBusca) — nenhum dos
+// quatro depende do período estar selecionado.
 async function carregarQuestoesBanco() {
   const periodo = document.getElementById('bmf-filtro-periodo').value;
   const area = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldade = document.getElementById('bmf-filtro-dificuldade').value;
-  if (!periodo && !area && !dificuldade) { questoesBanco = []; return; }
+  const professorSel = document.getElementById('bmf-filtro-professor').value;
+  const busca = document.getElementById('bmf-filtro-busca').value.trim();
+  if (!periodo && !area && !dificuldade && !professorSel && busca.length < 2) { questoesBanco = []; return; }
 
   const params = new URLSearchParams({ status: 'publicada' });
   if (periodo) params.set('periodo', periodo);
   if (area) params.set('areaEnamed', area);
   if (dificuldade) params.set('dificuldade', dificuldade);
+  if (professorSel) params.set('criadoPor', professorSel === 'me' ? currentUser.uid : professorSel);
+  if (busca.length >= 2) params.set('busca', busca);
   questoesBanco = await apiFetch(`/banco-med-fatec/questoes?${params.toString()}`);
+}
+
+// Recarrega a lista e re-renderiza, sempre deixando algum retorno visível —
+// zero resultado ("nenhuma questão com esses filtros") ou erro de verdade
+// (sessão expirada, falha de rede) nunca ficam em branco sem explicação.
+async function atualizarListaQuestoes() {
+  const grid = document.getElementById('bmf-questoes-grid');
+  const vazio = document.getElementById('bmf-questoes-vazio');
+  grid.innerHTML = '';
+  vazio.classList.add('hidden');
+  grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
+  try {
+    await carregarQuestoesBanco();
+    renderQuestoes();
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = '';
+    vazio.textContent = `Não deu pra carregar as questões agora (${err.message}). Tenta recarregar a página — se a sessão expirou, um novo login resolve.`;
+    vazio.classList.remove('hidden');
+  }
 }
 
 async function carregarQuestoesDaCategoria(categoriaId) {
@@ -225,6 +294,13 @@ async function carregarTudo() {
     await carregarQuestoesRevisao();
     popularSelectsCategoria();
     atualizarContagemDificuldade();
+
+    // Lista de colegas por nome só existe pra quem pode ver autoria — pro
+    // professor comum o select fica só com "Todos"/"Minhas questões" (o
+    // endpoint /professores nem responde pra ele, ver podeVerAutoria no
+    // backend), então nem faz sentido chamar.
+    if (podeVerAutoria()) await carregarProfessores();
+    popularSelectFiltroProfessor();
 
     await carregarQuestoesBanco();
 
@@ -268,6 +344,24 @@ function popularSelectsAreaEnamed() {
     });
     sel.dataset.montado = '1';
   });
+}
+
+// Filtro "ver questões de um professor" — "Minhas questões" (valor fixo
+// "me") já cobre o usuário atual, então ele não entra de novo na lista
+// enumerada (evita duas entradas apontando pra mesma pessoa). Refeito a
+// cada carregarTudo() porque a lista de professores pode mudar (login
+// novo criado) e o valor <option> muda de conteúdo, não só de aparecer.
+function popularSelectFiltroProfessor() {
+  const sel = document.getElementById('bmf-filtro-professor');
+  const valorAtual = sel.value;
+  sel.innerHTML = '<option value="">Todos os professores</option><option value="me">Minhas questões</option>';
+  professores.filter(p => p.uid !== currentUser?.uid).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.uid;
+    opt.textContent = p.nome;
+    sel.appendChild(opt);
+  });
+  if (valorAtual && [...sel.options].some(o => o.value === valorAtual)) sel.value = valorAtual;
 }
 
 // Filtro do banco: disciplinas agrupadas por período (<optgroup>) — dá pra
@@ -335,18 +429,33 @@ function popularDisciplinasDoPeriodo(selectDisciplinaId, periodo, valorParaSelec
 // ================================================================
 //  RENDER: BANCO DE QUESTÕES
 // ================================================================
+// Tira acento pra comparar — o servidor já busca por tituloBusca sem acento
+// (prefixo), então esse refino em memória tem que ignorar acento também,
+// senão esconde de novo resultado que o servidor já tinha trazido certo.
+function semAcento(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function questoesFiltradas() {
   // questoesBanco já vem do servidor filtrado por período + status=publicada
   // — aqui só refinamos dentro do que já está em memória (disciplina/
   // dificuldade/busca não precisam de nova ida ao Firestore).
   const cat = document.getElementById('bmf-filtro-categoria').value;
   const dif = document.getElementById('bmf-filtro-dificuldade').value;
-  const busca = document.getElementById('bmf-filtro-busca').value.trim().toLowerCase();
+  const busca = semAcento(document.getElementById('bmf-filtro-busca').value.trim().toLowerCase());
 
   return questoesBanco.filter(q => {
     if (cat && q.categoriaId !== cat) return false;
     if (dif && q.dificuldade !== dif) return false;
-    if (busca && !(`${q.titulo} ${q.elaboradoPor}`.toLowerCase().includes(busca))) return false;
+    // Inclui o nome da disciplina aqui também — o servidor já busca por
+    // título+disciplina (tituloBuscaTokens), então esse refino em memória
+    // precisa considerar os mesmos campos, senão descarta de novo quem só
+    // batia pela disciplina (ex.: busca "habilidades" achando questões da
+    // disciplina "Habilidades Clínicas" cujo título não menciona a palavra).
+    // elaboradoPor só existe na resposta pra quem pode ver autoria (backend
+    // já anonimiza pra professor) — "|| ''" evita "undefined" virar texto
+    // pesquisável quando o campo nem vem.
+    if (busca && !semAcento(`${q.titulo} ${q.elaboradoPor || ''} ${nomeCategoria(q.categoriaId)}`.toLowerCase()).includes(busca)) return false;
     return true;
   });
 }
@@ -363,16 +472,20 @@ let questoesSelecionadas = new Set();
 function renderQuestoes() {
   const grid = document.getElementById('bmf-questoes-grid');
   const vazio = document.getElementById('bmf-questoes-vazio');
+  const contagemEl = document.getElementById('bmf-questoes-contagem');
 
-  // Sem período, área ENAMED nem dificuldade escolhidos ainda, não tem o que
-  // listar (e não fomos buscar nada no servidor) — pede pra escolher em vez
-  // de mostrar "vazio".
+  // Sem período, área ENAMED, dificuldade, professor nem busca (2+ letras),
+  // não tem o que listar (e não fomos buscar nada no servidor) — pede pra
+  // escolher em vez de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
   const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldadeEscolhida = document.getElementById('bmf-filtro-dificuldade').value;
-  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida) {
+  const professorEscolhido = document.getElementById('bmf-filtro-professor').value;
+  const buscaEscolhida = document.getElementById('bmf-filtro-busca').value.trim();
+  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida && !professorEscolhido && buscaEscolhida.length < 2) {
     grid.innerHTML = '';
-    vazio.textContent = 'Selecione um período, uma área ENAMED ou uma dificuldade acima pra ver as questões.';
+    contagemEl.classList.add('hidden');
+    vazio.textContent = 'Selecione um período, uma área ENAMED, uma dificuldade, um professor, ou busque por título acima.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -386,8 +499,25 @@ function renderQuestoes() {
   [...questoesSelecionadas].forEach(id => { if (!idsVisiveis.has(id)) questoesSelecionadas.delete(id); });
 
   grid.innerHTML = '';
-  vazio.textContent = 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
+  const algumFiltroAtivo = periodoEscolhido || areaEscolhida || dificuldadeEscolhida || professorEscolhido || buscaEscolhida.length >= 2 ||
+    document.getElementById('bmf-filtro-categoria').value;
+  if (professorEscolhido === 'me') {
+    // Mensagem específica pro professor entender que é sobre o PRÓPRIO
+    // cadastro, não um erro/bug (evita achar que o filtro quebrou quando na
+    // verdade ele mesmo ainda não lançou nenhuma questão).
+    vazio.textContent = 'Ainda não foram cadastradas questões com o seu perfil.';
+  } else {
+    vazio.textContent = algumFiltroAtivo
+      ? 'Nenhuma questão encontrada com esses filtros. Tenta ajustar período/disciplina/área/dificuldade/professor ou o termo buscado.'
+      : 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
+  }
   vazio.classList.toggle('hidden', lista.length > 0);
+  contagemEl.classList.toggle('hidden', lista.length === 0);
+  if (lista.length) {
+    contagemEl.textContent = professorEscolhido === 'me'
+      ? `Você criou ${lista.length} questão(ões) com esses filtros.`
+      : `${lista.length} questão(ões) encontrada(s).`;
+  }
 
   lista.forEach(q => {
     const row = document.createElement('div');
@@ -398,9 +528,10 @@ function renderQuestoes() {
         <div class="bmf-q-row-badges">
           <span class="bmf-badge bmf-badge-${q.dificuldade}">${DIFICULDADE_LABEL[q.dificuldade] || q.dificuldade}</span>
           <span class="bmf-badge bmf-badge-tipo">${q.imagem ? ICONS.imagem : ''}${TIPO_LABEL[q.tipoMoodle] || q.tipoMoodle}</span>
+          ${q.areaEnamed ? `<span class="bmf-badge bmf-badge-area">${esc(q.areaEnamed)}</span>` : ''}
         </div>
         <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
-        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))} · por ${esc(q.elaboradoPor || '—')}</div>
+        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))}${podeVerAutoria() ? ` · por ${esc(q.elaboradoPor || '—')}` : ''}</div>
       </div>
       <div class="bmf-q-row-actions">
         <button class="bmf-icon-btn bmf-btn-editar-questao action-execute" data-id="${q.id}" title="Editar questão">${ICONS.editar}</button>
@@ -468,7 +599,7 @@ function renderProvas() {
           ${p.tipo === 'enamed' ? '<span class="bmf-badge bmf-badge-tipo">Simulado ENAMED</span>' : ''}
         </div>
         <div class="bmf-prova-row-titulo">${esc(p.nome)}</div>
-        <div class="bmf-prova-row-meta">${esc(p.tipo === 'enamed' ? p.areaEnamed : nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''}</div>
+        <div class="bmf-prova-row-meta">${esc(p.tipo === 'enamed' ? p.areaEnamed : nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''} · por ${esc(p.criadoPorNome || '—')}</div>
       </div>
       <div class="bmf-prova-row-acoes">
         <button class="btn btn-secondary bmf-btn-montar-prova action-execute" data-id="${p.id}">
@@ -1480,12 +1611,56 @@ function fecharModalAtivoComEsc() {
     ['bmf-modal-prova-novo', fecharModalNovaProva],
     ['bmf-modal-prova-montar', fecharModalMontarProva],
     ['bmf-modal-adicionar-prova', fecharModalAdicionarProva],
-    ['bmf-modal-resultado-importacao', () => fecharModalResultadoImportacao(false)]
+    ['bmf-modal-resultado-importacao', () => fecharModalResultadoImportacao(false)],
+    ['bmf-modal-relatorio', fecharModalRelatorio]
   ];
   for (const [id, fechar] of mapa) {
     const modal = document.getElementById(id);
     if (modal && modal.classList.contains('active')) { fechar(); return; }
   }
+}
+
+// Relatório do banco: período/disciplina/total de questões — reaproveita o
+// totalQuestoes que o GET /categorias já traz (count() agregado no
+// servidor), sem precisar de outra ida ao Firestore. A tabela por professor
+// já vem pronta do servidor (count() agregado por criadoPor).
+function abrirModalRelatorio() {
+  const corpo = document.getElementById('bmf-relatorio-corpo');
+  const total = categorias.reduce((acc, c) => acc + (c.totalQuestoes || 0), 0);
+  document.getElementById('bmf-relatorio-resumo').textContent =
+    `${total} questão(ões) publicada(s) no banco, em ${categorias.length} disciplina(s) cadastrada(s).`;
+
+  corpo.innerHTML = categorias.length
+    ? categorias.map(c => `
+        <tr>
+          <td>${ordinal(c.periodo)}</td>
+          <td>${esc(c.nome)}</td>
+          <td>${c.totalQuestoes || 0}</td>
+        </tr>`).join('') + `<tr class="bmf-relatorio-total"><td colspan="2">Total</td><td>${total}</td></tr>`
+    : '<tr class="bmf-relatorio-vazia"><td colspan="3">Nenhuma disciplina cadastrada ainda.</td></tr>';
+
+  document.getElementById('bmf-modal-relatorio').classList.add('active');
+  // Quebra por professor é coisa de coordenação/ADM (ver podeVerAutoria) —
+  // pro professor comum o bloco nem aparece (o endpoint responde 403 mesmo).
+  document.getElementById('bmf-relatorio-professor-bloco').classList.toggle('hidden', !podeVerAutoria());
+  if (podeVerAutoria()) carregarRelatorioProfessor();
+}
+
+async function carregarRelatorioProfessor() {
+  const corpoProf = document.getElementById('bmf-relatorio-professor-corpo');
+  corpoProf.innerHTML = '<tr><td colspan="2">Carregando…</td></tr>';
+  try {
+    const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-professor');
+    corpoProf.innerHTML = contagem.length
+      ? contagem.map(p => `<tr><td>${esc(p.nome)}</td><td>${p.total}</td></tr>`).join('')
+      : '<tr class="bmf-relatorio-vazia"><td colspan="2">Nenhum professor cadastrado ainda.</td></tr>';
+  } catch (err) {
+    corpoProf.innerHTML = '<tr class="bmf-relatorio-vazia"><td colspan="2">Não deu pra carregar agora.</td></tr>';
+    console.error(err);
+  }
+}
+function fecharModalRelatorio() {
+  document.getElementById('bmf-modal-relatorio').classList.remove('active');
 }
 
 function bindEventos() {
@@ -1502,30 +1677,23 @@ function bindEventos() {
       document.getElementById('bmf-view-provas').classList.toggle('hidden', tab !== 'provas');
       document.getElementById('bmf-view-revisao').classList.toggle('hidden', tab !== 'revisao');
       document.getElementById('bmf-view-colinha').classList.toggle('hidden', tab !== 'colinha');
+      if (tab === 'colinha') carregarContagemAreaEnamed();
     });
   });
 
   document.getElementById('bmf-filtro-periodo').addEventListener('change', async () => {
     popularSelectsCategoria();
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
+    await atualizarListaQuestoes();
   });
-  document.getElementById('bmf-filtro-area-enamed').addEventListener('change', async () => {
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
-  });
+  document.getElementById('bmf-filtro-area-enamed').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
-  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', async () => {
-    const grid = document.getElementById('bmf-questoes-grid');
-    grid.innerHTML = '<p class="bmf-empty">Carregando…</p>';
-    await carregarQuestoesBanco();
-    renderQuestoes();
+  document.getElementById('bmf-filtro-dificuldade').addEventListener('change', atualizarListaQuestoes);
+  document.getElementById('bmf-filtro-professor').addEventListener('change', atualizarListaQuestoes);
+  let debounceBusca;
+  document.getElementById('bmf-filtro-busca').addEventListener('input', () => {
+    clearTimeout(debounceBusca);
+    debounceBusca = setTimeout(atualizarListaQuestoes, 350);
   });
-  document.getElementById('bmf-filtro-busca').addEventListener('input', renderQuestoes);
 
   document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
   document.getElementById('bmf-btn-importar-ava').addEventListener('click', () => {
@@ -1646,6 +1814,9 @@ function bindEventos() {
 
   document.getElementById('bmf-btn-fechar-resultado-importacao').addEventListener('click', () => fecharModalResultadoImportacao(false));
   document.getElementById('bmf-btn-ir-revisao-resultado').addEventListener('click', () => fecharModalResultadoImportacao(true));
+
+  document.getElementById('bmf-btn-relatorio').addEventListener('click', abrirModalRelatorio);
+  document.getElementById('bmf-btn-fechar-relatorio').addEventListener('click', fecharModalRelatorio);
 }
 
 // ================================================================
@@ -1658,6 +1829,7 @@ async function initApp(user, role) {
   if (appInitialized && initializedRole === role) return;
   appInitialized = true;
   initializedRole = role;
+  currentRole = role;
 
   const guard = document.getElementById('auth-guard');
   if (guard) guard.classList.add('hidden');
@@ -1672,6 +1844,12 @@ async function initApp(user, role) {
   popularSelectsPeriodo();
   popularSelectsAreaEnamed();
   ajustarEditorPorTipo();
+  // Busca por autor não faz sentido pra quem não vê autoria (o campo nem
+  // vem na resposta) — placeholder deixa isso explícito em vez de prometer
+  // uma busca que não funciona.
+  if (!podeVerAutoria()) {
+    document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título...';
+  }
   await carregarTudo();
 }
 

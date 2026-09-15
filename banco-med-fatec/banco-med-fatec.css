@@ -97,6 +97,7 @@
 
 .form-group { margin-bottom: 1.25rem; text-align: left; }
 .form-label { display: block; font-size: 0.82rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.45rem; }
+.bmf-campo-ajuda { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; margin-top: 0.45rem; }
 .form-control {
   width: 100%;
   padding: 0.85rem 1rem;
@@ -356,6 +357,7 @@
 .bmf-badge-intermediaria { background: rgba(245, 158, 11, 0.14); color: #92650A; }
 .bmf-badge-dificil { background: rgba(239, 68, 68, 0.12); color: #B91C1C; }
 .bmf-badge-tipo { background: rgba(3, 20, 38, 0.06); color: var(--text-secondary); }
+.bmf-badge-area { background: rgba(0, 159, 227, 0.14); color: var(--med-azul-escuro); font-weight: 700; }
 
 .bmf-empty {
   text-align: center;
@@ -532,6 +534,8 @@
 .bmf-resultado-header { margin-bottom: 1rem; }
 .bmf-resultado-resumo { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem; }
 
+#bmf-questoes-contagem { margin-bottom: 0.75rem; }
+
 .bmf-resultado-lista {
   display: flex;
   flex-direction: column;
@@ -590,6 +594,64 @@
 .bmf-rte p:first-child { margin-top: 0; }
 .bmf-rte p:last-child { margin-bottom: 0; }
 .bmf-rte ul { padding-left: 1.4rem; margin: 0.4rem 0; }
+
+/* ---- Relatório do Banco (tabela período/disciplina/total) ---- */
+.bmf-relatorio-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.bmf-relatorio-tabela th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1.5px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+}
+.bmf-relatorio-tabela td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.bmf-relatorio-tabela tbody tr:hover { background: rgba(0, 79, 159, 0.04); }
+.bmf-relatorio-tabela td:last-child, .bmf-relatorio-tabela th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.bmf-relatorio-tabela tr.bmf-relatorio-total td {
+  font-weight: 800;
+  border-top: 2px solid var(--med-azul-escuro);
+  border-bottom: none;
+}
+.bmf-relatorio-tabela tr.bmf-relatorio-vazia td { color: var(--text-secondary); font-style: italic; }
+
+/* ---- Contagem real por área (aba Questões ENAMED) ---- */
+.bmf-area-contagem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.bmf-area-contagem-card {
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  border-top: 3px solid var(--area-cor);
+}
+.bmf-area-contagem-numero {
+  font-family: inherit;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--area-cor);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.bmf-area-contagem-nome { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; font-weight: 600; }
 
 /* ---- Colinha ENAMED (referência disciplina → área) ---- */
 .bmf-colinha-grid {
