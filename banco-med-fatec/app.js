@@ -227,23 +227,25 @@ async function atualizarContagemDificuldade() {
   }
 }
 
-// Lê os filtros de período, área ENAMED e dificuldade (os três pedem ao
-// servidor — só a disciplina refina em memória) e busca se pelo menos um
-// deles estiver escolhido. Área ENAMED cruza disciplinas e períodos de
-// propósito (é assim que o ENAMED organiza a prova), dificuldade sozinha
-// também cruza tudo (ex.: "ver todas as fáceis do banco"), e busca por
-// título funciona sozinha via busca por prefixo (tituloBusca) — nenhum dos
-// quatro depende do período estar selecionado.
+// Lê os filtros de período, disciplina, área ENAMED, dificuldade e
+// professor (todos pedem ao servidor) e busca se pelo menos um deles
+// estiver escolhido. Área ENAMED cruza disciplinas e períodos de propósito
+// (é assim que o ENAMED organiza a prova), dificuldade sozinha também cruza
+// tudo (ex.: "ver todas as fáceis do banco"), e busca por título funciona
+// sozinha via busca por prefixo (tituloBusca) — nenhum depende dos outros
+// estarem selecionados.
 async function carregarQuestoesBanco() {
   const periodo = document.getElementById('bmf-filtro-periodo').value;
+  const categoriaId = document.getElementById('bmf-filtro-categoria').value;
   const area = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldade = document.getElementById('bmf-filtro-dificuldade').value;
   const professorSel = document.getElementById('bmf-filtro-professor').value;
   const busca = document.getElementById('bmf-filtro-busca').value.trim();
-  if (!periodo && !area && !dificuldade && !professorSel && busca.length < 2) { questoesBanco = []; return; }
+  if (!periodo && !categoriaId && !area && !dificuldade && !professorSel && busca.length < 2) { questoesBanco = []; return; }
 
   const params = new URLSearchParams({ status: 'publicada' });
   if (periodo) params.set('periodo', periodo);
+  if (categoriaId) params.set('categoriaId', categoriaId);
   if (area) params.set('areaEnamed', area);
   if (dificuldade) params.set('dificuldade', dificuldade);
   if (professorSel) params.set('criadoPor', professorSel === 'me' ? currentUser.uid : professorSel);
@@ -478,14 +480,15 @@ function renderQuestoes() {
   // não tem o que listar (e não fomos buscar nada no servidor) — pede pra
   // escolher em vez de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
+  const categoriaEscolhida = document.getElementById('bmf-filtro-categoria').value;
   const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldadeEscolhida = document.getElementById('bmf-filtro-dificuldade').value;
   const professorEscolhido = document.getElementById('bmf-filtro-professor').value;
   const buscaEscolhida = document.getElementById('bmf-filtro-busca').value.trim();
-  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida && !professorEscolhido && buscaEscolhida.length < 2) {
+  if (!periodoEscolhido && !categoriaEscolhida && !areaEscolhida && !dificuldadeEscolhida && !professorEscolhido && buscaEscolhida.length < 2) {
     grid.innerHTML = '';
     contagemEl.classList.add('hidden');
-    vazio.textContent = 'Selecione um período, uma área ENAMED, uma dificuldade, um professor, ou busque por título acima.';
+    vazio.textContent = 'Selecione um período, uma disciplina, uma área ENAMED, uma dificuldade, um professor, ou busque por título acima.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -499,8 +502,7 @@ function renderQuestoes() {
   [...questoesSelecionadas].forEach(id => { if (!idsVisiveis.has(id)) questoesSelecionadas.delete(id); });
 
   grid.innerHTML = '';
-  const algumFiltroAtivo = periodoEscolhido || areaEscolhida || dificuldadeEscolhida || professorEscolhido || buscaEscolhida.length >= 2 ||
-    document.getElementById('bmf-filtro-categoria').value;
+  const algumFiltroAtivo = periodoEscolhido || categoriaEscolhida || areaEscolhida || dificuldadeEscolhida || professorEscolhido || buscaEscolhida.length >= 2;
   if (professorEscolhido === 'me') {
     // Mensagem específica pro professor entender que é sobre o PRÓPRIO
     // cadastro, não um erro/bug (evita achar que o filtro quebrou quando na
@@ -1686,7 +1688,7 @@ function bindEventos() {
     await atualizarListaQuestoes();
   });
   document.getElementById('bmf-filtro-area-enamed').addEventListener('change', atualizarListaQuestoes);
-  document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
+  document.getElementById('bmf-filtro-categoria').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-dificuldade').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-professor').addEventListener('change', atualizarListaQuestoes);
   let debounceBusca;
