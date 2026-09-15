@@ -189,16 +189,20 @@ export const ROLE_PERMISSIONS = {
   // nenhum outro módulo administrativo. Cargo dedicado (em vez de dar
   // banco-med-fatec pro cargo "coordenador" geral) pra não vazar acesso
   // pra coordenadores de outros cursos.
+  // Sem "dashboard"/"fidelidade" de propósito — esses dois cargos não usam
+  // Meu Espaço nem Cartão FATEC (ver CARGOS_SO_MODULO_PROPRIO em
+  // core/layout.js, que tira a exceção "todo cargo sempre vê esses dois" só
+  // pra eles, e o redirect direto pro banco-med-fatec em meu-espaco.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["dashboard", "fidelidade", "banco-med-fatec"]
+    modules: ["banco-med-fatec"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (só Banco de
   // Questões), cargo separado só pra aparecer com rótulo próprio na tela de
   // Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["dashboard", "fidelidade", "banco-med-fatec"]
+    modules: ["banco-med-fatec"]
   },
   visitante: {
     label: "Visitante",

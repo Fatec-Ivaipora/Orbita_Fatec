@@ -26,11 +26,16 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
 
   const roleConfig = getRoleConfig(role);
 
+  // Cargos exclusivos do Banco de Questões (Medicina) não têm uso pra Meu
+  // Espaço/Cartão FATEC — não entram na regra abaixo de "todo cargo sempre
+  // vê esses dois", fica só o único módulo que eles realmente usam.
+  const CARGOS_SO_MODULO_PROPRIO = ['coord_medicina', 'professor_medicina'];
+
   // Visibilidade de módulo no menu: nível efetivo >= 2 quando há cache;
   // sem cache, fallback para a lista estática do cargo
   const podeVerModulo = (modId) => {
     if (role === 'adm_l1') return true;
-    if (modId === 'dashboard' || modId === 'fidelidade') return true;
+    if ((modId === 'dashboard' || modId === 'fidelidade') && !CARGOS_SO_MODULO_PROPRIO.includes(role)) return true;
     if (cachedPerms) return getAccessLevel(cachedPerms[modId]) >= 2;
     return roleConfig.modules.includes(modId);
   };
