@@ -137,6 +137,8 @@ async function initApp(user, role) {
     initPaginaLancamento();
   } else if (document.getElementById('matriculas-relatorio-root')) {
     initPaginaRelatorio();
+  } else if (document.getElementById('matriculas-aluno-indica-root')) {
+    initPaginaAlunoIndica();
   }
 }
 
@@ -165,6 +167,16 @@ let semestreSelecionado = '2026.2';
 let cursoSelecionadoId = null;
 let cursoSelecionadoNome = null;
 
+// Filtro de período tipo Excel: começa com tudo marcado (equivale a "sem
+// filtro"); guarda só quem foi DESMARCADO, não quem está marcado — assim,
+// se a lista de períodos mudar (Fatec x Medicina), o que nunca foi
+// desmarcado continua marcado automaticamente.
+const TODOS_OS_PERIODOS = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
+let periodosDesmarcados = new Set();
+
+// Mesma ideia pro filtro de Situação — guarda só quem foi desmarcado.
+let situacoesDesmarcadas = new Set();
+
 let alunos = [];
 let alunosNextCursor = null;
 let alunosHasMore = false;
@@ -175,6 +187,8 @@ let buscaAlunoTimer = null;
 async function initPaginaLancamento() {
   await Promise.all([carregarOpcoes(), carregarCursosFatec()]);
   popularSelectsOpcoes();
+  setupPeriodoMultiSelect();
+  setupSituacaoMultiSelect();
   await popularSelectSemestres(document.getElementById('semestre-select'));
   semestreSelecionado = document.getElementById('semestre-select')?.value || semestreSelecionado;
 
@@ -208,7 +222,7 @@ async function initPaginaLancamento() {
     else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
 
-  ['periodo-filtro', 'situacao-filtro', 'plano-filtro'].forEach(id => {
+  ['plano-filtro'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     });
@@ -280,11 +294,11 @@ async function atualizarContadorRegistros() {
   try {
     const params = new URLSearchParams({ modulo: moduloSelecionado, semestre: semestreSelecionado });
     if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
-    const periodo = document.getElementById('periodo-filtro')?.value;
-    const situacao = document.getElementById('situacao-filtro')?.value;
+    const periodos = periodosFiltroAtual();
+    const situacoes = situacoesFiltroAtual();
     const plano = document.getElementById('plano-filtro')?.value;
-    if (periodo) params.set('periodo', periodo);
-    if (situacao) params.set('situacao', situacao);
+    if (periodos.length) params.set('periodos', periodos.join(','));
+    if (situacoes.length) params.set('situacoes', situacoes.join(','));
     if (plano) params.set('planoConfissao', plano);
 
     const { total, filtrados } = await apiFetch(`/matriculas/alunos/contagem?${params.toString()}`);
@@ -357,21 +371,9 @@ function popularSelectsOpcoes() {
       cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
-  // Fatec vai até o 10º período (+ "DP" de dependência); Medicina até o 12º —
-  // lista única cobrindo os dois, filtrar por um período que não existe no
-  // módulo atual simplesmente não retorna ninguém.
-  const periodoFiltro = document.getElementById('periodo-filtro');
-  if (periodoFiltro) {
-    const periodos = [...Array.from({ length: 12 }, (_, i) => `${i + 1}º`), 'DP'];
-    periodoFiltro.innerHTML = '<option value="">Todos os períodos</option>' +
-      periodos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
-  }
+  montarPeriodoMultiSelect();
 
-  const situacaoFiltro = document.getElementById('situacao-filtro');
-  if (situacaoFiltro) {
-    situacaoFiltro.innerHTML = '<option value="">Todas as situações</option>' +
-      opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  }
+  montarSituacaoMultiSelect();
   const planoFiltro = document.getElementById('plano-filtro');
   if (planoFiltro) {
     planoFiltro.innerHTML = '<option value="">Todos os planos/confissão</option>' +
@@ -392,14 +394,144 @@ function popularSelectsOpcoes() {
   }
 }
 
+// Fatec vai até o 10º período (+ "DP" de dependência); Medicina até o 12º —
+// lista única cobrindo os dois, filtrar por um período que não existe no
+// módulo atual simplesmente não retorna ninguém.
+// Monta o filtro de período tipo Excel: abre com tudo marcado, "Marcar
+// todos"/"Desmarcar todos" e uma caixinha por período — a pessoa desmarca
+// o que não quer ver, igual num filtro de coluna de planilha.
+function montarPeriodoMultiSelect() {
+  const opcoesEl = document.getElementById('periodo-opcoes');
+  if (!opcoesEl) return;
+  opcoesEl.innerHTML = TODOS_OS_PERIODOS.map(p => `
+    <label>
+      <input type="checkbox" class="periodo-checkbox" value="${esc(p)}" ${periodosDesmarcados.has(p) ? '' : 'checked'}>
+      ${esc(p)}
+    </label>
+  `).join('');
+  atualizarBotaoPeriodo();
+}
+
+function atualizarBotaoPeriodo() {
+  const btn = document.getElementById('periodo-btn');
+  if (!btn) return;
+  const marcados = TODOS_OS_PERIODOS.length - periodosDesmarcados.size;
+  if (periodosDesmarcados.size === 0) btn.textContent = 'Todos os períodos';
+  else if (marcados === 0) btn.textContent = 'Nenhum período';
+  else btn.textContent = `${marcados} período(s) selecionado(s)`;
+}
+
+// Lista de períodos a mandar pro servidor — vazio significa "sem filtro"
+// (todos marcados), pra não esconder aluno com período em branco.
+function periodosFiltroAtual() {
+  if (periodosDesmarcados.size === 0) return [];
+  return TODOS_OS_PERIODOS.filter(p => !periodosDesmarcados.has(p));
+}
+
+function setupPeriodoMultiSelect() {
+  const wrap = document.getElementById('periodo-multiselect');
+  const btn = document.getElementById('periodo-btn');
+  const panel = document.getElementById('periodo-panel');
+  const opcoesEl = document.getElementById('periodo-opcoes');
+  if (!wrap || !btn || !panel || !opcoesEl) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.classList.add('hidden');
+  });
+
+  wrap.querySelectorAll('.multi-select-acoes button').forEach(acaoBtn => {
+    acaoBtn.addEventListener('click', () => {
+      periodosDesmarcados = acaoBtn.dataset.acao === 'nenhum' ? new Set(TODOS_OS_PERIODOS) : new Set();
+      montarPeriodoMultiSelect();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    });
+  });
+
+  opcoesEl.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('periodo-checkbox')) return;
+    const valor = e.target.value;
+    if (e.target.checked) periodosDesmarcados.delete(valor);
+    else periodosDesmarcados.add(valor);
+    atualizarBotaoPeriodo();
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+  });
+}
+
+// Mesmo filtro tipo Excel, agora pra Situação — lista vem de opcoes.situacoes
+// (carregada do servidor), não é fixa como a de período.
+function montarSituacaoMultiSelect() {
+  const opcoesEl = document.getElementById('situacao-opcoes');
+  if (!opcoesEl) return;
+  opcoesEl.innerHTML = opcoes.situacoes.map(s => `
+    <label>
+      <input type="checkbox" class="situacao-checkbox" value="${esc(s)}" ${situacoesDesmarcadas.has(s) ? '' : 'checked'}>
+      ${esc(s)}
+    </label>
+  `).join('');
+  atualizarBotaoSituacao();
+}
+
+function atualizarBotaoSituacao() {
+  const btn = document.getElementById('situacao-btn');
+  if (!btn) return;
+  const marcados = opcoes.situacoes.length - situacoesDesmarcadas.size;
+  if (situacoesDesmarcadas.size === 0) btn.textContent = 'Todas as situações';
+  else if (marcados === 0) btn.textContent = 'Nenhuma situação';
+  else btn.textContent = `${marcados} situação(ões) selecionada(s)`;
+}
+
+function situacoesFiltroAtual() {
+  if (situacoesDesmarcadas.size === 0) return [];
+  return opcoes.situacoes.filter(s => !situacoesDesmarcadas.has(s));
+}
+
+function setupSituacaoMultiSelect() {
+  const wrap = document.getElementById('situacao-multiselect');
+  const btn = document.getElementById('situacao-btn');
+  const panel = document.getElementById('situacao-panel');
+  const opcoesEl = document.getElementById('situacao-opcoes');
+  if (!wrap || !btn || !panel || !opcoesEl) return;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) panel.classList.add('hidden');
+  });
+
+  wrap.querySelectorAll('.multi-select-acoes button').forEach(acaoBtn => {
+    acaoBtn.addEventListener('click', () => {
+      situacoesDesmarcadas = acaoBtn.dataset.acao === 'nenhum' ? new Set(opcoes.situacoes) : new Set();
+      montarSituacaoMultiSelect();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    });
+  });
+
+  opcoesEl.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('situacao-checkbox')) return;
+    const valor = e.target.value;
+    if (e.target.checked) situacoesDesmarcadas.delete(valor);
+    else situacoesDesmarcadas.add(valor);
+    atualizarBotaoSituacao();
+    if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+  });
+}
+
 // Grupo de badge por SITUAÇÃO — cor por significado (ok/alerta/crítica/neutra),
 // não por valor individual, senão vira uma cor aleatória por texto.
 const SITUACAO_GRUPO = {
   'Matrícula Nova - Assinada': 'ok', 'Rematrícula Assinada': 'ok', 'Formando': 'ok',
+  'Matrícula Nova - Retorno Assinada': 'ok', 'Matrícula Nova - Transferência Assinada': 'ok',
   'Matrícula Nova': 'alerta', 'Pendência Financeira': 'alerta', 'Não Assinou': 'alerta',
+  'Matrícula Nova - Retorno': 'alerta', 'Matrícula Nova - Transferência': 'alerta',
   'Cancelou': 'critica', 'Trancou': 'critica', '1ª Evasão': 'critica', '2ª Evasão': 'critica',
   'Desistente': 'critica', 'Reprovado': 'critica',
-  'Transferência': 'neutra', 'Retorno': 'neutra', 'Mudança de Curso': 'neutra'
+  'Transferência': 'neutra', 'Mudança de Curso': 'neutra'
 };
 function situacaoBadgeClasse(situacao) {
   return `situacao-${SITUACAO_GRUPO[situacao] || 'neutra'}`;
@@ -410,11 +542,11 @@ async function buscarProximaPaginaAlunos(primeira) {
   params.set('modulo', moduloSelecionado);
   params.set('semestre', semestreSelecionado);
   if (cursoSelecionadoId) params.set('cursoId', cursoSelecionadoId);
-  const periodo = document.getElementById('periodo-filtro')?.value;
-  const situacao = document.getElementById('situacao-filtro')?.value;
+  const periodos = periodosFiltroAtual();
+  const situacoes = situacoesFiltroAtual();
   const plano = document.getElementById('plano-filtro')?.value;
-  if (periodo) params.set('periodo', periodo);
-  if (situacao) params.set('situacao', situacao);
+  if (periodos.length) params.set('periodos', periodos.join(','));
+  if (situacoes.length) params.set('situacoes', situacoes.join(','));
   if (plano) params.set('planoConfissao', plano);
   const busca = document.getElementById('busca-aluno')?.value.trim();
   if (busca) params.set('busca', busca);
@@ -511,6 +643,97 @@ function renderTabelaAlunos(lista) {
   }));
 }
 
+// ==========================================
+// "ALUNO INDICA" — busca o veterano por nome (entre os já matriculados no
+// módulo/semestre do calouro que está sendo cadastrado) e guarda
+// id+nome do escolhido. `null` explícito quando a pessoa limpa a seleção,
+// pra dar pra desfazer um "indica" cadastrado errado.
+// ==========================================
+let alunoIndicadoPor = null; // { id, nome } | null
+let indicadoPorDebounce = null;
+
+function renderChipIndicadoPor() {
+  const chip = document.getElementById('aluno-indicado-por-chip');
+  const busca = document.getElementById('aluno-indicado-por-busca');
+  document.getElementById('aluno-indicado-por-id').value = alunoIndicadoPor?.id || '';
+  if (alunoIndicadoPor) {
+    chip.innerHTML = `<span class="indicado-por-selecionado">${esc(alunoIndicadoPor.nome)} <button type="button" id="btn-limpar-indicado-por">✕</button></span>`;
+    chip.classList.remove('hidden');
+    busca.classList.add('hidden');
+    document.getElementById('btn-limpar-indicado-por').addEventListener('click', () => {
+      alunoIndicadoPor = null;
+      busca.value = '';
+      renderChipIndicadoPor();
+    });
+  } else {
+    chip.classList.add('hidden');
+    chip.innerHTML = '';
+    busca.classList.remove('hidden');
+  }
+}
+
+// Lista de semestres já existentes no sistema (busca uma vez só e guarda —
+// não muda durante a sessão) — usada pra buscar o veterano em TODOS os
+// semestres, não só o do calouro sendo cadastrado. Sem isso, um veterano que
+// ainda não foi "virado" pro semestre novo (comum logo que abre um semestre)
+// nunca aparecia na busca.
+let semestresParaBuscaVeterano = null;
+async function listaSemestresParaBuscaVeterano() {
+  if (semestresParaBuscaVeterano) return semestresParaBuscaVeterano;
+  try {
+    const { semestres } = await apiFetch('/matriculas/config/semestres');
+    semestresParaBuscaVeterano = semestres;
+  } catch (err) {
+    semestresParaBuscaVeterano = [semestreSelecionado];
+  }
+  return semestresParaBuscaVeterano;
+}
+
+async function buscarVeteranosParaIndicacao(termo) {
+  const resultados = document.getElementById('aluno-indicado-por-resultados');
+  if (!termo || termo.trim().length < 2) { resultados.classList.add('hidden'); return; }
+  try {
+    const semestres = await listaSemestresParaBuscaVeterano();
+    // Busca em todos os semestres em paralelo (lista é pequena, poucas
+    // dezenas no máximo) e junta os resultados — o mesmo termo pode achar
+    // gente em semestres diferentes.
+    const porSemestre = await Promise.all(semestres.map(async (semestre) => {
+      const params = new URLSearchParams({ modulo: moduloSelecionado, semestre, busca: termo.trim(), pageSize: '8' });
+      try {
+        const resp = await apiFetch(`/matriculas/alunos?${params.toString()}`);
+        return resp.alunos;
+      } catch (err) {
+        return [];
+      }
+    }));
+    const candidatos = porSemestre.flat()
+      .filter(a => a.id !== alunoEmEdicaoId) // aluno não pode indicar a si mesmo
+      .sort((a, b) => (b.semestre || '').localeCompare(a.semestre || '')) // semestre mais recente primeiro
+      .slice(0, 8);
+
+    if (!candidatos.length) {
+      resultados.innerHTML = '<div class="autocomplete-vazio">Nenhum aluno encontrado com esse nome neste módulo.</div>';
+    } else {
+      resultados.innerHTML = candidatos.map(a => `
+        <div class="autocomplete-item" data-id="${a.id}" data-nome="${esc(a.nome)}">
+          <strong>${esc(a.nome)}</strong>
+          <span>${esc(a.curso)} — ${esc(a.periodo || '')} — ${esc(a.semestre)}</span>
+        </div>
+      `).join('');
+      resultados.querySelectorAll('.autocomplete-item').forEach(item => {
+        item.addEventListener('click', () => {
+          alunoIndicadoPor = { id: item.dataset.id, nome: item.dataset.nome };
+          resultados.classList.add('hidden');
+          renderChipIndicadoPor();
+        });
+      });
+    }
+    resultados.classList.remove('hidden');
+  } catch (err) {
+    resultados.classList.add('hidden');
+  }
+}
+
 function setupModalAluno() {
   const modal = document.getElementById('modal-aluno');
   if (!modal) return;
@@ -518,6 +741,16 @@ function setupModalAluno() {
   document.getElementById('btn-novo-aluno')?.addEventListener('click', () => abrirModalAluno(null));
   document.getElementById('btn-cancelar-aluno')?.addEventListener('click', () => modal.classList.add('hidden'));
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  document.getElementById('aluno-indicado-por-busca')?.addEventListener('input', (e) => {
+    clearTimeout(indicadoPorDebounce);
+    const termo = e.target.value;
+    indicadoPorDebounce = setTimeout(() => buscarVeteranosParaIndicacao(termo), 300);
+  });
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('aluno-indicado-por-resultados');
+    if (wrap && !wrap.contains(e.target) && e.target.id !== 'aluno-indicado-por-busca') wrap.classList.add('hidden');
+  });
 
   document.getElementById('form-aluno')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -534,7 +767,9 @@ function setupModalAluno() {
         telefone: document.getElementById('aluno-telefone').value,
         situacao: document.getElementById('aluno-situacao').value,
         planoConfissao: document.getElementById('aluno-plano').value,
-        observacoes: document.getElementById('aluno-observacoes').value
+        observacoes: document.getElementById('aluno-observacoes').value,
+        indicadoPorAlunoId: alunoIndicadoPor?.id || null,
+        indicadoPorNome: alunoIndicadoPor?.nome || null
       };
       if (moduloSelecionado === 'fatec') {
         payload.cursoId = cursoSel.value;
@@ -579,7 +814,30 @@ function abrirModalAluno(aluno) {
   const selectCursoAluno = document.getElementById('aluno-curso');
   if (selectCursoAluno) selectCursoAluno.value = aluno?.cursoId || cursoSelecionadoId || '';
 
+  alunoIndicadoPor = aluno?.indicadoPorAlunoId ? { id: aluno.indicadoPorAlunoId, nome: aluno.indicadoPorNome || '' } : null;
+  document.getElementById('aluno-indicado-por-busca').value = '';
+  document.getElementById('aluno-indicado-por-resultados').classList.add('hidden');
+  renderChipIndicadoPor();
+  carregarAlunosIndicados(aluno?.id || null);
+
   document.getElementById('modal-aluno').classList.remove('hidden');
+}
+
+// Mostra pra quem tá editando um veterano quantos calouros ele já indicou —
+// só existe pra aluno já salvo (precisa do id pra consultar).
+async function carregarAlunosIndicados(alunoId) {
+  const wrap = document.getElementById('aluno-indicou-wrap');
+  const lista = document.getElementById('aluno-indicou-lista');
+  if (!alunoId) { wrap.classList.add('hidden'); return; }
+  try {
+    const { total, indicados } = await apiFetch(`/matriculas/alunos/${alunoId}/indicados`);
+    if (!total) { wrap.classList.add('hidden'); return; }
+    lista.innerHTML = `<strong style="color:var(--text-main);">${total} aluno(s) indicado(s):</strong><br>` +
+      indicados.map(i => `${esc(i.nome)} — ${esc(i.curso)} (${esc(i.semestre)})`).join('<br>');
+    wrap.classList.remove('hidden');
+  } catch (err) {
+    wrap.classList.add('hidden');
+  }
 }
 
 // ==========================================
@@ -752,6 +1010,112 @@ function renderRelatorio(dados) {
     .filter(p => (porPlano[p] || 0) > 0)
     .map(p => `<tr><td>${esc(p)}</td><td>${porPlano[p] || 0}</td></tr>`)
     .join('') || '<tr><td colspan="2" class="tabela-msg">Nenhum aluno lançado para esse módulo/semestre ainda.</td></tr>';
+}
+
+// ==========================================
+// ALUNO INDICA (aluno-indica.html) — ranking de quem já indicou calouro,
+// quantos e quem. Mesmo padrão de módulo/semestre/curso da tela de relatório.
+// ==========================================
+let indicaEmAndamento = Promise.resolve();
+
+async function initPaginaAlunoIndica() {
+  const selectModulo = document.getElementById('indica-modulo-select');
+  const selectSemestre = document.getElementById('indica-semestre-select');
+  const selectCurso = document.getElementById('indica-curso-select');
+
+  await carregarCursosFatec();
+  if (selectCurso) {
+    selectCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+      cursosFatec.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  await popularSelectSemestres(selectSemestre);
+  atualizarVisibilidadeCursoIndica();
+  atualizarLabelImpressaoIndica();
+
+  selectModulo?.addEventListener('change', () => {
+    if (selectCurso) selectCurso.value = '';
+    atualizarVisibilidadeCursoIndica();
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+  selectSemestre?.addEventListener('change', () => {
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+  selectCurso?.addEventListener('change', () => {
+    atualizarLabelImpressaoIndica();
+    indicaEmAndamento = carregarAlunoIndica();
+  });
+
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  document.getElementById('btn-imprimir-indica')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Preparando...';
+    try {
+      await indicaEmAndamento;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = textoOriginal;
+    }
+    window.print();
+  });
+
+  indicaEmAndamento = carregarAlunoIndica();
+  await indicaEmAndamento;
+}
+
+function atualizarVisibilidadeCursoIndica() {
+  const isFatec = document.getElementById('indica-modulo-select')?.value !== 'medicina';
+  document.getElementById('indica-curso-select')?.classList.toggle('hidden', !isFatec);
+}
+
+function atualizarLabelImpressaoIndica() {
+  const label = document.getElementById('print-filtro-label-indica');
+  if (!label) return;
+  const moduloValor = document.getElementById('indica-modulo-select')?.value;
+  const modulo = moduloValor === 'medicina' ? 'Medicina' : 'Fatec';
+  const semestre = document.getElementById('indica-semestre-select')?.value || '';
+  const partes = [modulo];
+  if (moduloValor !== 'medicina') {
+    const cursoSelect = document.getElementById('indica-curso-select');
+    const cursoNome = cursoSelect?.value ? cursoSelect.selectedOptions[0]?.textContent : 'Todos os cursos';
+    partes.push(cursoNome);
+  }
+  partes.push(semestre);
+  label.textContent = partes.filter(Boolean).join(' — ');
+}
+
+async function carregarAlunoIndica() {
+  const modulo = document.getElementById('indica-modulo-select')?.value || 'fatec';
+  const semestre = document.getElementById('indica-semestre-select')?.value || '2026.2';
+  const cursoId = document.getElementById('indica-curso-select')?.value;
+  const tbody = document.getElementById('indica-tbody');
+  tbody.innerHTML = '<tr><td colspan="3" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    const params = new URLSearchParams({ modulo, semestre });
+    if (cursoId) params.set('cursoId', cursoId);
+    const { totalIndicacoes, veteranosQueIndicaram, veteranos } = await apiFetch(`/matriculas/aluno-indica?${params.toString()}`);
+    document.getElementById('indica-kpi-veteranos').textContent = veteranosQueIndicaram;
+    document.getElementById('indica-kpi-total').textContent = totalIndicacoes;
+
+    if (!veteranos.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="tabela-msg">Ninguém indicou calouro nesse módulo/semestre ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = veteranos.map(v => `
+      <tr>
+        <td>${esc(v.veteranoNome)}</td>
+        <td>${v.quantidade}</td>
+        <td>${v.indicados.map(i => `${esc(i.nome)} (${esc(i.curso)})`).join(', ')}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+  }
 }
 
 // ==========================================

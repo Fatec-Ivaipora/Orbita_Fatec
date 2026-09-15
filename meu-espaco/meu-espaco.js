@@ -125,7 +125,16 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+// Cargos exclusivos do Banco de Questões (Medicina) não têm nada a fazer no
+// Meu Espaço/Cartão FATEC — manda direto pro único módulo que eles têm.
+const CARGOS_SO_BANCO_MED_FATEC = ['coord_medicina', 'professor_medicina'];
+
 async function initApp(user, role) {
+  if (CARGOS_SO_BANCO_MED_FATEC.includes(role)) {
+    window.location.href = '/banco-med-fatec/index.html';
+    return;
+  }
+
   if (appInitialized && initializedRole === role) return;
   appInitialized = true;
   initializedRole = role;

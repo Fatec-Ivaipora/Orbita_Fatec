@@ -14,10 +14,19 @@ const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 // isso que substitui a bagunça de digitação da planilha original (variações
 // como "Cancelou2025.2", "Trancou.2026.1", "Matrícula Nova – Assinada" com
 // travessão diferente). Semestre já é campo próprio, então não entra aqui.
+// "Retorno" (sozinho) foi removido a pedido do usuário (setor Financeiro,
+// Lisa — 2026-09-11): não tinha esse controle na planilha original, mas o
+// setor quer separar melhor esse ano se o retorno/transferência já foi
+// assinado ou não — mesma ideia do par "Matrícula Nova"/"Matrícula Nova -
+// Assinada" que já existia. Registros antigos com situação "Retorno" (19
+// alunos, todos de fatec/2026.1) não foram migrados — ficam como histórico,
+// só não aparecem mais como opção pra escolher num cadastro novo.
 const SITUACOES = [
     'Matrícula Nova', 'Matrícula Nova - Assinada', 'Rematrícula Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     'Pendência Financeira', 'Não Assinou', 'Cancelou', 'Trancou',
-    '1ª Evasão', '2ª Evasão', 'Transferência', 'Retorno', 'Reprovado',
+    '1ª Evasão', '2ª Evasão', 'Transferência', 'Reprovado',
     'Mudança de Curso', 'Formando', 'Desistente'
 ];
 
@@ -54,6 +63,14 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
 
         const pageSize = Math.min(parseInt(req.query.pageSize, 10) || ALUNOS_PAGE_SIZE_PADRAO, 200);
         const busca = (req.query.busca || '').trim().toLowerCase();
+        // "periodos" (plural, separado por vírgula) é o filtro tipo Excel da
+        // tela — só um subconjunto dos períodos marcados. Mantém "periodo"
+        // (singular) por retrocompatibilidade, mas o front atual só manda
+        // "periodos" quando a pessoa desmarca algum item da lista.
+        const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
+        // "situacoes" (plural) é o mesmo filtro tipo Excel, agora pra
+        // situação — mantém "situacao" (singular) por retrocompatibilidade.
+        const situacoes = (req.query.situacoes || '').split(',').map(s => s.trim()).filter(Boolean);
 
         // Filtros de situação/plano/nome são aplicados em memória durante a
         // paginação (mesmo padrão do "pula item fechado" já usado em
@@ -67,8 +84,10 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         // direto pros que batem, sem round-trip HTTP por página.
         const passaNoFiltro = (a) =>
             (!situacao || a.situacao === situacao) &&
+            (!situacoes.length || situacoes.includes(a.situacao)) &&
             (!planoConfissao || a.planoConfissao === planoConfissao) &&
             (!periodo || a.periodo === periodo) &&
+            (!periodos.length || periodos.includes(a.periodo)) &&
             (!busca || (a.nome || '').toLowerCase().includes(busca));
 
         let cursor = (req.query.cursorNome && req.query.cursorId)
@@ -123,22 +142,43 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
+        // Listas marcadas (filtro tipo Excel) — Firestore aceita até 30
+        // valores no "in", as listas possíveis (períodos, situações) nunca
+        // chegam perto disso. Mas só dá pra usar UM "in" por consulta — se
+        // período E situação vierem marcados ao mesmo tempo, não dá pra
+        // combinar os dois "in" na mesma query de contagem; nesse caso lê os
+        // documentos (já filtrados por módulo/semestre/curso/plano) e conta
+        // em memória, em vez de usar count() puro.
+        const periodos = (req.query.periodos || '').split(',').map(p => p.trim()).filter(Boolean);
+        const situacoes = (req.query.situacoes || '').split(',').map(s => s.trim()).filter(Boolean);
+
         const base = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
 
         let filtrada = base;
         if (cursoId) filtrada = filtrada.where('cursoId', '==', cursoId);
-        if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
         if (planoConfissao) filtrada = filtrada.where('planoConfissao', '==', planoConfissao);
+        if (situacao) filtrada = filtrada.where('situacao', '==', situacao);
         if (periodo) filtrada = filtrada.where('periodo', '==', periodo);
-        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo);
+        const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo || periodos.length || situacoes.length);
 
-        const [totalSnap, filtradaSnap] = await Promise.all([
-            base.count().get(),
-            temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
-        ]);
-
-        const total = totalSnap.data().count;
-        const filtrados = temFiltroExtra ? filtradaSnap.data().count : total;
+        let total, filtrados;
+        if (periodos.length && situacoes.length) {
+            const [totalSnap, docsSnap] = await Promise.all([base.count().get(), filtrada.get()]);
+            total = totalSnap.data().count;
+            filtrados = docsSnap.docs.filter(d => {
+                const a = d.data();
+                return periodos.includes(a.periodo) && situacoes.includes(a.situacao);
+            }).length;
+        } else {
+            if (periodos.length) filtrada = filtrada.where('periodo', 'in', periodos);
+            if (situacoes.length) filtrada = filtrada.where('situacao', 'in', situacoes);
+            const [totalSnap, filtradaSnap] = await Promise.all([
+                base.count().get(),
+                temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
+            ]);
+            total = totalSnap.data().count;
+            filtrados = temFiltroExtra ? filtradaSnap.data().count : total;
+        }
 
         res.json({ total, filtrados });
     } catch (err) {
@@ -148,7 +188,7 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
 
 router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes } = req.body;
+        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
         const semestre = (req.body.semestre || '').trim();
 
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
@@ -172,6 +212,12 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             planoConfissao: planoConfissao || 'Não',
             observacoes: (observacoes || '').trim(),
             semestre,
+            // "Aluno indica": um veterano já matriculado indicou esse calouro —
+            // guarda o id do documento do veterano (pra montar o relatório de
+            // quem ele indicou) e o nome denormalizado (exibição rápida sem
+            // precisar buscar o documento do veterano de novo).
+            indicadoPorAlunoId: indicadoPorAlunoId ? String(indicadoPorAlunoId) : null,
+            indicadoPorNome: indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             updatedAt: new Date().toISOString()
@@ -185,8 +231,12 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
 
 router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes } = req.body;
+        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
         const dados = { updatedAt: new Date().toISOString() };
+        if (indicadoPorAlunoId !== undefined) {
+            dados.indicadoPorAlunoId = indicadoPorAlunoId ? String(indicadoPorAlunoId) : null;
+            dados.indicadoPorNome = indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null;
+        }
 
         if (nome !== undefined) {
             if (!nome.trim()) return res.status(400).json({ error: 'Informe o nome do aluno.' });
@@ -219,6 +269,21 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
 
         await db.collection(COL_ALUNOS).doc(req.params.id).update(dados);
         res.json({ message: 'Aluno atualizado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// "Aluno indica" — quantos calouros esse veterano (aluno :id) já indicou e
+// quem são. Consulta por igualdade num campo só (indicadoPorAlunoId), sem
+// orderBy combinado — não precisa de índice composto novo.
+router.get('/alunos/:id/indicados', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_ALUNOS).where('indicadoPorAlunoId', '==', req.params.id).get();
+        const indicados = snap.docs
+            .map(d => ({ id: d.id, nome: d.data().nome, curso: d.data().curso, semestre: d.data().semestre, situacao: d.data().situacao }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        res.json({ total: indicados.length, indicados });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -278,6 +343,44 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             situacoes: SITUACOES,
             planosConfissao: PLANOS_CONFISSAO
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// ALUNO INDICA — ranking de quem já indicou calouro, com quantos e quem.
+// Mesma query base do /relatorio (módulo+semestre), agrupando em memória
+// pelos alunos daquele semestre que têm `indicadoPorAlunoId` preenchido —
+// o veterano em si pode ser de outro semestre (não filtra por isso).
+// ==========================================
+router.get('/aluno-indica', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { modulo, semestre, cursoId } = req.query;
+        if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
+
+        let query = db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre);
+        if (cursoId) query = query.where('cursoId', '==', cursoId);
+        const snap = await query.get();
+
+        const porVeterano = new Map(); // veteranoId -> { veteranoNome, indicados: [] }
+        let totalIndicacoes = 0;
+        snap.forEach(doc => {
+            const a = doc.data();
+            if (!a.indicadoPorAlunoId) return;
+            totalIndicacoes++;
+            if (!porVeterano.has(a.indicadoPorAlunoId)) {
+                porVeterano.set(a.indicadoPorAlunoId, { veteranoId: a.indicadoPorAlunoId, veteranoNome: a.indicadoPorNome || '(nome não registrado)', indicados: [] });
+            }
+            porVeterano.get(a.indicadoPorAlunoId).indicados.push({ id: doc.id, nome: a.nome, curso: a.curso, situacao: a.situacao });
+        });
+
+        const veteranos = [...porVeterano.values()]
+            .map(v => ({ ...v, quantidade: v.indicados.length, indicados: v.indicados.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+            .sort((a, b) => b.quantidade - a.quantidade || a.veteranoNome.localeCompare(b.veteranoNome, 'pt-BR'));
+
+        res.json({ totalIndicacoes, veteranosQueIndicaram: veteranos.length, veteranos });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

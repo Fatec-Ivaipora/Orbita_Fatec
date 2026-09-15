@@ -109,7 +109,223 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
-## 8. Histórico de alterações
+### [2026-09-11] Matrículas: busca de "Aluno Indica" corrigida — não achava veterano de semestre anterior
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/app.js` — `buscarVeteranosParaIndicacao` agora busca o nome em TODOS os semestres já cadastrados no sistema (`GET /matriculas/config/semestres`, cacheado em memória), em paralelo, e junta os resultados (mais recente primeiro) — antes só buscava no semestre do calouro sendo cadastrado. Cada resultado da busca agora mostra também o semestre, pra diferenciar quando o mesmo nome aparece em mais de um.
+  - `/financeiro/matriculas/index.html` — texto de ajuda embaixo do campo atualizado ("...em qualquer semestre").
+- Tipo: Correção de bug
+- Motivo: Bug real relatado pelo usuário — cadastrando calouro no semestre 2027.1 (recém-aberto), o veterano que indicou ainda só existia em 2026.2 (não passou pelo "Virar Semestre" ainda) e não aparecia na busca. Confirmado com dado real (aluna existia em 2026.1/2026.2, ausente em 2027.1 — não aparecia antes da correção, aparece agora).
+- Impacto/riscos a observar:
+  - Cada semestre é uma requisição própria (paralelas) — com poucos semestres cadastrados (hoje: 2026.1, 2026.2, 2027.1) o custo é baixo; se a lista de semestres crescer muito ao longo dos anos, reconsiderar limitar a busca aos últimos N semestres.
+- Como testar: cadastrar um calouro no semestre mais recente e buscar por um veterano que só existe num semestre anterior (ainda não migrado) — deve aparecer normalmente agora, com o semestre dele ao lado do nome.
+- Como reverter: `git revert` deste commit volta a buscar só no semestre do calouro sendo cadastrado (reintroduz o bug relatado).
+
+### [2026-09-11] Licitação: ajusta o link por cotação (só mostra o mais barato na lista, link clicável no modal)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/licitacao/app.js` — a lista de itens agora mostra o 🔗 da cotação MAIS BARATA (ao lado do nome da empresa, não do badge "Fechado" — antes era o link de quem fechou, não mais); pra ver o link de qualquer outra empresa (inclusive a que fechou, se for diferente da mais barata), abre o modal de Cotações (💰), onde todas aparecem. Nesse modal, cada linha ganhou um botãozinho 🔗 do lado do campo de link que abre a URL direto numa aba nova (sem precisar copiar/colar) — fica desabilitado enquanto o campo está vazio.
+  - `/financeiro/licitacao/licitacao.css` — estilo do botão de abrir link dentro do modal de cotações.
+- Tipo: Ajuste de UX (refinamento do que foi feito nesta mesma sessão)
+- Motivo: Pedido do usuário — só queria ver o link da cotação mais barata na lista principal; o link das outras empresas (inclusive a que fechou, se pagou mais caro) fica dentro do modal de cotações mesmo, só que agora clicável.
+- Impacto/riscos a observar:
+  - Não mexeu no cadastro de item em si — o campo de link do item (`linkReferencia`, referência geral/observação) é outra funcionalidade, já existia antes desta sessão e continua do jeito que estava, a pedido do usuário.
+- Como testar: abrir Licitação, item com 2+ cotações e links diferentes — conferir que só o 🔗 da mais barata aparece na lista; abrir "Cotações" (💰) e clicar no botão ao lado do campo de link de qualquer empresa pra abrir a página numa aba nova.
+- Como reverter: `git revert` deste commit volta pro comportamento do commit anterior (link do fornecedor fechado, sem botão de abrir no modal).
+
+### [2026-09-11] Licitação: link do produto por cotação (conferir se fechou com a mais cara)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/financeiro.js` — `calcularCotacoes` passa a aceitar/gravar `link` por cotação (junto com `fornecedorId`/`valorUnitario`/`valorTotal`), usado por `PUT /itens/:id/cotacoes`. As 3 rotas que RECONSTROEM a cotação do fornecedor na hora de fechar (`POST /fechamento/confirmar`, `POST /fechamento/confirmar-com-desconto`, `PUT /fechamento/:id/valor`) agora preservam o `link` que já existia naquela cotação — sem isso, fechar apagava a referência do produto.
+  - `/financeiro/licitacao/app.js` — modal de cotações ganha um campo "Link do produto" por fornecedor (opcional); na tabela de itens, quando um item fechado tem link registrado na cotação vencedora, mostra um 🔗 clicável ao lado do badge "Fechado — Empresa" — e se a empresa fechada NÃO for a mais barata cotada, o ícone vem com ⚠️ e o título deixa isso explícito.
+  - `/financeiro/licitacao/licitacao.css` — grid da linha de cotação passa de 3 pra 4 colunas (nome / valor / link / total).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — quando um item tem mais de uma cotação e o "patrão" decide fechar com a mais cara, precisava dar pra ver o link do produto dela pra conferir/justificar a escolha.
+- Impacto/riscos a observar:
+  - **Campo opcional** — cotação sem link continua funcionando normal, só não mostra o ícone.
+  - **Só aparece o link da empresa que FECHOU**, não de todas as concorrentes ao mesmo tempo na tabela principal (ficam salvas em `item.cotacoes[].link`, visíveis reabrindo o modal de cotações desse item).
+- Como testar: abrir Licitação, cadastrar um item, abrir "Cotações", preencher valor + link de 2+ fornecedores, fechar (na tela de Fechamento) com o fornecedor que NÃO é o mais barato, e conferir que aparece 🔗⚠️ ao lado do "Fechado" na lista de itens, com o link certo.
+- Como reverter: `git revert` deste commit — cotações que já tinham link gravado ficam com o campo no Firestore, só não é mais lido/exibido em lugar nenhum (inofensivo).
+
+### [2026-09-11] Novo módulo: Banco MED-FATEC (banco de questões da Medicina)
+- Autor: trabalho já estava em andamento no diretório quando esta sessão começou (não foi escrito por este agente) — commitado/subido a pedido do usuário.
+- Branch: main
+- Arquivos criados:
+  - `/banco-med-fatec/` (`index.html`, `app.js`, `banco-med-fatec.css`) — tela de categorias/disciplinas, cadastro de questões (múltipla escolha única/múltipla, verdadeiro/falso) e montagem de provas.
+  - `/src/rotas/banco-med-fatec.js` — CRUD de categorias, questões e provas (coleções `banco_med_categorias`, `banco_med_questoes`, `banco_med_provas`); `GET /provas/:id/exportar` gera XML no formato Moodle pra importar a prova como questionário no AVA.
+  - `/src/utils/moodleXml.js` — gerador do XML Moodle reaproveitado pelo endpoint de exportação.
+  - `/img/medfatec-logo.png` — logo do módulo.
+- Arquivos alterados:
+  - `/api/index.js` — `require`/`app.use` da rota `/api/banco-med-fatec`.
+  - `/core/permissions.js` — nova categoria "Medicina", módulo `banco-med-fatec` no menu, liberado pra `adm_l1`/`adm_l2`.
+  - `/src/middlewares/auth.js` — nível padrão de `banco-med-fatec` por cargo (3 pra quem é de Medicina/Admin, 1 pros demais).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — subir esse trabalho que já estava pronto no diretório.
+- Impacto/riscos a observar:
+  - **Não revisado a fundo por este agente** — o código foi escrito por outra sessão/pessoa antes desta conversa; só foi conferido sintaticamente (todos os arquivos passam `node -c`/check de módulo ES) antes de commitar, sem revisão funcional linha a linha.
+  - **Limite de 950KB por imagem em base64** (`MAX_IMG_BASE64`), mesmo padrão já usado no módulo Ferida pra não estourar o limite de 1 MiB por documento do Firestore.
+- Como testar: logar como `adm_l1`/`adm_l2`, abrir "BANCO MED-FATEC" no menu (categoria Medicina), cadastrar uma categoria, uma questão e montar uma prova; exportar a prova e conferir o XML gerado.
+- Como reverter: `git revert` deste commit remove o módulo inteiro (arquivos + rotas + permissões).
+
+### [2026-09-11] Matrículas: lista de Situações — remove "Retorno", adiciona 4 novas (pedido da Lisa/Financeiro)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/matriculas.js` — `SITUACOES` perde `'Retorno'` e ganha `'Matrícula Nova - Retorno'`, `'Matrícula Nova - Retorno Assinada'`, `'Matrícula Nova - Transferência'`, `'Matrícula Nova - Transferência Assinada'` (mesmo padrão do par já existente `'Matrícula Nova'`/`'Matrícula Nova - Assinada'`). `'Transferência'` (sozinho) foi mantido — só "Retorno" foi removido, a pedido explícito do usuário.
+  - `/financeiro/matriculas/app.js` — `SITUACAO_GRUPO` (cor do badge) atualizado: as duas variantes "Assinada" entram no grupo `ok` (verde), as duas sem "Assinada" entram no grupo `alerta` (amarelo), removida a entrada de `'Retorno'`.
+- Tipo: Mudança de dado/vocabulário controlado
+- Motivo: Pedido do usuário (conversa com a Lisa, Financeiro) — "Retorno" não vinha da planilha original; a partir de 2026 querem separar se o retorno ou a transferência já foi assinado ou não, mesma lógica já usada pra "Matrícula Nova".
+- Impacto/riscos a observar:
+  - **19 alunos com situação "Retorno" não foram migrados** (todos de `fatec`/semestre `2026.1`) — ficam como estão, é histórico de antes dessa mudança; "Retorno" só não aparece mais como opção pra escolher num cadastro NOVO ou editado. Se algum dia abrir um desses 19 pra editar, o campo de situação vai aparecer vazio até escolher uma das opções válidas atuais.
+  - **`'Transferência'` (sozinho) continua na lista** — não foi pedido remover, só "Retorno".
+- Como testar: abrir Matrículas, cadastrar/editar um aluno e conferir que "Retorno" sumiu do select e as 4 novas opções aparecem; escolher uma delas e conferir a cor do badge (Assinada = verde, sem Assinada = amarelo) na lista.
+- Como reverter: `git revert` deste commit volta a lista de situações ao estado anterior — não mexe nos 19 registros antigos (não foram tocados por essa mudança).
+
+### [2026-09-11] Matrículas: filtro de Situação também vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` — mesmo tratamento dado ao filtro de Período (ver entrada anterior) aplicado agora ao filtro de Situação: checkbox por situação, "Marcar todos"/"Desmarcar todos", contador no botão. Lista de opções vem de `opcoes.situacoes` (carregada do servidor), não é fixa como a de período.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `situacoes` (plural, separado por vírgula) além do `situacao` (singular) existente. Como o Firestore só aceita UM operador `in` por consulta, quando período E situação vêm marcados ao mesmo tempo a rota de contagem lê os documentos (já filtrados por módulo/semestre/curso/plano) e conta em memória, em vez de usar `count()` puro nos dois — único jeito de combinar dois filtros "tipo Excel" na mesma contagem.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — mesmo comportamento do filtro de Período, agora pro de Situação.
+- Impacto/riscos a observar:
+  - **Contagem com período + situação marcados ao mesmo tempo** deixa de ser uma leitura de agregação pura e passa a ler os documentos do módulo/semestre (a coleção é da ordem de 1500-1800 por semestre) — mais caro que antes, mas só acontece quando os dois filtros tipo Excel estão ativos ao mesmo tempo.
+  - Só a tela principal de Matrículas foi alterada — o filtro de situação da tela "Virar Semestre" (`vs-situacao-filtro`) continua um `<select>` normal.
+- Como testar: abrir Matrículas, desmarcar algumas situações no filtro, conferir lista e contador; combinar com filtro de período marcado também e conferir que os dois se aplicam juntos.
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
+### [2026-09-11] Matrículas: filtro de Período vira multi-seleção tipo Excel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/financeiro/matriculas/index.html` + `app.js` + `matriculas.css` — o `<select>` de Período (só deixava escolher um por vez) virou um dropdown com checkbox por período (1º-12º + DP), "Marcar todos"/"Desmarcar todos" e botão mostrando quantos estão marcados — mesmo comportamento do filtro de coluna do Excel. Guarda só quem foi DESMARCADO (`periodosDesmarcados`), não quem está marcado, então a lista nunca fica "traduzida errado" se mudar de módulo.
+  - `/src/rotas/matriculas.js` — `GET /alunos` e `GET /alunos/contagem` aceitam `periodos` (plural, separado por vírgula) além do `periodo` (singular) que já existia; contagem usa `where('periodo','in',[...])` do Firestore.
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — queria selecionar todos os períodos de uma vez e ir desmarcando os que não quer ver, em vez de escolher um por vez.
+- Impacto/riscos a observar:
+  - **Só a tela principal de Matrículas** (`index.html`) foi alterada — o filtro de período da tela "Virar Semestre" (`vs-periodo-filtro`) continua sendo um `<select>` normal, não fazia parte do pedido.
+  - **Quando tudo está marcado, o filtro não é aplicado** (equivalente a "Todos os períodos" de antes) — isso inclui aluno com período em branco. Assim que a pessoa desmarca QUALQUER período, só quem está marcado aparece — aluno com período em branco some da lista nesse caso (não existe uma opção "(em branco)" no filtro, mesma limitação que o Excel teria sem essa opção).
+- Como testar: abrir Matrículas, clicar no filtro de Período, desmarcar alguns períodos e conferir que a lista e o contador de registros atualizam sozinhos; clicar "Marcar todos"/"Desmarcar todos" e conferir o texto do botão ("Todos os períodos" / "N período(s) selecionado(s)" / "Nenhum período").
+- Como reverter: `git revert` deste commit volta ao `<select>` de escolha única.
+
+### [2026-09-04] Secretaria Acadêmica: "Relatório DP" some do menu do cargo `sec` (bug) + novos logins
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/core/permissions.js` — `sec.modules` estava sem `"relatorio-dp"`, mesmo o cargo já tendo nível 3 pra esse módulo configurado no documento `config/permissions` do Firestore (usado pela tela "Gerência de Acessos") — o link "Relatório DP" nunca aparecia no menu de ninguém com cargo Secretaria, mesmo quem já tinha acesso liberado. Mesma classe de bug já corrigida antes pro cargo `financeiro` (matrículas/cobrança em 2026-09-04) — aqui a causa é a lista estática do menu, não o documento de permissões (que já estava certo).
+- Tipo: Correção de bug (menu escondendo módulo já liberado)
+- Motivo: Pedido do usuário — Ediane, Brenda, Hemilly (já tinham login), Dyenyffer e Maria Eduarda (logins novos) precisavam ver Relatório de Matrículas e Relatório DP.
+- Impacto/riscos a observar:
+  - **Não fica registrado em código quem tem qual acesso individual** — os dois usuários novos (Dyenyffer, Maria Eduarda) e o ajuste de nível "leitor" (Hemilly, Dyenyffer) foram feitos direto no Firestore (`users/{uid}` e `users/{uid}.permissoes`), não há arquivo/commit que documente isso — só esta entrada do changelog.
+  - **E-mails fictícios**: a pedido do usuário, Dyenyffer e Maria Eduarda foram cadastradas com e-mail fictício `@orbita.com.br` (não é domínio institucional real) e senha temporária `primeironome@26` — force login e troca de senha no 1º acesso já é o padrão do sistema (`primeiroAcesso: true`).
+- Como testar: logar como Ediane/Brenda (cargo `sec`, sem override) e conferir que "Relatório DP" aparece no menu; logar como Hemilly/Dyenyffer e confirmar que Matrículas abre em modo leitura (sem botão de cadastrar/editar) mas Relatório DP abre completo.
+- Como reverter: `git revert` deste commit volta a esconder "Relatório DP" do menu de todo o cargo Secretaria (não só dessas 5 pessoas) — os logins/permissões criados no Firestore não são desfeitos pelo revert (teria que desativar as contas manualmente se for o caso).
+
+### [2026-09-04] Orçamento: cada colaboradora vê só o próprio, Chefe de Setor (Lisa) vê de todo mundo
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/orcamento.js` — `GET /orcamentos` e `GET /orcamentos/setores` filtram por `createdBy === uid` da requisição, exceto pra quem é `adm_l1`/`adm_l2` ou tem `chefeDeSetor: true` (mesmo flag já usado pra restringir exclusão — Lisa, do Financeiro, já tinha essa flag). `PUT /orcamentos/:id`, `GET/POST /orcamentos/:id/lancamentos` e `PUT/DELETE /lancamentos/:id` agora checam que quem está mexendo é a dona do orçamento (ou chefe/admin) antes de aplicar — antes dava pra editar/lançar gasto em orçamento de qualquer colega só sabendo o id, mesmo sem aparecer na lista dela. `POST /orcamentos` grava `createdByNome` (nome de quem criou), pra quem vê "de todo mundo" saber de quem é cada um.
+  - `/financeiro/orcamento/app.js` — mostra o nome de quem cadastrou como uma tag no card do orçamento (só aparece quando o campo existe — orçamentos antigos, criados antes desta mudança, não têm essa tag).
+- Tipo: Mudança de permissão/escopo de dados
+- Motivo: Pedido do usuário — "a página de orçamento precisa ser individual pra cada colaboradora e a Lisa como responsável vê de todo mundo".
+- Impacto/riscos a observar:
+  - **Orçamentos já existentes**: só 2 no banco no momento desta mudança, ambos criados pela própria Lisa — não precisou de backfill de `createdByNome` (fica em branco nos 2 antigos, sem problema porque quem vê "todo mundo" já sabe que são dela).
+  - **Chave de "vê tudo" é o mesmo flag `chefeDeSetor`** usado no módulo inteiro do sistema (Painel do Setor, Quadro de Avisos, exclusão de orçamento) — não é exclusivo de Orçamento; se um dia outra pessoa virar Chefe de Setor do Financeiro, ela também passa a ver o orçamento de todo mundo automaticamente, o que é o comportamento esperado.
+  - **Catálogo de itens continua compartilhado** (`financeiro_orcamento_catalogo_itens`) — não faz parte do escopo individual, é intencional (autocomplete de nome de item vale pra todo mundo do setor).
+- Como testar: Logar como uma colaboradora sem `chefeDeSetor` (ex.: Vanessa ou Maria Juliete) e conferir que só aparece o que ela mesma cadastrou; logar como Lisa e conferir que aparece tudo, com o nome de quem cadastrou em cada card; tentar editar/lançar gasto num orçamento de outra pessoa direto pela URL/API e confirmar erro 403.
+- Como reverter: `git revert` deste commit volta a mostrar todo mundo pra todo mundo (comportamento antigo). O campo `createdByNome` gravado nos orçamentos criados enquanto essa mudança estava ativa não é apagado pelo revert (inofensivo, só não é mais lido em lugar nenhum).
+
+### [2026-09-04] Matrículas: novo campo "Aluno Indica" (veterano indica calouro) + relatório de ranking
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/financeiro/matriculas/aluno-indica.html` — tela própria de relatório (mesmo padrão de `relatorio.html`: filtro módulo/semestre/curso, KPIs, tabela, impressão), com link no menu de `index.html` e `relatorio.html`.
+- Arquivos alterados:
+  - `/src/rotas/matriculas.js` — `POST/PUT /alunos` aceitam `indicadoPorAlunoId`/`indicadoPorNome` (aluno não pode indicar a si mesmo, checado no front); `GET /alunos/:id/indicados` (quem esse veterano específico já indicou); `GET /aluno-indica` (ranking agregado por módulo/semestre: quantos indicaram, quantas indicações, e por veterano a lista de quem ele indicou) — mesmo padrão de agregação em memória do `/relatorio` já existente, sem índice composto novo.
+  - `/financeiro/matriculas/index.html` + `app.js` — campo "Aluno Indica" no formulário de aluno (autocomplete por nome, busca só dentro do módulo/semestre do calouro sendo cadastrado via a mesma rota `GET /alunos?busca=`); ao editar um aluno que já é veterano de outros, mostra inline quantos/quem ele indicou.
+  - `/financeiro/matriculas/matriculas.css` — estilos do autocomplete e do chip do veterano selecionado; adicionada `.linha-hint` (não existia neste CSS).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — a secretaria quer registrar, na hora de matricular um calouro, qual veterano já matriculado indicou ele, e depois conseguir ver quantos e quem cada veterano indicou.
+- Impacto/riscos a observar:
+  - **Identidade do aluno é só por nome + documento por semestre**: não existe CPF nem id global de pessoa em `matriculas_alunos` — cada semestre é um documento novo (ligado ao anterior só via `origemAlunoId` quando passa pelo "Virar Semestre"). "Aluno Indica" referencia o **documento específico** do veterano escolhido na busca, não a pessoa em abstrato — se o mesmo veterano tiver documentos em semestres diferentes, indicações registradas em momentos diferentes podem acabar ligadas a documentos diferentes dele.
+  - **Busca de veterano restrita ao módulo/semestre do calouro**: não busca em semestres anteriores. Cobre o caso comum (veterano já rematriculado no semestre atual antes de abrir matrícula de calouro), mas não acha um veterano que só esteja em semestre mais antigo.
+  - **`indicadoPorNome` é denormalizado**: se o nome do veterano for corrigido depois (edição de cadastro), o nome mostrado nas indicações antigas não atualiza sozinho — mostra o nome de quando a indicação foi registrada.
+- Como testar: Abrir Matrículas, cadastrar um calouro e usar "Aluno Indica" pra buscar e escolher um veterano já matriculado; salvar; abrir esse mesmo calouro editando de novo e conferir que o veterano continua selecionado; editar o veterano e conferir que aparece "Alunos que este aluno indicou" com o calouro na lista; abrir "Aluno Indica" no menu e conferir o ranking.
+- Como reverter: `git revert` deste commit remove os arquivos novos e a UI; os campos `indicadoPorAlunoId`/`indicadoPorNome` gravados nos documentos de `matriculas_alunos` não são apagados pelo revert (ficam órfãos, inofensivos — não são lidos por nenhuma outra rota).
+
+### [2026-09-04] Cobrança: filtro jurídico/modelo, comparativo em tela própria, editar aluno, excluir ação, correção de cursos truncados, "carregar mais"
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/cobranca.js` — filtro `juridico` (advogado/judicial, derivado do campo `plano`) e `modelo` (Bacharelado/Licenciatura/Tecnólogo, derivado do prefixo do `curso`) em `/resumo`, `/filtros` e `/parcelas`; `/parcelas` não pagina mais no servidor (devolve a lista inteira filtrada de uma vez — o "Carregar mais" do front só revela mais linhas já trazidas, sem nova leitura no Firestore); `PUT /alunos/:cpf` novo (edita nome/CPF/celular/situação em **todas** as parcelas daquele CPF de uma vez — antes só dava pra editar por parcela — e registra sozinho um evento `mudanca_situacao` no histórico quando a situação muda, migrando o histórico de ações pro CPF novo se o CPF for corrigido); `DELETE /acoes/:id` novo.
+  - `/scripts/importar-cobranca-planilha.js` — reconstrói o campo `curso` usando o campo `plano` da planilha: "SUPERIOR DE TECNOLOGIA EM GEST..." (truncado a 30 caracteres na fonte) escondia 4 tecnólogos diferentes (Gestão Financeira, Gestão Comercial, Gestão de Recursos Humanos, Agronegócio) — resolvido por aluno (cpf), caindo em "não identificado" quando nenhuma parcela do aluno tem um plano que revele o curso (9 de 21 alunos nesse caso); outros 5 cursos truncados sem ambiguidade também corrigidos. Script agora é seguro de rodar de novo (`--confirmar` apaga a carga anterior de parcelas + ações com `origem=planilha` antes de regravar, nunca toca em caso/ação manual).
+  - `/financeiro/cobranca/index.html` + `relatorio.html` + `app.js` + `cobranca.css` — filtros novos (situação jurídica, modelo), coluna "Jurídico" na tabela, nome do curso e modelo separados em tag (`BACHARELADO EM X` → nome "X" + tag "Bacharelado"), botão "Editar aluno" (nome/CPF/celular/situação, separado do "Editar parcela"), botão de excluir + data/hora/autor em cada item do histórico de ações, "Carregar mais" no lugar da paginação por página.
+  - `/financeiro/cobranca/comparativo.html` (novo) — o histórico mensal (jan-ago/2026) saiu de dentro do índice/relatório (não reagia a filtro nenhum, ficava confuso do lado de filtros que não o afetavam) e virou tela própria, com cards + barra proporcional por mês em vez de tabela crua.
+  - `/firestore.indexes.json` — sem mudança nesta rodada (índice `cpf`+`criadoEm` já tratado no commit anterior).
+- Tipo: Correção de dado (cursos truncados) + melhorias de UX/performance
+- Motivo: Feedback do usuário testando a tela: nomes de curso cortados, tecnólogos de Gestão misturados, comparativo confuso fora de contexto, tela "travando" ao editar aluno com várias parcelas (bug real: botão Cancelar ficava escondido dentro do formulário), falta de opção de editar aluno/excluir ação/registrar data e autor, paginação relendo a coleção inteira a cada página.
+- Impacto/riscos a observar:
+  - **Bug corrigido**: o modal de "escolher qual parcela editar" não tinha como cancelar (botão Cancelar estava dentro do `<form>` que ficava escondido junto) — usuária ficava presa até escolher uma parcela. Corrigido com um botão de cancelar próprio nessa tela.
+  - **9 alunos do tecnólogo de Gestão continuam com curso "não identificado"**: não há informação na planilha (nenhuma parcela deles tem plano que revele qual Gestão é) — só dá pra corrigir com cadastro manual se alguém souber o curso certo.
+- Como testar: abrir Cobrança, testar filtro "jurídico" e "modelo" separadamente; abrir "Editar aluno" num aluno com várias parcelas e confirmar que dá pra cancelar sem escolher nada; mudar a situação de um aluno e conferir que vira registro automático no histórico; excluir um registro do histórico; clicar "Carregar mais" na lista; abrir a tela "Comparativo mensal" pelo menu.
+- Como reverter: `git revert` deste commit. Os dados já reimportados com curso corrigido no Firestore não voltam sozinhos ao estado truncado (não é destrutivo reverter só o código).
+
+### [2026-09-03] Cobrança: troca a fonte de dados do Edubox (Postgres) por planilha importada + cadastro manual
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/scripts/importar-cobranca-planilha.js` — importação ÚNICA da planilha `COBRANÇA GRADUAÇÃO.xlsx` (fonte: financeiro) pro Firestore. Lê a aba "Todos graduação " (mestra — as abas "Advogado"/"Trancados, cancelado..."/"Ativos" são só recortes filtrados dela, mesmo schema, conferido linha a linha) e a aba "Comparativo Valores em Aberto " (histórico jan-ago/2026). A planilha tem 3 linhas de rodapé (subtotal/cabeçalho repetido/"Qtd.") misturadas nos dados — filtradas por Sta.Mat fora do conjunto válido; conferido que a soma bate exato com o rodapé da própria planilha (1119 linhas válidas, R$ 737.586,48 "A Pagar", R$ 7.799,03 "V, Pago"). 14 linhas duplicadas exatas foram ignoradas na gravação (1105 parcelas gravadas). Roda com `--confirmar`; sem essa flag só mostra prévia.
+- Arquivos removidos:
+  - `/src/db-edubox.js` (conexão Postgres com o Edubox — não usada por mais nada no sistema)
+- Arquivos reescritos:
+  - `/src/rotas/cobranca.js` — trocou consulta ao vivo no Postgres do Edubox por leitura no Firestore (coleção nova `financeiro_cobranca_parcelas`). Sem `codcli` (id numérico do Edubox) — a chave agora é `cpf`. Coleção pequena (~1100 docs): lê tudo (ou filtra por um único campo de igualdade — curso OU semestre) e agrupa/pagina em memória, mesmo padrão de `orcamento.js`, evita índice composto novo. Endpoints novos: `GET /filtros` (cursos+semestres+situações, substitui `/cursos` e `/semestres`), `GET /parcelas/detalhe?ids=` (detalhe de parcelas específicas, usado na edição), `POST/PUT/DELETE /parcelas` (cadastro manual — a partir de agora o financeiro cadastra/edita direto pela tela, sem reimportar planilha), `GET /historico-mensal` (série jan-ago/2026 importada, não recalculável a partir das parcelas atuais). `/acoes/:cpf` (era `/acoes/:codcli`) e `/acoes/importar-csv` (agora casa CPF contra `financeiro_cobranca_parcelas` em vez do Edubox).
+  - `/financeiro/cobranca/index.html` + `app.js` + `cobranca.css` — filtro novo de situação de matrícula (badge colorido na tabela), botão "Novo caso" + modal de cadastro/edição manual (com escolha de qual parcela editar quando o aluno tem mais de uma no mesmo curso), textos que mencionavam Edubox atualizados.
+  - `/financeiro/cobranca/relatorio.html` + `app.js` — card novo com o histórico mensal (jan-ago/2026) importado da planilha, acima da tabela de inadimplência filtrada; coluna de situação adicionada na tabela do relatório.
+  - `/firestore.indexes.json` — índice `financeiro_cobranca_acoes` trocou o campo `codcli` por `cpf` (mesmo formato `ASC + criadoEm DESC`) — **deployado** via `firebase deploy --only firestore:indexes` (não apagou os índices que já existiam fora do arquivo, rodado sem `--force`).
+  - `/package.json`, `package-lock.json` — removida a dependência `pg` (`npm uninstall pg`)
+  - `.env_exemplo` — removidas as chaves `EDUBOX_*` (sem uso)
+- Seed automático na importação: parcelas com `Plano = "ADVOGADO FATEC"` viram uma ação `enviado_advocacia` e `Plano = "DÉBITO JUDICIAL"` viram `acordo_judicial` em `financeiro_cobranca_acoes` (uma ação por aluno, não por parcela — 55 ações seedadas: 39 advocacia + 16 acordo judicial).
+- Regra de semestre: Janeiro-Junho = `AAAA/1`, Julho-Dezembro = `AAAA/2`, calculada a partir do vencimento — vale pra qualquer ano presente nos dados (dívida antiga inclusive), a pedido do usuário. Campo fica editável por caso, porque negociação pode mudar em qual período uma dívida é cobrada.
+- Tipo: Mudança de arquitetura (troca de fonte de dados) + nova funcionalidade (cadastro manual)
+- Motivo: Pedido do usuário — a planilha da financeiro (`COBRANÇA GRADUAÇÃO.xlsx`) passou a ser a fonte oficial dos casos de cobrança; o financeiro vai cadastrar/atualizar os casos manualmente pela tela a partir de agora, não há mais reimportação de planilha prevista nem consulta ao vivo no Edubox.
+- Impacto/riscos a observar:
+  - **Dado agora é estático até ser editado manualmente**: ao contrário da versão anterior (consulta ao vivo), pagamentos feitos depois de 2026-09-03 só refletem no sistema quando alguém marcar manualmente (`valorPago`) ou editar/excluir o caso. Não existe mais reconciliação automática com nenhum sistema externo.
+  - **Escopo temporal mais curto**: a planilha só cobre jan-ago/2026 (dívida mais antiga tinha ido até 2010 na versão com Edubox) — dívidas anteriores a 2026 não estão neste módulo a menos que alguém as cadastre manualmente.
+  - **CPF agora é a chave de tudo**: sem CPF, um caso cadastrado manualmente não aparece automaticamente ligado a nenhuma ação/histórico anterior (mesma limitação que já existia na importação CSV antes).
+  - **Índice do Firestore precisa estar deployado**: sem o índice `cpf ASC + criadoEm DESC` em `financeiro_cobranca_acoes`, `GET /acoes/:cpf` quebra com `FAILED_PRECONDITION` — já deployado nesta mudança, mas se o índice for removido/recriado do zero em outro projeto, rodar `firebase deploy --only firestore:indexes` de novo.
+- Como testar: Logar como `financeiro`; abrir "Cobrança"; escolher um curso ou semestre e clicar em "Buscar"; conferir a coluna de situação e os dias de atraso; clicar em "Novo caso" e cadastrar um caso de teste; editar um caso existente que tenha mais de uma parcela (ex.: escolher qual parcela editar aparece antes do formulário); abrir o relatório e conferir a tabela de histórico mensal (jan-ago/2026) e o botão de imprimir.
+- Como reverter: `git revert` deste commit volta o código pro estado com Edubox — mas os dados gravados em `financeiro_cobranca_parcelas`/`financeiro_cobranca_historico_mensal` no Firestore não são apagados pelo revert (teriam que ser removidos manualmente se for realmente voltar atrás), e o índice antigo (`codcli`) precisaria ser redeployado.
+
+### [2026-08-31] Novo módulo: Cobrança (inadimplência + controle de advocacia)
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/src/db-edubox.js` (reconecta ao Postgres do Edubox, mesmo padrão do extinto módulo CPA — ver remoção em 2026-08-10 — mas agora no banco `edubox` **ao vivo**, não `edubox_old`: testado em 2026-08-31, `edubox_old` estava ~3 meses desatualizado, inaceitável para inadimplência)
+  - `/src/rotas/cobranca.js` (`GET /resumo`, `GET /cursos`, `GET /semestres`, `GET /parcelas` — lista de alunos com parcela vencida em aberto, agrupada por aluno+curso, dias de atraso calculados como `current_date - venctr` porque o campo `ddvctr` do Edubox não é confiável — testado com parcelas vencidas há 126 a 2785 dias sempre retornando `0`/`null`; `GET/POST /acoes` e `POST /acoes/importar-csv` — histórico de contato/negociação/advocacia, gravado só no Firestore, coleção `financeiro_cobranca_acoes`)
+  - `/financeiro/cobranca/` (`index.html`, `app.js`, `cobranca.css`, `relatorio.html`) — segue o padrão visual/estrutural de `financeiro/orcamento`
+- Arquivos alterados:
+  - `/package.json` (nova dependência `pg`)
+  - `.env`, `.env_exemplo` (`EDUBOX_HOST`/`PORT`/`DATABASE`/`USER`/`PASSWORD` — mesmas chaves que existiam antes do CPA, `.env` real não versionado)
+  - `/api/index.js` (`require`/`app.use` da rota `/api/cobranca`)
+  - `/core/permissions.js` (novo módulo `cobranca`, categoria `financeiro`, **exclusivo do cargo `financeiro`** — a pedido do usuário, nem `adm_l2` vê no menu; `adm_l1` não está na lista mas mantém o bypass de Super Admin do backend, que vale pra todo módulo do sistema, não só este)
+  - `/src/middlewares/auth.js` (chave `cobranca` no `defaultPermissions`: `financeiro: 3`, todos os outros cargos `1` — inclusive `adm_l2`, diferente do padrão de `licitacao`/`orcamento` que ele também acessa)
+  - `/firestore.indexes.json` (índice composto novo `financeiro_cobranca_acoes` (`codcli` ASC, `criadoEm` DESC), necessário pro histórico de ações por aluno — **precisa rodar `firebase deploy --only firestore:indexes` manualmente**, não foi deployado automaticamente)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário (Financeiro) — inadimplência hoje só é visível "por dentro" do Edubox, sem filtro por curso/semestre, sem histórico de negociação e sem rastro de quais dívidas já foram encaminhadas ao escritório de advocacia (o financeiro às vezes manda um aluno pro jurídico fazer acordo). Situação real em 2026-08-31: 716 alunos com parcela vencida em aberto, R$ 2.832.150,73 total, dívida remontando até 2010.
+- Impacto/riscos a observar:
+  - **Banco compartilhado entre instituições**: mesmo risco já documentado na criação do CPA — o Postgres do Edubox é usado por ~32 outras instituições. Toda query em `cobranca.js` faz `INNER JOIN` até `tac_curso` (`tfi_ctreceber → tac_matricula → tac_turma → tac_curso`), inclusive em `/semestres` e `/acoes/importar-csv`. Não trocar por `LEFT JOIN` nem remover achando redundante.
+  - **`semctr` inconsistente**: o mesmo semestre aparece gravado ora como `"2026/2"`, ora como `"2026-2"` no Edubox. O filtro (`condicaoSemestre` em `cobranca.js`) normaliza barra↔traço dos dois lados antes de comparar, e `/semestres` já devolve só a forma com `/` (deduplicada) — se algum dia trocar essa lógica, testar com um curso que tenha as duas variantes (ex.: qualquer parcela vencida de 2026.2).
+  - **Controle jurídico é só do Órbita Fatec**: conferido em `information_schema` — o Edubox não tem nenhuma tabela/coluna de advocacia/processo judicial. Todo o histórico de "enviado à advocacia"/"acordo judicial" fica na coleção Firestore `financeiro_cobranca_acoes`, sem nenhuma tentativa de inferir isso do lado do Edubox.
+  - **Importação CSV sem CPF fica sem vínculo automático**: `POST /acoes/importar-csv` só acha o `codcli` no Edubox quando a planilha traz CPF; sem CPF, o registro é salvo mesmo assim (com `codcli: null`, pelo nome digitado), mas não aparece automaticamente ligado a nenhum aluno na lista principal — só via busca manual.
+  - **Dado sensível (LGPD)**: nome, CPF, contato e situação financeira de aluno. Mesmo cuidado já registrado no módulo Ferida — não expor CPF completo desnecessariamente, e o acesso já fica restrito aos mesmos cargos financeiros que veem Licitação/Orçamento.
+  - **Pool de 5 conexões**: `/parcelas` exige curso ou semestre selecionado antes de rodar (erro 400 sem isso) — evita que a tela sem filtro nenhum martele o pool compartilhado do Edubox.
+- Como testar: Logar como `financeiro`; abrir "Cobrança" (categoria Financeiro); escolher um curso ou semestre e clicar em "Buscar"; conferir que os dias de atraso batem com o vencimento mostrado; abrir o histórico de um aluno e registrar uma ação de teste (ex.: "Enviado à advocacia" com um nome de escritório fictício); conferir que vira badge na listagem; testar "Importar advocacia (CSV)" com um arquivo pequeno (`nome,cpf,escritorio` no cabeçalho); logar como `adm_l2`, `ti` ou `coordenador` e confirmar que "Cobrança" não aparece no menu (só `financeiro` — e `adm_l1` via bypass de Super Admin, se acessar a URL direto).
+- Como reverter: `git revert` deste commit remove os arquivos e os registros de permissão (as credenciais do Edubox no `.env` real não são tocadas pelo revert, já que não ficam versionadas — remover manualmente se for realmente desligar o módulo).
 
 ### [2026-08-10] Otimizações de performance para mobile (compressão, cache, assets)
 - Autor: Claude Code

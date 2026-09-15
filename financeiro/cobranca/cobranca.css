@@ -1,4 +1,4 @@
-/* matriculas.css - Módulo Financeiro / Relatório Matrículas */
+/* cobranca.css - Módulo Financeiro / Cobrança */
 :root {
   --primary-blue: #0F4EB8;
   --secondary-blue: #1E63D6;
@@ -9,7 +9,9 @@
   --border-color: #E5E7EB;
   --accent-orange: #EB7025;
   --green: #10B981;
+  --yellow: #D97706;
   --red: #EF4444;
+  --purple: #7C3AED;
 }
 
 .hidden { display: none !important; }
@@ -46,12 +48,12 @@
   gap: 0.5rem;
   font-family: inherit;
   text-decoration: none;
+  border: none;
 }
 
 .btn-primary {
   background: var(--primary-blue);
   color: #fff;
-  border: none;
   box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25);
 }
 .btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
@@ -59,6 +61,7 @@
 
 .btn-secondary { background: white; color: var(--text-main); border: 1px solid var(--border-color); }
 .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -80,43 +83,20 @@
 
 .select-filter {
   padding: 0.7rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;
-  color: var(--text-main); background: white; font-family: inherit; cursor: pointer; min-width: 200px;
+  color: var(--text-main); background: white; font-family: inherit; cursor: pointer; min-width: 180px;
 }
 .select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
 
-/* Filtro multi-seleção estilo Excel (ex.: Período) */
-.multi-select { position: relative; display: inline-block; }
-.multi-select-btn {
-  display: inline-flex; align-items: center; gap: 0.4rem; text-align: left; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+/* Resumo geral (KPIs) */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
+.kpi-card {
+  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
 }
-.multi-select-btn::after { content: "▾"; margin-left: auto; color: var(--text-secondary); font-size: 0.75rem; }
-.multi-select-panel {
-  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 220px;
-  background: white; border: 1px solid var(--border-color); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-.multi-select-acoes {
-  display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--border-color);
-}
-.multi-select-acoes button {
-  background: none; border: none; color: var(--primary-blue); font-weight: 600; font-size: 0.8rem;
-  cursor: pointer; padding: 0; font-family: inherit;
-}
-.multi-select-acoes button:hover { text-decoration: underline; }
-.multi-select-opcoes { max-height: 260px; overflow-y: auto; padding: 0.4rem 0; }
-.multi-select-opcoes label {
-  display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.9rem; font-size: 0.88rem;
-  color: var(--text-main); cursor: pointer;
-}
-.multi-select-opcoes label:hover { background: #f8fafc; }
-.multi-select-opcoes input[type="checkbox"] { cursor: pointer; }
-
-.semestre-badge {
-  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1rem;
-  border-radius: 8px; background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.85rem;
-}
+.kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+.kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
+.kpi-value-sm { font-size: 1rem; }
+.kpi-hint { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.3rem; line-height: 1.3; }
 
 /* Card + Tabela */
 .card {
@@ -126,31 +106,14 @@
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
   overflow: hidden;
 }
-
 .card-secao-titulo { padding: 1.25rem 1.5rem 0; margin: 0 0 -0.25rem; font-size: 1rem; font-weight: 700; color: var(--text-main); }
 
 .tabela-wrap { overflow-x: auto; }
-
-/* Barra de rolagem horizontal mais grossa e colorida — o padrão do navegador
-   é fino demais e passa despercebido que dá pra arrastar a tabela pro lado. */
 .tabela-wrap { scrollbar-width: thin; scrollbar-color: var(--primary-blue) #eef2f7; }
 .tabela-wrap::-webkit-scrollbar { height: 11px; }
 .tabela-wrap::-webkit-scrollbar-track { background: #eef2f7; border-radius: 10px; }
 .tabela-wrap::-webkit-scrollbar-thumb { background: var(--primary-blue); border-radius: 10px; }
 .tabela-wrap::-webkit-scrollbar-thumb:hover { background: var(--secondary-blue); }
-
-/* Lista de alunos pode ter dezenas/centenas de linhas por curso — dá um
-   scroll vertical próprio e travado (max-height) pra virar o container que
-   o sticky do cabeçalho realmente gruda (mesmo padrão do módulo Licitação). */
-.alunos-scroll {
-  max-height: 65vh;
-  overflow-y: auto;
-}
-.alunos-scroll thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .data-table th {
@@ -163,34 +126,57 @@
 .data-table tr:hover td { background: #fafbfd; }
 
 .tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
-
-.carregar-mais-wrap { display: flex; justify-content: center; padding: 1rem; border-top: 1px solid var(--border-color); }
-
 .acoes-col { white-space: nowrap; }
+.linha-hint { font-size: 0.78rem; color: var(--text-secondary); }
 
-/* Situação — cor por grupo, não por valor individual (senão vira uma cor por
-   badge sem padrão nenhum): verde = matrícula/rematrícula em dia; amarelo =
-   pendente de ação (financeiro ou assinatura); vermelho = saída do aluno;
-   azul = movimentação neutra (retorno, mudança, formando). */
-.status-badge {
-  border: none; border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 700;
-  font-family: inherit; white-space: nowrap;
-}
-.situacao-ok { background: #d1fae5; color: #047857; }
-.situacao-alerta { background: #fef3c7; color: #d97706; }
-.situacao-critica { background: #fee2e2; color: #b91c1c; }
-.situacao-neutra { background: #dbeafe; color: #1d4ed8; }
+/* Paginação */
+.paginacao { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; border-top: 1px solid var(--border-color); }
+.paginacao-atual { font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
 
-.revisar-badge {
-  display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.4rem;
-  background: #fef3c7; color: #92400e; border-radius: 20px; padding: 0.25rem 0.6rem;
-  font-size: 0.72rem; font-weight: 700;
+/* Faixa de atraso */
+.faixa-badge {
+  display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 20px;
+  font-size: 0.78rem; font-weight: 700; white-space: nowrap;
 }
+.faixa-1-30 { background: #d1fae5; color: #047857; }
+.faixa-31-60 { background: #fef3c7; color: #92400e; }
+.faixa-61-90 { background: #ffedd5; color: #c2410c; }
+.faixa-90-mais { background: #fee2e2; color: #b91c1c; }
+
+/* Situação de matrícula */
+.situacao-badge {
+  display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+}
+.situacao-ativo { background: #d1fae5; color: #047857; }
+.situacao-trancamento { background: #fef3c7; color: #92400e; }
+.situacao-desistencia, .situacao-cancelado { background: #fee2e2; color: #b91c1c; }
+.situacao-concluido { background: #e0f2fe; color: #075985; }
+.situacao-pendente { background: #f1f5f9; color: var(--text-secondary); }
+
+/* Ação de cobrança (badge + histórico) */
+.acao-badge {
+  display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+}
+.badge-contato { background: #e0f2fe; color: #075985; }
+.badge-negociacao { background: #fef3c7; color: #92400e; }
+.badge-advocacia { background: #ede9fe; color: var(--purple); }
+.badge-judicial { background: #fee2e2; color: #b91c1c; }
+.badge-quitado { background: #d1fae5; color: #047857; }
+.badge-outro { background: #f1f5f9; color: var(--text-secondary); }
+
+.acao-historico { max-height: 220px; overflow-y: auto; margin-bottom: 1.25rem; border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem; }
+.acao-item { padding: 0.6rem 0; border-bottom: 1px solid var(--border-color); }
+.acao-item:last-child { border-bottom: none; }
+.acao-item-topo { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+.acao-item-escritorio { font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.2rem; }
+.acao-item-obs { font-size: 0.85rem; color: var(--text-main); }
 
 /* Modais */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem;
 }
 .modal-overlay.hidden { display: none; }
 
@@ -198,10 +184,14 @@
   background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 520px;
   max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
-.modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 1.25rem; }
-.modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: -0.75rem 0 1rem; }
+.modal-content-lg { max-width: 780px; }
+.modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 0.35rem; }
+.modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 1.25rem; }
+.modal-subtitle code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
 
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 1rem; }
+@media (max-width: 640px) { .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; } }
 
 .form-group { margin-bottom: 1.1rem; }
 .form-group label {
@@ -219,25 +209,39 @@
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
 
-.linha-hint { font-size: 0.78rem; color: var(--text-secondary); }
+/* Importação de CSV */
+.csv-input { margin-bottom: 1rem; width: 100%; }
+.import-resumo { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600; }
 
-/* Autocomplete "Aluno Indica" */
-.autocomplete-lista {
-  position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin-top: 0.25rem;
-  background: white; border: 1px solid var(--border-color); border-radius: 8px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08); max-height: 220px; overflow-y: auto;
+/* Comparativo mensal (comparativo.html) */
+.comp-legenda { display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+.comp-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.comp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.comp-dot-ativos { background: var(--green); }
+.comp-dot-juridico { background: var(--purple); }
+.comp-dot-inativos { background: var(--red); }
+
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
+.comp-card {
+  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
 }
-.autocomplete-item { padding: 0.6rem 0.9rem; cursor: pointer; font-size: 0.88rem; border-bottom: 1px solid var(--border-color); }
-.autocomplete-item:last-child { border-bottom: none; }
-.autocomplete-item:hover { background: #f8fafc; }
-.autocomplete-item strong { color: var(--text-main); }
-.autocomplete-item span { display: block; font-size: 0.75rem; color: var(--text-secondary); }
-.autocomplete-vazio { padding: 0.6rem 0.9rem; font-size: 0.85rem; color: var(--text-secondary); }
-.indicado-por-selecionado {
-  display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; padding: 0.4rem 0.7rem;
-  background: #eef2ff; border-radius: 20px; font-size: 0.82rem; font-weight: 600; color: var(--primary-blue);
+.comp-mes { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.15rem; }
+.comp-total { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.75rem; }
+.comp-bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #eef2f7; margin-bottom: 0.75rem; }
+.comp-bar-seg { height: 100%; }
+.comp-bar-ativos { background: var(--green); }
+.comp-bar-juridico { background: var(--purple); }
+.comp-bar-inativos { background: var(--red); }
+.comp-valores { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.82rem; color: var(--text-secondary); }
+.comp-valores strong { color: var(--text-main); }
+.comp-obs { margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border-color); font-size: 0.78rem; color: var(--text-secondary); font-style: italic; }
+
+@media print {
+  .comp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .comp-card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; padding: 0.75rem 1rem; }
+  .comp-total { font-size: 1.1rem; }
 }
-.indicado-por-selecionado button { background: none; border: none; cursor: pointer; color: inherit; font-weight: 700; padding: 0; }
 
 /* Toast */
 .toast {
@@ -248,25 +252,15 @@
 .toast-success { background: var(--green); }
 .toast-error { background: var(--red); }
 
-/* Relatório */
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
-.kpi-card {
-  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
-}
-.kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
-.kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
-.kpi-hint { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.3rem; line-height: 1.3; }
-
 @media (max-width: 900px) {
-  .form-row { grid-template-columns: 1fr; }
+  .modal-content-lg { max-width: 100%; }
 }
 
 /* ==========================================
-   Impressão do relatório (relatorio.html) — mesmo padrão já usado em
-   Licitação: o shell do app é flex com altura travada (.layout-main
-   overflow:hidden + .layout-content flex:1 overflow-y:auto), sem esse
-   reset a impressão corta conteúdo fora da 1ª página.
+   Impressão do relatório (relatorio.html) — mesmo padrão de Orçamento/
+   Licitação/Matrículas: o shell do app é flex com altura travada
+   (.layout-main overflow:hidden + .layout-content flex:1 overflow-y:auto),
+   sem esse reset a impressão corta conteúdo fora da 1ª página.
    ========================================== */
 .print-page { background: transparent; }
 .rel-cabecalho-print {
@@ -281,6 +275,7 @@
 .rel-cabecalho-print h1 { margin: 0; font-size: 17px; color: var(--primary-blue); }
 .rel-cabecalho-print p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
 .rel-data-emissao { font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
+.rel-print-logo { height: 36px; width: auto; }
 
 body.pagina-relatorio .layout-main {
   overflow-y: auto;
@@ -318,18 +313,12 @@ body.pagina-relatorio .layout-content {
 
   .rel-cabecalho-print { display: flex; }
 
-  /* Lista de alunos (index.html): coluna de Ações e o rótulo "revisar" não
-     fazem sentido no papel. */
-  .acoes-col, .revisar-badge { display: none !important; }
-  .alunos-scroll { max-height: none !important; overflow: visible !important; }
-
   .print-page, .kpi-grid, .kpi-card { width: 100% !important; box-sizing: border-box; }
 
   .kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .kpi-card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; padding: 0.75rem 1rem; }
   .kpi-value { font-size: 1.15rem; }
   .kpi-label { font-size: 0.68rem; }
-  .kpi-hint { font-size: 0.62rem; }
 
   .card { box-shadow: none; border: 1px solid var(--border-color); break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px !important; }
   .data-table { font-size: 0.78rem; }

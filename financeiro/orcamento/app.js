@@ -469,6 +469,7 @@ function renderizarGrid() {
         <div class="orc-card-meta">
           <span class="setor-chip">${esc(o.setor)}</span>
           ${o.semestre ? `<span class="semestre-chip">${esc(o.semestre)}</span>` : ''}
+          ${o.createdByNome ? `<span class="semestre-chip" title="Quem cadastrou este orçamento">${esc(o.createdByNome)}</span>` : ''}
         </div>
         ${temPrevisto ? `<div class="orc-progress-track"><div class="orc-progress-fill ${classeProgresso(previsto, gasto)}" style="width:${pct}%"></div></div>` : ''}
         <div class="orc-card-valores">

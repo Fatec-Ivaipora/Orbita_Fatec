@@ -5,7 +5,8 @@ export const CATEGORIES = {
   docencia: "Docência",
   saude: "Gestão Saúde",
   secretaria: "Secretaria",
-  financeiro: "Financeiro"
+  financeiro: "Financeiro",
+  medicina: "Medicina"
 };
 
 export const MODULES = {
@@ -125,17 +126,37 @@ export const MODULES = {
     title: "Avaliação Docente",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
     url: "/avaliacao-docente/index.html"
+  },
+  cobranca: {
+    id: "cobranca",
+    category: "financeiro",
+    title: "Cobrança",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4.9" y1="4.9" x2="7" y2="7"/></svg>`,
+    url: "/financeiro/cobranca/index.html"
+  },
+  "banco-med-fatec": {
+    id: "banco-med-fatec",
+    category: "medicina",
+    title: "Banco de Questões",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>`,
+    url: "/banco-med-fatec/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
+  // "Cobrança" (inadimplência) é exclusivo do cargo Financeiro — não entra
+  // aqui nem no ADM N2, a pedido do usuário (31/08). Fica de fora do menu
+  // lateral e da grade padrão de Gerência de Acessos pra esses cargos;
+  // ADM N1 continua com bypass total no backend (`requireModulePermission`
+  // sempre libera `adm_l1`, é assim pra todo módulo do sistema, não dá pra
+  // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec"]
   },
   ti: {
     label: "T.I.",
@@ -147,7 +168,7 @@ export const ROLE_PERMISSIONS = {
   },
   financeiro: {
     label: "Financeiro",
-    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento"]
+    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento", "cobranca"]
   },
   // Coordenador perdeu acesso à Licitação (18/08) — passou a ser tarefa
   // exclusiva do Financeiro, pra não misturar semestre ativo entre uma
@@ -163,7 +184,26 @@ export const ROLE_PERMISSIONS = {
   // a ler a permissão real do Firestore.
   sec: {
     label: "Secretaria",
-    modules: ["dashboard", "fidelidade", "matriculas"]
+    modules: ["dashboard", "fidelidade", "matriculas", "relatorio-dp"]
+  },
+  // Coordenação da Medicina — só enxerga o Banco de Questões (MED FATEC),
+  // nenhum outro módulo administrativo. Cargo dedicado (em vez de dar
+  // banco-med-fatec pro cargo "coordenador" geral) pra não vazar acesso
+  // pra coordenadores de outros cursos.
+  // Sem "dashboard"/"fidelidade" de propósito — esses dois cargos não usam
+  // Meu Espaço nem Cartão FATEC (ver CARGOS_SO_MODULO_PROPRIO em
+  // core/layout.js, que tira a exceção "todo cargo sempre vê esses dois" só
+  // pra eles, e o redirect direto pro banco-med-fatec em meu-espaco.js).
+  coord_medicina: {
+    label: "Coordenação Medicina",
+    modules: ["banco-med-fatec"]
+  },
+  // Professor da Medicina — mesmo acesso do coord_medicina (só Banco de
+  // Questões), cargo separado só pra aparecer com rótulo próprio na tela de
+  // Usuários (não misturar professor com coordenador na listagem).
+  professor_medicina: {
+    label: "Professor Medicina",
+    modules: ["banco-med-fatec"]
   },
   visitante: {
     label: "Visitante",

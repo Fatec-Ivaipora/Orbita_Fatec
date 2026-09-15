@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BANCO MED-FATEC · Órbita - FatecIVP</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/core/layout.css">
+  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=16">
+</head>
+
+<body>
+
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+
+      <div class="layout-content">
+        <main id="bmf-main" class="mod-main">
+
+          <div class="bmf-brand">
+            <img src="/img/medfatec-logo.png" alt="MED FATEC">
+          </div>
+
+          <div class="bmf-tabs">
+            <button class="bmf-tab-btn active" data-tab="banco">Banco de Questões</button>
+            <button class="bmf-tab-btn" data-tab="provas">Provas</button>
+            <button class="bmf-tab-btn" data-tab="revisao">Revisão de Importação <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
+            <button class="bmf-tab-btn" data-tab="colinha">Questões ENAMED</button>
+          </div>
+
+          <!-- ============ VIEW: BANCO DE QUESTÕES ============ -->
+          <section id="bmf-view-banco" class="bmf-view">
+            <div class="bmf-toolbar">
+              <div class="bmf-filters">
+                <select id="bmf-filtro-periodo">
+                  <option value="">Todos os períodos</option>
+                </select>
+                <select id="bmf-filtro-categoria">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="bmf-filtro-area-enamed">
+                  <option value="">Todas as áreas ENAMED</option>
+                </select>
+                <select id="bmf-filtro-dificuldade">
+                  <option value="">Todas as dificuldades</option>
+                  <option value="facil">Fácil</option>
+                  <option value="media">Média</option>
+                  <option value="intermediaria">Intermediária</option>
+                  <option value="dificil">Difícil</option>
+                </select>
+                <select id="bmf-filtro-professor">
+                  <option value="">Todos os professores</option>
+                  <option value="me">Minhas questões</option>
+                </select>
+                <div class="bmf-search-wrap">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="bmf-filtro-busca" placeholder="Buscar por título ou autor...">
+                </div>
+              </div>
+              <div class="bmf-filters-actions">
+                <button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-relatorio" title="Relatório: quantas questões tem em cada disciplina">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                  <span>Relatório</span>
+                </button>
+                <button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-importar-ava" title="Importar arquivos Moodle XML exportados do Open LMS">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>
+                  <span>Importar do AVA</span>
+                </button>
+                <input type="file" id="bmf-importar-ava-input" accept=".xml" multiple class="hidden">
+                <button class="btn bmf-btn-on-blue-primary action-execute" id="bmf-btn-nova-questao">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Nova Questão</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="bmf-selecao-bar" class="bmf-selecao-bar hidden">
+              <span id="bmf-selecao-contagem">0 questão(ões) selecionada(s)</span>
+              <div class="bmf-selecao-bar-acoes">
+                <button type="button" class="btn btn-secondary" id="bmf-btn-limpar-selecao">Limpar seleção</button>
+                <button type="button" class="btn btn-primary" id="bmf-btn-adicionar-prova">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  <span>Adicionar a uma prova</span>
+                </button>
+              </div>
+            </div>
+
+            <p id="bmf-questoes-contagem" class="bmf-resultado-resumo hidden"></p>
+            <div id="bmf-questoes-grid" class="bmf-lista">
+              <!-- linhas injetadas via JS -->
+            </div>
+            <p id="bmf-questoes-vazio" class="bmf-empty hidden">Nenhuma questão encontrada. Que tal cadastrar a primeira?</p>
+          </section>
+
+          <!-- ============ VIEW: PROVAS ============ -->
+          <section id="bmf-view-provas" class="bmf-view hidden">
+            <div class="bmf-toolbar">
+              <div class="bmf-filters">
+                <select id="bmf-prova-filtro-periodo">
+                  <option value="">Todos os períodos</option>
+                </select>
+              </div>
+              <div class="bmf-filters-actions">
+                <button class="btn bmf-btn-on-blue-primary action-execute" id="bmf-btn-nova-prova">
+                  <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Nova Prova</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="bmf-provas-grid" class="bmf-lista">
+              <!-- linhas injetadas via JS -->
+            </div>
+            <p id="bmf-provas-vazio" class="bmf-empty hidden">Nenhuma prova criada ainda.</p>
+          </section>
+
+          <!-- ============ VIEW: REVISÃO DE IMPORTAÇÃO ============ -->
+          <section id="bmf-view-revisao" class="bmf-view hidden">
+            <p style="color:var(--text-secondary); margin-bottom:1.25rem; font-size:0.9rem;">Questões importadas do AVA ficam aqui até você confirmar a disciplina certa — só depois disso elas entram no banco compartilhado.</p>
+            <div id="bmf-revisao-lista"></div>
+            <p id="bmf-revisao-vazio" class="bmf-empty hidden">Nada pendente de revisão no momento.</p>
+          </section>
+
+          <!-- ============ VIEW: QUESTÕES ENAMED ============ -->
+          <section id="bmf-view-colinha" class="bmf-view hidden">
+            <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">Quanto o banco já tem classificado em cada uma das 7 áreas do ENAMED. Disciplina com área fixa (ex.: Saúde da Mulher → Ginecologia e Obstetrícia) já entra sozinha; disciplina transversal (Sistemas Morfofisiológicos, Patologia Clínica etc.) é classificada questão por questão, pelo conteúdo — por isso nem toda questão dessas disciplinas cai numa área.</p>
+
+            <div id="bmf-area-contagem-grid" class="bmf-area-contagem-grid"></div>
+
+            <h4 style="margin:1.75rem 0 0.75rem; font-weight:800; color:var(--med-azul-escuro); font-size:1rem;">Referência: qual disciplina cai em qual área</h4>
+            <div class="bmf-colinha-grid">
+              <div class="bmf-colinha-area" style="--area-cor:#2F6FA8;">
+                <h4>Clínica Médica</h4>
+                <ul><li><b>6º-7º</b> Saúde do Adulto e do Idoso I/II</li><li><b>8º</b> Cuidado Paliativo e Dor</li><li><b>8º</b> Medicina de Urgência e Emergência</li><li><b>11º-12º</b> Internato Clínica Médica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#A2543B;">
+                <h4>Cirurgia</h4>
+                <ul><li><b>5º-6º</b> Clínica Cirúrgica I/II</li><li><b>5º-6º</b> Habilidades Cirúrgicas I/II</li><li><b>11º-12º</b> Internato Clínica Cirúrgica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#4B8F63;">
+                <h4>Pediatria</h4>
+                <ul><li><b>5º-6º</b> Saúde da Criança e do Adolescente I/II</li><li><b>9º-10º</b> Internato Pediatria I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#9A4F76;">
+                <h4>Ginecologia e Obstetrícia</h4>
+                <ul><li><b>7º-8º</b> Saúde da Mulher I/II</li><li><b>9º-10º</b> Internato Gin. e Obstetrícia I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#6E63A6;">
+                <h4>Saúde Mental</h4>
+                <ul><li><b>4º</b> Neurociência e Comportamento <i>(base)</i></li><li><b>5º</b> Saúde Mental</li><li><b>10º</b> Internato II — Saúde Mental</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#B98A2E;">
+                <h4>Medicina de Família e Comunidade</h4>
+                <ul><li><b>1º-8º</b> Saúde, Comunidade e Integralidade do Cuidado I a VIII</li><li><b>9º-10º</b> Internato Atenção Básica I/II</li></ul>
+              </div>
+              <div class="bmf-colinha-area" style="--area-cor:#3F8686;">
+                <h4>Medicina Preventiva e Social</h4>
+                <ul><li><b>1º-3º</b> Projetos e Temas Integradores em Saúde I a III</li><li><b>7º</b> Medicina Legal · Saúde Global</li><li><b>8º</b> Saúde do Trabalhador</li><li><b>10º</b> Internato II — Saúde Coletiva</li></ul>
+              </div>
+              <div class="bmf-colinha-area bmf-colinha-transversal" style="--area-cor:#7A756A;">
+                <h4>Transversais / base — classificadas por conteúdo</h4>
+                <ul><li>Habilidades Clínicas I-VI · Sistemas Morfofisiológicos I-III · Patologia Clínica I-V</li><li>Medicina Baseada em Evidências I/II · Mecanismos de Defesas e Doenças</li><li>Interações Terapêuticas I/II · Oncogênese e Toxicologia · Medicina por Imagem</li><li>Optativas · Eletivos · Internato Urgência e Emergência I/II</li></ul>
+              </div>
+            </div>
+          </section>
+
+        </main>
+
+        <!-- ============ MODAL: QUESTÃO ============ -->
+        <div id="bmf-modal-questao" class="modal-overlay">
+          <div class="modal-box bmf-modal-lg">
+            <h3 id="bmf-questao-modal-titulo" class="bmf-modal-titulo">Nova Questão</h3>
+            <form id="bmf-form-questao">
+              <input type="hidden" id="bmf-q-id">
+
+              <div class="bmf-form-secao">
+                <div class="bmf-form-secao-titulo">Identificação</div>
+
+                <div class="form-group">
+                  <label class="form-label">Título da questão <span style="color:red">*</span></label>
+                  <input type="text" id="bmf-q-titulo" class="form-control" placeholder="Ex: Trabalho de parto — Exame cervical" required>
+                </div>
+
+                <div class="bmf-form-row">
+                  <div class="form-group" style="flex:0 0 140px;">
+                    <label class="form-label">Período <span style="color:red">*</span></label>
+                    <select id="bmf-q-periodo" class="form-control" required>
+                      <option value="">Período</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Disciplina <span style="color:red">*</span></label>
+                    <div style="display:flex; gap:0.5rem;">
+                      <select id="bmf-q-categoria" class="form-control" required style="flex:1;">
+                        <option value="">Selecione o período primeiro</option>
+                      </select>
+                      <button type="button" id="bmf-btn-add-categoria" class="bmf-icon-btn" style="width:48px; height:auto; flex-shrink:0;" title="Criar nova disciplina">
+                        <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="bmf-nova-categoria-group" class="form-group hidden" style="border:1.5px dashed var(--border-color); padding:0.75rem; border-radius:10px;">
+                  <label class="form-label" style="font-size:0.8rem;">Nova disciplina</label>
+                  <div style="display:flex; gap:0.5rem;">
+                    <select id="bmf-q-categoria-nova-periodo" class="form-control" style="flex:0 0 130px;">
+                      <option value="">Período</option>
+                    </select>
+                    <input type="text" id="bmf-q-categoria-nova" class="form-control" placeholder="Ex: Semiologia Médica" style="flex:1;">
+                    <button type="button" id="bmf-btn-salvar-categoria" class="btn btn-primary" style="width:auto;">Criar</button>
+                    <button type="button" id="bmf-btn-cancelar-categoria" class="bmf-icon-btn" title="Cancelar">
+                      <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="bmf-form-row">
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Dificuldade <span style="color:red">*</span></label>
+                    <select id="bmf-q-dificuldade" class="form-control" required>
+                      <option value="facil">Fácil</option>
+                      <option value="media">Média</option>
+                      <option value="intermediaria">Intermediária</option>
+                      <option value="dificil">Difícil</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Tipo de questão <span style="color:red">*</span></label>
+                    <select id="bmf-q-tipo" class="form-control" required>
+                      <option value="multichoice_unica">Múltipla escolha — uma correta</option>
+                      <option value="multichoice_multipla">Múltipla escolha — várias corretas</option>
+                      <option value="verdadeiro_falso">Verdadeiro / Falso</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Área ENAMED (opcional)</label>
+                  <select id="bmf-q-area-enamed" class="form-control">
+                    <option value="">Nenhuma</option>
+                  </select>
+                  <p class="bmf-campo-ajuda">O ENAMED não cobra por disciplina — ele organiza a prova em 7 grandes áreas (Clínica Médica, Cirurgia, Pediatria, Ginecologia e Obstetrícia, Saúde Mental, Medicina de Família e Comunidade, Medicina Preventiva e Social), cada uma puxando questões de várias disciplinas e períodos diferentes. Marcar a área certa aqui é o que permite montar um simulado nesse mesmo formato depois, direto em "Nova Prova → Simulado ENAMED". Se não souber qual marcar, pode deixar em branco: o sistema já tenta sugerir sozinho, pela disciplina ou pelo conteúdo da questão.</p>
+                </div>
+              </div>
+
+              <div class="bmf-form-secao">
+                <div class="bmf-form-secao-titulo">Enunciado</div>
+
+                <div class="form-group">
+                  <label class="form-label">Caso clínico e pergunta <span style="color:red">*</span></label>
+                  <div class="bmf-rte-toolbar" data-alvo="bmf-q-enunciado">
+                    <button type="button" class="bmf-rte-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">☰</button>
+                  </div>
+                  <div id="bmf-q-enunciado" class="form-control bmf-rte" contenteditable="true" data-placeholder="Descreva o caso clínico e a pergunta..."></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Imagem clínica (opcional)</label>
+                  <label for="bmf-q-imagem-input" class="bmf-file-upload">
+                    <svg class="bmf-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+                    <span id="bmf-q-imagem-nome">Escolher imagem…</span>
+                  </label>
+                  <input type="file" id="bmf-q-imagem-input" accept="image/*" class="hidden">
+                  <div id="bmf-q-imagem-preview" class="bmf-imagem-preview hidden">
+                    <img id="bmf-q-imagem-img" alt="Pré-visualização">
+                    <button type="button" id="bmf-btn-remover-imagem" class="btn btn-secondary" style="width:auto;">
+                      <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      <span>Remover imagem</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bmf-form-secao">
+                <div class="bmf-form-secao-titulo">Alternativas</div>
+                <div class="form-group">
+                  <div id="bmf-alternativas-lista"></div>
+                  <button type="button" id="bmf-btn-add-alternativa" class="btn btn-secondary" style="margin-top:0.75rem; width:auto;">
+                    <svg class="bmf-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Alternativa</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="bmf-form-secao">
+                <div class="bmf-form-secao-titulo">Explicação</div>
+                <div class="form-group">
+                  <label class="form-label">Justificativa <span style="color:red">*</span></label>
+                  <div class="bmf-rte-toolbar" data-alvo="bmf-q-justificativa">
+                    <button type="button" class="bmf-rte-btn" data-cmd="bold" title="Negrito"><b>B</b></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="italic" title="Itálico"><i>I</i></button>
+                    <button type="button" class="bmf-rte-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">☰</button>
+                  </div>
+                  <div id="bmf-q-justificativa" class="form-control bmf-rte" contenteditable="true" data-placeholder="Explicação da resposta correta..."></div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Fonte</label>
+                  <input type="text" id="bmf-q-fonte" class="form-control" placeholder="Ex: PORTO, C.C. Semiologia Médica. 8ª ed. 2019.">
+                </div>
+              </div>
+
+              <p class="bmf-form-erro hidden" id="bmf-q-erro"></p>
+
+              <div class="bmf-modal-acoes">
+                <button type="button" class="btn btn-secondary" id="bmf-btn-cancelar-questao">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Salvar Questão</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- ============ MODAL: NOVA PROVA ============ -->
+        <div id="bmf-modal-prova-novo" class="modal-overlay">
+          <div class="modal-box">
+            <h3 style="font-weight:800; margin-bottom:1.25rem;">Nova Prova</h3>
+            <form id="bmf-form-prova-novo">
+              <div class="bmf-form-row">
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Nome da prova <span style="color:red">*</span></label>
+                  <input type="text" id="bmf-p-nome" class="form-control" placeholder="Ex: PROVA T2-2" required>
+                </div>
+                <div class="form-group" style="flex:0 0 120px;">
+                  <label class="form-label">Semestre <span style="color:red">*</span></label>
+                  <input type="text" id="bmf-p-semestre" class="form-control" placeholder="Ex: 2026.1" required>
+                </div>
+              </div>
+              <div class="bmf-tipo-prova-toggle">
+                <button type="button" class="bmf-tipo-prova-btn active" data-tipo="disciplina">Por disciplina</button>
+                <button type="button" class="bmf-tipo-prova-btn" data-tipo="enamed">Simulado ENAMED (por área)</button>
+              </div>
+              <input type="hidden" id="bmf-p-tipo" value="disciplina">
+
+              <div id="bmf-p-grupo-disciplina" class="bmf-form-row">
+                <div class="form-group" style="flex:0 0 140px;">
+                  <label class="form-label">Período <span style="color:red">*</span></label>
+                  <select id="bmf-p-periodo" class="form-control">
+                    <option value="">Período</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label class="form-label">Disciplina <span style="color:red">*</span></label>
+                  <select id="bmf-p-categoria" class="form-control">
+                    <option value="">Selecione o período primeiro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="bmf-p-grupo-enamed" class="form-group hidden">
+                <label class="form-label">Área ENAMED <span style="color:red">*</span></label>
+                <select id="bmf-p-area-enamed" class="form-control">
+                  <option value="">Selecione a área</option>
+                </select>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.4rem;">Puxa questões de qualquer disciplina/período marcadas com essa área — pra montar um simulado no estilo ENAMED.</p>
+              </div>
+
+              <p class="bmf-form-erro hidden" id="bmf-p-erro"></p>
+
+              <div style="display:flex; gap:1rem; margin-top:1rem;">
+                <button type="button" class="btn btn-secondary" id="bmf-btn-cancelar-prova-novo" style="flex:1;">Cancelar</button>
+                <button type="submit" class="btn btn-primary" style="flex:1;">Criar Prova</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- ============ MODAL: MONTAR PROVA (seleção de questões) ============ -->
+        <div id="bmf-modal-prova-montar" class="modal-overlay">
+          <div class="modal-box bmf-modal-lg">
+            <h3 id="bmf-prova-montar-titulo" style="font-weight:800; margin-bottom:0.25rem;">Montar Prova</h3>
+            <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">Selecione as questões do banco que vão compor esta prova.</p>
+
+            <input type="text" id="bmf-prova-busca" class="form-control" placeholder="Buscar questão por título..." style="margin-bottom:0.75rem;">
+
+            <div class="bmf-prova-selecao-toolbar">
+              <button type="button" class="btn btn-secondary" id="bmf-prova-selecionar-todas">Selecionar todas</button>
+              <button type="button" class="btn btn-secondary" id="bmf-prova-desmarcar-todas">Desmarcar todas</button>
+              <div class="bmf-prova-qtd-wrap">
+                <input type="number" id="bmf-prova-qtd-input" min="1" placeholder="Qtd.">
+                <button type="button" class="btn btn-secondary" id="bmf-prova-selecionar-qtd">Selecionar aleatórias</button>
+              </div>
+            </div>
+
+            <div id="bmf-prova-questoes-lista" class="bmf-prova-questoes-lista"></div>
+
+            <p class="bmf-form-erro hidden" id="bmf-prova-erro"></p>
+
+            <div style="display:flex; gap:1rem; margin-top:1.25rem;">
+              <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-montar" style="flex:1;">Fechar</button>
+              <button type="button" class="btn btn-secondary" id="bmf-btn-excluir-prova" style="flex:1; color:#B91C1C;">Excluir Prova</button>
+              <button type="button" class="btn btn-primary" id="bmf-btn-salvar-selecao" style="flex:1;">Salvar Seleção</button>
+              <button type="button" class="btn btn-primary" id="bmf-btn-exportar-prova" style="flex:1;">
+                <svg class="bmf-icon" viewBox="0 0 24 24"><path d="M12 4v12"/><path d="M6 10l6 6 6-6"/><path d="M4 20h16"/></svg>
+                <span>Exportar Moodle XML</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ MODAL: ADICIONAR SELEÇÃO A UMA PROVA ============ -->
+        <div id="bmf-modal-adicionar-prova" class="modal-overlay">
+          <div class="modal-box">
+            <h3 style="font-weight:800; margin-bottom:0.25rem;">Adicionar à prova</h3>
+            <p id="bmf-adicionar-prova-sub" style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;"></p>
+
+            <div id="bmf-adicionar-prova-lista" class="bmf-prova-questoes-lista" style="margin-bottom:1rem;"></div>
+
+            <p class="bmf-form-erro hidden" id="bmf-adicionar-prova-erro"></p>
+
+            <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-adicionar-prova">Fechar</button>
+          </div>
+        </div>
+
+        <div id="bmf-modal-resultado-importacao" class="modal-overlay">
+          <div class="modal-box">
+            <div class="bmf-resultado-header">
+              <h3 class="bmf-modal-titulo">Importação concluída</h3>
+              <p id="bmf-resultado-importacao-resumo" class="bmf-resultado-resumo"></p>
+            </div>
+
+            <div id="bmf-resultado-importacao-lista" class="bmf-resultado-lista"></div>
+
+            <p class="bmf-resultado-dica">Confira a aba "Revisão de Importação" pra confirmar a disciplina de cada lote antes de publicar.</p>
+
+            <div class="bmf-modal-acoes">
+              <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-resultado-importacao">Fechar</button>
+              <button type="button" class="btn btn-primary" id="bmf-btn-ir-revisao-resultado">Ir para Revisão de Importação</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="bmf-modal-relatorio" class="modal-overlay">
+          <div class="modal-box bmf-modal-lg">
+            <h3 class="bmf-modal-titulo">Relatório do Banco</h3>
+            <p id="bmf-relatorio-resumo" class="bmf-resultado-resumo" style="margin-bottom:1rem;"></p>
+            <div style="max-height:40vh; overflow-y:auto;">
+              <table class="bmf-relatorio-tabela">
+                <thead>
+                  <tr><th>Período</th><th>Disciplina</th><th style="text-align:right;">Questões</th></tr>
+                </thead>
+                <tbody id="bmf-relatorio-corpo"></tbody>
+              </table>
+            </div>
+
+            <div id="bmf-relatorio-professor-bloco">
+              <h4 style="margin:1.5rem 0 0.5rem; font-weight:800; color:var(--med-azul-escuro); font-size:0.95rem;">Por professor</h4>
+              <div style="max-height:30vh; overflow-y:auto;">
+                <table class="bmf-relatorio-tabela">
+                  <thead>
+                    <tr><th>Professor</th><th style="text-align:right;">Questões</th></tr>
+                  </thead>
+                  <tbody id="bmf-relatorio-professor-corpo"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bmf-modal-acoes">
+              <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-relatorio">Fechar</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/banco-med-fatec/app.js?v=28"></script>
+</body>
+
+</html>

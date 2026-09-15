@@ -1,0 +1,725 @@
+/* ÓRBITA — BANCO MED-FATEC
+   Direção visual: item bank (quiz.one), traduzida pras cores do MED FATEC.
+   Ver .impeccable/surfaces/banco-med-fatec-index-html.md pro contrato. */
+
+:root {
+  /* Cores extraídas direto do logo MED FATEC (clínica) — separadas da
+     marca institucional geral (--primary-blue/--secondary-blue). */
+  --med-azul-escuro: #004F9F;
+  --med-azul-claro: #009FE3;
+  --med-azul-escuro-hover: #003D7A;
+}
+
+::selection { background: var(--med-azul-claro); color: #fff; }
+
+.mod-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 5rem;
+}
+
+.bmf-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.25rem;
+}
+.bmf-brand img {
+  height: 40px;
+  width: auto;
+}
+
+/* ---- Ícones (SVG inline, nunca emoji) ---- */
+.bmf-icon { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- Botões ---- */
+.btn {
+  padding: 0.8rem 1.1rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  width: 100%;
+}
+.btn:active { transform: scale(0.98); }
+.btn:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: 2px; }
+
+.btn-primary {
+  background: var(--med-azul-escuro);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--med-azul-escuro-hover); }
+
+.btn-secondary {
+  background: #fff;
+  color: var(--text-main);
+  border: 1.5px solid var(--border-color);
+}
+.btn-secondary:hover { background: rgba(3, 20, 38, 0.04); border-color: #C7D0DC; }
+
+/* Botão sobre a barra azul da toolbar — invertido (branco sólido / contorno translúcido) */
+.bmf-btn-on-blue-primary {
+  background: #fff;
+  color: var(--med-azul-escuro);
+}
+.bmf-btn-on-blue-primary:hover { background: #EAF3FF; }
+.bmf-btn-on-blue-ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+}
+.bmf-btn-on-blue-ghost:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* Botão só-ícone (ações discretas de linha: editar/excluir) */
+.bmf-icon-btn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color);
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bmf-icon-btn:hover { background: rgba(0, 79, 159, 0.06); color: var(--med-azul-escuro); border-color: var(--med-azul-claro); }
+.bmf-icon-btn:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: 2px; }
+.bmf-icon-btn.bmf-icon-btn-perigo:hover { background: rgba(239, 68, 68, 0.08); color: #B91C1C; border-color: #EF4444; }
+
+.form-group { margin-bottom: 1.25rem; text-align: left; }
+.form-label { display: block; font-size: 0.82rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.45rem; }
+.bmf-campo-ajuda { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; margin-top: 0.45rem; }
+.form-control {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: #F8FAFC;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.92rem;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.form-control:focus { border-color: var(--med-azul-claro); background: #fff; }
+.form-control:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: 1px; }
+
+.bmf-form-row { display: flex; gap: 1rem; }
+.bmf-form-erro {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #B91C1C;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* ---- Modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: rgba(3, 20, 38, 0.6);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+.modal-overlay.active { display: flex !important; }
+.modal-box {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px -12px rgba(3, 20, 38, 0.35);
+  margin: auto;
+}
+.bmf-modal-lg { max-width: 720px; }
+
+.bmf-modal-titulo {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--med-azul-escuro);
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1.5px solid var(--border-color);
+}
+
+.bmf-modal-acoes {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1.5px solid var(--border-color);
+}
+.bmf-modal-acoes .btn { flex: 1; }
+
+/* Agrupa campos do formulário em blocos com rótulo — quebra a monotonia
+   de "campo atrás de campo" num formulário longo. */
+.bmf-form-secao {
+  padding-top: 1.5rem;
+  margin-top: 1.5rem;
+  border-top: 1.5px dashed var(--border-color);
+}
+.bmf-form-secao:first-of-type { padding-top: 0; margin-top: 0; border-top: none; }
+.bmf-form-secao-titulo {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--med-azul-escuro);
+  margin-bottom: 1.1rem;
+}
+
+/* Botão de upload customizado — substitui o <input type=file> nativo,
+   que sai feio (botão do SO) e destoa do resto do formulário. */
+.bmf-file-upload {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1.5px dashed var(--border-color);
+  border-radius: 10px;
+  background: #F8FAFC;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.bmf-file-upload:hover { border-color: var(--med-azul-claro); background: #fff; color: var(--med-azul-escuro); }
+
+/* ---- Tabs ---- */
+.bmf-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1.5px solid var(--border-color);
+}
+.bmf-tab-btn {
+  padding: 0.75rem 1.1rem;
+  border: none;
+  background: none;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1.5px;
+  transition: color 0.15s;
+}
+.bmf-tab-btn:hover { color: var(--text-main); }
+.bmf-tab-btn:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: -2px; }
+.bmf-tab-btn.active {
+  color: var(--med-azul-escuro);
+  border-bottom-color: var(--med-azul-claro);
+}
+.bmf-tab-badge {
+  display: inline-block;
+  background: #B91C1C;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.35rem;
+}
+
+.bmf-view.hidden { display: none; }
+
+/* ---- Barra de ferramentas: bloco de cor sólido (azul MED FATEC) ----
+   Um único bloco carrega busca + filtros (pill, brancos) + ações
+   (branco sólido = primária, contorno translúcido = secundária). */
+.bmf-toolbar {
+  background: var(--med-azul-escuro);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.bmf-toolbar .btn { width: auto; }
+
+.bmf-filters { display: flex; gap: 0.6rem; flex-wrap: wrap; flex: 1; align-items: center; }
+.bmf-filters select,
+.bmf-filters input {
+  padding: 0.6rem 0.95rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--text-main);
+}
+.bmf-filters select:focus-visible,
+.bmf-filters input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.bmf-filters input::placeholder { color: var(--text-secondary); font-weight: 500; }
+.bmf-filters input { flex: 1; min-width: 200px; }
+.bmf-filters-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+.bmf-search-wrap { position: relative; flex: 1; min-width: 200px; display: flex; align-items: center; }
+.bmf-search-wrap .bmf-icon { position: absolute; left: 0.85rem; color: var(--text-secondary); pointer-events: none; }
+.bmf-search-wrap input { width: 100%; padding-left: 2.5rem; }
+
+/* ---- Barra de seleção em massa (padrão item-bank: marca várias linhas
+   e manda pra uma prova de uma vez) ---- */
+.bmf-selecao-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(0, 79, 159, 0.06);
+  border: 1.5px solid rgba(0, 79, 159, 0.25);
+  border-radius: 12px;
+  padding: 0.75rem 1.1rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+.bmf-selecao-bar > span { font-weight: 700; color: var(--med-azul-escuro); font-size: 0.88rem; }
+.bmf-selecao-bar-acoes { display: flex; gap: 0.6rem; }
+.bmf-selecao-bar-acoes .btn { width: auto; }
+
+.bmf-q-row-check {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  accent-color: var(--med-azul-claro);
+  cursor: pointer;
+}
+
+/* ---- Lista de questões (linhas, não cards) ---- */
+.bmf-lista {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.bmf-q-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+.bmf-q-row:last-child { border-bottom: none; }
+.bmf-q-row:hover { background: rgba(0, 79, 159, 0.035); }
+.bmf-q-row-main { flex: 1; min-width: 0; }
+.bmf-q-row-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.bmf-q-row-titulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.bmf-q-row-meta { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; margin-top: 0.2rem; }
+.bmf-q-row-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+.bmf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.bmf-badge .bmf-icon { width: 12px; height: 12px; }
+.bmf-badge-facil { background: rgba(52, 179, 160, 0.14); color: #1B7A6C; }
+.bmf-badge-media { background: rgba(0, 159, 227, 0.14); color: var(--med-azul-escuro); }
+.bmf-badge-intermediaria { background: rgba(245, 158, 11, 0.14); color: #92650A; }
+.bmf-badge-dificil { background: rgba(239, 68, 68, 0.12); color: #B91C1C; }
+.bmf-badge-tipo { background: rgba(3, 20, 38, 0.06); color: var(--text-secondary); }
+.bmf-badge-area { background: rgba(0, 159, 227, 0.14); color: var(--med-azul-escuro); font-weight: 700; }
+
+.bmf-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 3.5rem 1rem;
+  font-weight: 600;
+  background: var(--card-bg);
+  border: 1px dashed var(--border-color);
+  border-radius: 14px;
+}
+
+/* ---- Editor de alternativas ---- */
+.bmf-alt-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.bmf-alt-linha:has(.bmf-alt-correta:checked) {
+  background: rgba(52, 179, 160, 0.08);
+  border-color: rgba(27, 122, 108, 0.3);
+}
+.bmf-alt-linha .bmf-alt-texto { flex: 1; }
+.bmf-alt-linha input[type="checkbox"],
+.bmf-alt-linha input[type="radio"] { width: 22px; height: 22px; flex-shrink: 0; accent-color: #1B7A6C; }
+.bmf-alt-remover { width: 40px; height: 40px; flex-shrink: 0; }
+
+.bmf-imagem-preview { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+.bmf-imagem-preview img { max-width: 280px; max-height: 200px; border-radius: 10px; border: 1px solid var(--border-color); }
+.bmf-imagem-preview .btn { width: auto; padding: 0.5rem 0.9rem; font-size: 0.8rem; }
+
+/* ---- Provas (mesma gramática de lista) ---- */
+.bmf-prova-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+.bmf-prova-row:last-child { border-bottom: none; }
+.bmf-prova-row:hover { background: rgba(0, 79, 159, 0.035); }
+.bmf-prova-row-main { flex: 1; min-width: 0; }
+.bmf-prova-row-titulo { font-size: 0.95rem; font-weight: 700; color: var(--text-main); }
+.bmf-prova-row-meta { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; margin-top: 0.2rem; }
+.bmf-prova-row-acoes { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+.bmf-prova-row .btn { width: auto; }
+
+/* ---- Toolbar de seleção rápida no "Montar Prova" ---- */
+.bmf-prova-selecao-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.bmf-prova-selecao-toolbar .btn { width: auto; padding: 0.55rem 0.9rem; font-size: 0.82rem; }
+.bmf-prova-qtd-wrap { display: flex; gap: 0.5rem; align-items: center; }
+.bmf-prova-qtd-wrap input[type="number"] {
+  width: 70px;
+  padding: 0.55rem 0.6rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.bmf-prova-questoes-lista {
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.bmf-prova-q-item { border-bottom: 1px solid var(--border-color); }
+.bmf-prova-q-item:last-child { border-bottom: none; }
+.bmf-prova-q-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.88rem;
+}
+.bmf-prova-q-linha:hover { background: rgba(3, 20, 38, 0.02); }
+.bmf-prova-q-linha input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--med-azul-claro); flex-shrink: 0; cursor: pointer; }
+.bmf-prova-q-titulo {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.bmf-prova-q-titulo:hover { color: var(--med-azul-escuro); text-decoration: underline; }
+.bmf-prova-q-linha .bmf-icon-btn { width: 30px; height: 30px; border: none; background: none; flex-shrink: 0; }
+
+.bmf-prova-q-detalhe {
+  padding: 0 1rem 1rem 2.9rem;
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+.bmf-prova-q-enunciado { margin-bottom: 0.75rem; line-height: 1.5; }
+.bmf-prova-q-imagem { max-width: 240px; max-height: 180px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 0.75rem; display: block; }
+.bmf-prova-q-alternativas { list-style: none; padding: 0; margin: 0 0 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.bmf-prova-q-alternativas li { padding: 0.4rem 0.7rem; border-radius: 8px; background: #F8FAFC; border: 1px solid var(--border-color); }
+.bmf-prova-q-alt-correta { background: rgba(52, 179, 160, 0.1) !important; border-color: rgba(27, 122, 108, 0.3) !important; font-weight: 700; color: #1B7A6C; }
+.bmf-prova-q-justificativa { color: var(--text-secondary); line-height: 1.5; }
+.bmf-prova-q-justificativa strong { color: var(--text-main); }
+
+/* ---- Revisão de Importação ---- */
+.bmf-revisao-grupo {
+  background: var(--card-bg);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.bmf-revisao-cabecalho { margin-bottom: 1rem; }
+.bmf-revisao-cabecalho h4 { font-weight: 800; font-size: 1.05rem; margin-bottom: 0.3rem; color: var(--med-azul-escuro); }
+.bmf-q-meta { font-size: 0.78rem; color: var(--text-secondary); font-weight: 600; }
+
+.bmf-revisao-lista-titulos {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  background: #F8FAFC;
+  padding: 0.5rem 0;
+  margin-bottom: 1.1rem;
+}
+.bmf-revisao-lista-titulos div { padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-color); }
+.bmf-revisao-lista-titulos div:last-child { border-bottom: none; }
+
+.bmf-revisao-instrucao {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  background: rgba(0, 79, 159, 0.05);
+  border: 1.5px solid rgba(0, 79, 159, 0.2);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.1rem;
+  line-height: 1.6;
+}
+.bmf-revisao-instrucao strong { color: var(--med-azul-escuro); }
+
+.bmf-revisao-acoes { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
+.bmf-revisao-acoes > div { flex: 1; min-width: 160px; }
+.bmf-revisao-acoes .btn { width: auto; padding: 0.85rem 1.25rem; flex-shrink: 0; }
+
+.bmf-revisao-descartar {
+  display: block;
+  margin-top: 0.85rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.bmf-revisao-descartar:hover { color: #B91C1C; }
+
+/* ---- Modal de resultado da importação (substitui o alert() nativo) ---- */
+.bmf-resultado-header { margin-bottom: 1rem; }
+.bmf-resultado-resumo { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem; }
+
+#bmf-questoes-contagem { margin-bottom: 0.75rem; }
+
+.bmf-resultado-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  /* Sem max-height/scroll próprio de propósito — cresce com o conteúdo e
+     deixa o modal (.modal-box, que já tem max-height:90vh + scroll) rolar
+     como um todo, em vez de uma caixinha pequena dentro de outra. */
+}
+
+.bmf-resultado-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(52, 179, 160, 0.08);
+}
+.bmf-resultado-item .bmf-icon { color: #1B7A6C; margin-top: 0.1rem; }
+.bmf-resultado-item.bmf-resultado-erro { background: rgba(239, 68, 68, 0.08); }
+.bmf-resultado-item.bmf-resultado-erro .bmf-icon { color: #B91C1C; }
+
+.bmf-resultado-item-titulo { font-weight: 700; font-size: 0.92rem; color: var(--text-main); }
+.bmf-resultado-item-detalhe { font-size: 0.85rem; color: var(--text-main); margin-top: 0.15rem; }
+.bmf-resultado-item-arquivo { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.2rem; }
+
+/* ---- Editor de enunciado/justificativa: mostra o texto formatado (negrito,
+   lista) em vez das tags HTML cruas, e cresce sozinho com o conteúdo (é uma
+   div contenteditable, não uma textarea — sem altura fixa forçando rolagem
+   interna; o modal já rola como um todo quando fica alto). ---- */
+.bmf-rte-toolbar {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+.bmf-rte-btn {
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bmf-rte-btn:hover { border-color: var(--med-azul-claro); color: var(--med-azul-escuro); }
+.bmf-rte {
+  min-height: 110px;
+  line-height: 1.5;
+}
+.bmf-rte:focus { outline: none; border-color: var(--med-azul-claro); }
+.bmf-rte:empty::before { content: attr(data-placeholder); color: var(--text-secondary); }
+.bmf-rte p:first-child { margin-top: 0; }
+.bmf-rte p:last-child { margin-bottom: 0; }
+.bmf-rte ul { padding-left: 1.4rem; margin: 0.4rem 0; }
+
+/* ---- Relatório do Banco (tabela período/disciplina/total) ---- */
+.bmf-relatorio-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.bmf-relatorio-tabela th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1.5px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+}
+.bmf-relatorio-tabela td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.bmf-relatorio-tabela tbody tr:hover { background: rgba(0, 79, 159, 0.04); }
+.bmf-relatorio-tabela td:last-child, .bmf-relatorio-tabela th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.bmf-relatorio-tabela tr.bmf-relatorio-total td {
+  font-weight: 800;
+  border-top: 2px solid var(--med-azul-escuro);
+  border-bottom: none;
+}
+.bmf-relatorio-tabela tr.bmf-relatorio-vazia td { color: var(--text-secondary); font-style: italic; }
+
+/* ---- Contagem real por área (aba Questões ENAMED) ---- */
+.bmf-area-contagem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.bmf-area-contagem-card {
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  border-top: 3px solid var(--area-cor);
+}
+.bmf-area-contagem-numero {
+  font-family: inherit;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--area-cor);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.bmf-area-contagem-nome { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; font-weight: 600; }
+
+/* ---- Colinha ENAMED (referência disciplina → área) ---- */
+.bmf-colinha-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 720px) {
+  .bmf-colinha-grid { grid-template-columns: 1fr; }
+}
+.bmf-colinha-area {
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+.bmf-colinha-area::before {
+  content: "";
+  position: absolute; left: 0; top: 0.8rem; bottom: 0.8rem; width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: var(--area-cor);
+}
+.bmf-colinha-area h4 { margin: 0 0 0.6rem; font-weight: 800; font-size: 1rem; color: var(--area-cor); }
+.bmf-colinha-area ul { margin: 0; padding: 0; list-style: none; }
+.bmf-colinha-area li { padding: 0.3rem 0; border-top: 1px dashed var(--border-color); font-size: 0.86rem; line-height: 1.4; color: var(--text-main); }
+.bmf-colinha-area li:first-child { border-top: none; }
+.bmf-colinha-area li b { font-weight: 700; color: var(--text-secondary); margin-right: 0.3rem; }
+.bmf-colinha-transversal { grid-column: 1 / -1; }
+
+/* ---- Toggle "Por disciplina" x "Simulado ENAMED" na Nova Prova ---- */
+.bmf-tipo-prova-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.1rem;
+  background: rgba(0, 79, 159, 0.06);
+  padding: 0.3rem;
+  border-radius: 10px;
+}
+.bmf-tipo-prova-btn {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.bmf-tipo-prova-btn.active { background: #fff; color: var(--med-azul-escuro); box-shadow: 0 1px 4px rgba(3, 20, 38, 0.12); }
+
+.bmf-resultado-dica {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.1rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .bmf-form-row { flex-direction: column; gap: 0; }
+  .bmf-toolbar { flex-direction: column; align-items: stretch; }
+  .bmf-filters { flex-direction: column; align-items: stretch; }
+  .bmf-filters input { min-width: 0; }
+  .bmf-filters-actions { flex-direction: column; }
+  .modal-box { padding: 1.25rem; }
+  .bmf-q-row, .bmf-prova-row { flex-wrap: wrap; }
+  .bmf-q-row-actions { width: 100%; justify-content: flex-end; }
+}

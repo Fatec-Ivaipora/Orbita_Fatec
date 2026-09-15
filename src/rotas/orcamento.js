@@ -31,20 +31,29 @@ function calcularSaldo(valorPrevisto, totalGasto) {
     return valorPrevisto === null || valorPrevisto === undefined ? null : valorPrevisto - totalGasto;
 }
 
+// Chefe de Setor (ex.: Lisa no Financeiro) ou Administrador vê/mexe nos
+// orçamentos de todo mundo do setor — as outras colaboradoras só veem e
+// editam os próprios (cada uma cuida da sua verba, sem misturar). Mesmo
+// flag `chefeDeSetor` já usado pra restringir exclusão de orçamento.
+function ehChefeOuAdmin(req) {
+    return req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || req.user.chefeDeSetor === true;
+}
+
 // ==========================================
 // ORÇAMENTOS — verba prevista por setor/projeto (ex.: "Zeladoria 2026.2",
 // "Medicina Veterinária - Equipamentos"), com totalGasto/saldo denormalizados
 // no próprio doc e recalculados a cada lançamento — lista sem precisar somar
 // lançamentos toda hora (mesmo motivo do incidente de cota do Licitação).
 // Sem where() combinado com orderBy() de propósito — evita depender de
-// índice composto novo no Firestore; filtro de status/setor é em memória
-// sobre uma coleção pequena (dezenas de orçamentos por semestre).
+// índice composto novo no Firestore; filtro de status/setor/dono é em
+// memória sobre uma coleção pequena (dezenas de orçamentos por semestre).
 // ==========================================
 router.get('/orcamentos', verifyToken, checkPermission, async (req, res) => {
     try {
         const { status, setor } = req.query;
         const snap = await db.collection(COL_ORCAMENTOS).orderBy('createdAt', 'desc').get();
         let orcamentos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (!ehChefeOuAdmin(req)) orcamentos = orcamentos.filter(o => o.createdBy === req.user.uid);
         if (status && status !== 'todos') orcamentos = orcamentos.filter(o => o.status === status);
         if (setor) orcamentos = orcamentos.filter(o => o.setor === setor);
         res.json(orcamentos);
@@ -56,10 +65,12 @@ router.get('/orcamentos', verifyToken, checkPermission, async (req, res) => {
 router.get('/orcamentos/setores', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection(COL_ORCAMENTOS).get();
+        const vejaTodos = ehChefeOuAdmin(req);
         const set = new Set();
         snap.forEach(doc => {
-            const setor = doc.data().setor;
-            if (setor) set.add(setor);
+            const dados = doc.data();
+            if (!vejaTodos && dados.createdBy !== req.user.uid) return;
+            if (dados.setor) set.add(dados.setor);
         });
         res.json([...set].sort((a, b) => a.localeCompare(b, 'pt-BR')));
     } catch (err) {
@@ -90,7 +101,8 @@ router.post('/orcamentos', verifyToken, checkPermission, async (req, res) => {
             saldo: calcularSaldo(valorPrevisto, 0),
             status: 'aberto',
             createdAt: new Date().toISOString(),
-            createdBy: req.user.uid
+            createdBy: req.user.uid,
+            createdByNome: req.user.name || req.user.email || ''
         });
         res.status(201).json({ id: docRef.id, message: 'Orçamento criado com sucesso.' });
     } catch (err) {
@@ -105,6 +117,9 @@ router.put('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => 
         if (!snap.exists) return res.status(404).json({ error: 'Orçamento não encontrado.' });
 
         const atual = snap.data();
+        if (atual.createdBy !== req.user.uid && !ehChefeOuAdmin(req)) {
+            return res.status(403).json({ error: 'Este orçamento é de outra colaboradora — só ela, o Chefe de Setor ou o Administrador podem editar.' });
+        }
         const update = {};
 
         if (req.body.nome !== undefined) {
@@ -273,6 +288,12 @@ function validarCotacoes(cotacoesInput) {
 // ==========================================
 router.get('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (req, res) => {
     try {
+        const orcSnap = await db.collection(COL_ORCAMENTOS).doc(req.params.id).get();
+        if (!orcSnap.exists) return res.status(404).json({ error: 'Orçamento não encontrado.' });
+        if (orcSnap.data().createdBy !== req.user.uid && !ehChefeOuAdmin(req)) {
+            return res.status(403).json({ error: 'Este orçamento é de outra colaboradora.' });
+        }
+
         const snap = await db.collection(COL_LANCAMENTOS).where('orcamentoId', '==', req.params.id).get();
         const lancamentos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
             .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
@@ -306,6 +327,7 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
             const orcSnap = await tx.get(orcamentoRef);
             if (!orcSnap.exists) throw new Error('Orçamento não encontrado.');
             const orc = orcSnap.data();
+            if (orc.createdBy !== req.user.uid && !ehChefeOuAdmin(req)) throw new Error('Este orçamento é de outra colaboradora.');
             const novoTotalGasto = (orc.totalGasto || 0) + vencedora.valorTotal;
 
             tx.set(lancamentoRef, {
@@ -327,7 +349,8 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
         upsertItemCatalogo(itemNome);
         res.status(201).json({ id: lancamentoRef.id, message: 'Gasto lançado com sucesso.' });
     } catch (err) {
-        res.status(err.message === 'Orçamento não encontrado.' ? 404 : 500).json({ error: err.message });
+        const status = err.message === 'Orçamento não encontrado.' ? 404 : (err.message.includes('outra colaboradora') ? 403 : 500);
+        res.status(status).json({ error: err.message });
     }
 });
 
@@ -345,6 +368,7 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
             const orcSnap = await tx.get(orcamentoRef);
             if (!orcSnap.exists) throw new Error('Orçamento não encontrado.');
             const orc = orcSnap.data();
+            if (orc.createdBy !== req.user.uid && !ehChefeOuAdmin(req)) throw new Error('Este orçamento é de outra colaboradora.');
 
             const itemNome = req.body.itemNome !== undefined ? normalizarMaiusculo(req.body.itemNome) : lanc.itemNome;
             const unidade = req.body.unidade !== undefined ? normalizarTexto(req.body.unidade) : (lanc.unidade || '');
@@ -379,7 +403,8 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
         if (itemNomeParaCatalogo) upsertItemCatalogo(itemNomeParaCatalogo);
         res.json({ message: 'Lançamento atualizado.' });
     } catch (err) {
-        res.status(err.message.includes('não encontrado') ? 404 : 400).json({ error: err.message });
+        const status = err.message.includes('não encontrado') ? 404 : (err.message.includes('outra colaboradora') ? 403 : 400);
+        res.status(status).json({ error: err.message });
     }
 });
 
@@ -396,6 +421,7 @@ router.delete('/lancamentos/:id', verifyToken, checkPermission, async (req, res)
             const orcSnap = await tx.get(orcamentoRef);
             if (orcSnap.exists) {
                 const orc = orcSnap.data();
+                if (orc.createdBy !== req.user.uid && !ehChefeOuAdmin(req)) throw new Error('Este orçamento é de outra colaboradora.');
                 const novoTotalGasto = Math.max(0, (orc.totalGasto || 0) - (lanc.valorTotalFechado || 0));
                 tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
             }
@@ -404,7 +430,8 @@ router.delete('/lancamentos/:id', verifyToken, checkPermission, async (req, res)
 
         res.json({ message: 'Lançamento removido.' });
     } catch (err) {
-        res.status(err.message.includes('não encontrado') ? 404 : 500).json({ error: err.message });
+        const status = err.message.includes('não encontrado') ? 404 : (err.message.includes('outra colaboradora') ? 403 : 500);
+        res.status(status).json({ error: err.message });
     }
 });
 
