@@ -18,6 +18,14 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   : '/api';
 
 let currentUser = null;
+let currentRole = null;
+// Só coordenação/ADM veem quem elaborou cada questão — pedido explícito
+// (14/09): professor ver o que outro professor cadastrou é antiético, ele só
+// pode ver o que ele mesmo lançou e o que tem disponível no banco (sem saber
+// de quem é). Espelha podeVerAutoria() do backend (src/rotas/banco-med-fatec.js).
+function podeVerAutoria() {
+  return currentRole === 'adm_l1' || currentRole === 'coord_medicina';
+}
 
 async function apiFetch(endpoint, options = {}) {
   let token = '';
@@ -118,6 +126,7 @@ function comprimirImagem(file) {
 // memória (economia de leitura no Firestore: o banco cresce bastante com
 // as importações do AVA).
 let categorias = [];
+let professores = []; // [{uid, nome}] — quem tem login no banco (professor_medicina + coord_medicina), pro filtro "ver questões de um professor"
 let questoesBanco = [];      // questões "publicada" do período escolhido no filtro do Banco de Questões
 let questoesRevisao = [];    // questões status=revisao_importacao (fila de revisão — sempre carregada, é pequena)
 let questoesProvaAtual = []; // questões da disciplina da prova aberta em "Montar Prova" (carregado ao abrir o modal)
@@ -166,6 +175,10 @@ function nomeCategoria(id) {
 // ================================================================
 async function carregarQuestoesRevisao() {
   questoesRevisao = await apiFetch('/banco-med-fatec/questoes?status=revisao_importacao');
+}
+
+async function carregarProfessores() {
+  professores = await apiFetch('/banco-med-fatec/professores');
 }
 
 // Mostra quantas questões publicadas o banco tem em cada dificuldade, direto
@@ -225,13 +238,15 @@ async function carregarQuestoesBanco() {
   const periodo = document.getElementById('bmf-filtro-periodo').value;
   const area = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldade = document.getElementById('bmf-filtro-dificuldade').value;
+  const professorSel = document.getElementById('bmf-filtro-professor').value;
   const busca = document.getElementById('bmf-filtro-busca').value.trim();
-  if (!periodo && !area && !dificuldade && busca.length < 2) { questoesBanco = []; return; }
+  if (!periodo && !area && !dificuldade && !professorSel && busca.length < 2) { questoesBanco = []; return; }
 
   const params = new URLSearchParams({ status: 'publicada' });
   if (periodo) params.set('periodo', periodo);
   if (area) params.set('areaEnamed', area);
   if (dificuldade) params.set('dificuldade', dificuldade);
+  if (professorSel) params.set('criadoPor', professorSel === 'me' ? currentUser.uid : professorSel);
   if (busca.length >= 2) params.set('busca', busca);
   questoesBanco = await apiFetch(`/banco-med-fatec/questoes?${params.toString()}`);
 }
@@ -280,6 +295,13 @@ async function carregarTudo() {
     popularSelectsCategoria();
     atualizarContagemDificuldade();
 
+    // Lista de colegas por nome só existe pra quem pode ver autoria — pro
+    // professor comum o select fica só com "Todos"/"Minhas questões" (o
+    // endpoint /professores nem responde pra ele, ver podeVerAutoria no
+    // backend), então nem faz sentido chamar.
+    if (podeVerAutoria()) await carregarProfessores();
+    popularSelectFiltroProfessor();
+
     await carregarQuestoesBanco();
 
     renderQuestoes();
@@ -322,6 +344,24 @@ function popularSelectsAreaEnamed() {
     });
     sel.dataset.montado = '1';
   });
+}
+
+// Filtro "ver questões de um professor" — "Minhas questões" (valor fixo
+// "me") já cobre o usuário atual, então ele não entra de novo na lista
+// enumerada (evita duas entradas apontando pra mesma pessoa). Refeito a
+// cada carregarTudo() porque a lista de professores pode mudar (login
+// novo criado) e o valor <option> muda de conteúdo, não só de aparecer.
+function popularSelectFiltroProfessor() {
+  const sel = document.getElementById('bmf-filtro-professor');
+  const valorAtual = sel.value;
+  sel.innerHTML = '<option value="">Todos os professores</option><option value="me">Minhas questões</option>';
+  professores.filter(p => p.uid !== currentUser?.uid).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.uid;
+    opt.textContent = p.nome;
+    sel.appendChild(opt);
+  });
+  if (valorAtual && [...sel.options].some(o => o.value === valorAtual)) sel.value = valorAtual;
 }
 
 // Filtro do banco: disciplinas agrupadas por período (<optgroup>) — dá pra
@@ -412,7 +452,10 @@ function questoesFiltradas() {
     // precisa considerar os mesmos campos, senão descarta de novo quem só
     // batia pela disciplina (ex.: busca "habilidades" achando questões da
     // disciplina "Habilidades Clínicas" cujo título não menciona a palavra).
-    if (busca && !semAcento(`${q.titulo} ${q.elaboradoPor} ${nomeCategoria(q.categoriaId)}`.toLowerCase()).includes(busca)) return false;
+    // elaboradoPor só existe na resposta pra quem pode ver autoria (backend
+    // já anonimiza pra professor) — "|| ''" evita "undefined" virar texto
+    // pesquisável quando o campo nem vem.
+    if (busca && !semAcento(`${q.titulo} ${q.elaboradoPor || ''} ${nomeCategoria(q.categoriaId)}`.toLowerCase()).includes(busca)) return false;
     return true;
   });
 }
@@ -429,17 +472,20 @@ let questoesSelecionadas = new Set();
 function renderQuestoes() {
   const grid = document.getElementById('bmf-questoes-grid');
   const vazio = document.getElementById('bmf-questoes-vazio');
+  const contagemEl = document.getElementById('bmf-questoes-contagem');
 
-  // Sem período, área ENAMED, dificuldade nem busca (2+ letras), não tem o
-  // que listar (e não fomos buscar nada no servidor) — pede pra escolher em
-  // vez de mostrar "vazio".
+  // Sem período, área ENAMED, dificuldade, professor nem busca (2+ letras),
+  // não tem o que listar (e não fomos buscar nada no servidor) — pede pra
+  // escolher em vez de mostrar "vazio".
   const periodoEscolhido = document.getElementById('bmf-filtro-periodo').value;
   const areaEscolhida = document.getElementById('bmf-filtro-area-enamed').value;
   const dificuldadeEscolhida = document.getElementById('bmf-filtro-dificuldade').value;
+  const professorEscolhido = document.getElementById('bmf-filtro-professor').value;
   const buscaEscolhida = document.getElementById('bmf-filtro-busca').value.trim();
-  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida && buscaEscolhida.length < 2) {
+  if (!periodoEscolhido && !areaEscolhida && !dificuldadeEscolhida && !professorEscolhido && buscaEscolhida.length < 2) {
     grid.innerHTML = '';
-    vazio.textContent = 'Selecione um período, uma área ENAMED, uma dificuldade, ou busque por título acima.';
+    contagemEl.classList.add('hidden');
+    vazio.textContent = 'Selecione um período, uma área ENAMED, uma dificuldade, um professor, ou busque por título acima.';
     vazio.classList.remove('hidden');
     renderBarraSelecao();
     return;
@@ -453,12 +499,25 @@ function renderQuestoes() {
   [...questoesSelecionadas].forEach(id => { if (!idsVisiveis.has(id)) questoesSelecionadas.delete(id); });
 
   grid.innerHTML = '';
-  const algumFiltroAtivo = periodoEscolhido || areaEscolhida || dificuldadeEscolhida || buscaEscolhida.length >= 2 ||
+  const algumFiltroAtivo = periodoEscolhido || areaEscolhida || dificuldadeEscolhida || professorEscolhido || buscaEscolhida.length >= 2 ||
     document.getElementById('bmf-filtro-categoria').value;
-  vazio.textContent = algumFiltroAtivo
-    ? 'Nenhuma questão encontrada com esses filtros. Tenta ajustar período/disciplina/área/dificuldade ou o termo buscado.'
-    : 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
+  if (professorEscolhido === 'me') {
+    // Mensagem específica pro professor entender que é sobre o PRÓPRIO
+    // cadastro, não um erro/bug (evita achar que o filtro quebrou quando na
+    // verdade ele mesmo ainda não lançou nenhuma questão).
+    vazio.textContent = 'Ainda não foram cadastradas questões com o seu perfil.';
+  } else {
+    vazio.textContent = algumFiltroAtivo
+      ? 'Nenhuma questão encontrada com esses filtros. Tenta ajustar período/disciplina/área/dificuldade/professor ou o termo buscado.'
+      : 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
+  }
   vazio.classList.toggle('hidden', lista.length > 0);
+  contagemEl.classList.toggle('hidden', lista.length === 0);
+  if (lista.length) {
+    contagemEl.textContent = professorEscolhido === 'me'
+      ? `Você criou ${lista.length} questão(ões) com esses filtros.`
+      : `${lista.length} questão(ões) encontrada(s).`;
+  }
 
   lista.forEach(q => {
     const row = document.createElement('div');
@@ -472,7 +531,7 @@ function renderQuestoes() {
           ${q.areaEnamed ? `<span class="bmf-badge bmf-badge-area">${esc(q.areaEnamed)}</span>` : ''}
         </div>
         <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
-        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))} · por ${esc(q.elaboradoPor || '—')}</div>
+        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))}${podeVerAutoria() ? ` · por ${esc(q.elaboradoPor || '—')}` : ''}</div>
       </div>
       <div class="bmf-q-row-actions">
         <button class="bmf-icon-btn bmf-btn-editar-questao action-execute" data-id="${q.id}" title="Editar questão">${ICONS.editar}</button>
@@ -540,7 +599,7 @@ function renderProvas() {
           ${p.tipo === 'enamed' ? '<span class="bmf-badge bmf-badge-tipo">Simulado ENAMED</span>' : ''}
         </div>
         <div class="bmf-prova-row-titulo">${esc(p.nome)}</div>
-        <div class="bmf-prova-row-meta">${esc(p.tipo === 'enamed' ? p.areaEnamed : nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''}</div>
+        <div class="bmf-prova-row-meta">${esc(p.tipo === 'enamed' ? p.areaEnamed : nomeCategoria(p.categoriaId))} · ${(p.questoesIds || []).length} questão(ões)${totalExport ? ` · exportada ${totalExport}x` : ''} · por ${esc(p.criadoPorNome || '—')}</div>
       </div>
       <div class="bmf-prova-row-acoes">
         <button class="btn btn-secondary bmf-btn-montar-prova action-execute" data-id="${p.id}">
@@ -1563,7 +1622,8 @@ function fecharModalAtivoComEsc() {
 
 // Relatório do banco: período/disciplina/total de questões — reaproveita o
 // totalQuestoes que o GET /categorias já traz (count() agregado no
-// servidor), sem precisar de outra ida ao Firestore.
+// servidor), sem precisar de outra ida ao Firestore. A tabela por professor
+// já vem pronta do servidor (count() agregado por criadoPor).
 function abrirModalRelatorio() {
   const corpo = document.getElementById('bmf-relatorio-corpo');
   const total = categorias.reduce((acc, c) => acc + (c.totalQuestoes || 0), 0);
@@ -1580,6 +1640,24 @@ function abrirModalRelatorio() {
     : '<tr class="bmf-relatorio-vazia"><td colspan="3">Nenhuma disciplina cadastrada ainda.</td></tr>';
 
   document.getElementById('bmf-modal-relatorio').classList.add('active');
+  // Quebra por professor é coisa de coordenação/ADM (ver podeVerAutoria) —
+  // pro professor comum o bloco nem aparece (o endpoint responde 403 mesmo).
+  document.getElementById('bmf-relatorio-professor-bloco').classList.toggle('hidden', !podeVerAutoria());
+  if (podeVerAutoria()) carregarRelatorioProfessor();
+}
+
+async function carregarRelatorioProfessor() {
+  const corpoProf = document.getElementById('bmf-relatorio-professor-corpo');
+  corpoProf.innerHTML = '<tr><td colspan="2">Carregando…</td></tr>';
+  try {
+    const contagem = await apiFetch('/banco-med-fatec/questoes/contagem-professor');
+    corpoProf.innerHTML = contagem.length
+      ? contagem.map(p => `<tr><td>${esc(p.nome)}</td><td>${p.total}</td></tr>`).join('')
+      : '<tr class="bmf-relatorio-vazia"><td colspan="2">Nenhum professor cadastrado ainda.</td></tr>';
+  } catch (err) {
+    corpoProf.innerHTML = '<tr class="bmf-relatorio-vazia"><td colspan="2">Não deu pra carregar agora.</td></tr>';
+    console.error(err);
+  }
 }
 function fecharModalRelatorio() {
   document.getElementById('bmf-modal-relatorio').classList.remove('active');
@@ -1610,6 +1688,7 @@ function bindEventos() {
   document.getElementById('bmf-filtro-area-enamed').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-categoria').addEventListener('change', renderQuestoes);
   document.getElementById('bmf-filtro-dificuldade').addEventListener('change', atualizarListaQuestoes);
+  document.getElementById('bmf-filtro-professor').addEventListener('change', atualizarListaQuestoes);
   let debounceBusca;
   document.getElementById('bmf-filtro-busca').addEventListener('input', () => {
     clearTimeout(debounceBusca);
@@ -1750,6 +1829,7 @@ async function initApp(user, role) {
   if (appInitialized && initializedRole === role) return;
   appInitialized = true;
   initializedRole = role;
+  currentRole = role;
 
   const guard = document.getElementById('auth-guard');
   if (guard) guard.classList.add('hidden');
@@ -1764,6 +1844,12 @@ async function initApp(user, role) {
   popularSelectsPeriodo();
   popularSelectsAreaEnamed();
   ajustarEditorPorTipo();
+  // Busca por autor não faz sentido pra quem não vê autoria (o campo nem
+  // vem na resposta) — placeholder deixa isso explícito em vez de prometer
+  // uma busca que não funciona.
+  if (!podeVerAutoria()) {
+    document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título...';
+  }
   await carregarTudo();
 }
 

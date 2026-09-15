@@ -32,6 +32,25 @@ const AREAS_ENAMED = [
 // no módulo Ferida para imagens comprimidas no navegador.
 const MAX_IMG_BASE64 = 950000;
 
+// Quem pode ver QUEM elaborou cada questão / navegar o banco por professor.
+// Pedido explícito (14/09): "não é legal um professor ver o que o outro já
+// cadastrou, é antiético — só o coordenador vê isso, o professor só
+// consegue ver o que ele lançou e o que tem no banco disponível". O banco
+// continua compartilhado (todo professor usa as questões de todo mundo pra
+// montar prova), só a AUTORIA fica anônima pra quem não é coordenador/ADM.
+function podeVerAutoria(role) {
+    return role === 'adm_l1' || role === 'coord_medicina';
+}
+
+// Tira os campos de autoria da questão antes de mandar pra quem não pode ver
+// quem escreveu — a questão em si (enunciado/alternativas/etc.) continua
+// visível, só não dá pra saber QUEM fez.
+function anonimizarQuestao(q, role) {
+    if (podeVerAutoria(role)) return q;
+    const { elaboradoPor, criadoPor, criadoPorNome, ...resto } = q;
+    return resto;
+}
+
 // Resolve o período (1-12) da disciplina, pra gravar de forma denormalizada
 // em cada questão — sem isso, filtrar o banco por período no GET /questoes
 // exigiria ler a coleção inteira e cruzar com categorias no código (o custo
@@ -109,6 +128,24 @@ function validarQuestao(body) {
 
 router.get('/areas-enamed', verifyToken, checkPermission, async (req, res) => {
     res.json(AREAS_ENAMED);
+});
+
+// GET /professores — lista quem tem acesso ao banco (professor_medicina e
+// coord_medicina), pro filtro "ver questões de um professor". Só quem pode
+// ver autoria (coordenador/ADM) — um professor não navega o banco pelo nome
+// de um colega específico, só pelas próprias questões ("Minhas questões",
+// que não precisa dessa lista).
+router.get('/professores', verifyToken, checkPermission, async (req, res) => {
+    if (!podeVerAutoria(req.user.role)) return res.status(403).json({ error: 'Só a coordenação pode ver o banco por professor.' });
+    try {
+        const snap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
+        const professores = snap.docs
+            .map(d => ({ uid: d.id, nome: d.data().name || d.data().email }))
+            .sort((a, b) => a.nome.localeCompare(b.nome));
+        res.json(professores);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/categorias', verifyToken, checkPermission, async (req, res) => {
@@ -204,6 +241,28 @@ router.get('/questoes/contagem-area-enamed', verifyToken, checkPermission, async
     }
 });
 
+// GET /questoes/contagem-professor — total de questões publicadas por quem
+// criou (mesmo padrão count() agregado). Usado no relatório do coordenador
+// pra ver quanto cada professor já contribuiu pro banco — só coordenação/ADM.
+router.get('/questoes/contagem-professor', verifyToken, checkPermission, async (req, res) => {
+    if (!podeVerAutoria(req.user.role)) return res.status(403).json({ error: 'Só a coordenação pode ver o relatório por professor.' });
+    try {
+        const professoresSnap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
+        const contagens = [];
+        await Promise.all(professoresSnap.docs.map(async (d) => {
+            const agg = await db.collection(COL_QUESTOES)
+                .where('criadoPor', '==', d.id)
+                .where('status', '==', 'publicada')
+                .count().get();
+            contagens.push({ uid: d.id, nome: d.data().name || d.data().email, total: agg.data().count });
+        }));
+        contagens.sort((a, b) => b.total - a.total);
+        res.json(contagens);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /questoes — SEMPRE espera pelo menos um filtro (periodo, categoriaId
 // ou status) vindo do cliente. O banco pode crescer bastante (importação do
 // AVA traz dezenas por vez), então nunca lemos a coleção inteira aqui — só o
@@ -215,6 +274,17 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (req.query.categoriaId) query = query.where('categoriaId', '==', req.query.categoriaId);
         if (req.query.areaEnamed) query = query.where('areaEnamed', '==', req.query.areaEnamed);
         if (req.query.dificuldade) query = query.where('dificuldade', '==', req.query.dificuldade);
+        if (req.query.criadoPor) {
+            // Quem não pode ver autoria só pode filtrar pelas PRÓPRIAS
+            // questões ("Minhas questões") — nunca navegar pelo que um
+            // colega específico cadastrou. IMPORTANTE: se não pode ver
+            // autoria, o filtro é FORÇADO pro próprio uid (nunca cai pra
+            // "sem filtro nenhum") — um criadoPor de outra pessoa (ou
+            // qualquer valor incorreto vindo do cliente) nunca deve resultar
+            // em ver o banco inteiro sem restrição nenhuma.
+            const valor = podeVerAutoria(req.user.role) ? req.query.criadoPor : req.user.uid;
+            query = query.where('criadoPor', '==', valor);
+        }
         if (req.query.status) query = query.where('status', '==', req.query.status);
         if (req.query.busca) {
             // array-contains só aceita 1 valor — usa a primeira palavra
@@ -225,7 +295,7 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         }
 
         const snap = await query.get();
-        const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const questoes = snap.docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
     } catch (err) {
@@ -483,7 +553,7 @@ router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req
 // ==========================================
 
 function apenasProprias(role) {
-    return role !== 'adm_l1';
+    return role !== 'adm_l1' && role !== 'coord_medicina';
 }
 
 router.get('/provas', verifyToken, checkPermission, async (req, res) => {

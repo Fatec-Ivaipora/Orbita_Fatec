@@ -7,7 +7,7 @@
   <title>BANCO MED-FATEC · Órbita - FatecIVP</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
-  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=14">
+  <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=16">
 </head>
 
 <body>
@@ -57,6 +57,10 @@
                   <option value="intermediaria">Intermediária</option>
                   <option value="dificil">Difícil</option>
                 </select>
+                <select id="bmf-filtro-professor">
+                  <option value="">Todos os professores</option>
+                  <option value="me">Minhas questões</option>
+                </select>
                 <div class="bmf-search-wrap">
                   <svg class="bmf-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input type="text" id="bmf-filtro-busca" placeholder="Buscar por título ou autor...">
@@ -90,6 +94,7 @@
               </div>
             </div>
 
+            <p id="bmf-questoes-contagem" class="bmf-resultado-resumo hidden"></p>
             <div id="bmf-questoes-grid" class="bmf-lista">
               <!-- linhas injetadas via JS -->
             </div>
@@ -244,6 +249,7 @@
                   <select id="bmf-q-area-enamed" class="form-control">
                     <option value="">Nenhuma</option>
                   </select>
+                  <p class="bmf-campo-ajuda">O ENAMED não cobra por disciplina — ele organiza a prova em 7 grandes áreas (Clínica Médica, Cirurgia, Pediatria, Ginecologia e Obstetrícia, Saúde Mental, Medicina de Família e Comunidade, Medicina Preventiva e Social), cada uma puxando questões de várias disciplinas e períodos diferentes. Marcar a área certa aqui é o que permite montar um simulado nesse mesmo formato depois, direto em "Nova Prova → Simulado ENAMED". Se não souber qual marcar, pode deixar em branco: o sistema já tenta sugerir sozinho, pela disciplina ou pelo conteúdo da questão.</p>
                 </div>
               </div>
 
@@ -439,13 +445,25 @@
           <div class="modal-box bmf-modal-lg">
             <h3 class="bmf-modal-titulo">Relatório do Banco</h3>
             <p id="bmf-relatorio-resumo" class="bmf-resultado-resumo" style="margin-bottom:1rem;"></p>
-            <div style="max-height:55vh; overflow-y:auto;">
+            <div style="max-height:40vh; overflow-y:auto;">
               <table class="bmf-relatorio-tabela">
                 <thead>
                   <tr><th>Período</th><th>Disciplina</th><th style="text-align:right;">Questões</th></tr>
                 </thead>
                 <tbody id="bmf-relatorio-corpo"></tbody>
               </table>
+            </div>
+
+            <div id="bmf-relatorio-professor-bloco">
+              <h4 style="margin:1.5rem 0 0.5rem; font-weight:800; color:var(--med-azul-escuro); font-size:0.95rem;">Por professor</h4>
+              <div style="max-height:30vh; overflow-y:auto;">
+                <table class="bmf-relatorio-tabela">
+                  <thead>
+                    <tr><th>Professor</th><th style="text-align:right;">Questões</th></tr>
+                  </thead>
+                  <tbody id="bmf-relatorio-professor-corpo"></tbody>
+                </table>
+              </div>
             </div>
             <div class="bmf-modal-acoes">
               <button type="button" class="btn btn-secondary" id="bmf-btn-fechar-relatorio">Fechar</button>
@@ -457,7 +475,7 @@
     </div>
   </div>
 
-  <script type="module" src="/banco-med-fatec/app.js?v=25"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=28"></script>
 </body>
 
 </html>
