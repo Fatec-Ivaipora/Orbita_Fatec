@@ -208,6 +208,69 @@ function popularSelectSemestre(select, comTodos) {
     opcoes.map(n => `<option value="${n}">${n}º Semestre</option>`).join('');
 }
 
+// Dropdown de seleção múltipla (1º a 10º) pro campo de semestre(s) do modal
+// de cadastro — visualmente um select comum, mas permite marcar mais de um
+// pra casos específicos (a opção marcada fica destacada em azul).
+let semestresSelecionados = [];
+
+function popularSemestresDropdown() {
+  const panel = document.getElementById('semestres-panel');
+  panel.innerHTML = Array.from({ length: 10 }, (_, i) => {
+    const n = String(i + 1);
+    return `<div class="multiselect-option" data-value="${n}">${n}º Semestre</div>`;
+  }).join('');
+
+  panel.querySelectorAll('.multiselect-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const val = opt.dataset.value;
+      const idx = semestresSelecionados.indexOf(val);
+      if (idx === -1) semestresSelecionados.push(val);
+      else semestresSelecionados.splice(idx, 1);
+      semestresSelecionados.sort((a, b) => Number(a) - Number(b));
+      opt.classList.toggle('selected', idx === -1);
+      atualizarSemestresTrigger();
+    });
+  });
+
+  const trigger = document.getElementById('semestres-trigger');
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', isOpen);
+    trigger.classList.toggle('open', !isOpen);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById('avaliacao-semestres-dropdown')?.contains(e.target)) {
+      panel.classList.add('hidden');
+      trigger.classList.remove('open');
+    }
+  });
+}
+
+function atualizarSemestresTrigger() {
+  const label = document.getElementById('semestres-trigger-label');
+  label.textContent = semestresSelecionados.length ? fmtSemestres(semestresSelecionados) : 'Selecione o(s) semestre(s)';
+}
+
+function coletarSemestresSelecionados() {
+  return [...semestresSelecionados];
+}
+
+function marcarSemestresSelecionados(semestres) {
+  semestresSelecionados = (Array.isArray(semestres) ? semestres : [semestres]).filter(Boolean).map(String);
+  document.querySelectorAll('#semestres-panel .multiselect-option').forEach(opt => {
+    opt.classList.toggle('selected', semestresSelecionados.includes(opt.dataset.value));
+  });
+  atualizarSemestresTrigger();
+}
+
+// Formata a lista de semestres pra exibição (ex.: "3º" ou "3º, 4º").
+function fmtSemestres(semestre) {
+  const lista = Array.isArray(semestre) ? semestre : (semestre ? [semestre] : []);
+  return lista.map(s => `${s}º`).join(', ') || '-';
+}
+
 let appInitialized = false;
 let initializedRole = null;
 
@@ -292,7 +355,7 @@ async function initApp(user, role) {
     ? 'Cadastre o professor e a turma, depois responda o questionário de avaliação'
     : 'Gerencie e acompanhe as avaliações de desempenho dos docentes';
 
-  popularSelectSemestre(document.getElementById('avaliacao-semestre'), false);
+  popularSemestresDropdown();
   popularSelectSemestre(document.getElementById('filter-semestre'), true);
   document.getElementById('filter-semestre').addEventListener('change', applyFilters);
 
@@ -377,7 +440,7 @@ function applyFilters() {
 
   const filtered = avaliacoes.filter(av => {
     const matchTexto = !texto || (av.docente || '').toLowerCase().includes(texto);
-    const matchSemestre = !semestre || av.semestre === semestre;
+    const matchSemestre = !semestre || (Array.isArray(av.semestre) ? av.semestre.includes(semestre) : av.semestre === semestre);
     return matchTexto && matchSemestre;
   });
 
@@ -428,7 +491,7 @@ function renderTable(lista = avaliacoes) {
   tbody.innerHTML = lista.map(av => `
         <tr>
             <td><strong>${esc(av.docente)}</strong></td>
-            <td>${esc(av.semestre)}º</td>
+            <td>${esc(fmtSemestres(av.semestre))}</td>
             <td>${esc(av.curso) || '-'}</td>
             <td>${statusBadge(av.status)}</td>
             <td>${notaBadge(av.nota)}</td>
@@ -452,6 +515,7 @@ window.openModal = function () {
   }
   document.getElementById('form-avaliacao').reset();
   document.getElementById('avaliacao-id').value = '';
+  marcarSemestresSelecionados([]);
   document.getElementById('modal-title').innerText = 'Nova Avaliação';
   aplicarRestricaoCurso();
   document.getElementById('modal-avaliacao').classList.remove('hidden');
@@ -466,7 +530,7 @@ window.editAvaliacao = function (id) {
   if (!av) return;
   document.getElementById('avaliacao-id').value = av.id;
   document.getElementById('avaliacao-docente').value = av.docente;
-  document.getElementById('avaliacao-semestre').value = av.semestre;
+  marcarSemestresSelecionados(av.semestre);
   document.getElementById('avaliacao-curso').value = av.cursoId || '';
   document.getElementById('modal-title').innerText = 'Editar Avaliação';
   aplicarRestricaoCurso();
@@ -485,12 +549,17 @@ window.deleteAvaliacao = async function (id) {
 
 document.getElementById('form-avaliacao').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const semestresSelecionados = coletarSemestresSelecionados();
+  if (!semestresSelecionados.length) {
+    alert('Selecione ao menos um semestre.');
+    return;
+  }
   const id = document.getElementById('avaliacao-id').value;
   const cursoId = document.getElementById('avaliacao-curso').value;
   const cursoObj = cursos.find(c => c.id === cursoId);
   const data = {
     docente: document.getElementById('avaliacao-docente').value,
-    semestre: document.getElementById('avaliacao-semestre').value,
+    semestre: semestresSelecionados,
     cursoId: cursoId || null,
     curso: cursoObj ? cursoObj.name : '',
   };
@@ -533,7 +602,7 @@ window.abrirQuestionario = function (id, todas) {
   document.getElementById('form-questionario').reset();
   document.getElementById('questionario-id').value = av.id;
   document.getElementById('questionario-title').textContent = `Avaliar: ${av.docente}`;
-  document.getElementById('questionario-subtitle').textContent = `${av.semestre}º Semestre · ${av.curso || 'Curso não informado'}`;
+  document.getElementById('questionario-subtitle').textContent = `${fmtSemestres(av.semestre)} · ${av.curso || 'Curso não informado'}`;
   preencherRespostas(av.respostas);
   document.getElementById('questionario-alunos').value = av.alunos || '';
   preencherAlunosNomes(av.alunosNomes);
@@ -623,7 +692,7 @@ function renderDiretorList() {
   tbody.innerHTML = lista.map(av => `
         <tr>
             <td><strong>${esc(av.docente)}</strong></td>
-            <td>${esc(av.semestre)}º</td>
+            <td>${esc(fmtSemestres(av.semestre))}</td>
             <td>${esc(av.curso) || '-'}</td>
             <td>${statusBadge(av.status)}</td>
             <td>${notaBadge(av.nota)}</td>
@@ -658,7 +727,7 @@ window.verDetalhes = function (id, todas) {
 
   document.getElementById('detalhes-content').innerHTML = `
     <div class="detalhe-header">
-      <p><strong>Docente:</strong> ${esc(av.docente)} · <strong>Semestre:</strong> ${esc(av.semestre)}º</p>
+      <p><strong>Docente:</strong> ${esc(av.docente)} · <strong>Semestre(s):</strong> ${esc(fmtSemestres(av.semestre))}</p>
       <p><strong>Curso:</strong> ${esc(av.curso) || '-'} · <strong>Status:</strong> ${statusBadge(av.status)} · <strong>Nota:</strong> ${av.nota !== null && av.nota !== undefined ? Number(av.nota).toFixed(1) : 'N/A'}</p>
       ${av.alunos ? `<p><strong>Quantidade de Alunos:</strong> ${esc(String(av.alunos))}</p>` : ''}
       ${(av.alunosNomes || []).some(n => n) ? `<p><strong>Alunos:</strong> ${av.alunosNomes.map((n, i) => esc(n) || `Aluno ${i + 1}`).join(', ')}</p>` : ''}

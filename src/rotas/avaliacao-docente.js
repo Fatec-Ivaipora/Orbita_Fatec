@@ -158,7 +158,7 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doce
         }
         const snap = await query.get();
         const avaliacoes = [];
-        snap.forEach(doc => avaliacoes.push({ id: doc.id, ...doc.data() }));
+        snap.forEach(doc => avaliacoes.push(formatarAvaliacao(doc.id, doc.data())));
         res.json(avaliacoes);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -167,14 +167,35 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doce
 
 const SEMESTRES_VALIDOS = Array.from({ length: 10 }, (_, i) => String(i + 1));
 
-// POST /api/avaliacao-docente — cadastro rápido: só docente + semestre.
+// Normalmente uma avaliação cobre um único semestre, mas em casos
+// específicos (ex.: mesma turma avaliada num período que abrange mais de um
+// semestre) o cadastro aceita vários de uma vez — por isso `semestre` é
+// sempre armazenado como array, mesmo quando só tem um item. Aceita tanto
+// array quanto valor solto (retrocompatibilidade com o corpo antigo da
+// requisição) e retorna null se estiver vazio ou tiver algum valor inválido.
+function normalizarSemestres(input) {
+    const bruto = Array.isArray(input) ? input : (input !== undefined && input !== null && input !== '' ? [input] : []);
+    const unicos = [...new Set(bruto.map(String))];
+    if (!unicos.length || !unicos.every(s => SEMESTRES_VALIDOS.includes(s))) return null;
+    return unicos.sort((a, b) => Number(a) - Number(b));
+}
+
+// Registros antigos guardam `semestre` como string única — normaliza pra
+// array na leitura, pra front nunca precisar tratar os dois formatos.
+function formatarAvaliacao(id, data) {
+    const semestre = Array.isArray(data.semestre) ? data.semestre : (data.semestre ? [String(data.semestre)] : []);
+    return { id, ...data, semestre };
+}
+
+// POST /api/avaliacao-docente — cadastro rápido: só docente + semestre(s).
 // O questionário (as 12 perguntas) é respondido depois, pelo botão
 // "Avaliar" na listagem, via PUT /:id/responder.
 router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
     try {
         const { docente, semestre } = req.body;
         if (!docente || !String(docente).trim()) return res.status(400).json({ error: 'Informe o nome do professor.' });
-        if (!SEMESTRES_VALIDOS.includes(String(semestre))) return res.status(400).json({ error: 'Selecione um semestre válido (1 a 10).' });
+        const semestres = normalizarSemestres(semestre);
+        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um semestre válido (1 a 10).' });
 
         // Coordenador só pode lançar avaliação dentro do próprio curso
         // vinculado — o curso enviado pelo cliente é ignorado nesse caso.
@@ -192,7 +213,7 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doc
         const newDoc = db.collection(COL).doc();
         await newDoc.set({
             docente: String(docente).trim(),
-            semestre: String(semestre),
+            semestre: semestres,
             cursoId,
             curso,
             status: 'pendente',
@@ -224,11 +245,12 @@ router.put('/:id', verifyToken, verifyToken.requireModulePermission('avaliacao-d
 
         const { docente, semestre } = req.body;
         if (!docente || !String(docente).trim()) return res.status(400).json({ error: 'Informe o nome do professor.' });
-        if (!SEMESTRES_VALIDOS.includes(String(semestre))) return res.status(400).json({ error: 'Selecione um semestre válido (1 a 10).' });
+        const semestres = normalizarSemestres(semestre);
+        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um semestre válido (1 a 10).' });
 
         await docRef.update({
             docente: String(docente).trim(),
-            semestre: String(semestre)
+            semestre: semestres
         });
         res.json({ message: 'Avaliação atualizada com sucesso!' });
     } catch (err) {

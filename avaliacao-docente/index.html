@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avaliação Docente - Órbita FATEC</title>
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/avaliacao-docente/avaliacao-docente.css?v=7">
+    <link rel="stylesheet" href="/avaliacao-docente/avaliacao-docente.css?v=10">
 </head>
 <body>
     <div class="layout-wrapper" id="app-root">
@@ -148,10 +148,15 @@
                     <input type="text" id="avaliacao-docente" required>
                 </div>
                 <div class="form-group">
-                    <label>Semestre</label>
-                    <select id="avaliacao-semestre" required>
-                        <option value="">Selecione o semestre</option>
-                    </select>
+                    <label>Semestre(s)</label>
+                    <div class="multiselect" id="avaliacao-semestres-dropdown">
+                        <button type="button" class="multiselect-trigger" id="semestres-trigger">
+                            <span id="semestres-trigger-label">Selecione o(s) semestre(s)</span>
+                            <svg class="multiselect-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="multiselect-panel hidden" id="semestres-panel"></div>
+                    </div>
+                    <span class="form-hint">Normalmente é só um. Selecione mais de um apenas em casos específicos (ex.: mesma turma avaliada abrangendo mais de um semestre).</span>
                 </div>
                 <div class="form-group">
                     <label>Curso</label>
@@ -231,6 +236,6 @@
         </div>
     </div>
 
-    <script type="module" src="/avaliacao-docente/app.js?v=6"></script>
+    <script type="module" src="/avaliacao-docente/app.js?v=8"></script>
 </body>
 </html>
