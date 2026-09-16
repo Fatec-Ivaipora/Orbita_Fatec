@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avaliação Docente - Órbita FATEC</title>
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/avaliacao-docente/avaliacao-docente.css?v=10">
+    <link rel="stylesheet" href="/avaliacao-docente/avaliacao-docente.css?v=11">
 </head>
 <body>
     <div class="layout-wrapper" id="app-root">
@@ -20,10 +20,16 @@
                         <h1 class="page-title">Avaliação Docente</h1>
                         <p class="page-subtitle" id="page-subtitle">Gerencie as avaliações de desempenho dos docentes</p>
                     </div>
-                    <button class="btn-primary action-execute" id="btn-nova-avaliacao" onclick="openModal()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                        Nova Avaliação
-                    </button>
+                    <div class="page-header-actions">
+                        <button class="btn-secondary hidden" id="btn-gerenciar-ciclos" onclick="abrirModalCiclos()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Gerenciar Ciclos
+                        </button>
+                        <button class="btn-primary action-execute" id="btn-nova-avaliacao" onclick="openModal()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                            Nova Avaliação
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Abas: Minhas Avaliações (coordenador) x Painel do Diretor -->
@@ -41,7 +47,10 @@
                             <input type="text" id="filter-texto" class="search-input" placeholder="Buscar por nome do professor...">
                         </div>
                         <select id="filter-semestre" class="select-filter">
-                            <option value="">Todos os Semestres</option>
+                            <option value="">Todos os Períodos</option>
+                        </select>
+                        <select id="filter-ciclo" class="select-filter">
+                            <option value="">Todos os Ciclos</option>
                         </select>
                         <button class="btn-clear-filters hidden" id="btn-clear-filters" onclick="clearFilters()"
                             title="Limpar filtros">
@@ -55,8 +64,9 @@
                             <thead>
                                 <tr>
                                     <th>Docente</th>
-                                    <th>Semestre</th>
+                                    <th>Período</th>
                                     <th>Curso</th>
+                                    <th>Ciclo</th>
                                     <th>Status</th>
                                     <th>Nota <span class="info-tip" title="Nota = média das respostas de 1 a 5: Discordo totalmente = 1, Discordo = 2, Nem concordo nem discordo = 3, Concordo = 4, Concordo totalmente = 5. Respostas N/A não entram na média.">ⓘ</span></th>
                                     <th>Detalhes</th>
@@ -75,6 +85,9 @@
                     <div class="filters-bar">
                         <select id="filter-curso-dir" class="select-filter">
                             <option value="">Todos os Cursos</option>
+                        </select>
+                        <select id="filter-ciclo-dir" class="select-filter">
+                            <option value="">Todos os Ciclos</option>
                         </select>
                     </div>
 
@@ -119,8 +132,9 @@
                             <thead>
                                 <tr>
                                     <th>Docente</th>
-                                    <th>Semestre</th>
+                                    <th>Período</th>
                                     <th>Curso</th>
+                                    <th>Ciclo</th>
                                     <th>Status</th>
                                     <th>Nota <span class="info-tip" title="Nota = média das respostas de 1 a 5: Discordo totalmente = 1, Discordo = 2, Nem concordo nem discordo = 3, Concordo = 4, Concordo totalmente = 5. Respostas N/A não entram na média.">ⓘ</span></th>
                                     <th>Coordenador</th>
@@ -137,7 +151,7 @@
         </main>
     </div>
 
-    <!-- Modal: Nova/Editar Avaliação (cadastro rápido: só docente + semestre) -->
+    <!-- Modal: Nova/Editar Avaliação (cadastro rápido: docente + período + curso + ciclo) -->
     <div id="modal-avaliacao" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="modal-title">Nova Avaliação</h2>
@@ -148,15 +162,14 @@
                     <input type="text" id="avaliacao-docente" required>
                 </div>
                 <div class="form-group">
-                    <label>Semestre(s)</label>
+                    <label>Período(s)</label>
                     <div class="multiselect" id="avaliacao-semestres-dropdown">
                         <button type="button" class="multiselect-trigger" id="semestres-trigger">
-                            <span id="semestres-trigger-label">Selecione o(s) semestre(s)</span>
+                            <span id="semestres-trigger-label">Selecione o(s) período(s)</span>
                             <svg class="multiselect-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </button>
                         <div class="multiselect-panel hidden" id="semestres-panel"></div>
                     </div>
-                    <span class="form-hint">Normalmente é só um. Selecione mais de um apenas em casos específicos (ex.: mesma turma avaliada abrangendo mais de um semestre).</span>
                 </div>
                 <div class="form-group">
                     <label>Curso</label>
@@ -164,11 +177,39 @@
                         <option value="">Selecione um curso</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Ciclo de Avaliação</label>
+                    <select id="avaliacao-ciclo" required>
+                        <option value="">Selecione o ciclo</option>
+                    </select>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
                     <button type="submit" class="btn-primary">Salvar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal: Gerenciar Ciclos de Avaliação (só ADM N1/N2) -->
+    <div id="modal-ciclos" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Ciclos de Avaliação</h2>
+            <p class="questionario-subtitle">Ex.: 2026.1, 2026.2. O coordenador escolhe um ciclo já criado ao cadastrar cada avaliação.</p>
+
+            <form id="form-novo-ciclo" class="ciclo-form">
+                <input type="text" id="novo-ciclo-nome" placeholder="Ex: 2026.2" required>
+                <button type="submit" class="btn-primary">Adicionar</button>
+            </form>
+            <p id="ciclo-erro" class="form-error hidden"></p>
+
+            <div id="ciclos-list" class="ciclos-list">
+                <!-- Gerado via JS -->
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeModalCiclos()">Fechar</button>
+            </div>
         </div>
     </div>
 
@@ -236,6 +277,6 @@
         </div>
     </div>
 
-    <script type="module" src="/avaliacao-docente/app.js?v=9"></script>
+    <script type="module" src="/avaliacao-docente/app.js?v=10"></script>
 </body>
 </html>

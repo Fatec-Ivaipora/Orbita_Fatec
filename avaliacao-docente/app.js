@@ -37,6 +37,8 @@ async function apiFetch(endpoint, options = {}) {
 let avaliacoes = [];
 let avaliacoesTodas = [];
 let cursos = [];
+let ciclos = [];
+let isAdminRole = false;
 
 // As 10 perguntas fixas do questionário (mesmo texto/ordem do backend). As
 // perguntas 11 e 12 são abertas e ficam direto no HTML (questionario-positivo /
@@ -207,8 +209,8 @@ function preencherRespostas(respostas) {
 
 function popularSelectSemestre(select, comTodos) {
   const opcoes = Array.from({ length: 10 }, (_, i) => String(i + 1));
-  select.innerHTML = (comTodos ? '<option value="">Todos os Semestres</option>' : '<option value="">Selecione o semestre</option>') +
-    opcoes.map(n => `<option value="${n}">${n}º Semestre</option>`).join('');
+  select.innerHTML = (comTodos ? '<option value="">Todos os Períodos</option>' : '<option value="">Selecione o período</option>') +
+    opcoes.map(n => `<option value="${n}">${n}º Período</option>`).join('');
 }
 
 // Dropdown de seleção múltipla (1º a 10º) pro campo de semestre(s) do modal
@@ -220,7 +222,7 @@ function popularSemestresDropdown() {
   const panel = document.getElementById('semestres-panel');
   panel.innerHTML = Array.from({ length: 10 }, (_, i) => {
     const n = String(i + 1);
-    return `<div class="multiselect-option" data-value="${n}">${n}º Semestre</div>`;
+    return `<div class="multiselect-option" data-value="${n}">${n}º Período</div>`;
   }).join('');
 
   panel.querySelectorAll('.multiselect-option').forEach(opt => {
@@ -253,7 +255,7 @@ function popularSemestresDropdown() {
 
 function atualizarSemestresTrigger() {
   const label = document.getElementById('semestres-trigger-label');
-  label.textContent = semestresSelecionados.length ? fmtSemestres(semestresSelecionados) : 'Selecione o(s) semestre(s)';
+  label.textContent = semestresSelecionados.length ? fmtSemestres(semestresSelecionados) : 'Selecione o(s) período(s)';
 }
 
 function coletarSemestresSelecionados() {
@@ -340,6 +342,7 @@ async function initApp(user, role) {
   appInitialized = true;
   initializedRole = role;
   currentRole = role;
+  isAdminRole = role === 'adm_l1' || role === 'adm_l2';
 
   // Inicializa a navegação
   setupLayout(user, role, 'avaliacao-docente', async () => {
@@ -364,10 +367,13 @@ async function initApp(user, role) {
   popularSelectSemestre(document.getElementById('filter-semestre'), true);
   document.getElementById('filter-semestre').addEventListener('change', applyFilters);
 
+  document.getElementById('btn-gerenciar-ciclos').classList.toggle('hidden', !isAdminRole);
+
   setupFilters();
   setupTabs();
   renderPerguntas();
   await loadCursos();
+  await loadCiclos();
   await loadAvaliacoes();
 }
 
@@ -440,7 +446,91 @@ function aplicarRestricaoCurso() {
 }
 
 // ==========================================
-// MINHAS AVALIAÇÕES (cadastro básico: docente + semestre)
+// CICLOS DE AVALIAÇÃO (ex.: "2026.2") — criados só pelo ADM N1/N2
+// ==========================================
+async function loadCiclos() {
+  try {
+    ciclos = await apiFetch('/avaliacao-docente/ciclos');
+
+    const selectModal = document.getElementById('avaliacao-ciclo');
+    selectModal.innerHTML = '<option value="">Selecione o ciclo</option>' +
+      ciclos.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+
+    const selectFiltroMinhas = document.getElementById('filter-ciclo');
+    if (selectFiltroMinhas) {
+      selectFiltroMinhas.innerHTML = '<option value="">Todos os Ciclos</option>' +
+        ciclos.map(c => `<option value="${c.nome}">${esc(c.nome)}</option>`).join('');
+    }
+
+    const selectFiltroDir = document.getElementById('filter-ciclo-dir');
+    if (selectFiltroDir) {
+      selectFiltroDir.innerHTML = '<option value="">Todos os Ciclos</option>' +
+        ciclos.map(c => `<option value="${c.nome}">${esc(c.nome)}</option>`).join('');
+      selectFiltroDir.addEventListener('change', renderDiretorList);
+    }
+  } catch (err) {
+    console.error('Erro ao carregar ciclos:', err.message);
+  }
+}
+
+window.abrirModalCiclos = function () {
+  document.getElementById('form-novo-ciclo').reset();
+  document.getElementById('ciclo-erro').classList.add('hidden');
+  renderCiclosList();
+  document.getElementById('modal-ciclos').classList.remove('hidden');
+}
+
+window.closeModalCiclos = function () {
+  document.getElementById('modal-ciclos').classList.add('hidden');
+}
+
+function renderCiclosList() {
+  const container = document.getElementById('ciclos-list');
+  if (!ciclos.length) {
+    container.innerHTML = `<p style="color:#64748b; font-size:0.9rem; text-align:center; padding: 1rem 0;">Nenhum ciclo cadastrado ainda.</p>`;
+    return;
+  }
+  container.innerHTML = ciclos.map(c => `
+    <div class="ciclo-item">
+      <span>${esc(c.nome)}</span>
+      <button type="button" class="btn-sm danger" onclick="deleteCiclo('${c.id}')">Excluir</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('form-novo-ciclo').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById('novo-ciclo-nome').value.trim();
+  const erroEl = document.getElementById('ciclo-erro');
+  erroEl.classList.add('hidden');
+
+  try {
+    await apiFetch('/avaliacao-docente/ciclos', {
+      method: 'POST',
+      body: JSON.stringify({ nome })
+    });
+    document.getElementById('form-novo-ciclo').reset();
+    await loadCiclos();
+    renderCiclosList();
+  } catch (err) {
+    erroEl.textContent = err.message;
+    erroEl.classList.remove('hidden');
+  }
+});
+
+window.deleteCiclo = async function (id) {
+  if (!confirm('Excluir este ciclo? Avaliações já cadastradas com ele mantêm o nome salvo, mas ele deixa de aparecer pra novas avaliações.')) return;
+  try {
+    await apiFetch(`/avaliacao-docente/ciclos/${id}`, { method: 'DELETE' });
+    await loadCiclos();
+    renderCiclosList();
+  } catch (err) {
+    alert('Erro ao excluir ciclo: ' + err.message);
+  }
+}
+
+// ==========================================
+// MINHAS AVALIAÇÕES (cadastro básico: docente + período)
 // ==========================================
 async function loadAvaliacoes() {
   try {
@@ -454,25 +544,29 @@ async function loadAvaliacoes() {
 function applyFilters() {
   const texto = (document.getElementById('filter-texto')?.value || '').toLowerCase();
   const semestre = document.getElementById('filter-semestre')?.value || '';
+  const ciclo = document.getElementById('filter-ciclo')?.value || '';
 
   const filtered = avaliacoes.filter(av => {
     const matchTexto = !texto || (av.docente || '').toLowerCase().includes(texto);
     const matchSemestre = !semestre || (Array.isArray(av.semestre) ? av.semestre.includes(semestre) : av.semestre === semestre);
-    return matchTexto && matchSemestre;
+    const matchCiclo = !ciclo || av.ciclo === ciclo;
+    return matchTexto && matchSemestre && matchCiclo;
   });
 
-  const hasFilter = !!(texto || semestre);
+  const hasFilter = !!(texto || semestre || ciclo);
   document.getElementById('btn-clear-filters')?.classList.toggle('hidden', !hasFilter);
   renderTable(filtered);
 }
 
 function setupFilters() {
   document.getElementById('filter-texto')?.addEventListener('input', applyFilters);
+  document.getElementById('filter-ciclo')?.addEventListener('change', applyFilters);
 }
 
 window.clearFilters = function () {
   document.getElementById('filter-texto').value = '';
   document.getElementById('filter-semestre').value = '';
+  document.getElementById('filter-ciclo').value = '';
   applyFilters();
 };
 
@@ -501,7 +595,7 @@ function renderTable(lista = avaliacoes) {
     const msg = avaliacoes.length
       ? 'Nenhuma avaliação encontrada com esses filtros.'
       : 'Nenhuma avaliação cadastrada.';
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px; color:#64748b;">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 24px; color:#64748b;">${msg}</td></tr>`;
     return;
   }
 
@@ -510,6 +604,7 @@ function renderTable(lista = avaliacoes) {
             <td><strong>${esc(av.docente)}</strong></td>
             <td>${esc(fmtSemestres(av.semestre))}</td>
             <td>${esc(av.curso) || '-'}</td>
+            <td>${esc(av.ciclo) || '-'}</td>
             <td>${statusBadge(av.status)}</td>
             <td>${notaBadge(av.nota)}</td>
             <td><button class="btn-sm" onclick="verDetalhes('${av.id}', false)">Ver</button></td>
@@ -530,9 +625,16 @@ window.openModal = function () {
     alert('Seu usuário ainda não está vinculado a nenhum curso. Peça a um administrador para vincular seu(s) curso(s) em Usuários antes de criar avaliações.');
     return;
   }
+  if (!ciclos.length) {
+    alert('Ainda não existe nenhum ciclo de avaliação cadastrado. Peça a um administrador para criar um em "Gerenciar Ciclos".');
+    return;
+  }
   document.getElementById('form-avaliacao').reset();
   document.getElementById('avaliacao-id').value = '';
   marcarSemestresSelecionados([]);
+  // Convenção prática: já sugere o ciclo mais recente (lista vem ordenada
+  // do mais novo pro mais antigo), mas o usuário pode trocar.
+  document.getElementById('avaliacao-ciclo').value = ciclos[0].id;
   document.getElementById('modal-title').innerText = 'Nova Avaliação';
   aplicarRestricaoCurso();
   document.getElementById('modal-avaliacao').classList.remove('hidden');
@@ -548,6 +650,7 @@ window.editAvaliacao = function (id) {
   document.getElementById('avaliacao-id').value = av.id;
   document.getElementById('avaliacao-docente').value = av.docente;
   marcarSemestresSelecionados(av.semestre);
+  document.getElementById('avaliacao-ciclo').value = av.cicloId || '';
   document.getElementById('modal-title').innerText = 'Editar Avaliação';
   aplicarRestricaoCurso();
   // Reaplica o curso já salvo por cima das opções que aplicarRestricaoCurso
@@ -572,17 +675,25 @@ document.getElementById('form-avaliacao').addEventListener('submit', async (e) =
   e.preventDefault();
   const semestresSelecionados = coletarSemestresSelecionados();
   if (!semestresSelecionados.length) {
-    alert('Selecione ao menos um semestre.');
+    alert('Selecione ao menos um período.');
+    return;
+  }
+  const cicloId = document.getElementById('avaliacao-ciclo').value;
+  if (!cicloId) {
+    alert('Selecione o ciclo de avaliação.');
     return;
   }
   const id = document.getElementById('avaliacao-id').value;
   const cursoId = document.getElementById('avaliacao-curso').value;
   const cursoObj = cursos.find(c => c.id === cursoId);
+  const cicloObj = ciclos.find(c => c.id === cicloId);
   const data = {
     docente: document.getElementById('avaliacao-docente').value,
     semestre: semestresSelecionados,
     cursoId: cursoId || null,
     curso: cursoObj ? cursoObj.name : '',
+    cicloId,
+    ciclo: cicloObj ? cicloObj.nome : '',
   };
 
   try {
@@ -623,7 +734,7 @@ window.abrirQuestionario = function (id, todas) {
   document.getElementById('form-questionario').reset();
   document.getElementById('questionario-id').value = av.id;
   document.getElementById('questionario-title').textContent = `Avaliar: ${av.docente}`;
-  document.getElementById('questionario-subtitle').textContent = `${fmtSemestres(av.semestre)} · ${av.curso || 'Curso não informado'}`;
+  document.getElementById('questionario-subtitle').textContent = `${fmtSemestres(av.semestre)} · ${av.curso || 'Curso não informado'} · ${av.ciclo || 'Ciclo não informado'}`;
   preencherRespostas(av.respostas);
   document.getElementById('questionario-alunos').value = av.alunos || '';
   preencherAlunosNomes(av.alunosNomes);
@@ -700,13 +811,14 @@ async function loadDashboard() {
 
 function renderDiretorList() {
   const cursoFiltro = document.getElementById('filter-curso-dir')?.value || '';
-  const lista = cursoFiltro
-    ? avaliacoesTodas.filter(a => a.curso === cursoFiltro)
-    : avaliacoesTodas;
+  const cicloFiltro = document.getElementById('filter-ciclo-dir')?.value || '';
+  const lista = avaliacoesTodas.filter(a =>
+    (!cursoFiltro || a.curso === cursoFiltro) && (!cicloFiltro || a.ciclo === cicloFiltro)
+  );
 
   const tbody = document.getElementById('diretor-list');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px; color:#64748b;">Nenhuma avaliação encontrada.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 24px; color:#64748b;">Nenhuma avaliação encontrada.</td></tr>`;
     return;
   }
 
@@ -715,6 +827,7 @@ function renderDiretorList() {
             <td><strong>${esc(av.docente)}</strong></td>
             <td>${esc(fmtSemestres(av.semestre))}</td>
             <td>${esc(av.curso) || '-'}</td>
+            <td>${esc(av.ciclo) || '-'}</td>
             <td>${statusBadge(av.status)}</td>
             <td>${notaBadge(av.nota)}</td>
             <td>${esc(av.criadoPorNome) || '-'}</td>
@@ -748,8 +861,8 @@ window.verDetalhes = function (id, todas) {
 
   document.getElementById('detalhes-content').innerHTML = `
     <div class="detalhe-header">
-      <p><strong>Docente:</strong> ${esc(av.docente)} · <strong>Semestre(s):</strong> ${esc(fmtSemestres(av.semestre))}</p>
-      <p><strong>Curso:</strong> ${esc(av.curso) || '-'} · <strong>Status:</strong> ${statusBadge(av.status)} · <strong>Nota:</strong> ${av.nota !== null && av.nota !== undefined ? Number(av.nota).toFixed(1) : 'N/A'}</p>
+      <p><strong>Docente:</strong> ${esc(av.docente)} · <strong>Período(s):</strong> ${esc(fmtSemestres(av.semestre))}</p>
+      <p><strong>Curso:</strong> ${esc(av.curso) || '-'} · <strong>Ciclo:</strong> ${esc(av.ciclo) || '-'} · <strong>Status:</strong> ${statusBadge(av.status)} · <strong>Nota:</strong> ${av.nota !== null && av.nota !== undefined ? Number(av.nota).toFixed(1) : 'N/A'}</p>
       ${av.alunos ? `<p><strong>Quantidade de Alunos:</strong> ${esc(String(av.alunos))}</p>` : ''}
       ${(av.alunosNomes || []).some(n => n) ? `<p><strong>Alunos:</strong> ${av.alunosNomes.map((n, i) => esc(n) || `Aluno ${i + 1}`).join(', ')}</p>` : ''}
       ${av.criadoPorNome ? `<p><strong>Avaliado por:</strong> ${esc(av.criadoPorNome)}</p>` : ''}
