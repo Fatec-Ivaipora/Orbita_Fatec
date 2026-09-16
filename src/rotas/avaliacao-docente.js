@@ -4,6 +4,11 @@ const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 const COL = 'avaliacoesDocentes';
+const CICLOS_COL = 'ciclosAvaliacao';
+
+function isAdmin(role) {
+    return role === 'adm_l1' || role === 'adm_l2';
+}
 
 // Cursos da FATEC IVP — mesma lista usada em Usuários pra vincular o
 // Coordenador a um curso. Fixa aqui (e não na coleção `courses` do
@@ -121,6 +126,59 @@ router.get('/cursos', verifyToken, verifyToken.requireModulePermission('avaliaca
     res.json(CURSOS);
 });
 
+// ==========================================
+// CICLOS DE AVALIAÇÃO (ex.: "2026.2") — criados só pelo ADM N1/N2, e
+// escolhidos pelo coordenador na hora de cadastrar a avaliação. É o que dá
+// pro Diretor Acadêmico filtrar o Painel por período letivo.
+// ==========================================
+
+// GET /api/avaliacao-docente/ciclos — qualquer papel com acesso ao módulo
+// pode listar (precisa pra popular o seletor tanto do coordenador quanto
+// do filtro do Painel do Diretor).
+router.get('/ciclos', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
+    try {
+        const snap = await db.collection(CICLOS_COL).orderBy('nome', 'desc').get();
+        const ciclos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        res.json(ciclos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/avaliacao-docente/ciclos — só ADM N1/N2 cria (coordenador só
+// escolhe entre os que já existem).
+router.post('/ciclos', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
+    try {
+        if (!isAdmin(req.user.role)) {
+            return res.status(403).json({ error: 'Apenas administradores podem criar ciclos de avaliação.' });
+        }
+        const nome = String(req.body.nome || '').trim();
+        if (!nome) return res.status(400).json({ error: 'Informe o nome do ciclo (ex.: 2026.2).' });
+
+        const existente = await db.collection(CICLOS_COL).where('nome', '==', nome).limit(1).get();
+        if (!existente.empty) return res.status(400).json({ error: `O ciclo "${nome}" já existe.` });
+
+        const newDoc = db.collection(CICLOS_COL).doc();
+        await newDoc.set({ nome, createdAt: new Date().toISOString(), createdBy: req.user.uid });
+        res.status(201).json({ message: 'Ciclo criado com sucesso!', id: newDoc.id, nome });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/avaliacao-docente/ciclos/:id — só ADM N1/N2.
+router.delete('/ciclos/:id', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
+    try {
+        if (!isAdmin(req.user.role)) {
+            return res.status(403).json({ error: 'Apenas administradores podem remover ciclos de avaliação.' });
+        }
+        await db.collection(CICLOS_COL).doc(req.params.id).delete();
+        res.json({ message: 'Ciclo removido com sucesso!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/avaliacao-docente/dashboard — agregados pro Painel do Diretor
 // (ou pro próprio coordenador, restrito às suas avaliações).
 router.get('/dashboard', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
@@ -202,10 +260,15 @@ function formatarAvaliacao(id, data) {
 // "Avaliar" na listagem, via PUT /:id/responder.
 router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
     try {
-        const { docente, semestre } = req.body;
+        const { docente, semestre, cicloId } = req.body;
         if (!docente || !String(docente).trim()) return res.status(400).json({ error: 'Informe o nome do professor.' });
         const semestres = normalizarSemestres(semestre);
-        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um semestre válido (1 a 10).' });
+        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um período válido (1 a 10).' });
+
+        if (!cicloId) return res.status(400).json({ error: 'Selecione o ciclo de avaliação.' });
+        const cicloSnap = await db.collection(CICLOS_COL).doc(cicloId).get();
+        if (!cicloSnap.exists) return res.status(400).json({ error: 'Ciclo de avaliação inválido.' });
+        const ciclo = cicloSnap.data().nome;
 
         // Coordenador só pode lançar avaliação dentro de um dos próprios
         // cursos vinculados — o curso enviado pelo cliente é ignorado se não
@@ -235,6 +298,8 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doc
             semestre: semestres,
             cursoId,
             curso,
+            cicloId,
+            ciclo,
             status: 'pendente',
             respostas: null,
             nota: null,
@@ -252,7 +317,7 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doc
     }
 });
 
-// PUT /api/avaliacao-docente/:id — edita os dados básicos (docente/semestre).
+// PUT /api/avaliacao-docente/:id — edita os dados básicos (docente/período/ciclo).
 router.put('/:id', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
     try {
         const docRef = db.collection(COL).doc(req.params.id);
@@ -262,14 +327,20 @@ router.put('/:id', verifyToken, verifyToken.requireModulePermission('avaliacao-d
             return res.status(403).json({ error: 'Você só pode editar as avaliações que você mesmo criou.' });
         }
 
-        const { docente, semestre } = req.body;
+        const { docente, semestre, cicloId } = req.body;
         if (!docente || !String(docente).trim()) return res.status(400).json({ error: 'Informe o nome do professor.' });
         const semestres = normalizarSemestres(semestre);
-        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um semestre válido (1 a 10).' });
+        if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um período válido (1 a 10).' });
+
+        if (!cicloId) return res.status(400).json({ error: 'Selecione o ciclo de avaliação.' });
+        const cicloSnap = await db.collection(CICLOS_COL).doc(cicloId).get();
+        if (!cicloSnap.exists) return res.status(400).json({ error: 'Ciclo de avaliação inválido.' });
 
         await docRef.update({
             docente: String(docente).trim(),
-            semestre: semestres
+            semestre: semestres,
+            cicloId,
+            ciclo: cicloSnap.data().nome
         });
         res.json({ message: 'Avaliação atualizada com sucesso!' });
     } catch (err) {
