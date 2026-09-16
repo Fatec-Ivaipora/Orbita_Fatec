@@ -14,7 +14,10 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 
 let currentUser = null;
 let currentRole = 'visitante';
-let meuCursoId = null;
+// Um coordenador pode responder por mais de um curso — por isso é sempre
+// uma lista (com 1 item no caso comum). `userData.curso` (singular) é o
+// campo antigo de antes dessa mudança, mantido só como retrocompatibilidade.
+let meuCursosIds = [];
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -299,7 +302,9 @@ onAuthStateChanged(auth, async (user) => {
       const userData = await apiFetch('/usuarios/me');
       role = userData.role || 'visitante';
       meuOverrides = userData.permissoes || null;
-      meuCursoId = userData.curso || null;
+      meuCursosIds = Array.isArray(userData.cursos) && userData.cursos.length
+        ? userData.cursos
+        : (userData.curso ? [userData.curso] : []);
     } catch (err) {
       role = cached ? cached.role : 'visitante';
     }
@@ -410,14 +415,26 @@ async function loadCursos() {
   }
 }
 
-// Coordenador nunca escolhe o curso da avaliação — ele sempre avalia dentro
-// do curso vinculado ao seu usuário (definido em Usuários pelo admin).
+// Coordenador só avalia dentro dos cursos vinculados ao seu usuário
+// (definidos em Usuários pelo admin). Com 1 curso só, trava automático
+// (nem precisa escolher); com mais de 1, mostra só os dele pra escolher
+// qual dessa avaliação específica — nunca a lista completa de cursos.
 function aplicarRestricaoCurso() {
   const select = document.getElementById('avaliacao-curso');
   if (currentRole === 'coordenador') {
-    select.value = meuCursoId || '';
-    select.disabled = true;
+    const meusCursos = cursos.filter(c => meuCursosIds.includes(c.id));
+    select.innerHTML = '<option value="">Selecione um curso</option>' +
+      meusCursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+
+    if (meusCursos.length === 1) {
+      select.value = meusCursos[0].id;
+      select.disabled = true;
+    } else {
+      select.disabled = false;
+    }
   } else {
+    select.innerHTML = '<option value="">Selecione um curso</option>' +
+      cursos.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
     select.disabled = false;
   }
 }
@@ -509,8 +526,8 @@ function renderTable(lista = avaliacoes) {
 // MODAL: NOVA/EDITAR (cadastro básico)
 // ==========================================
 window.openModal = function () {
-  if (currentRole === 'coordenador' && !meuCursoId) {
-    alert('Seu usuário ainda não está vinculado a um curso. Peça a um administrador para vincular seu curso em Usuários antes de criar avaliações.');
+  if (currentRole === 'coordenador' && !meuCursosIds.length) {
+    alert('Seu usuário ainda não está vinculado a nenhum curso. Peça a um administrador para vincular seu(s) curso(s) em Usuários antes de criar avaliações.');
     return;
   }
   document.getElementById('form-avaliacao').reset();
@@ -531,9 +548,13 @@ window.editAvaliacao = function (id) {
   document.getElementById('avaliacao-id').value = av.id;
   document.getElementById('avaliacao-docente').value = av.docente;
   marcarSemestresSelecionados(av.semestre);
-  document.getElementById('avaliacao-curso').value = av.cursoId || '';
   document.getElementById('modal-title').innerText = 'Editar Avaliação';
   aplicarRestricaoCurso();
+  // Reaplica o curso já salvo por cima das opções que aplicarRestricaoCurso
+  // acabou de montar (não sobrescreve se ela já travou por ter 1 só curso).
+  if (!document.getElementById('avaliacao-curso').disabled) {
+    document.getElementById('avaliacao-curso').value = av.cursoId || '';
+  }
   document.getElementById('modal-avaliacao').classList.remove('hidden');
 }
 

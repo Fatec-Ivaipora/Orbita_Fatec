@@ -348,15 +348,96 @@ function updateRoleSelects() {
 }
 
 // ================================================================
-//  CURSO VINCULADO AO COORDENADOR (Avaliação Docente)
+//  CURSO(S) VINCULADO(S) AO COORDENADOR (Avaliação Docente)
+//  Um coordenador pode responder por mais de um curso, então isso é um
+//  multiselect (mesmo padrão do dropdown de "Semestre(s)" da Avaliação
+//  Docente): painel com opções marcáveis + gatilho mostrando o resumo.
 // ================================================================
+let novoCursosSelecionados = [];
+let editCursosSelecionados = [];
+
+// Nomes dos cursos de um usuário coordenador, pra mostrar na listagem ao
+// lado do cargo. `u.curso` (singular) é o campo antigo, retrocompatível.
+function nomesCursosDoUsuario(u) {
+  const ids = Array.isArray(u.cursos) && u.cursos.length
+    ? u.cursos
+    : (u.curso ? [u.curso] : []);
+  if (!ids.length) return 'Sem curso vinculado';
+  return ids.map(id => CURSOS_FATEC.find(c => c.id === id)?.name || id).join(', ');
+}
+
 function renderCursoOptions() {
-  const options = '<option value="">Selecione um curso</option>' +
-    CURSOS_FATEC.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  const novoCurso = document.getElementById('novo-curso');
-  const editCurso = document.getElementById('edit-curso');
-  if (novoCurso) novoCurso.innerHTML = options;
-  if (editCurso) editCurso.innerHTML = options;
+  const optionsHtml = CURSOS_FATEC.map(c => `<div class="multiselect-option" data-value="${c.id}">${esc(c.name)}</div>`).join('');
+
+  const novoPanel = document.getElementById('novo-cursos-panel');
+  if (novoPanel) {
+    novoPanel.innerHTML = optionsHtml;
+    novoPanel.querySelectorAll('.multiselect-option').forEach(opt => {
+      opt.addEventListener('click', () => toggleCursoOpcao(opt, 'novo'));
+    });
+  }
+
+  const editPanel = document.getElementById('edit-cursos-panel');
+  if (editPanel) {
+    editPanel.innerHTML = optionsHtml;
+    editPanel.querySelectorAll('.multiselect-option').forEach(opt => {
+      opt.addEventListener('click', () => toggleCursoOpcao(opt, 'edit'));
+    });
+  }
+
+  setupCursosDropdownToggle('novo');
+  setupCursosDropdownToggle('edit');
+}
+
+function toggleCursoOpcao(opt, prefixo) {
+  const lista = prefixo === 'novo' ? novoCursosSelecionados : editCursosSelecionados;
+  const val = opt.dataset.value;
+  const idx = lista.indexOf(val);
+  if (idx === -1) lista.push(val);
+  else lista.splice(idx, 1);
+  opt.classList.toggle('selected', idx === -1);
+  atualizarCursosTrigger(prefixo);
+}
+
+function setupCursosDropdownToggle(prefixo) {
+  const trigger = document.getElementById(`${prefixo}-cursos-trigger`);
+  const panel = document.getElementById(`${prefixo}-cursos-panel`);
+  if (!trigger || !panel || trigger.dataset.bound) return;
+  trigger.dataset.bound = '1';
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', isOpen);
+    trigger.classList.toggle('open', !isOpen);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById(`${prefixo}-cursos-dropdown`)?.contains(e.target)) {
+      panel.classList.add('hidden');
+      trigger.classList.remove('open');
+    }
+  });
+}
+
+function atualizarCursosTrigger(prefixo) {
+  const lista = prefixo === 'novo' ? novoCursosSelecionados : editCursosSelecionados;
+  const label = document.getElementById(`${prefixo}-cursos-trigger-label`);
+  if (!label) return;
+  label.textContent = lista.length
+    ? lista.map(id => CURSOS_FATEC.find(c => c.id === id)?.name || id).join(', ')
+    : 'Selecione o(s) curso(s)';
+}
+
+function marcarCursosSelecionados(prefixo, cursosIds) {
+  const lista = (Array.isArray(cursosIds) ? cursosIds : (cursosIds ? [cursosIds] : [])).filter(Boolean);
+  if (prefixo === 'novo') novoCursosSelecionados = [...lista];
+  else editCursosSelecionados = [...lista];
+
+  document.querySelectorAll(`#${prefixo}-cursos-panel .multiselect-option`).forEach(opt => {
+    opt.classList.toggle('selected', lista.includes(opt.dataset.value));
+  });
+  atualizarCursosTrigger(prefixo);
 }
 
 function setupCursoToggle() {
@@ -474,6 +555,7 @@ function renderUsers(list) {
         <div class="user-card-email">${esc(u.email || u.uid)}</div>
         <div class="user-card-meta">
           <span class="role-badge badge-${role}">${ROLE_LABEL[role] || role}</span>
+          ${role === 'coordenador' ? `<span class="curso-badge">${esc(nomesCursosDoUsuario(u))}</span>` : ''}
           ${u.permissoes && Object.keys(u.permissoes).length ? '<span class="perm-override-badge">Acessos personalizados</span>' : ''}
           <span class="user-card-date">Desde ${dateStr}</span>
           ${isSelf ? '<span class="user-card-date">· você</span>' : ''}
@@ -597,6 +679,9 @@ function abrirModalNovo() {
   document.getElementById('form-novo-usuario').reset();
   document.getElementById('form-error').classList.add('hidden');
   document.getElementById('novo-curso-group')?.classList.add('hidden');
+  marcarCursosSelecionados('novo', []);
+  document.getElementById('novo-cursos-panel')?.classList.add('hidden');
+  document.getElementById('novo-cursos-trigger')?.classList.remove('open');
   abrirModal('modal-novo');
 }
 
@@ -612,10 +697,16 @@ function abrirModalEditar(uid, name, role, email) {
   const radio = document.querySelector(`input[name="edit-role"][value="${role}"]`);
   if (radio) radio.checked = true;
 
-  // Set curso vinculado (só relevante pra Coordenador)
+  // Set curso(s) vinculado(s) (só relevante pra Coordenador). `user.curso`
+  // (singular) é o campo antigo, mantido como retrocompatibilidade pra
+  // quem foi vinculado antes dessa mudança pra múltiplos cursos.
   document.getElementById('edit-curso-group')?.classList.toggle('hidden', role !== 'coordenador');
-  const editCursoSelect = document.getElementById('edit-curso');
-  if (editCursoSelect) editCursoSelect.value = user.curso || '';
+  const cursosDoUsuario = Array.isArray(user.cursos) && user.cursos.length
+    ? user.cursos
+    : (user.curso ? [user.curso] : []);
+  marcarCursosSelecionados('edit', cursosDoUsuario);
+  document.getElementById('edit-cursos-panel')?.classList.add('hidden');
+  document.getElementById('edit-cursos-trigger')?.classList.remove('open');
 
   // Set status
   const isAtivo = user.ativo !== false;
@@ -922,8 +1013,8 @@ async function criarUsuario(e) {
   const nome  = document.getElementById('novo-nome').value.trim();
   const email = document.getElementById('novo-email').value.trim();
   const senha = document.getElementById('novo-senha').value;
-  const role  = document.querySelector('input[name="novo-role"]:checked')?.value || 'ti';
-  const curso = document.getElementById('novo-curso')?.value || '';
+  const role   = document.querySelector('input[name="novo-role"]:checked')?.value || 'ti';
+  const cursos = novoCursosSelecionados;
 
   const errEl = document.getElementById('form-error');
   const btn   = document.getElementById('btn-salvar-novo');
@@ -932,8 +1023,8 @@ async function criarUsuario(e) {
 
   errEl.classList.add('hidden');
 
-  if (role === 'coordenador' && !curso) {
-    errEl.textContent = 'Selecione o curso vinculado ao Coordenador.';
+  if (role === 'coordenador' && !cursos.length) {
+    errEl.textContent = 'Selecione ao menos um curso vinculado ao Coordenador.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -945,7 +1036,7 @@ async function criarUsuario(e) {
   try {
     await apiFetch('/usuarios', {
       method: 'POST',
-      body: JSON.stringify({ nome, email, senha, role, curso: role === 'coordenador' ? curso : '' })
+      body: JSON.stringify({ nome, email, senha, role, cursos: role === 'coordenador' ? cursos : [] })
     });
 
     fecharModal('modal-novo');
@@ -969,9 +1060,9 @@ async function salvarRole() {
   const newRole = document.querySelector('input[name="edit-role"]:checked')?.value;
   if (!uid || !newRole) return;
 
-  const curso = document.getElementById('edit-curso')?.value || '';
-  if (newRole === 'coordenador' && !curso) {
-    showToast('❌ Selecione o curso vinculado ao Coordenador.', 'error');
+  const cursos = editCursosSelecionados;
+  if (newRole === 'coordenador' && !cursos.length) {
+    showToast('❌ Selecione ao menos um curso vinculado ao Coordenador.', 'error');
     return;
   }
 
@@ -980,7 +1071,7 @@ async function salvarRole() {
   try {
     await apiFetch(`/usuarios/${uid}/role`, {
       method: 'PUT',
-      body: JSON.stringify({ role: newRole, curso: newRole === 'coordenador' ? curso : '' })
+      body: JSON.stringify({ role: newRole, cursos: newRole === 'coordenador' ? cursos : [] })
     });
     showToast(`✅ Nível alterado para ${ROLE_LABEL[newRole]}`, 'success');
   } catch (err) {
