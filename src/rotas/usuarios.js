@@ -69,7 +69,7 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('usuarios'), as
 // POST /api/usuarios - Cria no Firebase Auth e no Firestore
 router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
-        const { nome, email, senha, role, curso } = req.body;
+        const { nome, email, senha, role, cursos } = req.body;
 
         // 1. Cria usuário no Firebase Authentication via Admin SDK
         const userRecord = await auth.createUser({
@@ -84,9 +84,11 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), a
             name: nome,
             email,
             role,
-            // Curso vinculado só faz sentido pro Coordenador — é o que
-            // restringe quais avaliações docentes ele cria/enxerga.
-            curso: role === 'coordenador' ? (curso || null) : null,
+            // Cursos vinculados só fazem sentido pro Coordenador — são os
+            // que restringem em quais cursos ele cria avaliações docentes.
+            // Um coordenador pode responder por mais de um curso, por isso
+            // é sempre array (mesmo com um único item).
+            cursos: role === 'coordenador' && Array.isArray(cursos) ? cursos.filter(Boolean) : [],
             ativo: true,
             primeiroAcesso: true, // Força a troca de senha no primeiro acesso
             createdAt: new Date().toISOString(),
@@ -103,13 +105,16 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), a
 // PUT /api/usuarios/:uid/role
 router.put('/:uid/role', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
-        const { role, curso } = req.body;
-        // Curso vinculado só faz sentido pro Coordenador — limpa o campo ao
-        // trocar pra qualquer outro cargo, senão um vínculo antigo poderia
-        // vazar caso a pessoa volte a ser Coordenador depois.
+        const { role, cursos } = req.body;
+        // Cursos vinculados só fazem sentido pro Coordenador — limpa o campo
+        // ao trocar pra qualquer outro cargo, senão um vínculo antigo
+        // poderia vazar caso a pessoa volte a ser Coordenador depois.
         await db.collection('users').doc(req.params.uid).update({
             role,
-            curso: role === 'coordenador' ? (curso || null) : null
+            cursos: role === 'coordenador' && Array.isArray(cursos) ? cursos.filter(Boolean) : [],
+            // Campo antigo (uma era só 1 curso por coordenador) — remove pra
+            // não deixar um valor desatualizado competindo com `cursos`.
+            curso: admin.firestore.FieldValue.delete()
         });
         res.json({ message: 'Nível atualizado com sucesso!' });
     } catch (err) {

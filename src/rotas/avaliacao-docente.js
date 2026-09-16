@@ -95,14 +95,24 @@ function apenasProprias(role) {
     return role === 'coordenador';
 }
 
-// Busca o curso vinculado ao coordenador (definido em Usuários) — o
-// coordenador NUNCA escolhe o curso na hora de avaliar, ele sempre avalia
-// dentro do curso que o administrador vinculou ao cargo dele.
-async function cursoDoCoordenador(uid) {
+// Busca os cursos vinculados ao coordenador (definidos em Usuários) — um
+// coordenador pode responder por mais de um curso, então isso é sempre uma
+// lista. Se só tem 1 vinculado, a avaliação usa esse automaticamente; se
+// tem mais de 1, o coordenador escolhe qual dos seus cursos na hora de
+// avaliar (nunca um curso fora da própria lista).
+// `curso` (singular) é o campo antigo de antes dessa mudança — mantido só
+// pra não perder o vínculo de quem foi cadastrado antes da migração.
+async function cursosDoCoordenador(uid) {
     const snap = await db.collection('users').doc(uid).get();
-    const cursoId = snap.exists ? snap.data().curso : null;
-    const curso = CURSOS.find(c => c.id === cursoId);
-    return curso ? { cursoId: curso.id, curso: curso.name } : { cursoId: null, curso: '' };
+    if (!snap.exists) return [];
+    const data = snap.data();
+    const idsBrutos = Array.isArray(data.cursos) && data.cursos.length
+        ? data.cursos
+        : (data.curso ? [data.curso] : []);
+    return idsBrutos
+        .map(id => CURSOS.find(c => c.id === id))
+        .filter(Boolean)
+        .map(c => ({ cursoId: c.id, curso: c.name }));
 }
 
 // GET /api/avaliacao-docente/cursos — lista fixa de cursos, pra popular o
@@ -197,17 +207,26 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doc
         const semestres = normalizarSemestres(semestre);
         if (!semestres) return res.status(400).json({ error: 'Selecione ao menos um semestre válido (1 a 10).' });
 
-        // Coordenador só pode lançar avaliação dentro do próprio curso
-        // vinculado — o curso enviado pelo cliente é ignorado nesse caso.
+        // Coordenador só pode lançar avaliação dentro de um dos próprios
+        // cursos vinculados — o curso enviado pelo cliente é ignorado se não
+        // bater com nenhum dos vínculos dele.
         let cursoId = req.body.cursoId || null;
         let curso = req.body.curso || '';
         if (apenasProprias(req.user.role)) {
-            const vinculo = await cursoDoCoordenador(req.user.uid);
-            if (!vinculo.cursoId) {
-                return res.status(403).json({ error: 'Seu usuário ainda não está vinculado a um curso. Peça a um administrador para vincular seu curso em Usuários.' });
+            const vinculos = await cursosDoCoordenador(req.user.uid);
+            if (!vinculos.length) {
+                return res.status(403).json({ error: 'Seu usuário ainda não está vinculado a nenhum curso. Peça a um administrador para vincular seu(s) curso(s) em Usuários.' });
             }
-            cursoId = vinculo.cursoId;
-            curso = vinculo.curso;
+            if (vinculos.length === 1) {
+                cursoId = vinculos[0].cursoId;
+                curso = vinculos[0].curso;
+            } else {
+                const escolhido = vinculos.find(v => v.cursoId === cursoId);
+                if (!escolhido) {
+                    return res.status(400).json({ error: 'Selecione um dos cursos vinculados ao seu cadastro.' });
+                }
+                curso = escolhido.curso;
+            }
         }
 
         const newDoc = db.collection(COL).doc();
