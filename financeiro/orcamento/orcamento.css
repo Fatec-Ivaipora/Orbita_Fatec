@@ -25,7 +25,6 @@
   background: white;
   padding: 1.5rem 2rem;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   border: 1px solid var(--border-color);
 }
 
@@ -88,12 +87,12 @@
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
 .kpi-card {
   background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
 }
-.kpi-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
-.kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; }
+.kpi-label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+.kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .kpi-value.valor-negativo { color: var(--red); }
-.kpi-hint { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.3rem; line-height: 1.3; }
+.kpi-value.kpi-valor-vazio { color: #B9C2D0; font-weight: 700; }
+.kpi-hint { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.35rem; line-height: 1.3; min-height: 1em; }
 
 /* Grade de cartões de orçamento */
 .orc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.25rem; }
@@ -142,10 +141,31 @@
   background: white;
   border-radius: 14px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
   overflow: hidden;
 }
 .card-secao-titulo { padding: 1.25rem 1.5rem 0; margin: 0 0 -0.25rem; font-size: 1rem; font-weight: 700; color: var(--text-main); }
+
+/* Bloco dentro de um .card, com respiro próprio acima (usado pra empilhar
+   vários grupos dentro do mesmo card, ex.: um por orçamento em "Comprar por
+   empresa"). */
+.card-secao { padding: 0 1.5rem 1.5rem; margin-top: 1.25rem; }
+.card-secao:first-child { margin-top: 0; }
+
+/* Título de grupo (nome do orçamento) dentro de "Comprar por empresa" —
+   mesma linguagem visual do .setor-chip (fundo azul clarinho) pra separar
+   claramente um grupo do outro, em vez de só um <h4> perdido no espaço. */
+.card-secao-grupo-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: #eef3fc;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.card-secao-grupo-nome { font-weight: 700; font-size: 0.92rem; color: var(--text-main); }
+.card-secao-grupo-meta { font-size: 0.78rem; color: var(--primary-blue); font-weight: 700; white-space: nowrap; }
 
 .tabela-wrap { overflow-x: auto; }
 .tabela-wrap { scrollbar-width: thin; scrollbar-color: var(--primary-blue) #eef2f7; }
@@ -163,6 +183,13 @@
 .data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: #fafbfd; }
+.data-table td, .data-table th { font-variant-numeric: tabular-nums; }
+
+/* Tabelas "Item/Qtd/Vlr.Unit./Total(/Data)" (itens de um orçamento, itens
+   por empresa): as colunas numéricas encolhem pro conteúdo delas mesmas em
+   vez de dividir a largura igualmente — com poucas linhas isso deixava um
+   vão vazio enorme à direita da coluna Item. */
+.tabela-itens th:not(:first-child), .tabela-itens td:not(:first-child) { width: 1%; white-space: nowrap; }
 
 .tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
 .acoes-col { white-space: nowrap; }
@@ -190,6 +217,32 @@
 .modal-content-lg { max-width: 780px; }
 .modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 0.35rem; }
 .modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 1.25rem; }
+
+/* ---- Modal Empresas: form de adicionar + grade de cartões (não tabela) ---- */
+.form-empresa-add { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+.form-empresa-add input {
+  flex: 1; padding: 0.75rem 1rem; border: 1.5px solid var(--border-color); border-radius: 10px;
+  font-size: 0.95rem; font-family: inherit; color: var(--text-main);
+}
+.form-empresa-add input:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.12); }
+.form-empresa-add button { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+
+.empresas-contagem { color: var(--text-secondary); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.75rem; }
+
+.empresas-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;
+  max-height: 45vh; overflow-y: auto; padding: 0.15rem;
+}
+.empresa-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.85rem 1rem; border: 1.5px solid var(--border-color); border-radius: 12px;
+  background: #f8fafc;
+}
+.empresa-chip-nome { font-weight: 700; font-size: 0.92rem; color: var(--text-main); word-break: break-word; }
+.empresa-chip .btn-icon { flex-shrink: 0; width: 30px; height: 30px; }
+@media (max-width: 640px) {
+  .empresas-grid { grid-template-columns: 1fr; }
+}
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .form-row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; }
@@ -231,6 +284,9 @@
 }
 .cotacao-row input:focus { outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
 .cotacao-row.cotacao-vencedora input { border-color: var(--green); background: #ecfdf5; }
+/* Valor preenchido sozinho a partir do histórico de preço fornecedor+item —
+   sinaliza que é uma sugestão (última cotação conhecida), não confirmada. */
+.cotacao-row input.cotacao-valor[data-sugerido="1"] { border-color: #f0ad4e; background: #fff8ec; }
 .cotacao-selo {
   font-size: 0.72rem; font-weight: 700; color: var(--green); white-space: nowrap; min-width: 70px;
 }
@@ -301,6 +357,11 @@ body.pagina-relatorio .layout-content {
   body.pagina-relatorio .no-print,
   body.pagina-relatorio .layout-sidebar,
   body.pagina-relatorio .layout-header { display: none !important; }
+
+  /* "Comprar por empresa" imprime só o relatório daquela empresa — o card
+     de KPIs gerais (previsto/gasto/saldo de TODOS os orçamentos) não tem a
+     ver com o fornecedor selecionado e não deve ir junto na impressão. */
+  #orcamento-relatorio-root.modo-empresa #kpi-grid { display: none !important; }
 
   body.pagina-relatorio,
   body.pagina-relatorio .layout-wrapper,

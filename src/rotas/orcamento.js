@@ -8,6 +8,12 @@ const checkPermission = verifyToken.requireModulePermission('orcamento');
 const COL_ORCAMENTOS = 'financeiro_orcamentos';
 const COL_LANCAMENTOS = 'financeiro_orcamento_lancamentos';
 const COL_CATALOGO = 'financeiro_orcamento_catalogo_itens';
+const COL_PRECOS = 'financeiro_orcamento_precos_fornecedor';
+// Cadastro de empresas PRÓPRIO do Orçamento — pedido explícito (17/09): "eu
+// não quero compartilhado, quero que cada local tenha suas empresas". Antes
+// reaproveitava financeiro_fornecedores (compartilhado com Licitação); agora
+// é uma coleção separada, sem nenhuma ligação com o módulo Licitação.
+const COL_EMPRESAS = 'financeiro_orcamento_fornecedores';
 
 function validarTexto(v, max = 120) {
     return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max;
@@ -160,6 +166,13 @@ router.put('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => 
 // "Zeladoria 2026.2") — não bate com nenhum cadastro formal de setor do
 // sistema, então não dá pra restringir ao chefe de UM setor específico;
 // qualquer Chefe de Setor pode excluir qualquer orçamento.
+//
+// Pedido explícito (17/09): excluir um orçamento fechado (que sempre tem
+// gastos lançados) tem que funcionar — não dava antes, e a mensagem de erro
+// ("feche-o em vez de excluir") não fazia sentido pra quem já estava fechado.
+// Exclusão em cascata: apaga o orçamento E os lançamentos vinculados a ele,
+// não dá pra manter só os gastos soltos sem o orçamento. Em lotes de 400
+// (limite de 500 operações por batch do Firestore).
 router.delete('/orcamentos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
         const ref = db.collection(COL_ORCAMENTOS).doc(req.params.id);
@@ -172,11 +185,17 @@ router.delete('/orcamentos/:id', verifyToken, checkPermission, async (req, res) 
             return res.status(403).json({ error: 'Só o Administrador ou um Chefe de Setor podem excluir orçamentos.' });
         }
 
-        const lancSnap = await db.collection(COL_LANCAMENTOS).where('orcamentoId', '==', req.params.id).limit(1).get();
-        if (!lancSnap.empty) return res.status(400).json({ error: 'Este orçamento já tem gastos lançados — feche-o em vez de excluir.' });
+        const lancSnap = await db.collection(COL_LANCAMENTOS).where('orcamentoId', '==', req.params.id).get();
+        // `ref` (o orçamento) já é um DocumentReference — usa direto.
+        // `lancSnap.docs` são QueryDocumentSnapshot — precisa de `.ref`.
+        const refs = [...lancSnap.docs.map(d => d.ref), ref];
+        for (let i = 0; i < refs.length; i += 400) {
+            const batch = db.batch();
+            refs.slice(i, i + 400).forEach(r => batch.delete(r));
+            await batch.commit();
+        }
 
-        await ref.delete();
-        res.json({ message: 'Orçamento excluído.' });
+        res.json({ message: lancSnap.empty ? 'Orçamento excluído.' : `Orçamento e ${lancSnap.size} gasto(s) vinculado(s) excluídos.` });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -241,6 +260,102 @@ router.delete('/catalogo-itens/:id', verifyToken, checkPermission, async (req, r
     }
 });
 
+// ==========================================
+// EMPRESAS (fornecedores) — cadastro PRÓPRIO do Orçamento, sem ligação com o
+// módulo Licitação (cada um tem o seu, ver COL_EMPRESAS acima).
+//
+// Validação de duplicata por CHAVE normalizada (`nomeChave`), não pelo nome
+// exato — pedido explícito (17/09): "cadastrei MERCADO LIVRE, depois digitei
+// MERCADOLIVRE e ele aceitou, isso pode acontecer erros". Comparar só o nome
+// exato deixava passar diferença de espaço/pontuação/acento na mesma
+// empresa. `nomeChave` tira acento, maiúsculo, e qualquer caractere que não
+// seja letra/número — "MERCADO LIVRE" e "MERCADOLIVRE" caem na mesma chave.
+// ==========================================
+function chaveEmpresa(nome) {
+    return String(nome || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+router.get('/fornecedores', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_EMPRESAS).orderBy('nome').get();
+        res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/fornecedores', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const nome = normalizarMaiusculo(req.body.nome);
+        if (!validarTexto(nome, 120)) return res.status(400).json({ error: 'Informe o nome da empresa.' });
+
+        const nomeChave = chaveEmpresa(nome);
+        const existente = await db.collection(COL_EMPRESAS).where('nomeChave', '==', nomeChave).limit(1).get();
+        if (!existente.empty) {
+            return res.status(400).json({ error: `Já existe uma empresa parecida cadastrada: "${existente.docs[0].data().nome}". Verifique se não é a mesma antes de cadastrar de novo.` });
+        }
+
+        const docRef = await db.collection(COL_EMPRESAS).add({
+            nome, nomeChave,
+            createdAt: new Date().toISOString(),
+            createdBy: req.user.uid
+        });
+        res.status(201).json({ id: docRef.id, message: 'Empresa cadastrada.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/fornecedores/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const nome = normalizarMaiusculo(req.body.nome);
+        if (!validarTexto(nome, 120)) return res.status(400).json({ error: 'Informe o nome da empresa.' });
+
+        const nomeChave = chaveEmpresa(nome);
+        const existente = await db.collection(COL_EMPRESAS).where('nomeChave', '==', nomeChave).limit(1).get();
+        if (!existente.empty && existente.docs[0].id !== req.params.id) {
+            return res.status(400).json({ error: `Já existe uma empresa parecida cadastrada: "${existente.docs[0].data().nome}". Verifique se não é a mesma antes de renomear.` });
+        }
+
+        await db.collection(COL_EMPRESAS).doc(req.params.id).update({ nome, nomeChave });
+        res.json({ message: 'Empresa atualizada.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/fornecedores/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        await db.collection(COL_EMPRESAS).doc(req.params.id).delete();
+        res.json({ message: 'Empresa excluída.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// HISTÓRICO DE PREÇO POR FORNECEDOR+ITEM — última cotação conhecida de um
+// item com uma empresa específica, pra sugerir automaticamente o valor
+// unitário quando a mesma dupla fornecedor+item aparece de novo num
+// lançamento novo (ver upsertPrecoFornecedorItem). Consulta por chave
+// determinística — 1 leitura, sem query.
+// ==========================================
+router.get('/preco-fornecedor-item', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const fornecedor = normalizarMaiusculo(req.query.fornecedor);
+        const itemNome = normalizarMaiusculo(req.query.itemNome);
+        if (!fornecedor || !itemNome) return res.json(null);
+
+        const snap = await db.collection(COL_PRECOS).doc(chavePrecoFornecedorItem(fornecedor, itemNome)).get();
+        res.json(snap.exists ? snap.data() : null);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Cadastra automaticamente no catálogo um item digitado que ainda não existe
 // lá (comparação case-insensitive pra "Açúcar" e "açúcar" não virarem dois
 // registros). Best-effort — nunca derruba o lançamento por causa disso.
@@ -253,6 +368,30 @@ async function upsertItemCatalogo(nome) {
         }
     } catch (err) {
         // silencioso — o catálogo é só uma conveniência de autocomplete
+    }
+}
+
+// Histórico de preço por (fornecedor, item) — pedido explícito (17/09):
+// "manter o histórico de itens já orçados com esta empresa e o preço que
+// eles têm na mercadoria, aí só atualiza na hora do lançamento". Um doc por
+// combinação fornecedor+item, ID determinístico (sem precisar de query pra
+// achar se já existe, ao contrário do catálogo acima) — sempre sobrescreve
+// com o preço mais recente dessa cotação específica, ganhando ou não.
+function chavePrecoFornecedorItem(fornecedor, itemNome) {
+    return `${fornecedor}__${itemNome}`
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .slice(0, 400);
+}
+
+async function upsertPrecoFornecedorItem(fornecedor, itemNome, valorUnitario, unidade) {
+    try {
+        await db.collection(COL_PRECOS).doc(chavePrecoFornecedorItem(fornecedor, itemNome)).set({
+            fornecedor, itemNome, valorUnitario, unidade: unidade || null,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+    } catch (err) {
+        // silencioso — é só conveniência de preenchimento automático
     }
 }
 
@@ -347,6 +486,7 @@ router.post('/orcamentos/:id/lancamentos', verifyToken, checkPermission, async (
         });
 
         upsertItemCatalogo(itemNome);
+        cotacoesComTotal.forEach(c => upsertPrecoFornecedorItem(c.fornecedor, itemNome, c.valorUnitario, unidade));
         res.status(201).json({ id: lancamentoRef.id, message: 'Gasto lançado com sucesso.' });
     } catch (err) {
         const status = err.message === 'Orçamento não encontrado.' ? 404 : (err.message.includes('outra colaboradora') ? 403 : 500);
@@ -358,6 +498,9 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
     try {
         const lancamentoRef = db.collection(COL_LANCAMENTOS).doc(req.params.id);
         let itemNomeParaCatalogo = null;
+        let cotacoesParaPreco = null;
+        let itemNomeParaPreco = null;
+        let unidadeParaPreco = null;
 
         await db.runTransaction(async (tx) => {
             const lancSnap = await tx.get(lancamentoRef);
@@ -398,9 +541,13 @@ router.put('/lancamentos/:id', verifyToken, checkPermission, async (req, res) =>
             tx.update(orcamentoRef, { totalGasto: novoTotalGasto, saldo: calcularSaldo(orc.valorPrevisto, novoTotalGasto) });
 
             itemNomeParaCatalogo = itemNome;
+            cotacoesParaPreco = cotacoesComTotal;
+            itemNomeParaPreco = itemNome;
+            unidadeParaPreco = unidade;
         });
 
         if (itemNomeParaCatalogo) upsertItemCatalogo(itemNomeParaCatalogo);
+        if (cotacoesParaPreco) cotacoesParaPreco.forEach(c => upsertPrecoFornecedorItem(c.fornecedor, itemNomeParaPreco, c.valorUnitario, unidadeParaPreco));
         res.json({ message: 'Lançamento atualizado.' });
     } catch (err) {
         const status = err.message.includes('não encontrado') ? 404 : (err.message.includes('outra colaboradora') ? 403 : 400);

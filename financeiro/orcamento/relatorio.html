@@ -6,7 +6,7 @@
     <title>Relatório de Orçamento - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css">
+    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css?v=3">
 </head>
 <body class="pagina-relatorio">
     <!-- Auth Guard Padrão -->
@@ -53,6 +53,9 @@
                     <select class="select-filter" id="rel-fornecedor-select" disabled>
                         <option value="">Todos os fornecedores</option>
                     </select>
+                    <select class="select-filter" id="rel-empresa-select">
+                        <option value="">Comprar por empresa (orçamentos fechados)...</option>
+                    </select>
                 </div>
 
                 <div class="print-page">
@@ -69,14 +72,17 @@
                         <div class="kpi-card">
                             <div class="kpi-label" id="kpi-previsto-label">Previsto</div>
                             <div class="kpi-value" id="kpi-previsto">R$ 0,00</div>
+                            <div class="kpi-hint" id="kpi-previsto-hint"></div>
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label" id="kpi-gasto-label">Gasto</div>
                             <div class="kpi-value" id="kpi-gasto">R$ 0,00</div>
+                            <div class="kpi-hint" id="kpi-gasto-hint"></div>
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label" id="kpi-saldo-label">Saldo</div>
                             <div class="kpi-value" id="kpi-saldo">R$ 0,00</div>
+                            <div class="kpi-hint" id="kpi-saldo-hint"></div>
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label">Orçamentos</div>
@@ -87,7 +93,7 @@
 
                     <!-- Nenhum orçamento específico selecionado: visão geral (1 linha por orçamento) -->
                     <div class="card" id="relatorio-card-orcamentos">
-                        <h3 class="card-secao-titulo">Orçamentos</h3>
+                        <h2 class="card-secao-titulo">Orçamentos</h2>
                         <div class="tabela-wrap">
                             <table class="data-table">
                                 <thead>
@@ -110,7 +116,7 @@
 
                     <!-- Um orçamento selecionado no filtro: itens dele (por fornecedor) -->
                     <div class="card hidden" id="relatorio-card-itens">
-                        <h3 class="card-secao-titulo">Itens do orçamento</h3>
+                        <h2 class="card-secao-titulo">Itens do orçamento</h2>
                         <div id="rel-itens-cabecalho" style="padding: 0 1.5rem 1rem;">
                             <div class="orc-detalhe-resumo" style="margin:0;">
                                 <div><span>Comprar com</span><strong id="rel-itens-fornecedor">—</strong></div>
@@ -119,7 +125,7 @@
                             </div>
                         </div>
                         <div class="tabela-wrap">
-                            <table class="data-table">
+                            <table class="data-table tabela-itens">
                                 <thead>
                                     <tr>
                                         <th>Item</th>
@@ -135,6 +141,21 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Empresa selecionada no filtro "Comprar por empresa": itens dela em
+                         CADA orçamento fechado, agrupados por orçamento (não por fornecedor —
+                         já é uma empresa só). Pedido: "empresa está em todos os 3 orçamentos,
+                         preciso saber o que comprar de cada orçamento com ela". -->
+                    <div class="card hidden" id="relatorio-card-empresa">
+                        <h2 class="card-secao-titulo">Comprar por empresa — orçamentos fechados</h2>
+                        <div style="padding: 0 1.5rem 1rem;">
+                            <div class="orc-detalhe-resumo" style="margin:0;">
+                                <div><span>Empresa</span><strong id="rel-empresa-nome">—</strong></div>
+                                <div><span>Total em todos os orçamentos fechados</span><strong id="rel-empresa-total">R$ 0,00</strong></div>
+                            </div>
+                        </div>
+                        <div id="rel-empresa-grupos" style="padding: 0 1.5rem 1.5rem;"></div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -142,6 +163,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/orcamento/app.js"></script>
+    <script type="module" src="/financeiro/orcamento/app.js?v=3"></script>
 </body>
 </html>
