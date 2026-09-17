@@ -185,9 +185,112 @@ async function initPaginaRelatorio() {
   document.getElementById('rel-orcamento-select')?.addEventListener('change', carregarItensRelatorio);
   document.getElementById('rel-fornecedor-select')?.addEventListener('change', renderizarItensRelatorio);
 
+  // Só busca os lançamentos dos orçamentos fechados quando a pessoa de fato
+  // for usar esse filtro (foco no select) — não teria por que ler tudo isso
+  // toda vez que a página de relatório abre, se ninguém for usar.
+  document.getElementById('rel-empresa-select')?.addEventListener('focus', popularSelectEmpresaFechados, { once: true });
+  document.getElementById('rel-empresa-select')?.addEventListener('change', renderizarRelatorioPorEmpresa);
+
   document.getElementById('btn-imprimir-relatorio')?.addEventListener('click', () => window.print());
 
   renderizarRelatorio();
+}
+
+// Lê os lançamentos de TODOS os orçamentos fechados (poucos, na prática —
+// cada um já é uma leitura pequena) e guarda em cache local — recarregado só
+// se a página for recarregada. Cada lançamento ganha orcamentoNome/orcamentoId
+// pra poder agrupar por orçamento no relatório por empresa.
+let lancamentosFechadosCache = null;
+async function carregarLancamentosOrcamentosFechados() {
+  if (lancamentosFechadosCache) return lancamentosFechadosCache;
+  const fechados = orcamentos.filter(o => o.status === 'encerrado');
+  const listas = await Promise.all(fechados.map(o =>
+    apiFetch(`/orcamento/orcamentos/${o.id}/lancamentos`)
+      .then(ls => ls.map(l => ({ ...l, orcamentoNome: o.nome })))
+      .catch(() => []) // orçamento de outra colaboradora (403) — só ignora, não trava o relatório
+  ));
+  lancamentosFechadosCache = listas.flat();
+  return lancamentosFechadosCache;
+}
+
+async function popularSelectEmpresaFechados() {
+  const select = document.getElementById('rel-empresa-select');
+  const todos = await carregarLancamentosOrcamentosFechados();
+  const empresas = [...new Set(todos.map(l => l.fornecedorFechado).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const atual = select.value;
+  select.innerHTML = '<option value="">Comprar por empresa (orçamentos fechados)...</option>' +
+    empresas.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  if (empresas.includes(atual)) select.value = atual;
+}
+
+// Mesma ideia de montarLinhasAgrupadasPorFornecedor, só que o agrupamento é
+// por ORÇAMENTO (a empresa já é uma só, fixada pelo filtro) — é isso que
+// responde "o que eu compro dessa empresa em cada orçamento fechado".
+function montarGruposPorOrcamento(lancamentos) {
+  const grupos = new Map();
+  lancamentos.forEach(l => {
+    if (!grupos.has(l.orcamentoNome)) grupos.set(l.orcamentoNome, []);
+    grupos.get(l.orcamentoNome).push(l);
+  });
+
+  const nomesOrdenados = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return nomesOrdenados.map(nomeOrcamento => {
+    const itens = grupos.get(nomeOrcamento);
+    const subtotal = itens.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
+    const linhas = itens.map(l => `
+      <tr>
+        <td>${esc(l.itemNome)}${l.unidade ? ` <span class="lanc-item-unidade">(${esc(l.unidade)})</span>` : ''}</td>
+        <td>${l.quantidade}</td>
+        <td>${fmtMoeda(l.valorUnitarioFechado)}</td>
+        <td>${fmtMoeda(l.valorTotalFechado)}</td>
+      </tr>`).join('');
+    return `
+      <div class="card-secao card-secao-grupo">
+        <div class="card-secao-grupo-titulo">
+          <span class="card-secao-grupo-nome">${esc(nomeOrcamento)}</span>
+          <span class="card-secao-grupo-meta">${itens.length} ${itens.length === 1 ? 'item' : 'itens'} · ${fmtMoeda(subtotal)}</span>
+        </div>
+        <div class="tabela-wrap">
+          <table class="data-table tabela-itens">
+            <thead><tr><th>Item</th><th>Qtd</th><th>Vlr. Unit.</th><th>Total</th></tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function renderizarRelatorioPorEmpresa() {
+  const empresa = document.getElementById('rel-empresa-select').value;
+  const card = document.getElementById('relatorio-card-empresa');
+  const root = document.getElementById('orcamento-relatorio-root');
+  if (!empresa) { card.classList.add('hidden'); root?.classList.remove('modo-empresa'); return; }
+
+  // Some com as outras visões (visão geral / itens de um orçamento) — só uma
+  // por vez, igual já acontece entre elas.
+  document.getElementById('relatorio-card-orcamentos').classList.add('hidden');
+  document.getElementById('relatorio-card-itens').classList.add('hidden');
+  document.getElementById('rel-orcamento-select').value = '';
+  card.classList.remove('hidden');
+  // Marca "modo empresa" pra impressão sair só com o relatório da empresa —
+  // sem isso o card de KPIs gerais (previsto/gasto/saldo de TODOS os
+  // orçamentos) ia junto na impressão, e não é isso que a pessoa quer
+  // quando pediu pra imprimir só o relatório de um fornecedor.
+  root?.classList.add('modo-empresa');
+
+  const todos = await carregarLancamentosOrcamentosFechados();
+  const itensDaEmpresa = todos.filter(l => l.fornecedorFechado === empresa);
+  const total = itensDaEmpresa.reduce((s, l) => s + (l.valorTotalFechado || 0), 0);
+
+  document.getElementById('rel-empresa-nome').textContent = empresa;
+  document.getElementById('rel-empresa-total').textContent = fmtMoeda(total);
+  document.getElementById('rel-empresa-grupos').innerHTML = itensDaEmpresa.length
+    ? montarGruposPorOrcamento(itensDaEmpresa)
+    : '<p class="tabela-msg">Nenhum item fechado com essa empresa ainda.</p>';
+
+  const filtroLabel = document.getElementById('print-filtro-label');
+  if (filtroLabel) filtroLabel.textContent = `Comprar por empresa — ${empresa} (orçamentos fechados)`;
 }
 
 function popularSelectOrcamentoRelatorio() {
@@ -211,6 +314,12 @@ async function carregarItensRelatorio() {
   const cardOrcamentos = document.getElementById('relatorio-card-orcamentos');
   const cardItens = document.getElementById('relatorio-card-itens');
   const tbody = document.getElementById('rel-itens-tbody');
+
+  // Trocou pro filtro de orçamento — sai do modo "por empresa" (só uma visão
+  // por vez).
+  document.getElementById('relatorio-card-empresa').classList.add('hidden');
+  document.getElementById('rel-empresa-select').value = '';
+  document.getElementById('orcamento-relatorio-root')?.classList.remove('modo-empresa');
 
   if (!orcamentoId) {
     lancamentosOrcamentoRelatorio = [];
@@ -294,6 +403,12 @@ function atualizarLabelImpressaoOrcamento() {
 }
 
 function renderizarRelatorio() {
+  // Trocou setor/período/status — sai do modo "por empresa" também.
+  document.getElementById('relatorio-card-empresa')?.classList.add('hidden');
+  const selectEmpresa = document.getElementById('rel-empresa-select');
+  if (selectEmpresa) selectEmpresa.value = '';
+  document.getElementById('orcamento-relatorio-root')?.classList.remove('modo-empresa');
+
   const lista = orcamentosFiltrados();
   atualizarKPIs(lista);
 
@@ -323,17 +438,89 @@ function renderizarRelatorio() {
   }).join('');
 }
 
-// Lista de fornecedores compartilhada com o módulo Licitação — só para
-// sugerir nomes já usados (autocomplete) e manter consistência ao agrupar
-// lançamentos por fornecedor. Falha aqui não deve travar a página.
+// Empresas cadastradas — PRÓPRIAS do Orçamento (pedido explícito 17/09: "eu
+// não quero compartilhado, quero que cada local tenha suas empresas" — antes
+// reaproveitava o cadastro do módulo Licitação, agora é uma coleção
+// separada, /orcamento/fornecedores). Usado tanto pra popular a
+// sugestão/autocomplete do campo de cotação quanto pro modal "Empresas".
+let fornecedoresDetalhados = []; // [{id, nome}] — guarda o id pra dar excluir no modal "Empresas"
 async function carregarFornecedores() {
   try {
-    const lista = await apiFetch('/financeiro/fornecedores');
-    fornecedoresGlobais = lista.map(f => f.nome).filter(Boolean);
+    fornecedoresDetalhados = await apiFetch('/orcamento/fornecedores');
+    fornecedoresGlobais = fornecedoresDetalhados.map(f => f.nome).filter(Boolean);
     document.getElementById('fornecedores-datalist').innerHTML = fornecedoresGlobais.map(n => `<option value="${esc(n)}">`).join('');
   } catch (err) {
-    // Sem permissão de Licitação ou erro pontual — o campo de fornecedor
-    // continua funcionando como texto livre, só sem sugestão.
+    // Erro pontual — o campo de fornecedor continua funcionando como texto
+    // livre, só sem sugestão.
+  }
+}
+
+// ==========================================
+// EMPRESAS — modal de cadastro dentro do Orçamento. Grade de cartões (não
+// tabela) pra bater o olho e achar rápido — pedido explícito: "eu preciso
+// ver claramente as empresas, não só um menu esquisito".
+// ==========================================
+function renderizarModalEmpresas() {
+  const grid = document.getElementById('empresas-grid');
+  const contagem = document.getElementById('empresas-contagem');
+
+  if (!fornecedoresDetalhados.length) {
+    contagem.textContent = '';
+    grid.innerHTML = '<p class="tabela-msg">Nenhuma empresa cadastrada ainda. Adicione a primeira acima.</p>';
+    return;
+  }
+
+  const ordenadas = [...fornecedoresDetalhados].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  contagem.textContent = `${ordenadas.length} empresa(s) cadastrada(s)`;
+  grid.innerHTML = ordenadas.map(f => `
+    <div class="empresa-chip">
+      <span class="empresa-chip-nome">${esc(f.nome)}</span>
+      <button type="button" class="btn-icon action-execute" data-excluir-empresa="${f.id}" title="Excluir empresa">🗑</button>
+    </div>`).join('');
+  grid.querySelectorAll('[data-excluir-empresa]').forEach(btn => {
+    btn.addEventListener('click', () => excluirEmpresa(btn.dataset.excluirEmpresa));
+  });
+}
+
+async function abrirModalEmpresas() {
+  document.getElementById('modal-empresas').classList.remove('hidden');
+  document.getElementById('empresa-nome').value = '';
+  document.getElementById('empresas-grid').innerHTML = '<p class="tabela-msg">Carregando...</p>';
+  await carregarFornecedores();
+  renderizarModalEmpresas();
+  document.getElementById('empresa-nome').focus();
+}
+
+function fecharModalEmpresas() {
+  document.getElementById('modal-empresas').classList.add('hidden');
+}
+
+async function criarEmpresa(e) {
+  e.preventDefault();
+  const nome = document.getElementById('empresa-nome').value.trim();
+  if (!nome) return;
+  try {
+    await apiFetch('/orcamento/fornecedores', { method: 'POST', body: JSON.stringify({ nome }) });
+    showToast('Empresa cadastrada.');
+    document.getElementById('empresa-nome').value = '';
+    await carregarFornecedores();
+    renderizarModalEmpresas();
+    document.getElementById('empresa-nome').focus();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function excluirEmpresa(id) {
+  const fornecedor = fornecedoresDetalhados.find(f => f.id === id);
+  if (!confirm(`Excluir a empresa "${fornecedor ? fornecedor.nome : ''}"? Isso não afeta lançamentos já feitos, só some da sugestão de nome.`)) return;
+  try {
+    await apiFetch(`/orcamento/fornecedores/${id}`, { method: 'DELETE' });
+    showToast('Empresa excluída.');
+    await carregarFornecedores();
+    renderizarModalEmpresas();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 
@@ -429,16 +616,19 @@ function atualizarKPIs(lista) {
   const totalGasto = lista.reduce((s, o) => s + (o.totalGasto || 0), 0);
   const saldoGeral = totalPrevisto - comPrevisto.reduce((s, o) => s + (o.totalGasto || 0), 0);
 
-  const escopo = lista.length === 1 ? `(${lista[0].nome})` : `— ${lista.length} orçamento${lista.length === 1 ? '' : 's'}`;
-  document.getElementById('kpi-previsto-label').textContent = `Previsto ${escopo}`;
-  document.getElementById('kpi-gasto-label').textContent = `Gasto ${escopo}`;
-  document.getElementById('kpi-saldo-label').textContent = `Saldo ${escopo}`;
+  const escopo = lista.length === 1 ? lista[0].nome : `${lista.length} orçamento${lista.length === 1 ? '' : 's'}`;
+  document.getElementById('kpi-previsto-hint').textContent = escopo;
+  document.getElementById('kpi-gasto-hint').textContent = escopo;
+  document.getElementById('kpi-saldo-hint').textContent = escopo;
 
-  document.getElementById('kpi-previsto').textContent = comPrevisto.length ? fmtMoeda(totalPrevisto) : '—';
+  const kpiPrevisto = document.getElementById('kpi-previsto');
+  kpiPrevisto.textContent = comPrevisto.length ? fmtMoeda(totalPrevisto) : '—';
+  kpiPrevisto.classList.toggle('kpi-valor-vazio', !comPrevisto.length);
   document.getElementById('kpi-gasto').textContent = fmtMoeda(totalGasto);
   const kpiSaldo = document.getElementById('kpi-saldo');
   kpiSaldo.textContent = comPrevisto.length ? fmtMoeda(saldoGeral) : '—';
   kpiSaldo.classList.toggle('valor-negativo', comPrevisto.length > 0 && saldoGeral < 0);
+  kpiSaldo.classList.toggle('kpi-valor-vazio', !comPrevisto.length);
   document.getElementById('kpi-qtd').textContent = lista.length;
   document.getElementById('kpi-qtd-hint').textContent = comPrevisto.some(o => (o.totalGasto || 0) > o.valorPrevisto) ? 'Há orçamento(s) estourado(s)' : '';
 }
@@ -708,6 +898,7 @@ async function excluirLancamento(id) {
   try {
     await apiFetch(`/orcamento/lancamentos/${id}`, { method: 'DELETE' });
     showToast('Item removido.');
+    lancamentosFechadosCache = null; // pode ter sido item de um orçamento já fechado
     await recarregarDetalheAposMudanca();
   } catch (err) {
     showToast(err.message, 'error');
@@ -734,13 +925,49 @@ function adicionarLinhaCotacao(fornecedor = '', valorUnitario = '') {
   `;
   lista.appendChild(row);
 
-  row.querySelector('.cotacao-valor').addEventListener('input', atualizarSeloVencedora);
+  const valorInput = row.querySelector('.cotacao-valor');
+  valorInput.addEventListener('input', () => {
+    delete valorInput.dataset.sugerido;
+    atualizarSeloVencedora();
+  });
+  row.querySelector('.cotacao-fornecedor').addEventListener('blur', () => sugerirPrecoCotacao(row));
   row.querySelector('.cotacao-remover').addEventListener('click', () => {
     row.remove();
     atualizarSeloVencedora();
   });
 
   atualizarSeloVencedora();
+}
+
+// Pedido explícito (17/09): "manter o histórico de itens já orçados com esta
+// empresa e o preço que eles têm... só atualiza na hora do lançamento" — ao
+// sair do campo fornecedor (com o item já preenchido), busca a última
+// cotação conhecida dessa dupla fornecedor+item e preenche o valor sozinho
+// (só se o campo ainda estiver vazio — nunca sobrescreve o que a pessoa já
+// digitou). `dataset.sugerido` marca visualmente que veio do histórico, pra
+// deixar claro que é só uma sugestão, cabe atualizar se o preço mudou.
+async function sugerirPrecoCotacao(row) {
+  const fornecedor = row.querySelector('.cotacao-fornecedor').value.trim();
+  const itemNome = document.getElementById('lancamento-item').value.trim();
+  const valorInput = row.querySelector('.cotacao-valor');
+  if (!fornecedor || !itemNome || valorInput.value !== '') return;
+
+  try {
+    const preco = await apiFetch(`/orcamento/preco-fornecedor-item?fornecedor=${encodeURIComponent(fornecedor)}&itemNome=${encodeURIComponent(itemNome)}`);
+    if (preco && valorInput.value === '') {
+      valorInput.value = preco.valorUnitario;
+      valorInput.dataset.sugerido = '1';
+      atualizarSeloVencedora();
+    }
+  } catch (err) {
+    // silencioso — é só uma sugestão, não pode travar o lançamento
+  }
+}
+
+// Item preenchido/trocado depois do fornecedor já escolhido — reconsulta o
+// preço pra cada linha de cotação que ainda estiver com o valor vazio.
+function sugerirPrecoTodasLinhas() {
+  document.querySelectorAll('#cotacoes-lista .cotacao-row').forEach(row => sugerirPrecoCotacao(row));
 }
 
 function atualizarSeloVencedora() {
@@ -833,6 +1060,10 @@ async function alternarStatusDetalhe() {
   try {
     await apiFetch(`/orcamento/orcamentos/${orcamento.id}`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
     showToast(novoStatus === 'aberto' ? 'Orçamento reaberto.' : 'Orçamento fechado.');
+    // Muda o conjunto de "orçamentos fechados" que o relatório usa — sem
+    // isso, um orçamento recém-fechado não aparecia em "Comprar por
+    // empresa" (nem um recém-reaberto sumia de lá) até um F5.
+    lancamentosFechadosCache = null;
     await carregarOrcamentos();
     abrirDetalhe(orcamento.id);
   } catch (err) {
@@ -855,11 +1086,18 @@ function podeExcluirOrcamento() {
 async function excluirOrcamentoAtual() {
   const orcamento = orcamentos.find(o => o.id === orcamentoDetalheId);
   if (!orcamento) return;
-  if (!confirm(`Excluir o orçamento "${orcamento.nome}"? Só é possível se ele ainda não tiver nenhum lançamento de gasto.`)) return;
+  // Exclusão em cascata: se o orçamento já tiver gastos lançados, eles são
+  // apagados junto — não dá pra manter só os gastos soltos sem o orçamento.
+  if (!confirm(`Excluir o orçamento "${orcamento.nome}"? Se ele já tiver gastos lançados, eles também serão excluídos permanentemente junto.`)) return;
   try {
-    await apiFetch(`/orcamento/orcamentos/${orcamento.id}`, { method: 'DELETE' });
-    showToast('Orçamento excluído.');
+    const resp = await apiFetch(`/orcamento/orcamentos/${orcamento.id}`, { method: 'DELETE' });
+    showToast(resp.message || 'Orçamento excluído.');
     fecharModalDetalhe();
+    // Excluir o orçamento apaga os lançamentos fechados dele também (cascata
+    // no servidor) — mas o cache do relatório "Comprar por empresa" já tinha
+    // sido montado antes disso, então continuava mostrando os itens
+    // apagados até um F5. Invalida pra forçar buscar de novo na próxima vez.
+    lancamentosFechadosCache = null;
     await carregarOrcamentos();
   } catch (err) {
     showToast(err.message, 'error');
@@ -873,6 +1111,10 @@ function wireEventos() {
   document.getElementById('btn-novo-orcamento').addEventListener('click', () => abrirModalOrcamento());
   document.getElementById('btn-cancelar-orcamento').addEventListener('click', fecharModalOrcamento);
   document.getElementById('form-orcamento').addEventListener('submit', salvarOrcamento);
+
+  document.getElementById('btn-gerenciar-empresas').addEventListener('click', abrirModalEmpresas);
+  document.getElementById('btn-fechar-empresas').addEventListener('click', fecharModalEmpresas);
+  document.getElementById('form-empresa').addEventListener('submit', criarEmpresa);
 
   document.getElementById('setor-select').addEventListener('change', renderizarGrid);
   document.getElementById('semestre-select').addEventListener('change', renderizarGrid);
@@ -890,8 +1132,9 @@ function wireEventos() {
   document.getElementById('form-lancamento').addEventListener('submit', salvarLancamento);
   document.getElementById('btn-cancelar-lancamento').addEventListener('click', cancelarEdicaoLancamento);
   document.getElementById('btn-add-cotacao').addEventListener('click', () => adicionarLinhaCotacao());
+  document.getElementById('lancamento-item').addEventListener('blur', sugerirPrecoTodasLinhas);
 
-  [document.getElementById('modal-orcamento'), document.getElementById('modal-detalhe')].forEach(overlay => {
+  [document.getElementById('modal-orcamento'), document.getElementById('modal-detalhe'), document.getElementById('modal-empresas')].forEach(overlay => {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) overlay.classList.add('hidden');
     });

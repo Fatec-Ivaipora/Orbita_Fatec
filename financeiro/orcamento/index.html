@@ -6,7 +6,7 @@
     <title>Orçamento - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css">
+    <link rel="stylesheet" href="/financeiro/orcamento/orcamento.css?v=3">
 </head>
 <body>
     <!-- Auth Guard Padrão -->
@@ -28,6 +28,10 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
                             Relatório
                         </a>
+                        <button class="btn-secondary action-execute" id="btn-gerenciar-empresas">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 21V7M18 21V7M9 7h6M9 11h6M9 15h6M9 19h6"/></svg>
+                            Empresas
+                        </button>
                         <button class="btn-primary action-execute" id="btn-novo-orcamento" disabled>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Novo Orçamento
@@ -39,14 +43,17 @@
                     <div class="kpi-card">
                         <div class="kpi-label" id="kpi-previsto-label">Previsto</div>
                         <div class="kpi-value" id="kpi-previsto">R$ 0,00</div>
+                        <div class="kpi-hint" id="kpi-previsto-hint"></div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label" id="kpi-gasto-label">Gasto</div>
                         <div class="kpi-value" id="kpi-gasto">R$ 0,00</div>
+                        <div class="kpi-hint" id="kpi-gasto-hint"></div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label" id="kpi-saldo-label">Saldo</div>
                         <div class="kpi-value" id="kpi-saldo">R$ 0,00</div>
+                        <div class="kpi-hint" id="kpi-saldo-hint"></div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Orçamentos</div>
@@ -115,6 +122,30 @@
                     <button type="submit" class="btn-primary" id="btn-salvar-orcamento">Salvar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal: Empresas — cadastro PRÓPRIO do Orçamento (sem ligação com
+         Licitação). Grade de cartões em vez de tabela — pra bater o olho e
+         achar rápido, "não só um menu esquisito" (pedido do usuário). -->
+    <div id="modal-empresas" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Empresas do Orçamento</h2>
+            <p class="modal-subtitle">Cadastre aqui as empresas com quem você compra — o nome já aparece sugerido (e o último preço já cotado é preenchido sozinho) ao lançar um gasto novo.</p>
+            <form id="form-empresa" class="form-empresa-add">
+                <input type="text" id="empresa-nome" placeholder="Nome da empresa" style="text-transform:uppercase;" required maxlength="120">
+                <button type="submit" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Adicionar
+                </button>
+            </form>
+            <div id="empresas-contagem" class="empresas-contagem"></div>
+            <div id="empresas-grid" class="empresas-grid">
+                <p class="tabela-msg">Carregando...</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-fechar-empresas">Fechar</button>
+            </div>
         </div>
     </div>
 
@@ -203,6 +234,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/orcamento/app.js"></script>
+    <script type="module" src="/financeiro/orcamento/app.js?v=3"></script>
 </body>
 </html>
