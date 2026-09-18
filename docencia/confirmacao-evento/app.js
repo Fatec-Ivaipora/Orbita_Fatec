@@ -57,6 +57,18 @@ function formatarData(iso) {
   return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
 }
 
+// Professor que leciona em muitos cursos (comum, matriz rotativa entre
+// Gestão Comercial/Financeira/RH/Agronegócio) deixava a linha gigante,
+// desproporcional ao resto da tabela — pedido explícito (18/09): "procura
+// outra forma de falar os cursos". Mostra só os 2 primeiros + "e mais N";
+// passa o mouse (title) pra ver a lista inteira.
+function formatarCursosProfessor(cursos) {
+  if (!cursos || !cursos.length) return '';
+  if (cursos.length <= 2) return `<div class="ce-professor-cursos">${esc(cursos.join(', '))}</div>`;
+  const resumo = `${esc(cursos.slice(0, 2).join(', '))} e mais ${cursos.length - 2}`;
+  return `<div class="ce-professor-cursos" title="${esc(cursos.join(', '))}">${resumo}</div>`;
+}
+
 // ================================================================
 //  AUTH GUARD E INICIALIZAÇÃO (mesmo padrão dos demais módulos)
 // ================================================================
@@ -294,8 +306,9 @@ function renderItens() {
     <tr data-item-id="${item.id}">
       <td>
         <div class="ce-professor-nome">${esc(item.professorNome)}</div>
-        ${item.cursos && item.cursos.length ? `<div class="ce-professor-cursos">${esc(item.cursos.join(', '))}</div>` : ''}
+        ${formatarCursosProfessor(item.cursos)}
       </td>
+      <td><input type="datetime-local" class="ce-input-inline" data-campo="dataContato" value="${esc(item.dataContato || '')}"></td>
       <td>
         <div class="ce-status-pills">
           ${['presente', 'ausente', 'ausente_ead'].map(s => `
@@ -304,8 +317,7 @@ function renderItens() {
         </div>
       </td>
       <td><textarea class="ce-input-inline ce-textarea-inline" data-campo="justificativa" placeholder="Motivo da ausência" rows="2">${esc(item.justificativa || '')}</textarea></td>
-      <td><input type="text" class="ce-input-inline" data-campo="dataContato" value="${esc(item.dataContato || '')}" placeholder="dd/mm hh:mm"></td>
-      <td><input type="text" class="ce-input-inline" data-campo="dataConfirmacao" value="${esc(item.dataConfirmacao || '')}" placeholder="dd/mm"></td>
+      <td><input type="date" class="ce-input-inline" data-campo="dataConfirmacao" value="${esc(item.dataConfirmacao || '')}"></td>
       <td><button type="button" class="btn-icon btn-icon-perigo action-execute" data-remover-item="${item.id}" title="Remover da lista">🗑</button></td>
     </tr>`).join('');
 
