@@ -72,6 +72,8 @@ const rotasOrcamento = require('../src/rotas/orcamento');
 const rotasAvaliacaoDocente = require('../src/rotas/avaliacao-docente');
 const rotasCobranca = require('../src/rotas/cobranca');
 const rotasBancoMedFatec = require('../src/rotas/banco-med-fatec');
+const rotasBancoProvas = require('../src/rotas/banco-provas');
+const rotasConfirmacaoEvento = require('../src/rotas/confirmacao-evento');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
@@ -93,6 +95,8 @@ app.use('/api/orcamento', rotasOrcamento);
 app.use('/api/avaliacao-docente', rotasAvaliacaoDocente);
 app.use('/api/cobranca', rotasCobranca);
 app.use('/api/banco-med-fatec', rotasBancoMedFatec);
+app.use('/api/banco-provas', rotasBancoProvas);
+app.use('/api/confirmacao-evento', rotasConfirmacaoEvento);
 
 // Exportação obrigatória para o Vercel Serverless
 

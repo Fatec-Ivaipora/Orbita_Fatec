@@ -96,6 +96,7 @@ const CURSOS_FATEC = [
   { id: 'fisioterapia', name: 'Fisioterapia' },
   { id: 'gestao-comercial', name: 'Gestão Comercial' },
   { id: 'gestao-financeira', name: 'Gestão Financeira' },
+  { id: 'logistica', name: 'Logística' },
   { id: 'medicina', name: 'Medicina' },
   { id: 'medicina-veterinaria', name: 'Medicina Veterinária' },
   { id: 'pedagogia', name: 'Pedagogia' },

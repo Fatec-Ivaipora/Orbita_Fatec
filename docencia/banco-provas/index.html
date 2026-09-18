@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banco de Provas - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=11">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Banco de Provas</h1>
+                        <p class="page-subtitle">Banco de questões por disciplina/período, pra montar simulados e provas sem ficar juntando arquivo de cada professor</p>
+                    </div>
+                </div>
+
+                <div class="curso-bar">
+                    <label for="bp-curso-select">Curso</label>
+                    <select class="select-filter" id="bp-curso-select"></select>
+                    <p id="bp-sem-curso-aviso" class="form-hint hidden" style="margin:0;">Você ainda não tem nenhum curso vinculado — peça pro Administrador vincular no cadastro de Usuários.</p>
+                </div>
+
+                <div id="bp-conteudo" class="hidden">
+                    <div class="bp-tabs">
+                        <button class="bp-tab-btn active" data-tab="disciplinas">Disciplinas</button>
+                        <button class="bp-tab-btn" data-tab="questoes">Banco de Questões</button>
+                        <button class="bp-tab-btn" data-tab="revisao">Revisão de Importação <span id="bp-revisao-badge" class="bp-badge bp-badge-dissertativa hidden" style="margin-left:0.3rem;">0</span></button>
+                        <button class="bp-tab-btn" data-tab="provas">Provas</button>
+                    </div>
+
+                    <!-- ============ VIEW: DISCIPLINAS ============ -->
+                    <section id="bp-view-disciplinas" class="bp-view">
+                        <div class="filters-bar">
+                            <p class="form-hint" style="margin:0;">Cadastre as disciplinas do curso por período/série — é o que organiza o banco de questões.</p>
+                            <div class="filters-bar-actions">
+                                <button class="btn-primary" id="bp-btn-nova-disciplina">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Nova Disciplina
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="tabela-wrap">
+                                <table class="data-table">
+                                    <thead><tr><th>Disciplina</th><th style="text-align:right;">Questões</th><th>Ações</th></tr></thead>
+                                    <tbody id="bp-disciplinas-tbody">
+                                        <tr><td colspan="3" class="tabela-msg">Selecione um curso.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ============ VIEW: BANCO DE QUESTÕES ============ -->
+                    <section id="bp-view-questoes" class="bp-view hidden">
+                        <div class="filters-bar">
+                            <select class="select-filter" id="bp-filtro-periodo">
+                                <option value="">Todos os períodos</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-disciplina">
+                                <option value="">Todas as disciplinas</option>
+                                <option value="geral">Conhecimentos Gerais</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-semestre">
+                                <option value="">Todos os semestres</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-bimestre">
+                                <option value="">Todos os bimestres</option>
+                                <option value="1">1º Bimestre</option>
+                                <option value="2">2º Bimestre</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-chamada">
+                                <option value="">Todas as chamadas</option>
+                                <option value="1">1ª Chamada</option>
+                                <option value="2">2ª Chamada</option>
+                                <option value="exame">Exame</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-tipo">
+                                <option value="">Objetivas e dissertativas</option>
+                                <option value="objetiva">Só objetivas</option>
+                                <option value="dissertativa">Só dissertativas</option>
+                            </select>
+                            <select class="select-filter" id="bp-filtro-dificuldade">
+                                <option value="">Todas as dificuldades</option>
+                                <option value="facil">Fácil</option>
+                                <option value="media">Média</option>
+                                <option value="intermediaria">Intermediária</option>
+                                <option value="dificil">Difícil</option>
+                            </select>
+                            <div class="filters-bar-actions">
+                                <button class="btn-secondary" id="bp-btn-importar-docx">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>
+                                    Importar do Word
+                                </button>
+                                <button class="btn-primary" id="bp-btn-nova-questao">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Nova Questão
+                                </button>
+                            </div>
+                        </div>
+                        <div id="bp-questoes-lista" class="bp-questoes-lista"></div>
+                        <p id="bp-questoes-vazio" class="tabela-msg hidden">Selecione um período, uma disciplina ou uma dificuldade acima pra ver as questões.</p>
+                    </section>
+
+                    <!-- ============ VIEW: REVISÃO DE IMPORTAÇÃO ============ -->
+                    <section id="bp-view-revisao" class="bp-view hidden">
+                        <p class="form-hint" style="margin-bottom:1rem;">Questões importadas do Word ficam aqui até você confirmar a disciplina certa de cada grupo — só depois disso elas entram no banco.</p>
+                        <div id="bp-revisao-lista"></div>
+                        <p id="bp-revisao-vazio" class="tabela-msg hidden">Nada pendente de revisão no momento.</p>
+                    </section>
+
+                    <!-- ============ VIEW: PROVAS ============ -->
+                    <section id="bp-view-provas" class="bp-view hidden">
+                        <div class="filters-bar">
+                            <p class="form-hint" style="margin:0;">Simulado sorteia questões de conhecimentos gerais + disciplinas; Prova Bimestral/Exame você escolhe questão por questão de uma disciplina só.</p>
+                            <div class="filters-bar-actions">
+                                <button class="btn-primary" id="bp-btn-nova-prova">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Nova Prova
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="tabela-wrap">
+                                <table class="data-table">
+                                    <thead><tr><th>Nome</th><th>Tipo</th><th style="text-align:right;">Questões</th><th>Ações</th></tr></thead>
+                                    <tbody id="bp-provas-tbody">
+                                        <tr><td colspan="4" class="tabela-msg">Nenhuma prova criada ainda.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Nova/Editar Disciplina -->
+    <div id="modal-disciplina" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-disciplina-title">Nova Disciplina</h2>
+            <p class="modal-subtitle">Disciplina do curso selecionado, na série/período em que é ministrada.</p>
+            <form id="form-disciplina">
+                <input type="hidden" id="disciplina-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Período / Série</label>
+                        <select id="disciplina-periodo" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Nome abreviado (opcional)</label>
+                        <input type="text" id="disciplina-nome-breve" maxlength="30" placeholder="Ex.: F.D.E.H.">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nome da disciplina</label>
+                    <input type="text" id="disciplina-nome" required maxlength="150" placeholder="Ex.: Leis Penais Especiais">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-disciplina">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Nova/Editar Questão -->
+    <div id="modal-questao" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="modal-questao-title">Nova Questão</h2>
+            <form id="form-questao">
+                <input type="hidden" id="questao-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Disciplina</label>
+                        <select id="questao-disciplina" required>
+                            <option value="">Selecione</option>
+                            <option value="geral">Conhecimentos Gerais</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Semestre (opcional)</label>
+                        <input type="text" id="questao-semestre" placeholder="Ex.: 2026.2" maxlength="20">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Bimestre</label>
+                        <select id="questao-bimestre">
+                            <option value="">—</option>
+                            <option value="1">1º Bimestre</option>
+                            <option value="2">2º Bimestre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Chamada</label>
+                        <select id="questao-chamada">
+                            <option value="">—</option>
+                            <option value="1">1ª Chamada</option>
+                            <option value="2">2ª Chamada</option>
+                            <option value="exame">Exame</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select id="questao-tipo">
+                            <option value="objetiva">Objetiva (múltipla escolha)</option>
+                            <option value="dissertativa">Dissertativa</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Dificuldade</label>
+                        <select id="questao-dificuldade">
+                            <option value="facil">Fácil</option>
+                            <option value="media" selected>Média</option>
+                            <option value="intermediaria">Intermediária</option>
+                            <option value="dificil">Difícil</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Enunciado</label>
+                    <textarea id="questao-enunciado" required maxlength="4000" rows="4" placeholder="Texto da questão..."></textarea>
+                </div>
+
+                <div id="questao-bloco-alternativas">
+                    <div class="form-group">
+                        <label>Alternativas (marque a correta)</label>
+                        <div id="questao-alternativas-lista"></div>
+                        <button type="button" class="btn-secondary" id="btn-add-alternativa" style="margin-top:0.5rem;">+ Alternativa</button>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Valor (opcional)</label>
+                        <input type="number" id="questao-valor" step="0.05" min="0" placeholder="Ex.: 0.25">
+                    </div>
+                    <div class="form-group">
+                        <label>Professor(a) (opcional)</label>
+                        <input type="text" id="questao-professor" maxlength="120" placeholder="Quem elaborou">
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-questao">Cancelar</button>
+                    <button type="submit" class="btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Importar do Word (2 etapas: analisar arquivo -> marcar gabarito) -->
+    <div id="modal-importar" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Importar do Word</h2>
+
+            <!-- ETAPA 1: escolher arquivo -->
+            <div id="importar-etapa-arquivo">
+                <p class="modal-subtitle">O arquivo é a versão pro aluno (sem gabarito) — na próxima tela você marca a resposta certa clicando, sem precisar digitar.</p>
+                <form id="form-importar">
+                    <div class="form-group">
+                        <label>Curso</label>
+                        <select id="importar-curso" required></select>
+                        <p class="form-hint" style="margin:0.3rem 0 0;">Confira antes de analisar — as questões vão pro banco deste curso.</p>
+                    </div>
+                    <div class="form-group">
+                        <label>Arquivo (.docx ou .doc)</label>
+                        <input type="file" id="importar-arquivo" accept=".docx,.doc" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Alternativas por questão</label>
+                            <select id="importar-alternativas">
+                                <option value="5">5 (A a E)</option>
+                                <option value="4">4 (A a D)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Professor(a) (opcional)</label>
+                            <input type="text" id="importar-professor" maxlength="120" placeholder="Quem elaborou">
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="btn-cancelar-importar">Cancelar</button>
+                        <button type="submit" class="btn-primary" id="btn-analisar-importar">Analisar arquivo</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ETAPA 2: marcar gabarito clicando (nada de digitar número+letra) -->
+            <div id="importar-etapa-gabarito" class="hidden">
+                <p class="modal-subtitle">Importando para <strong id="importar-gabarito-curso-nome"></strong> — clique na alternativa certa de cada questão. <span id="importar-gabarito-progresso" class="bp-badge bp-badge-objetiva"></span></p>
+                <p id="importar-rascunho-aviso" class="form-hint hidden" style="color:var(--accent-orange); font-weight:600;">Progresso salvo automaticamente neste navegador — pode fechar e voltar depois sem perder o que já marcou.</p>
+                <div id="importar-gabarito-lista" style="max-height:50vh; overflow-y:auto;"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-descartar-importar">Descartar e começar de novo</button>
+                    <button type="button" class="btn-secondary" id="btn-voltar-importar">Voltar</button>
+                    <button type="button" class="btn-secondary" id="btn-imprimir-gabarito-importar">Imprimir gabarito</button>
+                    <button type="button" class="btn-primary" id="btn-confirmar-importar">Confirmar importação</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Nova Prova -->
+    <div id="modal-prova" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Nova Prova</h2>
+            <p class="modal-subtitle">Curso: <strong id="prova-curso-nome"></strong> — pra trocar de curso, feche este formulário e mude no filtro "Curso" da página.</p>
+            <div class="bp-tabs" style="margin-bottom:1.25rem;">
+                <button type="button" class="bp-tab-btn prova-tipo-btn active" data-prova-tipo="simulado">Simulado</button>
+                <button type="button" class="bp-tab-btn prova-tipo-btn" data-prova-tipo="bimestral">Prova Bimestral</button>
+                <button type="button" class="bp-tab-btn prova-tipo-btn" data-prova-tipo="exame">Exame</button>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nome da prova</label>
+                    <input type="text" id="prova-nome" maxlength="150" placeholder="Ex.: Simulado 2026.2 — 1º Bimestre">
+                </div>
+                <div class="form-group">
+                    <label>Semestre</label>
+                    <select id="prova-semestre">
+                        <option value="">— sem semestre —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Período/Série</label>
+                <select id="prova-periodo"></select>
+                <p class="form-hint" style="margin:0.3rem 0 0;">Só mostra as disciplinas do período escolhido (a turma que vai fazer essa prova) — não a grade inteira do curso.</p>
+            </div>
+
+            <!-- SIMULADO: quantidade por disciplina + Conhecimentos Gerais, na
+                 sequência em que as questões foram cadastradas/importadas
+                 (Cong. Gerais primeiro, disciplinas depois) — sem sorteio. -->
+            <div id="prova-bloco-simulado">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Bimestre</label>
+                        <select id="prova-simulado-bimestre">
+                            <option value="">—</option>
+                            <option value="1">1º Bimestre</option>
+                            <option value="2">2º Bimestre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Chamada</label>
+                        <select id="prova-simulado-chamada">
+                            <option value="">—</option>
+                            <option value="1">1ª Chamada</option>
+                            <option value="2">2ª Chamada</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Quantidade de questões por disciplina (0 = não entra)</label>
+                    <div id="prova-cotas-lista"></div>
+                </div>
+                <button type="button" class="btn-secondary" id="btn-sortear-prova">Montar prova com essas quantidades</button>
+                <div id="prova-preview" style="margin-top:1rem;"></div>
+            </div>
+
+            <!-- BIMESTRAL/EXAME: uma disciplina, seleção manual -->
+            <div id="prova-bloco-manual" class="hidden">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Disciplina</label>
+                        <select id="prova-manual-disciplina"></select>
+                    </div>
+                    <div class="form-group" id="prova-manual-bimestre-grupo">
+                        <label>Bimestre</label>
+                        <select id="prova-manual-bimestre">
+                            <option value="">—</option>
+                            <option value="1">1º Bimestre</option>
+                            <option value="2">2º Bimestre</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="prova-manual-chamada-grupo">
+                        <label>Chamada</label>
+                        <select id="prova-manual-chamada">
+                            <option value="">—</option>
+                            <option value="1">1ª Chamada</option>
+                            <option value="2">2ª Chamada</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="form-hint hidden" id="prova-manual-exame-aviso">Exame não tem bimestre/chamada — mostrando as questões marcadas como "Exame" na disciplina escolhida.</p>
+                <div class="form-group">
+                    <label>Professor(a) (opcional)</label>
+                    <input type="text" id="prova-manual-professor" maxlength="120">
+                </div>
+
+                <div class="form-group">
+                    <label>Selecione as questões</label>
+                    <p class="form-hint" style="margin:0 0 0.4rem;">Mostrando só as questões do semestre escolhido no campo "Semestre" no topo — selecione "— sem semestre —" pra ver de todos os semestres.</p>
+                    <div id="prova-manual-lista" style="max-height:40vh; overflow-y:auto; border:1px solid var(--border-color); border-radius:8px; padding:0.75rem;"></div>
+                </div>
+
+                <!-- Ordem de impressão das questões SELECIONADAS — arrasta pra
+                     cima/baixo pra decidir a sequência exata (não é sorteio;
+                     objetivas e dissertativas continuam em blocos separados,
+                     dissertativa sempre no final, mas a ordem DENTRO de cada
+                     bloco é o professor quem decide, arrastando aqui). -->
+                <div class="form-group">
+                    <label>Ordem na prova (arraste pra reordenar)</label>
+                    <div id="prova-ordem-lista" style="border:1px solid var(--border-color); border-radius:8px; padding:0.5rem;">
+                        <p class="tabela-msg">Selecione questões acima pra definir a ordem.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-cancelar-prova">Cancelar</button>
+                <button type="button" class="btn-primary" id="btn-salvar-prova">Criar Prova</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Pré-visualizar prova antes de baixar o .docx final -->
+    <div id="modal-preview-prova" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="preview-prova-titulo">Pré-visualizar prova</h2>
+            <p class="modal-subtitle">Confira o conteúdo antes de baixar — se algo estiver errado, corrija a questão/prova e pré-visualize de novo.</p>
+            <div id="preview-prova-conteudo" class="bp-prev-conteudo"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="btn-fechar-preview-prova">Fechar</button>
+                <button type="button" class="btn-primary" id="btn-baixar-preview-prova">Baixar .docx</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/docencia/banco-provas/app.js?v=18"></script>
+</body>
+</html>

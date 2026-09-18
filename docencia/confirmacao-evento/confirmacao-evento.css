@@ -1,0 +1,156 @@
+/* confirmacao-evento.css - Módulo Docência / Confirmação de Presença em Evento */
+:root {
+  --primary-blue: #0F4EB8;
+  --secondary-blue: #1E63D6;
+  --bg-color: #F4F7FB;
+  --card-bg: #FFFFFF;
+  --text-main: #0B1F33;
+  --text-secondary: #64748B;
+  --border-color: #E5E7EB;
+  --accent-orange: #EB7025;
+  --green: #10B981;
+  --red: #EF4444;
+}
+
+.hidden { display: none !important; }
+
+/* Header de página */
+.page-header {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+  margin-bottom: 1.5rem; background: white; padding: 1.5rem 2rem; border-radius: 12px; border: 1px solid var(--border-color);
+}
+.page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.25rem; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+
+/* Botões */
+.btn-primary, .btn-secondary {
+  padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem; font-family: inherit; text-decoration: none; border: none;
+}
+.btn-primary { background: var(--primary-blue); color: #fff; box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25); }
+.btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-secondary { background: white; color: var(--text-main); border: 1px solid var(--border-color); }
+.btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-color);
+  background: white; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 0.9rem; color: inherit;
+}
+.btn-icon:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.btn-icon-perigo:hover { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+
+.select-filter {
+  padding: 0.7rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;
+  color: var(--text-main); background: white; font-family: inherit; cursor: pointer; min-width: 180px;
+}
+.select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+
+/* Toolbar de filtros */
+.filters-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.filters-bar-actions { display: flex; gap: 0.6rem; margin-left: auto; flex-wrap: wrap; }
+
+/* Card + tabela */
+.card { background: white; border-radius: 14px; border: 1px solid var(--border-color); overflow: hidden; }
+.tabela-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.data-table th {
+  text-align: left; padding: 0.9rem 1rem; background: #f8fafc; color: var(--text-secondary); font-weight: 700;
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border-color); white-space: nowrap;
+}
+.data-table td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #fafbfd; }
+.tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
+.acoes-col { white-space: nowrap; }
+
+.ce-link-evento {
+  background: none; border: none; padding: 0; font-family: inherit; font-size: inherit; font-weight: 700;
+  color: var(--primary-blue); cursor: pointer; text-align: left;
+}
+.ce-link-evento:hover { text-decoration: underline; }
+
+/* Modais */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-content {
+  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 560px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+.modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 0.35rem; }
+.modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 1.25rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-group { margin-bottom: 1.1rem; }
+.form-group label {
+  display: block; margin-bottom: 0.4rem; color: var(--text-secondary); font-weight: 600; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 0.7rem 0.9rem; border: 1px solid var(--border-color); border-radius: 8px;
+  box-sizing: border-box; font-size: 0.95rem; color: var(--text-main); background: #f8fafc; font-family: inherit;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+.form-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.35rem; }
+
+@media (max-width: 900px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+
+/* Resumo/gráfico do evento (Presente/Ausente/Ausente EAD/Pendente) — barras
+   horizontais em CSS puro, mesma ideia da barrinha de blocos da planilha
+   original, sem depender de lib de gráfico. */
+.ce-resumo {
+  background: white; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.6rem;
+}
+.ce-resumo-linha { display: grid; grid-template-columns: 110px 1fr 120px; gap: 0.75rem; align-items: center; }
+.ce-resumo-label { font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); }
+.ce-resumo-barra-fundo { background: #f1f5f9; border-radius: 6px; height: 14px; overflow: hidden; }
+.ce-resumo-barra { height: 100%; border-radius: 6px; transition: width 0.3s ease; }
+.ce-resumo-barra-presente { background: var(--green); }
+.ce-resumo-barra-ausente { background: var(--red); }
+.ce-resumo-barra-ausente_ead { background: var(--accent-orange); }
+.ce-resumo-barra-pendente { background: #94a3b8; }
+.ce-resumo-valor { font-size: 0.82rem; font-weight: 700; color: var(--text-main); text-align: right; }
+
+@media (max-width: 700px) {
+  .ce-resumo-linha { grid-template-columns: 90px 1fr 90px; }
+}
+
+/* Tabela de professores do evento */
+.ce-professor-nome { font-weight: 600; color: var(--text-main); }
+.ce-professor-cursos { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem; }
+
+.ce-status-pills { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.ce-pill {
+  padding: 0.35rem 0.7rem; border-radius: 20px; border: 1px solid var(--border-color); background: white;
+  font-family: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer; color: var(--text-secondary); white-space: nowrap;
+}
+.ce-pill:hover { border-color: #cbd5e1; }
+.ce-pill-presente.ce-pill-ativa { background: var(--green); border-color: var(--green); color: white; }
+.ce-pill-ausente.ce-pill-ativa { background: var(--red); border-color: var(--red); color: white; }
+.ce-pill-ausente_ead.ce-pill-ativa { background: var(--accent-orange); border-color: var(--accent-orange); color: white; }
+
+.ce-input-inline {
+  width: 100%; min-width: 140px; padding: 0.45rem 0.6rem; border: 1px solid var(--border-color); border-radius: 6px;
+  font-size: 0.82rem; font-family: inherit; color: var(--text-main); background: #f8fafc;
+}
+.ce-input-inline:focus { outline: none; border-color: var(--primary-blue); background: white; }
+.ce-textarea-inline {
+  min-width: 220px; min-height: 3.2rem; resize: vertical; font-family: inherit; line-height: 1.35;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 2rem; right: 2rem; background: #333; color: white; padding: 1rem 1.5rem;
+  border-radius: 8px; z-index: 10000; box-shadow: 0 5px 15px rgba(0,0,0,0.15); font-weight: 600;
+}
+.toast.hidden { display: none; }
+.toast-success { background: var(--green); }
+.toast-error { background: var(--red); }

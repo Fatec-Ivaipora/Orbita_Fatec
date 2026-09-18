@@ -164,7 +164,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 3,
                 'avaliacao-docente': 3,
                 cobranca: 1, // "Cobrança" é exclusivo do Financeiro, nem ADM N2 vê (31/08)
-                'banco-med-fatec': 3
+                'banco-med-fatec': 3,
+                'banco-provas': 3,
+                'confirmacao-evento': 3
             },
             ti: {
                 emprestimo: 3,
@@ -180,7 +182,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             rh: {
                 emprestimo: 1,
@@ -196,7 +200,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             financeiro: {
                 emprestimo: 1,
@@ -212,7 +218,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 3,
                 'avaliacao-docente': 1,
                 cobranca: 3,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
             // tarefa exclusiva do Financeiro. Orçamento e Cobrança seguem a
@@ -235,7 +243,15 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 3,
                 cobranca: 1,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                // Coordenador de qualquer curso pode montar prova - a rota
+                // filtra pra só os cursos vinculados a ele (users.cursos),
+                // mesma regra de Avaliação Docente.
+                'banco-provas': 3,
+                // Confirmação de Presença em Evento é institucional (todos os
+                // professores ativos, não só do próprio curso) — nível 3 pra
+                // qualquer coordenador poder marcar presença/ausência.
+                'confirmacao-evento': 3
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -253,7 +269,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             // Coordenação da Medicina — só o Banco de Questões (nível 3, pode
             // criar/editar questões e provas); nenhum outro módulo.
@@ -271,7 +289,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 3
+                'banco-med-fatec': 3,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             // Professor da Medicina — mesmo nível de acesso do coord_medicina.
             professor_medicina: {
@@ -288,7 +308,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 3
+                'banco-med-fatec': 3,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             },
             visitante: {
                 emprestimo: 2,
@@ -304,7 +326,9 @@ const requireModulePermission = (moduleName) => {
                 orcamento: 1,
                 'avaliacao-docente': 1,
                 cobranca: 1,
-                'banco-med-fatec': 1
+                'banco-med-fatec': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1
             }
         };
 
