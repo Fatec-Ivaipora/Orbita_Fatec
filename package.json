@@ -10,9 +10,13 @@
   "dependencies": {
     "compression": "^1.8.1",
     "cors": "^2.8.6",
+    "docx": "^9.7.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^13.9.0",
+    "mammoth": "^1.12.3",
+    "pg": "^8.23.0",
+    "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5"
   }
 }

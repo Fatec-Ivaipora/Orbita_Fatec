@@ -1,0 +1,276 @@
+/* banco-provas.css - Módulo Docência / Banco de Provas */
+:root {
+  --primary-blue: #0F4EB8;
+  --secondary-blue: #1E63D6;
+  --bg-color: #F4F7FB;
+  --card-bg: #FFFFFF;
+  --text-main: #0B1F33;
+  --text-secondary: #64748B;
+  --border-color: #E5E7EB;
+  --accent-orange: #EB7025;
+  --green: #10B981;
+  --red: #EF4444;
+}
+
+.hidden { display: none !important; }
+
+/* Header de página */
+.page-header {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+  margin-bottom: 1.5rem; background: white; padding: 1.5rem 2rem; border-radius: 12px; border: 1px solid var(--border-color);
+}
+.page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.25rem; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.95rem; font-weight: 500; }
+.page-header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* Botões */
+.btn-primary, .btn-secondary {
+  padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem; font-family: inherit; text-decoration: none; border: none;
+}
+.btn-primary { background: var(--primary-blue); color: #fff; box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25); }
+.btn-primary:hover { background: var(--secondary-blue); transform: translateY(-2px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-secondary { background: white; color: var(--text-main); border: 1px solid var(--border-color); }
+.btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-color);
+  background: white; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 0.9rem; color: inherit;
+}
+.btn-icon:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.btn-icon-perigo:hover { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+
+/* Curso ativo (seletor no topo) */
+.curso-bar {
+  display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+  background: white; padding: 1rem 1.25rem; border-radius: 12px; border: 1px solid var(--border-color);
+}
+.curso-bar label { font-weight: 700; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.select-filter {
+  padding: 0.7rem 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;
+  color: var(--text-main); background: white; font-family: inherit; cursor: pointer; min-width: 180px;
+}
+.select-filter:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15); }
+
+/* Abas */
+.bp-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); }
+.bp-tab-btn {
+  padding: 0.75rem 1.1rem; border: none; background: none; font-family: inherit; font-weight: 700; font-size: 0.9rem;
+  color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.bp-tab-btn.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
+.bp-view { display: block; }
+.bp-view.hidden { display: none; }
+
+/* Toolbar de filtros */
+.filters-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.filters-bar-actions { display: flex; gap: 0.6rem; margin-left: auto; flex-wrap: wrap; }
+
+/* Card + tabela */
+.card { background: white; border-radius: 14px; border: 1px solid var(--border-color); overflow: hidden; }
+.card-secao-titulo { padding: 1.1rem 1.5rem 0; margin: 0 0 -0.25rem; font-size: 1rem; font-weight: 700; color: var(--text-main); }
+.tabela-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.data-table th {
+  text-align: left; padding: 0.9rem 1rem; background: #f8fafc; color: var(--text-secondary); font-weight: 700;
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border-color); white-space: nowrap;
+}
+.data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #fafbfd; }
+.tabela-msg { text-align: center; color: var(--text-secondary); padding: 3rem 1rem !important; }
+.acoes-col { white-space: nowrap; }
+
+/* Cabeçalho de grupo (período) dentro da tabela de disciplinas */
+.grupo-header td {
+  background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.82rem;
+  padding: 0.55rem 1rem; border-bottom: 1px solid var(--border-color);
+}
+
+/* Lista de questões (cards, não tabela — enunciado longo não cabe em linha) */
+.bp-questoes-lista { display: flex; flex-direction: column; gap: 0.6rem; }
+.bp-q-row {
+  display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; background: white;
+  border: 1px solid var(--border-color); border-radius: 12px;
+}
+.bp-q-row-main { flex: 1; min-width: 0; }
+.bp-q-row-badges { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+.bp-badge {
+  display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 20px;
+  font-size: 0.72rem; font-weight: 700; white-space: nowrap;
+}
+.bp-badge-objetiva { background: #eef3fc; color: var(--primary-blue); }
+.bp-badge-dissertativa { background: #fdf2e9; color: var(--accent-orange); }
+.bp-badge-geral { background: #ecfdf5; color: #047857; }
+.bp-badge-dificuldade-facil { background: #ecfdf5; color: #15803d; }
+.bp-badge-dificuldade-media { background: #eef3fc; color: var(--primary-blue); }
+.bp-badge-dificuldade-intermediaria { background: #fdf2e9; color: var(--accent-orange); }
+.bp-badge-dificuldade-dificil { background: #fdecec; color: #b91c1c; }
+.bp-q-row-titulo { font-weight: 600; color: var(--text-main); line-height: 1.4; margin-bottom: 0.25rem; }
+.bp-q-row-meta { font-size: 0.78rem; color: var(--text-secondary); }
+.bp-q-row-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+/* Modais */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(3, 20, 38, 0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-content {
+  background: white; padding: 2rem; border-radius: 16px; width: 100%; max-width: 560px;
+  max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+.modal-content-lg { max-width: 780px; }
+.modal-content h2 { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0 0 0.35rem; }
+.modal-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 1.25rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; }
+.form-group { margin-bottom: 1.1rem; }
+.form-group label {
+  display: block; margin-bottom: 0.4rem; color: var(--text-secondary); font-weight: 600; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 0.7rem 0.9rem; border: 1px solid var(--border-color); border-radius: 8px;
+  box-sizing: border-box; font-size: 0.95rem; color: var(--text-main); background: #f8fafc; font-family: inherit;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: var(--primary-blue); background: white; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.15);
+}
+.form-group textarea { resize: vertical; min-height: 90px; }
+.form-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.35rem; }
+
+/* Editor de alternativas (A-E) */
+.alternativa-row {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 0.6rem; align-items: center; margin-bottom: 0.5rem;
+}
+.alternativa-letra {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: 8px; background: #eef3fc; color: var(--primary-blue); font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+}
+.alternativa-row input[type="text"] {
+  padding: 0.6rem 0.8rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;
+  color: var(--text-main); background: #f8fafc; font-family: inherit;
+}
+.alternativa-row input[type="text"]:focus { outline: none; border-color: var(--primary-blue); background: white; }
+.alternativa-row.alternativa-correta input[type="text"] { border-color: var(--green); background: #ecfdf5; }
+.alternativa-gabarito-radio { width: 20px; height: 20px; accent-color: var(--green); cursor: pointer; }
+
+@media (max-width: 900px) {
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+}
+
+/* Revisão de Importação — um card por grupo (lote + categoria sugerida) */
+.bp-revisao-card {
+  background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 1.1rem 1.25rem; margin-bottom: 0.75rem;
+}
+.bp-revisao-card-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.bp-revisao-card-titulo { font-weight: 700; color: var(--text-main); }
+.bp-revisao-card-qtd { font-size: 0.8rem; color: var(--text-secondary); }
+.bp-revisao-card-acoes { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.bp-revisao-card-acoes select { min-width: 220px; }
+
+/* Cotas do Simulado (quantidade por disciplina) */
+.prova-cota-row {
+  display: grid; grid-template-columns: 1fr 110px; gap: 0.75rem; align-items: center; margin-bottom: 0.5rem;
+}
+.prova-cota-row input { width: 100%; }
+
+/* Preview do sorteio / lista de seleção manual */
+.prova-preview-grupo { margin-bottom: 1rem; }
+.prova-preview-grupo-titulo { font-weight: 700; color: var(--primary-blue); font-size: 0.85rem; margin-bottom: 0.4rem; }
+.prova-preview-item, .prova-manual-item {
+  display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--border-color);
+  border-radius: 8px; margin-bottom: 0.4rem; font-size: 0.85rem;
+}
+.prova-manual-item input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
+
+/* ---- Ordem na prova (arrastar pra reordenar) ---- */
+.prova-ordem-item {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 0.4rem;
+  font-size: 0.85rem; background: white; cursor: grab;
+}
+.prova-ordem-item.prova-ordem-item-arrastando { opacity: 0.4; }
+.prova-ordem-arrasta { color: var(--text-secondary); font-size: 1.1rem; line-height: 1; flex-shrink: 0; }
+.prova-ordem-numero { font-weight: 700; color: var(--text-secondary); flex-shrink: 0; min-width: 1.4em; }
+.prova-ordem-texto { flex: 1; color: var(--text-main); }
+
+/* ---- Marcar gabarito na importação (bolinhas clicáveis, tipo EvalBee) ---- */
+.gab-questao-row {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 0.9rem 1rem; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 0.6rem;
+}
+.gab-questao-row.gab-marcada { border-color: var(--green); background: #ecfdf5; }
+.gab-questao-row.gab-questao-com-aviso { border-color: var(--accent-orange); }
+.gab-questao-aviso {
+  margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: #fff4ec; border-left: 3px solid var(--accent-orange);
+  color: #9a4a12; font-size: 0.8rem; font-weight: 600; border-radius: 4px;
+}
+.gab-questao-texto { flex: 1; min-width: 0; font-size: 0.88rem; color: var(--text-main); line-height: 1.4; }
+.gab-questao-num { font-weight: 800; color: var(--primary-blue); margin-right: 0.4rem; }
+.gab-bolinhas { display: flex; gap: 0.4rem; flex-shrink: 0; }
+.gab-bolinha {
+  width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border-color); background: white;
+  font-weight: 800; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; transition: all 0.12s ease;
+}
+.gab-bolinha:hover { border-color: var(--primary-blue); color: var(--primary-blue); }
+.gab-bolinha.gab-bolinha-marcada { background: var(--green); border-color: var(--green); color: white; }
+.gab-grupo-header {
+  background: #eef3fc; color: var(--primary-blue); font-weight: 700; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.03em; padding: 0.5rem 0.9rem; border-radius: 8px; margin-bottom: 0.5rem;
+}
+.gab-grupo-header:not(:first-child) { margin-top: 0.9rem; }
+
+/* Pré-visualização da prova (antes de baixar o .docx) — imita o layout do
+   arquivo final: cabeçalho em tabela, orientações, grade de gabarito e
+   questões, tudo sobre fundo de "papel" pra ficar claro que é o preview de
+   um documento, não uma tela normal do sistema. */
+.bp-prev-conteudo {
+  max-height: 65vh; overflow-y: auto; background: #f1f5f9; padding: 1.5rem;
+  border-radius: 10px; margin-bottom: 0.5rem; font-size: 0.85rem; color: #111; line-height: 1.5;
+}
+.bp-prev-titulo { font-weight: 800; font-size: 1.1rem; text-align: center; margin: 0 0 1rem; }
+.bp-prev-negrito { font-weight: 700; margin: 0.8rem 0 0.4rem; }
+.bp-prev-centro { text-align: center; }
+.bp-prev-tabela-cab, .bp-prev-tabela-gabarito {
+  width: 100%; border-collapse: collapse; margin-bottom: 0.8rem; background: white;
+}
+.bp-prev-cel {
+  border: 1px solid #ccc; padding: 0.4rem 0.6rem; vertical-align: top;
+}
+.bp-prev-cel-ciente { text-align: center; width: 30%; }
+.bp-prev-tabela-gabarito td {
+  border: 1px solid #ccc; text-align: center; padding: 0.4rem; font-weight: 700; background: white;
+}
+.bp-prev-lista { margin: 0 0 0.8rem; padding-left: 1.2rem; }
+.bp-prev-lista li { margin-bottom: 0.25rem; }
+.bp-prev-questao { background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem; }
+.bp-prev-questao p { margin: 0 0 0.4rem; }
+.bp-prev-alternativa { padding-left: 1rem; }
+
+/* Gabarito editável direto na pré-visualização — clicar na alternativa
+   certa corrige o gabarito na hora (PUT /questoes/:id/gabarito), sem abrir
+   o formulário inteiro da questão. */
+.bp-prev-gabarito-editor { display: flex; flex-direction: column; gap: 0.3rem; }
+.bp-prev-alt-btn {
+  display: block; width: 100%; text-align: left; padding: 0.4rem 0.6rem; margin: 0;
+  border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc;
+  font-family: inherit; font-size: 0.85rem; color: var(--text-main); cursor: pointer;
+}
+.bp-prev-alt-btn:hover { border-color: var(--primary-blue); background: #eef3fc; }
+.bp-prev-alt-btn.bp-prev-alt-correta { border-color: var(--green); background: #ecfdf5; font-weight: 700; }
+.bp-prev-linha-resposta { border-bottom: 1px solid #999; height: 1.4rem; margin-bottom: 0.5rem; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 2rem; right: 2rem; background: #333; color: white; padding: 1rem 1.5rem;
+  border-radius: 8px; z-index: 10000; box-shadow: 0 5px 15px rgba(0,0,0,0.15); font-weight: 600;
+}
+.toast.hidden { display: none; }
+.toast-success { background: var(--green); }
+.toast-error { background: var(--red); }

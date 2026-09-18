@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmação de Presença - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/docencia/confirmacao-evento/confirmacao-evento.css?v=4">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Confirmação de Presença em Evento</h1>
+                        <p class="page-subtitle">Puxa os professores ativos direto do Edubox (GRA + MED) e ajuda a controlar quem confirmou presença em cada evento.</p>
+                    </div>
+                </div>
+
+                <!-- ============ VIEW: LISTA DE EVENTOS ============ -->
+                <section id="ce-view-eventos">
+                    <div class="filters-bar">
+                        <p class="form-hint" style="margin:0;">Cada evento já vem com a lista de professores ativos do semestre vigente — você só marca presença/ausência.</p>
+                        <div class="filters-bar-actions">
+                            <button class="btn-primary" id="ce-btn-novo-evento">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Novo Evento
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Evento</th><th>Data</th><th>Semestre</th><th style="text-align:right;">Professores</th><th style="text-align:right;">Confirmados</th><th>Ações</th></tr></thead>
+                                <tbody id="ce-eventos-tbody">
+                                    <tr><td colspan="6" class="tabela-msg">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ VIEW: DETALHE DO EVENTO (CONFIRMAÇÃO) ============ -->
+                <section id="ce-view-evento" class="hidden">
+                    <button type="button" class="btn-secondary" id="ce-btn-voltar-eventos" style="margin-bottom:1rem;">← Voltar aos eventos</button>
+
+                    <div class="page-header" style="margin-bottom:1rem;">
+                        <div>
+                            <h2 id="ce-evento-nome" style="margin:0;"></h2>
+                            <p class="page-subtitle" id="ce-evento-meta" style="margin:0.25rem 0 0;"></p>
+                        </div>
+                        <div class="filters-bar-actions">
+                            <button class="btn-secondary" id="ce-btn-atualizar-professores">Atualizar lista do Edubox</button>
+                            <button class="btn-secondary" id="ce-btn-add-professor">+ Adicionar professor</button>
+                        </div>
+                    </div>
+
+                    <div id="ce-resumo-grafico" class="ce-resumo"></div>
+
+                    <div class="filters-bar">
+                        <select class="select-filter" id="ce-filtro-status">
+                            <option value="">Todos os status</option>
+                            <option value="pendente">Pendente</option>
+                            <option value="presente">Presente</option>
+                            <option value="ausente">Ausente</option>
+                            <option value="ausente_ead">Ausente EAD</option>
+                        </select>
+                        <input type="text" class="select-filter" id="ce-filtro-nome" placeholder="Buscar professor pelo nome...">
+                    </div>
+
+                    <div class="card">
+                        <div class="tabela-wrap">
+                            <table class="data-table ce-tabela-itens">
+                                <thead>
+                                    <tr>
+                                        <th>Professor</th>
+                                        <th>Status</th>
+                                        <th>Justificativa</th>
+                                        <th>Contato</th>
+                                        <th>Confirmação</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ce-itens-tbody">
+                                    <tr><td colspan="6" class="tabela-msg">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Novo Evento -->
+    <div id="modal-evento" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Novo Evento</h2>
+            <p class="modal-subtitle">Ao criar, a lista de professores ativos (GRA + MED) é puxada automaticamente do Edubox.</p>
+            <form id="form-evento">
+                <div class="form-group">
+                    <label>Nome do evento</label>
+                    <input type="text" id="evento-nome" required maxlength="150" placeholder="Ex.: SIP - Semana de Integração Pedagógica">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Data do evento</label>
+                        <input type="date" id="evento-data" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Semestre (opcional, só rótulo)</label>
+                        <input type="text" id="evento-semestre" maxlength="20" placeholder="Ex.: 2026.2">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-evento">Cancelar</button>
+                    <button type="submit" class="btn-primary" id="btn-salvar-evento">Criar Evento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar professor manualmente -->
+    <div id="modal-add-professor" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Adicionar Professor</h2>
+            <p class="modal-subtitle">Pra quem não veio automaticamente do Edubox (convidado externo, vínculo não cadastrado, etc.).</p>
+            <form id="form-add-professor">
+                <div class="form-group">
+                    <label>Nome</label>
+                    <input type="text" id="add-professor-nome" required maxlength="150">
+                </div>
+                <div class="form-group">
+                    <label>E-mail (opcional)</label>
+                    <input type="email" id="add-professor-email" maxlength="150">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-add-professor">Cancelar</button>
+                    <button type="submit" class="btn-primary">Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/docencia/confirmacao-evento/app.js?v=5"></script>
+</body>
+</html>
