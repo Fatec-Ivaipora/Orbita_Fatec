@@ -1,0 +1,388 @@
+/* ÓRBITA — RELATÓRIO DESEMPENHO (Medicina)
+   Sub-marca MED FATEC, mesmas regras do BANCO MED-FATEC (ver DESIGN.md):
+   uma única barra sólida por view, linhas de lista (nunca grade de cards),
+   ícones SVG inline, borda OU sombra — nunca as duas na mesma superfície. */
+
+:root {
+  --med-azul-escuro: #004F9F;
+  --med-azul-claro: #009FE3;
+  --med-azul-escuro-hover: #003D7A;
+  --med-perigo: #B91C1C;
+
+  /* Escala de qualidade do item — semântica, do melhor ao pior.
+     As duas faixas boas usam a própria marca MED; as ruins, âmbar/laranja. */
+  --q-excelente: #004F9F;
+  --q-boa: #009FE3;
+  --q-razoavel: #E9B43A;
+  --q-fraca: #EC7A45;
+  --q-problematica: #B91C1C;
+}
+
+::selection { background: var(--med-azul-claro); color: #fff; }
+
+.mod-main { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1.5rem 5rem; }
+
+.rd-brand { display: flex; justify-content: center; margin-bottom: 1.25rem; }
+.rd-brand img { height: 40px; width: auto; }
+
+.hidden { display: none !important; }
+
+/* ---- Ícones (SVG inline, nunca emoji) ---- */
+.rd-icon { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rd-icon-sm { width: 15px; height: 15px; }
+
+/* ---- Botões ---- */
+.btn {
+  padding: 0.8rem 1.1rem; border-radius: 10px; font-weight: 700; font-size: 0.88rem;
+  cursor: pointer; border: none; display: flex; align-items: center; justify-content: center;
+  gap: 0.5rem; text-decoration: none; width: 100%;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: 2px; }
+.btn-primary { background: var(--med-azul-escuro); color: #fff; }
+.btn-primary:hover { background: var(--med-azul-escuro-hover); }
+.btn-secondary { background: #fff; color: var(--text-main); border: 1.5px solid var(--border-color); }
+.btn-secondary:hover { background: rgba(3, 20, 38, 0.04); border-color: #C7D0DC; }
+.btn-perigo { background: #fff; color: var(--med-perigo); border: 1.5px solid #F0C8C8; }
+.btn-perigo:hover { background: #FDF2F2; }
+
+.rd-btn-on-blue-primary { background: #fff; color: var(--med-azul-escuro); }
+.rd-btn-on-blue-primary:hover { background: #EAF3FF; }
+.rd-btn-on-blue-ghost {
+  background: rgba(255, 255, 255, 0.12); color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.4);
+}
+.rd-btn-on-blue-ghost:hover { background: rgba(255, 255, 255, 0.2); }
+
+.rd-icon-btn {
+  width: 38px; height: 38px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 1.5px solid var(--border-color); border-radius: 10px;
+  color: #64748B; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.rd-icon-btn:hover { color: var(--med-azul-escuro); border-color: var(--med-azul-claro); }
+.rd-icon-btn.perigo:hover { color: var(--med-perigo); border-color: #E9A8A8; background: #FDF2F2; }
+
+/* ---- A barra (uma por view) ---- */
+.rd-toolbar {
+  background: var(--med-azul-escuro); border-radius: 14px; padding: 1rem 1.1rem;
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.rd-toolbar .btn { width: auto; }
+.rd-filters { display: flex; gap: 0.6rem; flex-wrap: wrap; flex: 1; align-items: center; }
+.rd-filters select, .rd-filters input {
+  padding: 0.6rem 0.95rem; border: none; border-radius: 999px; font-size: 0.85rem;
+  font-weight: 600; background: #fff; color: var(--text-main);
+}
+.rd-filters input { min-width: 230px; }
+.rd-filters-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.rd-search-wrap { position: relative; display: flex; align-items: center; }
+.rd-search-wrap .rd-icon { position: absolute; left: 0.75rem; color: #94A3B8; width: 16px; height: 16px; }
+.rd-search-wrap input { padding-left: 2.35rem; }
+
+.rd-toolbar-titulo { color: #fff; display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.rd-toolbar-titulo h2 { margin: 0; font-size: 1rem; font-weight: 700; }
+.rd-toolbar-titulo p { margin: 0.15rem 0 0; font-size: 0.78rem; color: rgba(255,255,255,0.75); }
+
+/* ---- Lista de relatórios ---- */
+.rd-lista { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; }
+.rd-row {
+  display: flex; align-items: center; gap: 1rem; padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.12s;
+}
+.rd-row:last-child { border-bottom: none; }
+.rd-row:hover { background: rgba(0, 79, 159, 0.035); }
+.rd-row-corpo { flex: 1; min-width: 0; }
+.rd-row-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.rd-row-titulo {
+  font-weight: 700; font-size: 0.95rem; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rd-row-meta { font-size: 0.78rem; font-weight: 600; color: #64748B; margin-top: 0.25rem; }
+.rd-row-acoes { display: flex; gap: 0.45rem; flex: none; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 0.3rem; border-radius: 999px;
+  padding: 0.16rem 0.6rem; font-size: 0.7rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px; color: #fff;
+}
+.badge-neutro { background: #EEF2F6; color: #475569; }
+.badge-alerta { background: #FDEADF; color: #C4551F; }
+
+.rd-vazio { padding: 3.5rem 1.5rem; text-align: center; color: #64748B; }
+.rd-vazio h3 { margin: 0.9rem 0 0.35rem; color: var(--text-main); font-size: 1rem; }
+.rd-vazio p { margin: 0; font-size: 0.85rem; }
+.rd-vazio svg { width: 42px; height: 42px; stroke: #B6C2CF; fill: none; stroke-width: 1.5; }
+
+/* ---- Modal (sombra, sem borda — regra do card-fantasma) ---- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(3, 20, 38, 0.45); display: flex;
+  align-items: center; justify-content: center; padding: 1.5rem; z-index: 1000;
+}
+.modal-box {
+  background: #fff; border-radius: 16px; padding: 1.75rem; width: 100%; max-width: 560px;
+  max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px -12px rgba(3, 20, 38, 0.35);
+}
+.modal-box h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.modal-box .modal-sub { margin: 0 0 1.25rem; font-size: 0.82rem; color: #64748B; line-height: 1.5; }
+.campo { margin-bottom: 0.95rem; }
+.campo label { display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem; }
+.campo input, .campo select {
+  width: 100%; padding: 0.7rem 0.85rem; border: 1.5px solid var(--border-color);
+  border-radius: 10px; font-size: 0.88rem; font-family: inherit; background: #fff; color: var(--text-main);
+}
+.campo input:focus, .campo select:focus { outline: none; border-color: var(--med-azul-claro); }
+.campo-duplo { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.modal-acoes { display: flex; gap: 0.7rem; margin-top: 1.4rem; }
+.modal-acoes .btn { flex: 1; }
+
+.rd-dropzone {
+  border: 1.5px dashed #C7D0DC; border-radius: 12px; padding: 1.5rem; text-align: center;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s; margin-bottom: 1rem;
+}
+.rd-dropzone:hover, .rd-dropzone.ativo { border-color: var(--med-azul-claro); background: rgba(0, 159, 227, 0.05); }
+.rd-dropzone svg { width: 28px; height: 28px; stroke: var(--med-azul-escuro); fill: none; stroke-width: 1.8; }
+.rd-dropzone p { margin: 0.55rem 0 0; font-size: 0.85rem; font-weight: 600; }
+.rd-dropzone small { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: #64748B; }
+.rd-dropzone.tem-arquivo { border-style: solid; border-color: var(--med-azul-escuro); }
+
+.rd-erro {
+  background: #FDF2F2; border-left: 4px solid var(--med-perigo); border-radius: 10px;
+  padding: 0.8rem 1rem; font-size: 0.82rem; color: #7F1D1D; line-height: 1.5; margin-bottom: 1rem;
+}
+
+/* ================================================================
+   O RELATÓRIO
+   Superfície de documento: é feito pra ser lido e impresso, então
+   aqui manda a legibilidade da página, não a gramática de lista.
+   ================================================================ */
+
+.rd-doc { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 2rem 2.25rem 2.5rem; }
+
+.rd-doc-kicker {
+  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--med-azul-escuro); font-weight: 700; margin-bottom: 0.4rem;
+}
+.rd-doc h1 {
+  font-size: 1.5rem; line-height: 1.2; margin: 0 0 0.35rem; letter-spacing: -0.4px;
+  text-transform: uppercase; font-weight: 800;
+}
+.rd-doc-sub { color: #64748B; margin: 0 0 1.5rem; font-size: 0.82rem; }
+
+.rd-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1.1rem 1.5rem; }
+.rd-meta dt {
+  font-size: 0.64rem; letter-spacing: 0.11em; text-transform: uppercase;
+  color: #64748B; font-weight: 700; margin-bottom: 0.3rem;
+}
+.rd-meta dd { margin: 0; font-weight: 700; font-size: 0.88rem; line-height: 1.3; }
+.editavel { border-bottom: 1px dashed transparent; padding: 1px 3px; margin: -1px -3px; border-radius: 4px; }
+.editavel:hover { border-bottom-color: #D7DEE6; }
+.editavel:focus { outline: none; background: #FFF8EC; border-bottom-color: var(--q-razoavel); }
+.rd-nota-edit { display: flex; align-items: center; gap: 0.45rem; color: #64748B; font-size: 0.75rem; margin: 1rem 0 0; }
+.rd-nota-edit .rd-icon { width: 14px; height: 14px; }
+
+.rd-regua { height: 3px; background: var(--med-azul-claro); border: 0; margin: 1.6rem 0 0; }
+
+.rd-secao { margin-top: 2rem; }
+.rd-secao > h2 { display: flex; align-items: center; gap: 0.55rem; font-size: 1rem; margin: 0 0 0.9rem; font-weight: 700; }
+.rd-secao > h2::before { content: ""; width: 4px; height: 17px; border-radius: 2px; background: var(--med-azul-claro); }
+.rd-secao-nota { color: #64748B; font-size: 0.78rem; margin: -0.5rem 0 0.9rem; line-height: 1.5; }
+
+.rd-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.7rem; }
+.rd-card { border: 1px solid var(--border-color); border-radius: 12px; padding: 0.9rem 0.95rem; }
+.rd-card .v { font-size: 1.5rem; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.rd-card .r { color: #64748B; font-size: 0.74rem; margin-top: 0.45rem; }
+.rd-card.escuro { background: var(--med-azul-escuro); border-color: var(--med-azul-escuro); }
+.rd-card.escuro .v { color: #fff; }
+.rd-card.escuro .r { color: #BBD4EE; }
+.rd-card.alerta { background: #FFF3EC; border-color: #FADCCB; }
+.rd-card.alerta .v { color: var(--q-fraca); }
+
+.rd-duas { display: grid; grid-template-columns: 1fr 1.35fr; gap: 1rem; align-items: stretch; }
+.rd-painel { border: 1px solid var(--border-color); border-radius: 14px; padding: 1.1rem 1.25rem; }
+.rd-painel h3 { margin: 0 0 0.6rem; font-size: 0.88rem; font-weight: 700; }
+.rd-rosca { width: 100%; max-width: 300px; display: block; margin: 0.4rem auto 0.2rem; }
+.rd-rosca-num { font-size: 62px; font-weight: 800; fill: var(--med-azul-escuro); letter-spacing: -2px; }
+.rd-rosca-rot { font-size: 19px; fill: #64748B; }
+.rd-legenda { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin-top: 0.8rem; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--border-color);
+  border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.74rem; background: #fff; color: var(--text-main);
+}
+.chip i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.rd-grafico { width: 100%; height: auto; display: block; }
+.rd-eixo { font-size: 10px; fill: #64748B; }
+
+.rd-rev {
+  border-left: 4px solid var(--q-fraca); background: #FFF8F4; border-radius: 10px;
+  padding: 0.85rem 1rem; margin-bottom: 0.7rem;
+}
+.rd-rev-top { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.78rem; }
+.rd-rev-top b { font-size: 0.92rem; }
+.rd-rev-num { color: #64748B; }
+.rd-rev-nome { font-weight: 600; margin: 0.35rem 0 0.25rem; font-size: 0.82rem; }
+.rd-rev-motivo { color: #5B6B72; font-size: 0.78rem; margin: 0; line-height: 1.5; }
+.tag { display: inline-block; border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.68rem; font-weight: 800; color: #fff; line-height: 1.7; }
+
+.rd-tabela-wrap { overflow-x: auto; }
+table.rd-tabela { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.rd-tabela thead th {
+  text-align: left; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #64748B; font-weight: 700; padding: 0.6rem 0.65rem;
+  border-bottom: 1px solid var(--border-color); background: #F8FAFC;
+}
+.rd-tabela tbody td { padding: 0.65rem; border-bottom: 1px solid #EFF3F4; vertical-align: middle; }
+.rd-tabela tbody tr:last-child td { border-bottom: none; }
+.rd-tabela tbody tr:hover { background: rgba(0, 79, 159, 0.03); }
+.rd-tabela .num { text-align: right; white-space: nowrap; }
+.rd-legenda-tabela { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.8rem; }
+
+.mini { display: inline-block; width: 100px; height: 7px; border-radius: 4px; background: #E7ECEE; position: relative; vertical-align: middle; overflow: hidden; }
+.mini-fill { position: absolute; inset: 0; border-radius: 4px; }
+.mini-num { display: block; font-size: 0.66rem; color: #64748B; margin-top: 0.15rem; }
+
+details.rd-q { border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 0.7rem; overflow: hidden; }
+details.rd-q > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem 1rem; background: #F8FAFC; }
+details.rd-q > summary::-webkit-details-marker { display: none; }
+.rd-q-id { font-weight: 800; font-size: 0.85rem; min-width: 34px; }
+.rd-q-nome { flex: 1; font-size: 0.8rem; color: #33454C; }
+.rd-q-disc { color: #64748B; font-size: 0.74rem; white-space: nowrap; }
+.rd-q-seta { color: #94A3B8; font-size: 0.65rem; transition: transform 0.15s; }
+details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
+.rd-alts { padding: 0.4rem 1rem 0.8rem; }
+.rd-alt { display: grid; grid-template-columns: 22px 1fr 130px 112px; gap: 0.75rem; align-items: center; padding: 0.55rem 0; border-bottom: 1px dotted #E1E8EA; }
+.rd-alt:last-child { border-bottom: none; }
+.rd-marca { width: 20px; height: 20px; border-radius: 6px; background: #E7ECEE; display: flex; align-items: center; justify-content: center; color: #fff; }
+.rd-marca svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.rd-marca.ok { background: var(--med-azul-escuro); }
+.rd-marca.dist { background: var(--q-fraca); }
+.rd-alt-txt { font-size: 0.78rem; line-height: 1.45; }
+.pill { display: inline-block; border-radius: 999px; padding: 0.04rem 0.5rem; font-size: 0.64rem; font-weight: 800; margin-left: 0.4rem; vertical-align: 1px; }
+.pill.ok { background: #E1EFFB; color: var(--med-azul-escuro); }
+.pill.dist { background: #FDEADF; color: #C4551F; }
+.rd-alt-num { text-align: right; font-size: 0.74rem; color: #64748B; white-space: nowrap; }
+
+.rd-rodape { color: #64748B; font-size: 0.75rem; line-height: 1.6; margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem; }
+.rd-rodape b { color: var(--text-main); }
+
+/* ---- Responsivo ---- */
+@media (max-width: 720px) {
+  .rd-toolbar { flex-direction: column; align-items: stretch; }
+  .rd-filters { flex-direction: column; align-items: stretch; }
+  .rd-filters input { min-width: 0; }
+  .rd-filters-actions { flex-direction: column; }
+  .rd-toolbar .btn { width: 100%; }
+  .rd-cards { grid-template-columns: repeat(2, 1fr); }
+  .rd-duas { grid-template-columns: 1fr; }
+  .rd-doc { padding: 1.25rem; }
+  .rd-alt { grid-template-columns: 22px 1fr; }
+  .rd-alt > :nth-child(3) { display: none; }
+  .rd-alt-num { grid-column: 2; text-align: left; }
+  .campo-duplo { grid-template-columns: 1fr; }
+  .rd-row { flex-wrap: wrap; }
+}
+
+/* ---- Impressão ----
+   A4 paisagem. Duas decisões mandam aqui:
+   1. A folha é larga (297mm) — o anexo de alternativas e as listas de
+      revisão saem em DUAS COLUNAS, senão cada linha ocupa a largura toda e
+      o relatório dobra de tamanho à toa.
+   2. A impressora da secretaria é monocromática e o Chrome vem com
+      "gráficos de fundo" desligado por padrão: nada pode depender de cor de
+      fundo pra ser legível. Fundo colorido vira contorno; o significado fica
+      no texto (as tags já dizem "Boa", "Fraca", etc.). */
+@page { size: A4 landscape; margin: 11mm; }
+
+@media print {
+  .layout-sidebar, .layout-header, .rd-toolbar, .rd-brand, .modal-overlay,
+  .rd-nota-edit { display: none !important; }
+
+  .layout-wrapper, .layout-main, .layout-content, .mod-main {
+    display: block !important; margin: 0 !important; padding: 0 !important;
+    max-width: none !important; background: #fff !important;
+  }
+  .rd-doc { border: none; border-radius: 0; padding: 0; }
+  body { font-size: 10.5px; }
+
+  /* Cabeçalho enxuto na folha: o que se ganha aqui é o que faz o panorama
+     caber junto com o resumo na 1ª página em vez de sobrar meia folha. */
+  .rd-doc h1 { font-size: 1.2rem; margin-bottom: 0.2rem; }
+  .rd-doc-kicker { font-size: 0.6rem; margin-bottom: 0.25rem; }
+  .rd-doc-sub { font-size: 0.72rem; margin-bottom: 0.7rem; }
+  .rd-meta { gap: 0.55rem 1.1rem; }
+  .rd-meta dt { font-size: 0.58rem; margin-bottom: 0.15rem; }
+  .rd-meta dd { font-size: 0.78rem; }
+  .rd-regua { margin-top: 0.8rem; }
+  .rd-card .v { font-size: 1.3rem; }
+  .rd-card { padding: 0.7rem 0.8rem; }
+
+  /* --- sem depender de fundo impresso --- */
+  .rd-card.escuro { background: #fff !important; border: 2px solid var(--med-azul-escuro); }
+  .rd-card.escuro .v { color: var(--med-azul-escuro); }
+  .rd-card.escuro .r { color: #475569; }
+  .rd-card.alerta { background: #fff !important; border: 2px solid var(--q-fraca); }
+  .rd-rev { background: #fff !important; border: 1px solid var(--border-color); border-left-width: 4px; }
+  .mini { border: 1px solid #CBD5E1; }
+  /* Tag e bolinha da legenda carregam a cor em --c (ver relatorio-render.js):
+     na tela é fundo colorido com texto branco; na folha vira texto colorido
+     com contorno, que sobrevive sem impressão de fundo e ainda se distingue
+     em tons de cinza numa impressora mono. */
+  .tag { background: transparent !important; color: var(--c, #1F2D33) !important;
+         border: 1.2px solid var(--c, #64748B); padding: 0.02rem 0.4rem; }
+  .chip i { background: transparent !important; border: 2.5px solid var(--c, #64748B); }
+  .badge { border: 1px solid rgba(0, 0, 0, 0.35); }
+  /* A barrinha é pura cor de fundo; o número ao lado já dá o valor. */
+  .mini { display: none; }
+  .mini-num { margin-top: 0; font-size: 10px; color: var(--text-main); }
+  details.rd-q { border-color: #DDE5E7; }
+  details.rd-q > summary { background: #fff !important; border-bottom: 1px solid var(--border-color); }
+
+  /* --- duas colunas nas listas longas --- */
+  .rd-2col { columns: 2; column-gap: 12mm; }
+  .rd-2col > * { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Numa coluna de ~135mm não cabe a barrinha; o número já diz tudo,
+     e em impressora mono a barra não significa nada mesmo. */
+  /* O quadradinho de marca é só cor de fundo — sem fundo impresso ele vira
+     um vão vazio. O sentido já está escrito ("correta" / "marcada errada"). */
+  .rd-marca { display: none; }
+  .rd-alt { grid-template-columns: 1fr auto; gap: 0.5rem; padding: 0.35rem 0; }
+  .rd-alt > :nth-child(3) { display: none; }
+  .rd-alt-txt { font-size: 9.5px; line-height: 1.35; }
+  .rd-alt-num { font-size: 9.5px; }
+  .rd-alts { padding: 0.3rem 0.7rem 0.5rem; }
+  details.rd-q > summary { padding: 0.45rem 0.7rem; }
+  .rd-q-nome { font-size: 9.5px; }
+  .rd-rev { padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; }
+  .rd-rev-motivo { font-size: 9.5px; }
+
+  /* --- quebras --- */
+  /* Panorama menor na folha: assim ele cabe junto com o resumo na 1ª página
+     em vez de pular inteiro e deixar meia folha em branco. */
+  .rd-painel { padding: 0.7rem 0.85rem; }
+  .rd-painel h3 { font-size: 0.82rem; margin-bottom: 0.4rem; }
+  .rd-rosca { max-width: 148px; }
+  /* Os SVGs têm viewBox, então limitar a altura só reduz a escala — nada
+     distorce (preserveAspectRatio centraliza). Sem isso o painel sozinho
+     passa de meia folha e empurra o panorama todo pra página seguinte. */
+  .rd-grafico { height: 180px; width: 100%; }
+  .rd-secao-nota { font-size: 9px; margin-top: 0.3rem; }
+  .rd-secao { margin-top: 1.2rem; }
+  .rd-secao > h2 { font-size: 0.92rem; margin-bottom: 0.6rem; break-after: avoid; page-break-after: avoid; }
+
+  .rd-cards, .rd-painel, .rd-tabela tr { break-inside: avoid; page-break-inside: avoid; }
+  .rd-duas { break-inside: auto; }
+  .rd-secao { break-inside: auto; }
+  /* Só o anexo de alternativas começa em página nova: as outras seções
+     emendam, que é o que evitava página quase em branco no meio. */
+  .rd-quebra { break-before: auto; page-break-before: auto; }
+  .rd-quebra-anexo { break-before: page; page-break-before: always; }
+
+  a { text-decoration: none; color: inherit; }
+}
+
+/* Impressão resumida: deixa de fora o anexo de alternativas (o grosso das
+   páginas). Acionada pelo botão "Imprimir resumo". */
+@media print {
+  body.rd-print-resumo .rd-anexo { display: none !important; }
+}

@@ -72,6 +72,7 @@ const rotasOrcamento = require('../src/rotas/orcamento');
 const rotasAvaliacaoDocente = require('../src/rotas/avaliacao-docente');
 const rotasCobranca = require('../src/rotas/cobranca');
 const rotasBancoMedFatec = require('../src/rotas/banco-med-fatec');
+const rotasRelatorioDesempenho = require('../src/rotas/relatorio-desempenho');
 const rotasBancoProvas = require('../src/rotas/banco-provas');
 const rotasConfirmacaoEvento = require('../src/rotas/confirmacao-evento');
 
@@ -95,6 +96,7 @@ app.use('/api/orcamento', rotasOrcamento);
 app.use('/api/avaliacao-docente', rotasAvaliacaoDocente);
 app.use('/api/cobranca', rotasCobranca);
 app.use('/api/banco-med-fatec', rotasBancoMedFatec);
+app.use('/api/relatorio-desempenho', rotasRelatorioDesempenho);
 app.use('/api/banco-provas', rotasBancoProvas);
 app.use('/api/confirmacao-evento', rotasConfirmacaoEvento);
 

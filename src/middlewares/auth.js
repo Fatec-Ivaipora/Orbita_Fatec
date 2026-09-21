@@ -165,6 +165,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 3,
                 cobranca: 1, // "Cobrança" é exclusivo do Financeiro, nem ADM N2 vê (31/08)
                 'banco-med-fatec': 3,
+                'relatorio-desempenho': 3,
                 'banco-provas': 3,
                 'confirmacao-evento': 3
             },
@@ -183,6 +184,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -201,6 +203,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -219,6 +222,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 3,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -244,6 +248,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 3,
                 cobranca: 1,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 // Coordenador de qualquer curso pode montar prova - a rota
                 // filtra pra só os cursos vinculados a ele (users.cursos),
                 // mesma regra de Avaliação Docente.
@@ -270,6 +275,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -290,6 +296,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 3,
+                'relatorio-desempenho': 3,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -309,6 +316,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 3,
+                'relatorio-desempenho': 3,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             },
@@ -327,6 +335,7 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
                 'banco-provas': 1,
                 'confirmacao-evento': 1
             }

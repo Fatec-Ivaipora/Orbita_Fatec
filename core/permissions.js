@@ -141,6 +141,16 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>`,
     url: "/banco-med-fatec/index.html"
   },
+  // Análise psicométrica das provas do AVA (Open LMS): o docente sobe o
+  // export de "Estatísticas do questionário" e recebe o relatório de
+  // facilidade/discriminação por questão, pronto pra imprimir.
+  "relatorio-desempenho": {
+    id: "relatorio-desempenho",
+    category: "medicina",
+    title: "Relatório Desempenho",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>`,
+    url: "/medicina/relatorio-desempenho/index.html"
+  },
   "banco-provas": {
     id: "banco-provas",
     category: "docencia",
@@ -166,11 +176,11 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "banco-provas", "confirmacao-evento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "banco-provas", "confirmacao-evento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento"]
   },
   ti: {
     label: "T.I.",
@@ -210,14 +220,14 @@ export const ROLE_PERMISSIONS = {
   // pra eles, e o redirect direto pro banco-med-fatec em meu-espaco.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["banco-med-fatec"]
+    modules: ["banco-med-fatec", "relatorio-desempenho"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (só Banco de
   // Questões), cargo separado só pra aparecer com rótulo próprio na tela de
   // Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["banco-med-fatec"]
+    modules: ["banco-med-fatec", "relatorio-desempenho"]
   },
   visitante: {
     label: "Visitante",
