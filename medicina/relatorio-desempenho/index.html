@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatório Desempenho · Órbita - FatecIVP</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/core/layout.css">
+  <link rel="stylesheet" href="/medicina/relatorio-desempenho/relatorio-desempenho.css?v=1">
+</head>
+
+<body>
+
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+
+      <div class="layout-content">
+        <main id="rd-main" class="mod-main">
+
+          <div class="rd-brand">
+            <img src="/img/medfatec-logo.png" alt="MED FATEC">
+          </div>
+
+          <!-- ============ VIEW: LISTA DE RELATÓRIOS ============ -->
+          <section id="rd-view-lista" class="rd-view">
+            <div class="rd-toolbar">
+              <div class="rd-filters">
+                <select id="rd-filtro-disciplina">
+                  <option value="">Todas as disciplinas</option>
+                </select>
+                <select id="rd-filtro-semestre">
+                  <option value="">Todos os semestres</option>
+                </select>
+                <div class="rd-search-wrap">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input type="text" id="rd-filtro-busca" placeholder="Buscar por avaliação ou turma...">
+                </div>
+              </div>
+              <div class="rd-filters-actions">
+                <button class="btn rd-btn-on-blue-ghost" id="rd-btn-ajuda" title="Onde encontrar o arquivo de estatísticas no AVA">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <span>Como exportar do AVA</span>
+                </button>
+                <button class="btn rd-btn-on-blue-primary action-execute" id="rd-btn-novo">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Novo Relatório</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="rd-lista" class="rd-lista"></div>
+          </section>
+
+          <!-- ============ VIEW: RELATÓRIO ABERTO ============ -->
+          <section id="rd-view-relatorio" class="rd-view hidden">
+            <div class="rd-toolbar">
+              <div class="rd-toolbar-titulo">
+                <button class="btn rd-btn-on-blue-ghost" id="rd-btn-voltar">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                  <span>Voltar</span>
+                </button>
+                <div>
+                  <h2 id="rd-doc-toolbar-titulo">Relatório</h2>
+                  <p id="rd-doc-toolbar-meta"></p>
+                </div>
+              </div>
+              <div class="rd-filters-actions">
+                <button class="btn rd-btn-on-blue-ghost action-execute" id="rd-btn-salvar-cabecalho" title="Salvar as correções feitas no cabeçalho">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>Salvar cabeçalho</span>
+                </button>
+                <button class="btn rd-btn-on-blue-ghost" id="rd-btn-imprimir-resumo" title="Imprime sem o anexo de alternativas — cerca de metade das folhas">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                  <span>Imprimir resumo</span>
+                </button>
+                <button class="btn rd-btn-on-blue-primary" id="rd-btn-imprimir">
+                  <svg class="rd-icon" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  <span>Imprimir</span>
+                </button>
+              </div>
+            </div>
+
+            <article id="rd-doc" class="rd-doc"></article>
+          </section>
+
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="rd-modais"></div>
+
+  <script type="module" src="/medicina/relatorio-desempenho/app.js?v=1"></script>
+</body>
+
+</html>
