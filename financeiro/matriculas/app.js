@@ -139,6 +139,8 @@ async function initApp(user, role) {
     initPaginaRelatorio();
   } else if (document.getElementById('matriculas-aluno-indica-root')) {
     initPaginaAlunoIndica();
+  } else if (document.getElementById('matriculas-comparativo-root')) {
+    initPaginaComparativo();
   }
 }
 
@@ -940,8 +942,123 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
   return nomes.reduce((soma, n) => soma + (porSituacaoTotal[n] || 0), 0);
 }
 
+
+// ==========================================
+// COMPARATIVO ENTRE SEMESTRES
+// Uma coluna por semestre, uma linha por indicador — as mesmas definições dos
+// cards (veterano = rematrícula, calouro = matrícula nova, perda = cancelou +
+// trancou + evasões). Fica fora do carregamento do relatório de propósito:
+// contar os semestres vivos custa uma leitura por aluno no Firestore, então só
+// roda quando a pessoa pede.
+// ==========================================
+const LINHAS_COMPARATIVO = [
+  { chave: 'total', rotulo: 'Total de alunos', destaque: true },
+  { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)' },
+  { chave: 'calouros', rotulo: 'Calouros (matrícula nova)' },
+  { chave: 'ativos', rotulo: 'Ativos', destaque: true },
+  { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira', separador: true },
+  { chave: 'naoAssinou', rotulo: 'Não assinou' },
+  { chave: 'primeiraEvasao', rotulo: '1ª Evasão' },
+  { chave: 'segundaEvasao', rotulo: '2ª Evasão', ocultarSeZerado: true },
+  { chave: 'cancelou', rotulo: 'Cancelou' },
+  { chave: 'trancou', rotulo: 'Trancou' },
+  { chave: 'perdas', rotulo: 'Total de perdas', destaque: true, separador: true },
+  { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true },
+  { chave: 'perdaTotal', rotulo: '% de perda sobre o total', percentual: true }
+];
+
+async function initPaginaComparativo() {
+  const selectModulo = document.getElementById('comp-modulo-select');
+  selectModulo?.addEventListener('change', () => {
+    atualizarLabelImpressaoComparativo();
+    carregarComparativo();
+  });
+
+  document.getElementById('btn-imprimir-comparativo')?.addEventListener('click', () => window.print());
+
+  atualizarLabelImpressaoComparativo();
+  const dataEmissao = document.getElementById('print-data-emissao');
+  if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
+
+  await carregarComparativo();
+}
+
+function atualizarLabelImpressaoComparativo() {
+  const label = document.getElementById('print-filtro-label');
+  if (!label) return;
+  const modulo = document.getElementById('comp-modulo-select')?.value === 'medicina' ? 'Medicina' : 'Fatec';
+  label.textContent = modulo;
+}
+
+async function carregarComparativo() {
+  const modulo = document.getElementById('comp-modulo-select')?.value || 'fatec';
+  document.getElementById('rel-comparativo-sub').textContent = 'Carregando...';
+  document.getElementById('comparativo-thead').innerHTML = '';
+  document.getElementById('comparativo-tbody').innerHTML = '';
+
+  try {
+    const dados = await apiFetch(`/matriculas/comparativo?modulo=${encodeURIComponent(modulo)}`);
+    renderComparativo(dados);
+  } catch (err) {
+    document.getElementById('rel-comparativo-sub').textContent = 'Erro ao carregar: ' + err.message;
+  }
+}
+
+function renderComparativo(dados) {
+  const linhas = dados.linhas || [];
+  const sub = document.getElementById('rel-comparativo-sub');
+
+  if (!linhas.length) {
+    sub.textContent = 'Nenhum semestre com dados para comparar.';
+    return;
+  }
+  sub.textContent = `${linhas.length} semestres · módulo ${dados.modulo === 'medicina' ? 'Medicina' : 'Fatec'}`;
+
+  // Cabeçalho: o ° marca o semestre que veio da planilha antiga (só contagem).
+  document.getElementById('comparativo-thead').innerHTML =
+    '<tr><th>Indicador</th>' +
+    linhas.map(l => `<th>${esc(l.semestre)}${l.historico ? '<span class="comparativo-hist" title="Dados históricos da planilha">°</span>' : ''}</th>`).join('') +
+    '</tr>';
+
+  const fmt = (valor, ehPercentual) => {
+    if (valor === null || valor === undefined) return '—';
+    return ehPercentual ? `${valor.toFixed(1)}%` : String(valor);
+  };
+
+  const corpo = LINHAS_COMPARATIVO
+    .filter(def => !def.ocultarSeZerado || linhas.some(l => (l[def.chave] || 0) > 0))
+    .map(def => {
+      const classes = [def.destaque ? 'linha-destaque' : '', def.separador ? 'linha-separador' : '']
+        .filter(Boolean).join(' ');
+      return `<tr class="${classes}"><td>${esc(def.rotulo)}</td>` +
+        linhas.map(l => `<td>${fmt(l[def.chave], def.percentual)}</td>`).join('') +
+        '</tr>';
+    }).join('');
+
+  document.getElementById('comparativo-tbody').innerHTML = corpo;
+
+  const temHistorico = linhas.some(l => l.historico);
+  document.getElementById('rel-comparativo-nota').textContent = temHistorico
+    ? '° Semestre fechado: números vindos da planilha usada antes do Órbita, guardados só como contagem. Não há lista de alunos para abrir nesses semestres.'
+    : '';
+}
+
 function renderRelatorio(dados) {
   const { total, pendentesRevisao, cursos, porCursoSituacao, porSituacaoTotal, porPlano, situacoes, planosConfissao } = dados;
+
+  // Semestre fechado (2023.1–2025.2): veio de `matriculas_historico`, que só
+  // tem contagem. Sem esse aviso, alguém vai clicar procurando a lista de
+  // alunos do ano e achar que o sistema perdeu os dados.
+  const avisoHist = document.getElementById('rel-aviso-historico');
+  if (avisoHist) {
+    avisoHist.classList.toggle('hidden', !dados.historico);
+    if (dados.historico) {
+      const origem = dados.arquivoOrigem ? ' Origem: ' + dados.arquivoOrigem + '.' : '';
+      document.getElementById('rel-aviso-historico-txt').textContent =
+        ' Estes totais vieram da planilha usada antes do Órbita e servem para comparação. ' +
+        'Não há detalhamento por aluno para abrir neste semestre.' + origem;
+    }
+  }
 
   // Definições do jeito que a coordenação/financeiro já usa (mesmo conceito
   // da planilha antiga): Veterano = rematrícula; Calouro = matrícula nova do

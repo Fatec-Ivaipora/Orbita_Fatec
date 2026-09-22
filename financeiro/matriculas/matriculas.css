@@ -158,7 +158,10 @@
   font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
   border-bottom: 1px solid var(--border-color); white-space: nowrap;
 }
-.data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
+/* Caixa alta só na tela — não mexe no dado gravado (nome/cidade continuam
+   como foram digitados no banco), pedido pra combinar com os nomes de curso
+   que já vêm em maiúsculo de `courses` (22/09). */
+.data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; text-transform: uppercase; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: #fafbfd; }
 
@@ -174,7 +177,7 @@
    azul = movimentação neutra (retorno, mudança, formando). */
 .status-badge {
   border: none; border-radius: 20px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 700;
-  font-family: inherit; white-space: nowrap;
+  font-family: inherit; white-space: nowrap; text-transform: uppercase;
 }
 .situacao-ok { background: #d1fae5; color: #047857; }
 .situacao-alerta { background: #fef3c7; color: #d97706; }
@@ -335,3 +338,46 @@ body.pagina-relatorio .layout-content {
   .data-table { font-size: 0.78rem; }
   .data-table th, .data-table td { padding: 0.4rem 0.6rem; }
 }
+
+/* Aviso de semestre fechado: os anos anteriores vieram da planilha antiga só
+   como contagem (coleção matriculas_historico), sem dado de aluno — então a
+   tela precisa deixar claro que não há lista pra abrir por trás desses
+   números. Fica visível também na impressão, de propósito. */
+.rel-aviso-historico {
+  background: #FFF8E6;
+  border: 1px solid #F0DCA8;
+  border-left: 4px solid #E9B43A;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #6B5312;
+}
+.rel-aviso-historico strong { color: #4A3A0B; }
+
+/* Comparativo entre semestres: uma coluna por semestre, uma linha por
+   indicador. Os semestres fechados vêm de matriculas_historico (só contagem)
+   e os vivos são contados na hora — a coluna marcada com ° avisa qual é qual,
+   porque num deles dá pra clicar e ver aluno, no outro não. */
+.rel-comparativo {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #E5E7EB);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.rel-comparativo-titulo { margin: 0 0 0.2rem; font-size: 1rem; font-weight: 700; }
+.rel-comparativo-sub { margin: 0 0 0.9rem; font-size: 0.8rem; color: #64748B; }
+.rel-comparativo-scroll { overflow-x: auto; }
+.rel-comparativo .data-table { min-width: 620px; }
+.rel-comparativo .data-table th,
+.rel-comparativo .data-table td { white-space: nowrap; text-align: right; }
+.rel-comparativo .data-table th:first-child,
+.rel-comparativo .data-table td:first-child { text-align: left; font-weight: 600; }
+.rel-comparativo tr.linha-destaque td { font-weight: 700; }
+.rel-comparativo tr.linha-separador td {
+  border-top: 2px solid var(--border-color, #E5E7EB);
+}
+.comparativo-hist { color: #92791F; font-weight: 700; }
+.rel-comparativo-nota { margin: 0.8rem 0 0; font-size: 0.75rem; color: #64748B; line-height: 1.5; }

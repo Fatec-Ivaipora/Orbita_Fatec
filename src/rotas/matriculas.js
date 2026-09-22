@@ -7,6 +7,8 @@ const checkPermission = verifyToken.requireModulePermission('matriculas');
 
 const COL_ALUNOS = 'matriculas_alunos';
 const COL_CONFIG = 'matriculas_config';
+// Totais dos semestres fechados, sem dado de aluno (ver scripts/importar-historico-matriculas.js)
+const COL_HISTORICO = 'matriculas_historico';
 const DOC_SEMESTRES = 'semestres';
 const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 
@@ -309,6 +311,46 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
 
+        // Semestres fechados (2023.1–2025.2) não têm aluno no sistema: deles
+        // guardamos só os totais, em `matriculas_historico` (um documento por
+        // módulo+semestre, sem nome de aluno — ver
+        // scripts/importar-historico-matriculas.js). Se existir documento
+        // histórico para o semestre pedido, ele é a resposta.
+        const histSnap = await db.collection(COL_HISTORICO).doc(`${modulo}_${semestre}`).get();
+        if (histSnap.exists) {
+            const h = histSnap.data();
+            let porCursoSituacao = h.porCursoSituacao || {};
+            let cursos = h.cursos || Object.keys(porCursoSituacao);
+            let total = h.total || 0;
+
+            // O filtro da tela manda cursoId; no histórico o que existe é o
+            // nome do curso, então resolve o id uma vez e recorta.
+            if (cursoId) {
+                const cursoDoc = await db.collection('courses').doc(cursoId).get();
+                const nome = cursoDoc.exists ? (cursoDoc.data().name || '').trim() : null;
+                const doCurso = nome && porCursoSituacao[nome] ? { [nome]: porCursoSituacao[nome] } : {};
+                porCursoSituacao = doCurso;
+                cursos = Object.keys(doCurso);
+                total = Object.values(doCurso[nome] || {}).reduce((a, b) => a + b, 0);
+            }
+
+            return res.json({
+                total,
+                pendentesRevisao: 0,
+                cursos,
+                porCursoSituacao,
+                porSituacaoTotal: cursoId ? (porCursoSituacao[cursos[0]] || {}) : (h.porSituacaoTotal || {}),
+                porPlano: cursoId ? {} : (h.porPlano || {}),
+                situacoes: SITUACOES,
+                planosConfissao: PLANOS_CONFISSAO,
+                // A tela usa isto pra avisar que é ano fechado e que não há
+                // detalhamento por aluno pra abrir.
+                historico: true,
+                arquivoOrigem: h.arquivoOrigem || null,
+                importadoEm: h.importadoEm || null
+            });
+        }
+
         let query = db.collection(COL_ALUNOS)
             .where('modulo', '==', modulo)
             .where('semestre', '==', semestre);
@@ -343,6 +385,89 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             situacoes: SITUACOES,
             planosConfissao: PLANOS_CONFISSAO
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// COMPARATIVO ENTRE SEMESTRES
+// Uma linha por semestre, com os mesmos indicadores dos cards do relatório —
+// é o que responde "como estávamos antes e como estamos agora" numa olhada.
+//
+// De onde vem cada semestre:
+//   - fechados (2023.1–2025.2): documento de `matriculas_historico`, que só
+//     tem contagem (1 leitura por semestre);
+//   - vivos (2026.x): contados em `matriculas_alunos` na hora.
+// Por isso esta rota fica separada do /relatorio e só é chamada quando a
+// pessoa abre o comparativo — contar os semestres vivos custa uma leitura por
+// aluno, e não faz sentido pagar isso em toda abertura do relatório.
+// ==========================================
+router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { modulo } = req.query;
+        if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
+
+        // Mesma lista que alimenta o seletor da tela.
+        const cfg = await db.collection(COL_CONFIG).doc(DOC_SEMESTRES).get();
+        const daBase = (cfg.exists && Array.isArray(cfg.data().lista)) ? cfg.data().lista : [];
+        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort();
+
+        const linhas = [];
+        for (const semestre of semestres) {
+            const hist = await db.collection(COL_HISTORICO).doc(`${modulo}_${semestre}`).get();
+
+            let total = 0;
+            let porSituacaoTotal = {};
+            let historico = false;
+
+            if (hist.exists) {
+                const h = hist.data();
+                total = h.total || 0;
+                porSituacaoTotal = h.porSituacaoTotal || {};
+                historico = true;
+            } else {
+                const snap = await db.collection(COL_ALUNOS)
+                    .where('modulo', '==', modulo)
+                    .where('semestre', '==', semestre)
+                    .select('situacao')
+                    .get();
+                snap.forEach(d => {
+                    const sit = d.data().situacao;
+                    total++;
+                    porSituacaoTotal[sit] = (porSituacaoTotal[sit] || 0) + 1;
+                });
+            }
+
+            // Semestre sem nenhum dado não entra — não polui a tabela com coluna vazia.
+            if (!total) continue;
+
+            const soma = (...nomes) => nomes.reduce((acc, n) => acc + (porSituacaoTotal[n] || 0), 0);
+            const calouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada');
+            const perdas = soma('Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão');
+
+            linhas.push({
+                semestre,
+                historico,
+                total,
+                veteranos: porSituacaoTotal['Rematrícula Assinada'] || 0,
+                calouros,
+                ativos: soma('Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
+                             'Matrícula Nova', 'Matrícula Nova - Assinada'),
+                pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
+                naoAssinou: porSituacaoTotal['Não Assinou'] || 0,
+                primeiraEvasao: porSituacaoTotal['1ª Evasão'] || 0,
+                segundaEvasao: porSituacaoTotal['2ª Evasão'] || 0,
+                cancelou: porSituacaoTotal['Cancelou'] || 0,
+                trancou: porSituacaoTotal['Trancou'] || 0,
+                perdas,
+                // Mesmas contas dos cards: perda sobre captação e sobre o total.
+                perdaCaptacao: calouros > 0 ? (perdas / calouros) * 100 : null,
+                perdaTotal: total > 0 ? (perdas / total) * 100 : null
+            });
+        }
+
+        res.json({ modulo, linhas });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
