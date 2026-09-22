@@ -433,3 +433,19 @@ body.pagina-relatorio .layout-content {
 .comparativo-card-table tr.linha-secao:first-child td { padding-top: 0; }
 .comparativo-hist { color: #92791F; font-weight: 700; }
 .rel-comparativo-nota { margin: 0.8rem 0 0; font-size: 0.75rem; color: #64748B; line-height: 1.5; }
+
+/* Botão "ver como chegou nesse número" — Total de alunos / Total de
+   Calouros captados, dentro do cartão do comparativo (22/09). */
+.btn-detalhe-total {
+  border: none; background: none; padding: 0; margin: 0; font: inherit;
+  color: inherit; font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px;
+}
+.btn-detalhe-total-icone { font-size: 0.75em; opacity: 0.7; }
+.modal-detalhe-total-content .data-table { width: 100%; font-size: 0.85rem; margin-top: 0.5rem; }
+.modal-detalhe-total-content .data-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border-color, #F1F5F9); }
+.modal-detalhe-total-content .data-table td:last-child { text-align: right; font-weight: 600; }
+.modal-detalhe-total-content .data-table tr.linha-destaque td { font-weight: 700; }
+.modal-detalhe-total-content .data-table tr.linha-separador td { border-top: 2px solid var(--border-color, #E5E7EB); }
+.detalhe-total-sub { color: var(--text-secondary, #64748B); font-size: 0.8rem; margin: -0.75rem 0 0.5rem; line-height: 1.4; }

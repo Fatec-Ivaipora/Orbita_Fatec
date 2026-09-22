@@ -62,6 +62,19 @@
         </main>
     </div>
 
+    <!-- Modal: "como chegou nesse número" — abre ao clicar em Total de
+         alunos / Total de Calouros captados, um botão em cada cartão. -->
+    <div id="modal-detalhe-total" class="modal-overlay hidden">
+        <div class="modal-content modal-detalhe-total-content">
+            <h2 id="detalhe-total-titulo">Detalhe</h2>
+            <p class="detalhe-total-sub" id="detalhe-total-sub"></p>
+            <table class="data-table" id="detalhe-total-tabela">
+                <tbody id="detalhe-total-tbody"></tbody>
+            </table>
+            <button type="button" class="btn-secondary" id="btn-fechar-detalhe-total" style="margin-top:1rem;">Fechar</button>
+        </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
 
     <script type="module" src="/financeiro/matriculas/app.js"></script>

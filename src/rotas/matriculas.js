@@ -510,7 +510,11 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 perdas,
                 // Mesmas contas dos cards do relatório de um semestre só.
                 perdaCaptacao: denominadorCaptacao > 0 ? (perdasCalouros / denominadorCaptacao) * 100 : null,
-                perdaTotal: total > 0 ? (perdas / total) * 100 : null
+                perdaTotal: total > 0 ? (perdas / total) * 100 : null,
+                // Bruto por situação — alimenta o botão "como chegou nesse
+                // número" (detalha Total de alunos / Total de Calouros
+                // captados clicando no valor) sem precisar de outra chamada.
+                porSituacaoTotal
             });
         }
 
