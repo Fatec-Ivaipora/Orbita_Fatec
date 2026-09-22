@@ -170,6 +170,11 @@ async function main() {
         const porCursoSituacao = {};
         const porSituacaoTotal = {};
         const porPlano = {};
+        // Cancelou/Trancou por tipo (calouro = período 1º, veterano = resto)
+        // — a situação sozinha não separa isso (mesmo problema do sistema
+        // vivo), mas na Matriz o período de cada aluno tá preservado, então dá
+        // pra cruzar aqui na importação (pedido 22/09).
+        let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0;
         let total = 0, fantasmas = 0;
 
         for (const linha of linhas) {
@@ -186,6 +191,7 @@ async function main() {
             const cursoBruto = (linha[COL.curso] || '').toString().trim();
             const situacao = normalizarSituacao(linha[COL.situacao]);
             const plano = normalizarPlano(linha[COL.planoConfissao]);
+            const periodo = (linha[COL.periodo] || '').toString().trim();
 
             if (!situacao) avisos.push(`[${aba.sheet}] situação não mapeada: "${linha[COL.situacao]}"`);
             if (!plano) avisos.push(`[${aba.sheet}] plano não mapeado: "${linha[COL.planoConfissao]}"`);
@@ -207,6 +213,9 @@ async function main() {
             porCursoSituacao[curso][sit] = (porCursoSituacao[curso][sit] || 0) + 1;
             porSituacaoTotal[sit] = (porSituacaoTotal[sit] || 0) + 1;
             porPlano[pl] = (porPlano[pl] || 0) + 1;
+
+            if (sit === 'Cancelou') { periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++; }
+            if (sit === 'Trancou') { periodo === '1º' ? trancouCalouro++ : trancouVeterano++; }
         }
 
         documentos.push({
@@ -220,6 +229,10 @@ async function main() {
                 porCursoSituacao,
                 porSituacaoTotal,
                 porPlano,
+                cancelouCalouro,
+                cancelouVeterano,
+                trancouCalouro,
+                trancouVeterano,
                 // Procedência: deixa explícito que veio da planilha antiga e que
                 // não existe aluno por trás desses números dentro do sistema.
                 origem: 'planilha-historica',

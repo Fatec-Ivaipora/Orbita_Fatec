@@ -101,8 +101,11 @@ router.get('/pessoas', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// QUADRO DE AVISOS (mural do setor, estilo post-it — Chefe de Setor/ADM
-// deixam recados pra equipe. Cada setor só vê os próprios avisos.)
+// QUADRO DE AVISOS (mural do setor, estilo post-it — qualquer pessoa do
+// setor publica, não só Chefe de Setor/ADM: é o canal de mão dupla pra
+// pedir algo pro líder e pro setor inteiro se comunicar, não só o líder
+// avisando a equipe. Cada setor só vê os próprios avisos. Moderação de
+// remover continua restrita — ver DELETE /avisos/:id (22/09).
 // ==========================================
 const CORES_AVISO = ['amarelo', 'rosa', 'azul', 'verde', 'laranja'];
 
@@ -135,12 +138,13 @@ router.get('/avisos', verifyToken, async (req, res) => {
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
-router.post('/avisos', verifyToken, requireGestor, async (req, res) => {
+router.post('/avisos', verifyToken, async (req, res) => {
     try {
         const texto = (req.body.texto || '').trim();
         if (!texto) return res.status(400).json({ error: 'Escreva o aviso antes de publicar.' });
         const cor = CORES_AVISO.includes(req.body.cor) ? req.body.cor : CORES_AVISO[0];
-        const setorId = resolveSetorGestor(req);
+        const setorId = resolveSetorConsulta(req);
+        if (!setorId) return res.status(400).json({ error: 'Você precisa estar em um setor pra publicar avisos.' });
 
         const data = {
             setorId,
@@ -155,8 +159,9 @@ router.post('/avisos', verifyToken, requireGestor, async (req, res) => {
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
-// Só quem publicou ou ADM pode remover — nem o resto da chefia do mesmo
-// setor mexe no aviso de quem não é o autor.
+// Quem publicou, o chefe do setor onde o aviso foi publicado, ou um ADM —
+// agora que qualquer um do setor publica, o chefe precisa poder moderar
+// (tirar do mural algo fora de lugar) mesmo não sendo o autor.
 router.delete('/avisos/:id', verifyToken, async (req, res) => {
     try {
         const docRef = db.collection('avisos').doc(req.params.id);
@@ -165,8 +170,9 @@ router.delete('/avisos/:id', verifyToken, async (req, res) => {
         const aviso = snap.data();
         const souAutor = aviso.autorUid === req.user.uid;
         const souAdmin = req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
-        if (!souAutor && !souAdmin) {
-            return res.status(403).json({ error: 'Só quem publicou o aviso (ou um ADM) pode remover.' });
+        const souGestorDoSetor = ehGestorSetor(req) && aviso.setorId === req.user.setorId;
+        if (!souAutor && !souAdmin && !souGestorDoSetor) {
+            return res.status(403).json({ error: 'Só quem publicou o aviso, o chefe do setor ou um ADM pode remover.' });
         }
         await docRef.delete();
         res.json({ message: 'Aviso removido.' });

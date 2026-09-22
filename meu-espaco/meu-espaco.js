@@ -106,7 +106,7 @@ onAuthStateChanged(auth, async (user) => {
         // novo. Recalcula tudo de novo aqui, sem depender do outro fluxo.
         souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role) || currentChefeDeSetor;
         document.getElementById('gestor-panel')?.classList.toggle('hidden', !souGestor);
-        document.getElementById('aviso-composer')?.classList.toggle('hidden', !souGestor);
+        document.getElementById('aviso-composer')?.classList.remove('hidden');
         if (souGestor) {
           await setupSetorScope(role);
         } else {
@@ -149,9 +149,9 @@ async function initApp(user, role) {
 
   souGestor = ['chefe_setor', 'adm_l1', 'adm_l2'].includes(role) || currentChefeDeSetor;
   setupComposerAviso();
+  document.getElementById('aviso-composer').classList.remove('hidden');
   if (souGestor) {
     document.getElementById('gestor-panel').classList.remove('hidden');
-    document.getElementById('aviso-composer').classList.remove('hidden');
     await setupSetorScope(role);
   } else {
     await carregarAvisos();
@@ -196,7 +196,8 @@ function chaveDia(date) {
 }
 
 // ================================================================
-//  QUADRO DE AVISOS (mural de post-its do setor)
+//  QUADRO DE AVISOS (mural de post-its do setor — qualquer pessoa do
+//  setor publica e remove o próprio post; chefe/ADM também moderam)
 // ================================================================
 function setupComposerAviso() {
   const wrap = document.getElementById('aviso-cor-opcoes');
@@ -240,7 +241,10 @@ function renderAvisos(avisos) {
   }
   mural.innerHTML = avisos.map((a, i) => {
     const tilt = (i % 2 === 0 ? -1 : 1) * (2 + (i % 3));
-    const podeExcluir = a.autorUid === currentUser.uid || souAdmin();
+    // Autor sempre pode remover o próprio; gestor (chefe do setor/ADM) modera
+    // qualquer post do mural — todo aviso que ele vê já é do setor que
+    // gerencia (souGestor cobre chefe_setor, chefeDeSetor e ADM).
+    const podeExcluir = a.autorUid === currentUser.uid || souGestor;
     const data = new Date(a.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     return `
       <div class="aviso-card" data-cor="${esc(a.cor)}" style="--tilt:${tilt}deg;">
@@ -254,10 +258,6 @@ function renderAvisos(avisos) {
   }).join('');
 
   mural.querySelectorAll('.aviso-card-excluir').forEach(btn => btn.addEventListener('click', () => excluirAviso(btn.dataset.id)));
-}
-
-function souAdmin() {
-  return currentRole === 'adm_l1' || currentRole === 'adm_l2';
 }
 
 async function publicarAviso() {
