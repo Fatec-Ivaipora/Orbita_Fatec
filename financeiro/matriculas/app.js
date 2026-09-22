@@ -964,7 +964,7 @@ const LINHAS_COMPARATIVO = [
     formula: 'Rematrícula Assinada' },
   { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
     formula: 'Matrícula Nova + Matrícula Nova - Assinada' },
-  { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true,
+  { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true, detalhavel: true,
     formula: 'Matrícula Nova + Matrícula Nova - Assinada + 1ª Evasão + 2ª Evasão + Retorno + Cancelou (só o de calouro) — todo mundo que entrou pela porta de calouro, ficando ou não.' },
 
   // Pendência Financeira e Não Assinou NÃO são perda — quem tá nessas duas
@@ -999,7 +999,7 @@ const LINHAS_COMPARATIVO = [
     formula: 'Situação = Não Assinou — continua Ativo, só falta assinar. Não é perda.' },
   { chave: 'ativos', rotulo: 'Ativos', destaque: true,
     formula: 'Rematrícula Assinada + Pendência Financeira + Não Assinou + Matrícula Nova + Matrícula Nova - Assinada' },
-  { chave: 'total', rotulo: 'Total de alunos', destaque: true,
+  { chave: 'total', rotulo: 'Total de alunos', destaque: true, detalhavel: true,
     formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
   { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
     formula: '(Cancelou de calouro + 1ª Evasão + 2ª Evasão) ÷ Matrícula Nova - Assinada. Cancelou de veterano e Trancou ficam de fora — não são perda de captação.' },
@@ -1016,6 +1016,10 @@ async function initPaginaComparativo() {
 
   document.getElementById('btn-imprimir-comparativo')?.addEventListener('click', () => window.print());
 
+  const modal = document.getElementById('modal-detalhe-total');
+  document.getElementById('btn-fechar-detalhe-total')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
   atualizarLabelImpressaoComparativo();
   const dataEmissao = document.getElementById('print-data-emissao');
   if (dataEmissao) dataEmissao.textContent = 'Emitido em ' + new Date().toLocaleString('pt-BR');
@@ -1029,6 +1033,10 @@ function atualizarLabelImpressaoComparativo() {
   const modulo = document.getElementById('comp-modulo-select')?.value === 'medicina' ? 'Medicina' : 'Fatec';
   label.textContent = modulo;
 }
+
+// Guardado pra alimentar o modal "como chegou nesse número" sem precisar
+// buscar de novo — atualizado toda vez que o comparativo recarrega.
+let ultimoComparativo = { modulo: 'fatec', linhas: [] };
 
 async function carregarComparativo() {
   const modulo = document.getElementById('comp-modulo-select')?.value || 'fatec';
@@ -1045,6 +1053,7 @@ async function carregarComparativo() {
 
 function renderComparativo(dados) {
   const linhas = dados.linhas || [];
+  ultimoComparativo = dados;
   const sub = document.getElementById('rel-comparativo-sub');
   const grid = document.getElementById('comparativo-grid');
 
@@ -1073,7 +1082,12 @@ function renderComparativo(dados) {
         const classes = [def.destaque ? 'linha-destaque' : '', def.separador ? 'linha-separador' : '']
           .filter(Boolean).join(' ');
         const titulo = def.formula ? ` title="${esc(def.formula)}"` : '';
-        return `<tr class="${classes}"><td${titulo}>${esc(def.rotulo)}</td><td${titulo}>${fmt(l[def.chave], def.percentual)}</td></tr>`;
+        // Total de alunos / Total de Calouros captados ganham um botão que
+        // abre o detalhe de como o número foi somado (pedido 22/09).
+        const valorHtml = def.detalhavel
+          ? `<button type="button" class="btn-detalhe-total" data-semestre="${esc(l.semestre)}" data-chave="${esc(def.chave)}" title="Ver como chegou nesse número">${fmt(l[def.chave], def.percentual)} <span class="btn-detalhe-total-icone">🔍</span></button>`
+          : fmt(l[def.chave], def.percentual);
+        return `<tr class="${classes}"><td${titulo}>${esc(def.rotulo)}</td><td${titulo}>${valorHtml}</td></tr>`;
       }).join('');
     return `
       <div class="comparativo-card">
@@ -1089,6 +1103,54 @@ function renderComparativo(dados) {
   document.getElementById('rel-comparativo-nota').textContent = temHistorico
     ? '° Semestre fechado: números vindos da planilha usada antes do Órbita, guardados só como contagem. Não há lista de alunos para abrir nesses semestres.'
     : '';
+
+  grid.querySelectorAll('.btn-detalhe-total').forEach(btn => btn.addEventListener('click', () => {
+    abrirDetalheTotal(btn.dataset.semestre, btn.dataset.chave);
+  }));
+}
+
+// Componentes de cada total detalhável — mesma soma que o backend faz, só
+// que reconstruída aqui a partir do `porSituacaoTotal` bruto que a API
+// manda, pra não precisar duplicar isso nos dois lados sem necessidade.
+const COMPONENTES_TOTAL = {
+  // Total de alunos = a soma de TODAS as situações do semestre, sem exceção.
+  total: null,
+  // Total de Calouros captados: mesmas situações da fórmula em
+  // src/rotas/matriculas.js, com Cancelou trocado pelo componente já
+  // separado por período (cancelouCalouro).
+  totalCalouros: [
+    'Matrícula Nova', 'Matrícula Nova - Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+    '1ª Evasão', '2ª Evasão'
+  ]
+};
+
+function abrirDetalheTotal(semestre, chave) {
+  const linha = (ultimoComparativo.linhas || []).find(l => l.semestre === semestre);
+  if (!linha) return;
+  const porSituacaoTotal = linha.porSituacaoTotal || {};
+
+  const linhasDetalhe = [];
+  if (chave === 'total') {
+    Object.entries(porSituacaoTotal)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([situacao, qtd]) => linhasDetalhe.push([situacao, qtd]));
+  } else if (chave === 'totalCalouros') {
+    COMPONENTES_TOTAL.totalCalouros.forEach(situacao => {
+      const qtd = porSituacaoTotal[situacao] || 0;
+      if (qtd > 0) linhasDetalhe.push([situacao, qtd]);
+    });
+    if (linha.cancelouCalouro) linhasDetalhe.push(['Cancelou (calouro)', linha.cancelouCalouro]);
+  }
+
+  const def = LINHAS_COMPARATIVO.find(d => d.chave === chave);
+  document.getElementById('detalhe-total-titulo').textContent = `${def?.rotulo || chave} — ${semestre}`;
+  document.getElementById('detalhe-total-sub').textContent = def?.formula || '';
+  document.getElementById('detalhe-total-tbody').innerHTML =
+    linhasDetalhe.map(([nome, qtd]) => `<tr><td>${esc(nome)}</td><td>${qtd}</td></tr>`).join('') +
+    `<tr class="linha-destaque linha-separador"><td>Total</td><td>${linha[chave]}</td></tr>`;
+
+  document.getElementById('modal-detalhe-total').classList.remove('hidden');
 }
 
 function renderRelatorio(dados) {
