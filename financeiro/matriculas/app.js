@@ -951,20 +951,60 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
 // contar os semestres vivos custa uma leitura por aluno no Firestore, então só
 // roda quando a pessoa pede.
 // ==========================================
+// `formula` vira tooltip (title) em cima de cada número da tabela — o
+// pedido foi "passar o mouse e ver de onde vem" sem precisar abrir o código
+// ou perguntar pra mim toda vez (22/09).
+// Reorganizado em 3 blocos pra contar a história em ordem: o que somou
+// (captação), o que diminuiu (perdas), e o total geral no fim — em vez de
+// misturado (pedido 22/09). `secao` vira um cabeçalho dentro do cartão, sem
+// chave/valor.
 const LINHAS_COMPARATIVO = [
-  { chave: 'total', rotulo: 'Total de alunos', destaque: true },
-  { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)' },
-  { chave: 'calouros', rotulo: 'Calouros (matrícula nova)' },
-  { chave: 'ativos', rotulo: 'Ativos', destaque: true },
-  { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira', separador: true },
-  { chave: 'naoAssinou', rotulo: 'Não assinou' },
-  { chave: 'primeiraEvasao', rotulo: '1ª Evasão' },
-  { chave: 'segundaEvasao', rotulo: '2ª Evasão', ocultarSeZerado: true },
-  { chave: 'cancelou', rotulo: 'Cancelou' },
-  { chave: 'trancou', rotulo: 'Trancou' },
-  { chave: 'perdas', rotulo: 'Total de perdas', destaque: true, separador: true },
-  { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true },
-  { chave: 'perdaTotal', rotulo: '% de perda sobre o total', percentual: true }
+  { secao: 'O que somou (captação)' },
+  { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)',
+    formula: 'Rematrícula Assinada' },
+  { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
+    formula: 'Matrícula Nova + Matrícula Nova - Assinada' },
+  { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true,
+    formula: 'Matrícula Nova + Matrícula Nova - Assinada + 1ª Evasão + 2ª Evasão + Retorno + Cancelou (só o de calouro) — todo mundo que entrou pela porta de calouro, ficando ou não.' },
+
+  // Pendência Financeira e Não Assinou NÃO são perda — quem tá nessas duas
+  // situações continua Ativo (ver fórmula de "ativos" logo abaixo), só falta
+  // resolver uma pendência administrativa. Por isso ficam fora do bloco de
+  // perdas e do "Total de perdas" (22/09).
+  //
+  // Cancelou e Trancou vêm separados por calouro/veterano (cruzando com
+  // período: 1º = calouro, resto = veterano) — pedido 22/09, porque a
+  // situação sozinha não diz quem era quem, e o setor precisa enxergar essa
+  // diferença.
+  { secao: 'O que diminuiu (perdas)' },
+  { chave: 'primeiraEvasao', rotulo: '1ª Evasão',
+    formula: 'Situação = 1ª Evasão — saiu antes de começar as aulas (só existe pra calouro)' },
+  { chave: 'segundaEvasao', rotulo: '2ª Evasão', ocultarSeZerado: true,
+    formula: 'Situação = 2ª Evasão' },
+  { chave: 'cancelouCalouro', rotulo: 'Cancelou — calouro', ocultarSeZerado: true,
+    formula: 'Situação = Cancelou, período 1º — saiu depois de começar as aulas / pagou 1ª mensalidade' },
+  { chave: 'cancelouVeterano', rotulo: 'Cancelou — veterano', ocultarSeZerado: true,
+    formula: 'Situação = Cancelou, período 2º em diante' },
+  { chave: 'trancouCalouro', rotulo: 'Trancou — calouro', ocultarSeZerado: true,
+    formula: 'Situação = Trancou, período 1º' },
+  { chave: 'trancouVeterano', rotulo: 'Trancou — veterano', ocultarSeZerado: true,
+    formula: 'Situação = Trancou, período 2º em diante' },
+  { chave: 'perdas', rotulo: 'Total de perdas', destaque: true,
+    formula: 'Cancelou + Trancou + 1ª Evasão + 2ª Evasão (todo mundo que saiu, calouro ou veterano)' },
+
+  { secao: 'Total geral' },
+  { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira',
+    formula: 'Situação = Pendência Financeira — continua Ativo, só falta resolver o pagamento. Não é perda.' },
+  { chave: 'naoAssinou', rotulo: 'Não assinou',
+    formula: 'Situação = Não Assinou — continua Ativo, só falta assinar. Não é perda.' },
+  { chave: 'ativos', rotulo: 'Ativos', destaque: true,
+    formula: 'Rematrícula Assinada + Pendência Financeira + Não Assinou + Matrícula Nova + Matrícula Nova - Assinada' },
+  { chave: 'total', rotulo: 'Total de alunos', destaque: true,
+    formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
+  { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
+    formula: '(Cancelou de calouro + 1ª Evasão + 2ª Evasão) ÷ Matrícula Nova - Assinada. Cancelou de veterano e Trancou ficam de fora — não são perda de captação.' },
+  { chave: 'perdaTotal', rotulo: '% de perda sobre o total', percentual: true,
+    formula: '(Cancelou + Trancou + 1ª Evasão + 2ª Evasão) ÷ Total de alunos — inclui veterano de propósito.' }
 ];
 
 async function initPaginaComparativo() {
@@ -993,8 +1033,7 @@ function atualizarLabelImpressaoComparativo() {
 async function carregarComparativo() {
   const modulo = document.getElementById('comp-modulo-select')?.value || 'fatec';
   document.getElementById('rel-comparativo-sub').textContent = 'Carregando...';
-  document.getElementById('comparativo-thead').innerHTML = '';
-  document.getElementById('comparativo-tbody').innerHTML = '';
+  document.getElementById('comparativo-grid').innerHTML = '';
 
   try {
     const dados = await apiFetch(`/matriculas/comparativo?modulo=${encodeURIComponent(modulo)}`);
@@ -1007,35 +1046,44 @@ async function carregarComparativo() {
 function renderComparativo(dados) {
   const linhas = dados.linhas || [];
   const sub = document.getElementById('rel-comparativo-sub');
+  const grid = document.getElementById('comparativo-grid');
 
   if (!linhas.length) {
     sub.textContent = 'Nenhum semestre com dados para comparar.';
+    grid.innerHTML = '';
     return;
   }
   sub.textContent = `${linhas.length} semestres · módulo ${dados.modulo === 'medicina' ? 'Medicina' : 'Fatec'}`;
-
-  // Cabeçalho: o ° marca o semestre que veio da planilha antiga (só contagem).
-  document.getElementById('comparativo-thead').innerHTML =
-    '<tr><th>Indicador</th>' +
-    linhas.map(l => `<th>${esc(l.semestre)}${l.historico ? '<span class="comparativo-hist" title="Dados históricos da planilha">°</span>' : ''}</th>`).join('') +
-    '</tr>';
 
   const fmt = (valor, ehPercentual) => {
     if (valor === null || valor === undefined) return '—';
     return ehPercentual ? `${valor.toFixed(1)}%` : String(valor);
   };
 
-  const corpo = LINHAS_COMPARATIVO
-    .filter(def => !def.ocultarSeZerado || linhas.some(l => (l[def.chave] || 0) > 0))
-    .map(def => {
-      const classes = [def.destaque ? 'linha-destaque' : '', def.separador ? 'linha-separador' : '']
-        .filter(Boolean).join(' ');
-      return `<tr class="${classes}"><td>${esc(def.rotulo)}</td>` +
-        linhas.map(l => `<td>${fmt(l[def.chave], def.percentual)}</td>`).join('') +
-        '</tr>';
-    }).join('');
-
-  document.getElementById('comparativo-tbody').innerHTML = corpo;
+  // Um cartão/tabelinha por semestre (pedido pra facilitar a leitura, em vez
+  // de uma tabela só larga com 9 colunas precisando rolar pro lado — 22/09).
+  grid.innerHTML = linhas.map(l => {
+    const marcaHistorico = l.historico ? '<span class="comparativo-hist" title="Dados históricos da planilha">°</span>' : '';
+    const corpo = LINHAS_COMPARATIVO
+      .filter(def => def.secao || !def.ocultarSeZerado || (l[def.chave] || 0) > 0)
+      .map(def => {
+        if (def.secao) {
+          return `<tr class="linha-secao"><td colspan="2">${esc(def.secao)}</td></tr>`;
+        }
+        const classes = [def.destaque ? 'linha-destaque' : '', def.separador ? 'linha-separador' : '']
+          .filter(Boolean).join(' ');
+        const titulo = def.formula ? ` title="${esc(def.formula)}"` : '';
+        return `<tr class="${classes}"><td${titulo}>${esc(def.rotulo)}</td><td${titulo}>${fmt(l[def.chave], def.percentual)}</td></tr>`;
+      }).join('');
+    return `
+      <div class="comparativo-card">
+        <h3 class="comparativo-card-titulo">${esc(l.semestre)}${marcaHistorico}</h3>
+        <table class="data-table comparativo-card-table">
+          <tbody>${corpo}</tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
 
   const temHistorico = linhas.some(l => l.historico);
   document.getElementById('rel-comparativo-nota').textContent = temHistorico
@@ -1068,6 +1116,15 @@ function renderRelatorio(dados) {
   document.getElementById('kpi-total').textContent = total;
   document.getElementById('kpi-veteranos').textContent = porSituacaoTotal['Rematrícula Assinada'] || 0;
   document.getElementById('kpi-calouros').textContent = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  // "Total de Calouros captados" = todo mundo que entrou pela porta de
+  // calouro, independente de ter ficado — mesma conta da planilha antiga
+  // (aba Relatório Fatec, célula que soma matrícula nova + assinada + 1ª/2ª
+  // evasão + retorno + cancelou). "Retorno" tem 3 grafias possíveis (ver
+  // comentário em src/rotas/matriculas.js).
+  document.getElementById('kpi-total-calouros').textContent = somaSituacoes(porSituacaoTotal,
+    'Matrícula Nova', 'Matrícula Nova - Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+    '1ª Evasão', '2ª Evasão', 'Cancelou');
   document.getElementById('kpi-ativos').textContent = somaSituacoes(porSituacaoTotal, 'Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Matrícula Nova', 'Matrícula Nova - Assinada');
   document.getElementById('kpi-pendencia').textContent = porSituacaoTotal['Pendência Financeira'] || 0;
   document.getElementById('kpi-nao-assinou').textContent = porSituacaoTotal['Não Assinou'] || 0;
@@ -1083,14 +1140,28 @@ function renderRelatorio(dados) {
     card2Evasao.classList.add('hidden');
   }
 
-  // "Perda" = todo mundo que saiu de qualquer jeito (cancelou, trancou,
-  // evadiu). Captação = calouros (matrícula nova) do semestre — a métrica
-  // olha "de cada 100 que a gente captou, quantos a gente perdeu".
-  const totalCalouros = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  // "Perda de captação" = Cancelou + 1ª/2ª Evasão. Cancelou entra porque na
+  // prática é quase sempre calouro (confirmado cruzando com período: 125 de
+  // 127 "Cancelou" de fatec/2026.1 são período 1º) — a planilha antiga já
+  // rotulava essa linha como "cancelamento de CALOURO". Só Trancou fica de
+  // fora: esse sim está espalhado por todos os períodos, sem dar pra separar
+  // calouro de veterano. Denominador = matrícula assinada de verdade, não
+  // conta quem ainda tá pendente de assinar (22/09).
+  // "Perda total" continua olhando todo mundo que saiu, de qualquer jeito,
+  // sobre o total do semestre — inclui veterano de propósito.
+  const matriculasAssinadas = porSituacaoTotal['Matrícula Nova - Assinada'] || 0;
+  const perdasCalouros = somaSituacoes(porSituacaoTotal, 'Cancelou', '1ª Evasão', '2ª Evasão');
   const totalPerdas = somaSituacoes(porSituacaoTotal, 'Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão');
+  // Rede de segurança pra semestre antigo mal tabulado na planilha original
+  // (ex.: 2023.2 — cabeçalho corrompido, quase tudo ficou em "Matrícula Nova"
+  // bruta em vez de "Assinada"): se a perda for maior que quem tá marcado
+  // como assinado, cai pro total de calouro (assinada+pendente) em vez de
+  // estourar 100% (22/09).
+  const totalDeCalourosBruto = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  const denominadorCaptacao = matriculasAssinadas >= perdasCalouros ? matriculasAssinadas : totalDeCalourosBruto;
   const formatarPercentual = (numerador, denominador) =>
     denominador > 0 ? `${((numerador / denominador) * 100).toFixed(1)}%` : '—';
-  document.getElementById('kpi-perda-captacao').textContent = formatarPercentual(totalPerdas, totalCalouros);
+  document.getElementById('kpi-perda-captacao').textContent = formatarPercentual(perdasCalouros, denominadorCaptacao);
   document.getElementById('kpi-perda-total').textContent = formatarPercentual(totalPerdas, total);
 
   const cardRevisar = document.getElementById('kpi-revisar-card');

@@ -356,10 +356,13 @@ body.pagina-relatorio .layout-content {
 }
 .rel-aviso-historico strong { color: #4A3A0B; }
 
-/* Comparativo entre semestres: uma coluna por semestre, uma linha por
-   indicador. Os semestres fechados vêm de matriculas_historico (só contagem)
-   e os vivos são contados na hora — a coluna marcada com ° avisa qual é qual,
-   porque num deles dá pra clicar e ver aluno, no outro não. */
+/* Comparativo entre semestres: um cartão por semestre (indicador + valor),
+   lado a lado quando cabe na tela e quebrando linha em telas menores — em
+   vez de uma tabela só larga com uma coluna por semestre, que exigia rolar
+   pro lado e ficava difícil de acompanhar uma linha até o fim (22/09). Os
+   semestres fechados vêm de matriculas_historico (só contagem) e os vivos
+   são contados na hora — o ° no título do cartão avisa qual é qual, porque
+   num deles dá pra clicar e ver aluno, no outro não. */
 .rel-comparativo {
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-color, #E5E7EB);
@@ -369,15 +372,64 @@ body.pagina-relatorio .layout-content {
 }
 .rel-comparativo-titulo { margin: 0 0 0.2rem; font-size: 1rem; font-weight: 700; }
 .rel-comparativo-sub { margin: 0 0 0.9rem; font-size: 0.8rem; color: #64748B; }
-.rel-comparativo-scroll { overflow-x: auto; }
-.rel-comparativo .data-table { min-width: 620px; }
-.rel-comparativo .data-table th,
-.rel-comparativo .data-table td { white-space: nowrap; text-align: right; }
-.rel-comparativo .data-table th:first-child,
-.rel-comparativo .data-table td:first-child { text-align: left; font-weight: 600; }
-.rel-comparativo tr.linha-destaque td { font-weight: 700; }
-.rel-comparativo tr.linha-separador td {
-  border-top: 2px solid var(--border-color, #E5E7EB);
+
+/* Grid, não flex: cada cartão nunca fica menor que 230px (letra não
+   espreme/não precisa de zoom) — o navegador calcula sozinho quantos cabem
+   por linha de acordo com a largura da tela e quebra o resto pra próxima
+   linha, todos do mesmo tamanho na mesma linha (22/09). */
+.comparativo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
 }
+.comparativo-card {
+  border: 1px solid var(--border-color, #E5E7EB);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: var(--card-bg, #fff);
+}
+.comparativo-card-titulo {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-color, #E5E7EB);
+}
+.comparativo-card-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.83rem; }
+.comparativo-card-table td {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border-color, #F1F5F9);
+  color: var(--text-main);
+}
+/* Rótulo pode ser longo ("Total de Calouros captados") — quebra linha em vez
+   de estourar a largura do cartão e cortar. Só o valor fica numa linha só,
+   já que número/percentual sempre cabe (22/09). */
+.comparativo-card-table td:first-child {
+  color: var(--text-secondary, #64748B);
+  padding-right: 0.5rem;
+  white-space: normal;
+  word-break: break-word;
+  width: 62%;
+}
+.comparativo-card-table td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+.comparativo-card-table tr:last-child td { border-bottom: none; }
+.comparativo-card-table td[title] { cursor: help; }
+.comparativo-card-table tr.linha-destaque td { font-weight: 700; }
+.comparativo-card-table tr.linha-separador td {
+  border-top: 2px solid var(--border-color, #E5E7EB);
+  padding-top: 0.5rem;
+}
+/* Cabeçalho de seção dentro do cartão ("O que somou", "O que diminuiu",
+   "Total geral") — separa visualmente os 3 blocos sem virar outra tabela. */
+.comparativo-card-table tr.linha-secao td {
+  padding: 0.7rem 0 0.25rem;
+  border-bottom: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary-blue, #2563EB);
+}
+.comparativo-card-table tr.linha-secao:first-child td { padding-top: 0; }
 .comparativo-hist { color: #92791F; font-weight: 700; }
 .rel-comparativo-nota { margin: 0.8rem 0 0; font-size: 0.75rem; color: #64748B; line-height: 1.5; }

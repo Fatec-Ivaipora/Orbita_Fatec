@@ -420,22 +420,31 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             let total = 0;
             let porSituacaoTotal = {};
             let historico = false;
+            // Cancelou/Trancou por tipo (calouro = período 1º, veterano = resto)
+            // — a situação sozinha não separa isso, período sim (pedido 22/09).
+            let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0;
 
             if (hist.exists) {
                 const h = hist.data();
                 total = h.total || 0;
                 porSituacaoTotal = h.porSituacaoTotal || {};
                 historico = true;
+                cancelouCalouro = h.cancelouCalouro || 0;
+                cancelouVeterano = h.cancelouVeterano || 0;
+                trancouCalouro = h.trancouCalouro || 0;
+                trancouVeterano = h.trancouVeterano || 0;
             } else {
                 const snap = await db.collection(COL_ALUNOS)
                     .where('modulo', '==', modulo)
                     .where('semestre', '==', semestre)
-                    .select('situacao')
+                    .select('situacao', 'periodo')
                     .get();
                 snap.forEach(d => {
-                    const sit = d.data().situacao;
+                    const { situacao: sit, periodo } = d.data();
                     total++;
                     porSituacaoTotal[sit] = (porSituacaoTotal[sit] || 0) + 1;
+                    if (sit === 'Cancelou') { periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++; }
+                    if (sit === 'Trancou') { periodo === '1º' ? trancouCalouro++ : trancouVeterano++; }
                 });
             }
 
@@ -445,6 +454,39 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             const soma = (...nomes) => nomes.reduce((acc, n) => acc + (porSituacaoTotal[n] || 0), 0);
             const calouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada');
             const perdas = soma('Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão');
+            // Total de Calouros = todo mundo que entrou pela porta de calouro no
+            // semestre, independente de ter ficado ou saído — mesma conta que a
+            // planilha antiga usava (aba "Relatório Fatec", célula
+            // =SOMA(matrícula nova; assinada; 1ª evasão; retorno; cancelou)), só
+            // que agora usando cancelouCalouro (por período) em vez do Cancelou
+            // bruto, que também pegava veterano cancelando junto.
+            // "Retorno" tem 3 grafias possíveis pela mudança de cadastro de
+            // 11/09: registros antigos (só fatec/2026.1) usam "Retorno" puro;
+            // daqui pra frente é "Matrícula Nova - Retorno[ Assinada]"; e o
+            // histórico da planilha (2023-2025) sempre normaliza pra "Matrícula
+            // Nova - Retorno". "Mudança de Curso" fica de fora de propósito —
+            // a planilha original também não somava essa linha aqui.
+            const totalCalouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada',
+                'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+                '1ª Evasão', '2ª Evasão') + cancelouCalouro;
+            // Perda de captação: usa cancelouCalouro (separado por período, não
+            // o Cancelou bruto) — agora dá pra saber exatamente quantos
+            // cancelamentos eram de calouro e não misturar com veterano
+            // cancelando junto. Trancou fica de fora inteiro, calouro ou
+            // veterano: é usado pra reter matrícula, não pra medir perda de
+            // captação. Denominador é matrícula que de fato assinou (Matrícula
+            // Nova - Assinada), não a que ainda tá pendente (22/09).
+            const matriculasAssinadas = porSituacaoTotal['Matrícula Nova - Assinada'] || 0;
+            const perdasCalouros = soma('1ª Evasão', '2ª Evasão') + cancelouCalouro;
+            // Rede de segurança pra semestre antigo mal tabulado na planilha
+            // original (ex.: 2023.2, cabeçalho corrompido — quase tudo ficou em
+            // "Matrícula Nova" bruta em vez de "Assinada", perda deu 241%): se a
+            // perda for maior que o que tá marcado como assinado, é sinal de que
+            // esse semestre não separou assinado/pendente direito na origem —
+            // cai pro total de calouro (assinada+pendente) em vez de estourar
+            // 100%. Não muda nenhum semestre que já está com o dado certo (ver
+            // 22/09).
+            const denominadorCaptacao = matriculasAssinadas >= perdasCalouros ? matriculasAssinadas : calouros;
 
             linhas.push({
                 semestre,
@@ -452,6 +494,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 total,
                 veteranos: porSituacaoTotal['Rematrícula Assinada'] || 0,
                 calouros,
+                totalCalouros,
                 ativos: soma('Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
                              'Matrícula Nova', 'Matrícula Nova - Assinada'),
                 pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
@@ -460,9 +503,13 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 segundaEvasao: porSituacaoTotal['2ª Evasão'] || 0,
                 cancelou: porSituacaoTotal['Cancelou'] || 0,
                 trancou: porSituacaoTotal['Trancou'] || 0,
+                cancelouCalouro,
+                cancelouVeterano,
+                trancouCalouro,
+                trancouVeterano,
                 perdas,
-                // Mesmas contas dos cards: perda sobre captação e sobre o total.
-                perdaCaptacao: calouros > 0 ? (perdas / calouros) * 100 : null,
+                // Mesmas contas dos cards do relatório de um semestre só.
+                perdaCaptacao: denominadorCaptacao > 0 ? (perdasCalouros / denominadorCaptacao) * 100 : null,
                 perdaTotal: total > 0 ? (perdas / total) * 100 : null
             });
         }
