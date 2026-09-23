@@ -316,6 +316,175 @@
 .toast-success { background: var(--green); }
 .toast-error { background: var(--red); }
 
+/* ==========================================
+   SOLICITAR ORÇAMENTO
+   ========================================== */
+.sol-info-fixa {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+.sol-info-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  flex: 1;
+}
+.sol-info-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #888);
+}
+.sol-info-chip strong {
+  font-size: 0.92rem;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.sol-itens-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 1rem 0 0.5rem;
+}
+
+.sol-itens-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sol-item-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 80px 70px 1fr 32px;
+  gap: 0.4rem;
+  align-items: center;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+
+.sol-item-row .form-group {
+  margin: 0;
+}
+
+.sol-item-row .form-group input {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.sol-item-num {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: center;
+}
+
+.sol-item-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.55;
+  padding: 0;
+  line-height: 1;
+}
+.sol-item-del:hover { opacity: 1; }
+
+/* Histórico de solicitações */
+.sol-historico-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sol-hist-card {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: var(--card-bg);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sol-hist-card-header {
+  flex: 1;
+  min-width: 0;
+}
+
+.sol-hist-titulo {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  display: block;
+}
+
+.sol-hist-setor {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: var(--bg-color);
+  border-radius: 4px;
+  padding: 1px 6px;
+  display: inline-block;
+  margin-top: 3px;
+}
+
+.sol-hist-meta {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.sol-hist-qtd {
+  background: #eff6ff;
+  color: var(--primary-blue);
+  border-radius: 100px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.sol-hist-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sol-hist-btn-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.5;
+  padding: 4px;
+}
+.sol-hist-btn-del:hover { opacity: 1; }
+
+@media (max-width: 640px) {
+  .sol-item-row {
+    grid-template-columns: 24px 1fr 70px 32px;
+  }
+  .sol-item-un, .sol-item-obs { display: none; }
+}
+
 @media (max-width: 900px) {
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
 }

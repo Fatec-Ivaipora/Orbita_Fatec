@@ -21,6 +21,7 @@ let lancamentoEmEdicaoId = null;
 let fornecedoresGlobais = [];
 let currentRole = null;
 let currentChefeDeSetor = false;
+let currentUserNome = '';
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -95,6 +96,7 @@ onAuthStateChanged(auth, async (user) => {
       role = userData.role || 'visitante';
       meuOverrides = userData.permissoes || null;
       currentChefeDeSetor = userData.chefeDeSetor === true;
+      currentUserNome = userData.name || user.displayName || user.email || '';
     } catch (err) {
       role = cached ? cached.role : 'visitante';
     }
@@ -1139,4 +1141,393 @@ function wireEventos() {
       if (e.target === overlay) overlay.classList.add('hidden');
     });
   });
+
+  // Solicitar Orçamento
+  document.getElementById('btn-solicitar-orcamento').addEventListener('click', abrirHistoricoSolicitacoes);
+  document.getElementById('btn-fechar-historico-sol').addEventListener('click', () => document.getElementById('modal-historico-solicitacoes').classList.add('hidden'));
+  document.getElementById('btn-nova-solicitar-hist').addEventListener('click', () => {
+    document.getElementById('modal-historico-solicitacoes').classList.add('hidden');
+    abrirModalSolicitar();
+  });
+  document.getElementById('btn-cancelar-solicitar').addEventListener('click', () => document.getElementById('modal-solicitar-orcamento').classList.add('hidden'));
+  document.getElementById('btn-add-sol-item').addEventListener('click', adicionarItemSolicitar);
+  document.getElementById('btn-imprimir-solicitar').addEventListener('click', imprimirSolicitacao);
+  document.getElementById('form-solicitar-orcamento').addEventListener('submit', salvarSolicitacao);
+
+  [document.getElementById('modal-solicitar-orcamento'), document.getElementById('modal-historico-solicitacoes')].forEach(overlay => {
+    overlay?.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.add('hidden');
+    });
+  });
+}
+
+// ==========================================
+// SOLICITAR ORÇAMENTO
+// ==========================================
+let solicitacoes = [];
+
+function fmtData(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('pt-BR');
+}
+
+function abrirModalSolicitar(sol = null) {
+  const form = document.getElementById('form-solicitar-orcamento');
+  form.reset();
+  document.getElementById('solicitar-id').value = sol ? sol.id : '';
+  document.getElementById('solicitar-titulo').value = sol ? sol.titulo : '';
+  document.getElementById('solicitar-data').value = sol ? sol.data : new Date().toISOString().split('T')[0];
+  document.getElementById('solicitar-prazo').value = sol ? (sol.prazo || '') : '';
+  document.getElementById('solicitar-obs').value = sol ? (sol.obs || '') : '';
+  document.getElementById('solicitar-empresa').value = sol ? (sol.empresa || '') : '';
+
+  // Setor fixo + nome do usuário logado
+  document.getElementById('solicitar-nome-display').textContent = currentUserNome || '—';
+
+  // Popula datalist de empresas
+  const dl = document.getElementById('sol-empresas-datalist');
+  if (dl) dl.innerHTML = fornecedoresGlobais.map(n => `<option value="${esc(n)}">`).join('');
+
+  // Itens
+  const lista = document.getElementById('sol-itens-lista');
+  lista.innerHTML = '';
+  const itens = sol && sol.itens && sol.itens.length ? sol.itens : [{ nome: '', quantidade: '', unidade: '', obs: '' }];
+  itens.forEach(it => adicionarItemSolicitar(it));
+
+  document.getElementById('modal-solicitar-orcamento').classList.remove('hidden');
+}
+
+let _solItemIdx = 0;
+function adicionarItemSolicitar(it = null) {
+  const idx = _solItemIdx++;
+  const nome = (typeof it === 'object' && it !== null && !(it instanceof Event)) ? it.nome || '' : '';
+  const quantidade = (typeof it === 'object' && it !== null && !(it instanceof Event)) ? it.quantidade || '' : '';
+  const unidade = (typeof it === 'object' && it !== null && !(it instanceof Event)) ? it.unidade || '' : '';
+  const obs = (typeof it === 'object' && it !== null && !(it instanceof Event)) ? it.obs || '' : '';
+
+  const lista = document.getElementById('sol-itens-lista');
+  const row = document.createElement('div');
+  row.className = 'sol-item-row';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <span class="sol-item-num">${lista.children.length + 1}</span>
+    <div class="form-group sol-item-nome">
+      <input type="text" class="sol-inp-nome" placeholder="Descrição do item" style="text-transform:uppercase;" value="${esc(nome)}" required maxlength="150">
+    </div>
+    <div class="form-group sol-item-qtd">
+      <input type="number" class="sol-inp-qtd" placeholder="Qtd" min="0.01" step="0.01" value="${esc(quantidade)}" required>
+    </div>
+    <div class="form-group sol-item-un">
+      <input type="text" class="sol-inp-un" placeholder="Un." value="${esc(unidade)}" maxlength="20">
+    </div>
+    <div class="form-group sol-item-obs">
+      <input type="text" class="sol-inp-obs" placeholder="Obs (opcional)" value="${esc(obs)}" maxlength="200">
+    </div>
+    <button type="button" class="btn-icon sol-item-del" title="Remover item">🗑</button>
+  `;
+  row.querySelector('.sol-item-del').addEventListener('click', () => {
+    row.remove();
+    renumerarItens();
+  });
+  lista.appendChild(row);
+}
+
+function renumerarItens() {
+  document.querySelectorAll('#sol-itens-lista .sol-item-row').forEach((row, i) => {
+    row.querySelector('.sol-item-num').textContent = i + 1;
+  });
+}
+
+function coletarItensSolicitar() {
+  return [...document.querySelectorAll('#sol-itens-lista .sol-item-row')].map(row => ({
+    nome: row.querySelector('.sol-inp-nome').value.trim().toUpperCase(),
+    quantidade: parseFloat(row.querySelector('.sol-inp-qtd').value) || 0,
+    unidade: row.querySelector('.sol-inp-un').value.trim(),
+    obs: row.querySelector('.sol-inp-obs').value.trim(),
+  })).filter(it => it.nome);
+}
+
+async function salvarSolicitacao(e) {
+  e.preventDefault();
+  const id = document.getElementById('solicitar-id').value;
+  const itens = coletarItensSolicitar();
+  if (!itens.length) { showToast('Adicione pelo menos um item.', 'error'); return; }
+
+  // Empresa: verifica se já existe; se não, cadastra automaticamente
+  const empresaDigitada = (document.getElementById('solicitar-empresa').value || '').trim().toUpperCase();
+  let empresaNome = empresaDigitada || null;
+  if (empresaDigitada) {
+    const jaExiste = fornecedoresGlobais.some(n => n.toUpperCase() === empresaDigitada);
+    if (!jaExiste) {
+      try {
+        await apiFetch('/orcamento/fornecedores', { method: 'POST', body: JSON.stringify({ nome: empresaDigitada }) });
+        await carregarFornecedores(); // atualiza lista global
+        showToast(`Empresa "${empresaDigitada}" cadastrada automaticamente.`);
+      } catch (err) {
+        // Se já existia por corrida de condição, ignora
+        if (!err.message?.includes('parecida')) throw err;
+      }
+    }
+  }
+
+  const payload = {
+    titulo: document.getElementById('solicitar-titulo').value.trim(),
+    setor: 'FINANCEIRO',
+    solicitante: currentUserNome,
+    empresa: empresaNome,
+    data: document.getElementById('solicitar-data').value,
+    prazo: document.getElementById('solicitar-prazo').value || null,
+    obs: document.getElementById('solicitar-obs').value.trim() || null,
+    itens,
+  };
+
+  try {
+    if (id) {
+      await apiFetch(`/orcamento/solicitacoes/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      showToast('Solicitação atualizada.');
+    } else {
+      await apiFetch('/orcamento/solicitacoes', { method: 'POST', body: JSON.stringify(payload) });
+      showToast('Solicitação criada.');
+    }
+    document.getElementById('modal-solicitar-orcamento').classList.add('hidden');
+    await carregarSolicitacoes();
+    abrirHistoricoSolicitacoes();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function carregarSolicitacoes() {
+  try {
+    solicitacoes = await apiFetch('/orcamento/solicitacoes');
+  } catch (err) {
+    solicitacoes = [];
+  }
+}
+
+async function abrirHistoricoSolicitacoes() {
+  document.getElementById('modal-historico-solicitacoes').classList.remove('hidden');
+  const lista = document.getElementById('sol-historico-lista');
+  lista.innerHTML = '<div class="tabela-msg-grid">Carregando...</div>';
+  await carregarSolicitacoes();
+  renderHistoricoSolicitacoes();
+}
+
+function renderHistoricoSolicitacoes() {
+  const lista = document.getElementById('sol-historico-lista');
+  if (!solicitacoes.length) {
+    lista.innerHTML = '<div class="tabela-msg-grid">Nenhuma solicitação criada ainda.</div>';
+    return;
+  }
+  lista.innerHTML = '';
+  [...solicitacoes].sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || '')).forEach(sol => {
+    const card = document.createElement('div');
+    card.className = 'sol-hist-card';
+    card.innerHTML = `
+      <div class="sol-hist-card-header">
+        <div>
+          <strong class="sol-hist-titulo">${esc(sol.titulo)}</strong>
+          <span class="sol-hist-setor">${esc(sol.setor)}</span>
+        </div>
+        <div class="sol-hist-meta">
+          <span>📅 ${fmtData(sol.data)}</span>
+          ${sol.prazo ? `<span>⏰ Até ${fmtData(sol.prazo)}</span>` : ''}
+          <span class="sol-hist-qtd">${sol.itens?.length || 0} iten${sol.itens?.length === 1 ? '' : 's'}</span>
+        </div>
+      </div>
+      <div class="sol-hist-actions">
+        <button class="btn-secondary sol-hist-btn-impr">🖨 Imprimir</button>
+        <button class="btn-secondary sol-hist-btn-edit">✎ Editar</button>
+        <button class="btn-icon sol-hist-btn-del" title="Excluir">🗑</button>
+      </div>
+    `;
+    card.querySelector('.sol-hist-btn-impr').addEventListener('click', () => gerarJanelaImpressao(sol));
+    card.querySelector('.sol-hist-btn-edit').addEventListener('click', () => {
+      document.getElementById('modal-historico-solicitacoes').classList.add('hidden');
+      abrirModalSolicitar(sol);
+    });
+    card.querySelector('.sol-hist-btn-del').addEventListener('click', async () => {
+      if (!confirm(`Excluir solicitação "${sol.titulo}"?`)) return;
+      try {
+        await apiFetch(`/orcamento/solicitacoes/${sol.id}`, { method: 'DELETE' });
+        showToast('Solicitação excluída.');
+        await carregarSolicitacoes();
+        renderHistoricoSolicitacoes();
+      } catch (err) { showToast(err.message, 'error'); }
+    });
+    lista.appendChild(card);
+  });
+}
+
+function imprimirSolicitacao() {
+  const itens = coletarItensSolicitar();
+  if (!itens.length) { showToast('Adicione pelo menos um item antes de imprimir.', 'error'); return; }
+  const sol = {
+    titulo: document.getElementById('solicitar-titulo').value.trim(),
+    setor: 'FINANCEIRO',
+    solicitante: currentUserNome,
+    empresa: (document.getElementById('solicitar-empresa').value || '').trim().toUpperCase() || null,
+    data: document.getElementById('solicitar-data').value,
+    prazo: document.getElementById('solicitar-prazo').value || null,
+    obs: document.getElementById('solicitar-obs').value.trim() || null,
+    itens,
+  };
+  gerarJanelaImpressao(sol);
+}
+
+function gerarJanelaImpressao(sol) {
+  const itensHtml = sol.itens.map((it, i) => `
+    <tr>
+      <td style="text-align:center;">${i + 1}</td>
+      <td>${esc(it.nome)}</td>
+      <td style="text-align:center;">${it.quantidade}${it.unidade ? ' ' + esc(it.unidade) : ''}</td>
+      <td>${esc(it.obs || '')}</td>
+      <td style="text-align:center;"></td>
+      <td style="text-align:center;"></td>
+    </tr>
+  `).join('');
+
+  const dataFmt = sol.data ? fmtData(sol.data) : '—';
+  const prazoFmt = sol.prazo ? fmtData(sol.prazo) : '—';
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Solicitação de Orçamento — ${esc(sol.titulo)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #e8e8e8; margin: 0; padding: 10mm; }
+    .pagina { background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto; padding: 15mm; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+    .cabecalho { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #003087; padding-bottom: 10px; margin-bottom: 14px; }
+    .cab-logo { display: flex; align-items: center; gap: 12px; }
+    .cab-logo img { height: 44px; width: auto; }
+    .cab-inst { font-size: 10px; color: #555; }
+    .cab-inst strong { font-size: 13px; color: #003087; display: block; }
+    .cab-titulo { text-align: right; font-size: 10px; color: #555; }
+    .cab-titulo strong { font-size: 15px; color: #003087; display: block; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; margin-bottom: 14px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 14px; }
+    .info-item label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; display: block; margin-bottom: 2px; }
+    .info-item span { font-size: 12px; font-weight: 600; }
+    .sec-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #003087; border-bottom: 1px solid #003087; padding-bottom: 4px; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    th { background: #003087; color: #fff; padding: 6px 8px; text-align: left; font-size: 10px; }
+    td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f8faff; }
+    .col-num { width: 36px; }
+    .col-qtd { width: 80px; }
+    .col-obs { width: 160px; }
+    .col-vunit { width: 90px; }
+    .col-vtotal { width: 90px; }
+    .obs-box { border: 1px solid #ccc; border-radius: 4px; padding: 8px 12px; font-size: 11px; color: #444; margin-bottom: 14px; min-height: 36px; }
+    .assinatura { margin-top: 28px; display: flex; justify-content: space-between; gap: 24px; }
+    .ass-bloco { flex: 1; border-top: 1px solid #888; padding-top: 6px; text-align: center; font-size: 10px; color: #555; }
+    .rodape { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 9px; color: #aaa; text-align: center; }
+    @media print {
+      @page { size: A4 portrait; margin: 15mm; }
+      html, body { background: #fff; margin: 0; padding: 0; }
+      .pagina { width: 100%; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="pagina">
+  <div class="cabecalho">
+    <div class="cab-logo">
+      <img src="/img/fateclogoazul.png" alt="FATEC Ivaiporã">
+      <div class="cab-inst">
+        <strong>FATEC Ivaiporã</strong>
+        Faculdade de Tecnologia do Vale do Ivaí
+      </div>
+    </div>
+    <div class="cab-titulo">
+      <strong>Solicitação de Orçamento</strong>
+      Documento interno de cotação
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-item">
+      <label>Assunto</label>
+      <span>${esc(sol.titulo)}</span>
+    </div>
+    <div class="info-item">
+      <label>Setor solicitante</label>
+      <span>${esc(sol.setor || 'FINANCEIRO')}</span>
+    </div>
+    <div class="info-item">
+      <label>Solicitado por</label>
+      <span>${esc(sol.solicitante || '—')}</span>
+    </div>
+    <div class="info-item">
+      <label>Data da solicitação</label>
+      <span>${dataFmt}</span>
+    </div>
+    <div class="info-item">
+      <label>Prazo para resposta</label>
+      <span>${prazoFmt}</span>
+    </div>
+    <div class="info-item" style="grid-column: span 2;">
+      <label>Empresa fornecedora</label>
+      <span style="display:block; border-bottom: 1px solid #888; min-height: 18px; margin-top: 2px;">${sol.empresa ? esc(sol.empresa) : ''}</span>
+    </div>
+  </div>
+
+  <div class="sec-titulo">Itens solicitados</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Descrição do item</th>
+        <th class="col-qtd">Qtd / Un.</th>
+        <th class="col-obs">Especificações</th>
+        <th class="col-vunit">Vlr. Unit. (R$)</th>
+        <th class="col-vtotal">Vlr. Total (R$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itensHtml}
+    </tbody>
+  </table>
+
+  ${sol.obs ? `<div class="sec-titulo" style="margin-top:10px;">Observações</div><div class="obs-box">${esc(sol.obs)}</div>` : ''}
+
+  <div class="sec-titulo">Total geral</div>
+  <table style="width:auto; margin-left:auto;">
+    <tr>
+      <td style="text-align:right; padding-right:16px; font-weight:600;">TOTAL (R$)</td>
+      <td style="width:120px; border-bottom: 1px solid #888;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="text-align:right; padding-right:16px; font-size:10px; color:#888;">Validade da proposta</td>
+      <td style="border-bottom: 1px solid #888;">&nbsp;</td>
+    </tr>
+  </table>
+
+  <div class="assinatura">
+    <div class="ass-bloco">
+      Responsável pela solicitação<br>
+      ${esc(sol.setor)} · FATEC Ivaiporã
+    </div>
+    <div class="ass-bloco">
+      Assinatura e carimbo do fornecedor<br>
+      Data:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/
+    </div>
+  </div>
+
+  <div class="rodape">
+    FATEC Ivaiporã · Sistema Órbita · Gerado em ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+  </div>
+
+  <script>window.onload = () => window.print();<\/script>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Permita pop-ups para imprimir.', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
 }

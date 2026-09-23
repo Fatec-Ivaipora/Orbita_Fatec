@@ -14,6 +14,7 @@ const COL_PRECOS = 'financeiro_orcamento_precos_fornecedor';
 // reaproveitava financeiro_fornecedores (compartilhado com Licitação); agora
 // é uma coleção separada, sem nenhuma ligação com o módulo Licitação.
 const COL_EMPRESAS = 'financeiro_orcamento_fornecedores';
+const COL_SOLICITACOES = 'financeiro_orcamento_solicitacoes';
 
 function validarTexto(v, max = 120) {
     return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max;
@@ -579,6 +580,112 @@ router.delete('/lancamentos/:id', verifyToken, checkPermission, async (req, res)
     } catch (err) {
         const status = err.message.includes('não encontrado') ? 404 : (err.message.includes('outra colaboradora') ? 403 : 500);
         res.status(status).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// SOLICITAÇÕES DE ORÇAMENTO
+// ==========================================
+
+// Listar todas as solicitações (mais recentes primeiro)
+router.get('/solicitacoes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_SOLICITACOES)
+            .orderBy('criadoEm', 'desc')
+            .limit(200)
+            .get();
+        const solicitacoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        res.json(solicitacoes);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Criar nova solicitação
+router.post('/solicitacoes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { titulo, setor, data, prazo, obs, itens } = req.body;
+        if (!validarTexto(titulo, 120)) return res.status(400).json({ error: 'Título obrigatório.' });
+        if (!validarTexto(setor, 60)) return res.status(400).json({ error: 'Setor obrigatório.' });
+        if (!data) return res.status(400).json({ error: 'Data obrigatória.' });
+        if (!Array.isArray(itens) || !itens.length) return res.status(400).json({ error: 'Informe pelo menos um item.' });
+
+        const itensValidos = itens.map(it => ({
+            nome: normalizarMaiusculo(it.nome || ''),
+            quantidade: Number(it.quantidade) || 0,
+            unidade: normalizarTexto(it.unidade || ''),
+            obs: normalizarTexto(it.obs || ''),
+        })).filter(it => it.nome && it.quantidade > 0);
+
+        if (!itensValidos.length) return res.status(400).json({ error: 'Nenhum item válido.' });
+
+        const doc = {
+            titulo: normalizarTexto(titulo),
+            setor: normalizarTexto(setor),
+            data: normalizarTexto(data),
+            prazo: prazo ? normalizarTexto(prazo) : null,
+            obs: obs ? normalizarTexto(obs) : null,
+            itens: itensValidos,
+            criadoPor: req.user.uid,
+            criadoEm: new Date().toISOString(),
+        };
+
+        const ref = await db.collection(COL_SOLICITACOES).add(doc);
+        res.status(201).json({ id: ref.id, ...doc });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Atualizar solicitação
+router.put('/solicitacoes/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_SOLICITACOES).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+
+        const { titulo, setor, data, prazo, obs, itens } = req.body;
+        if (!validarTexto(titulo, 120)) return res.status(400).json({ error: 'Título obrigatório.' });
+        if (!validarTexto(setor, 60)) return res.status(400).json({ error: 'Setor obrigatório.' });
+        if (!data) return res.status(400).json({ error: 'Data obrigatória.' });
+        if (!Array.isArray(itens) || !itens.length) return res.status(400).json({ error: 'Informe pelo menos um item.' });
+
+        const itensValidos = itens.map(it => ({
+            nome: normalizarMaiusculo(it.nome || ''),
+            quantidade: Number(it.quantidade) || 0,
+            unidade: normalizarTexto(it.unidade || ''),
+            obs: normalizarTexto(it.obs || ''),
+        })).filter(it => it.nome && it.quantidade > 0);
+
+        if (!itensValidos.length) return res.status(400).json({ error: 'Nenhum item válido.' });
+
+        const update = {
+            titulo: normalizarTexto(titulo),
+            setor: normalizarTexto(setor),
+            data: normalizarTexto(data),
+            prazo: prazo ? normalizarTexto(prazo) : null,
+            obs: obs ? normalizarTexto(obs) : null,
+            itens: itensValidos,
+            atualizadoEm: new Date().toISOString(),
+        };
+
+        await ref.update(update);
+        res.json({ id: req.params.id, ...snap.data(), ...update });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Excluir solicitação
+router.delete('/solicitacoes/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_SOLICITACOES).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Solicitação não encontrada.' });
+        await ref.delete();
+        res.json({ message: 'Solicitação excluída.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
