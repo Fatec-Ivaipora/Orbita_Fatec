@@ -132,7 +132,15 @@ router.get('/avisos', verifyToken, async (req, res) => {
         if (!setorId) return res.json([]);
         const snap = await db.collection('avisos').where('setorId', '==', setorId).get();
         const avisos = [];
-        snap.forEach(doc => avisos.push({ id: doc.id, ...doc.data() }));
+        const uid = req.user.uid;
+        snap.forEach(doc => {
+            const d = { id: doc.id, ...doc.data() };
+            // Autor sempre vê o próprio aviso (para saber quantos leram)
+            // Outros usuários só veem se ainda não marcaram como lido
+            const souAutorDoAviso = d.autorUid === uid;
+            const jaLi = Array.isArray(d.lidoPor) && d.lidoPor.includes(uid);
+            if (souAutorDoAviso || !jaLi) avisos.push(d);
+        });
         avisos.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(avisos);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
@@ -179,6 +187,19 @@ router.delete('/avisos/:id', verifyToken, async (req, res) => {
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+
+// Marca aviso como lido pelo usuário atual — filtra no GET server-side
+router.patch('/avisos/:id/lido', verifyToken, async (req, res) => {
+    try {
+        const docRef = db.collection('avisos').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Aviso não encontrado.' });
+        const { FieldValue } = require('firebase-admin').firestore;
+        await docRef.update({ lidoPor: FieldValue.arrayUnion(req.user.uid) });
+        res.json({ ok: true });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 // ==========================================
 // ATIVIDADES (tarefas avulsas do funcionário — o quadro Kanban)
 // ==========================================
@@ -190,15 +211,22 @@ router.delete('/avisos/:id', verifyToken, async (req, res) => {
 // delegou, e o que cada funcionário cria pra si mesmo só aparece pra ele.
 router.get('/atividades', verifyToken, async (req, res) => {
     try {
-        const [minhasSnap, coletivasSnap, delegadasSnap] = await Promise.all([
+        const { setorId } = req.user;
+        const [minhasSnap, coletivasSnap, delegadasSnap, fixosSnap] = await Promise.all([
             db.collection('atividades').where('uid', '==', req.user.uid).get(),
             db.collection('atividades').where('atribuidos', 'array-contains', req.user.uid).get(),
-            db.collection('atividades').where('criadoPor', '==', req.user.uid).get()
+            db.collection('atividades').where('criadoPor', '==', req.user.uid).get(),
+            // Horários fixos do setor (ex.: lab bloqueado) aparecem na agenda de
+            // todo mundo do setor, não só de quem criou
+            setorId
+                ? db.collection('atividades').where('setorId', '==', setorId).where('fixo', '==', true).get()
+                : Promise.resolve(null)
         ]);
         const porId = new Map();
         minhasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
         coletivasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
         delegadasSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
+        if (fixosSnap) fixosSnap.forEach(doc => porId.set(doc.id, { id: doc.id, ...doc.data() }));
         res.json([...porId.values()]);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
@@ -242,6 +270,7 @@ router.post('/atividades', verifyToken, async (req, res) => {
             criadoPor: req.user.uid,
             criadoPorNome: req.user.name || req.user.email || '',
             concluidoEm: null,
+            tipo: req.body.tipo || null,
             createdAt: now,
             updatedAt: now
         };
@@ -273,6 +302,10 @@ router.put('/atividades/:id', verifyToken, async (req, res) => {
         if (!podeGerenciarAtividade(req, atual)) {
             return res.status(403).json({ error: 'Você não pode editar essa atividade.' });
         }
+        // Horário fixo (ex.: lab bloqueado por aula presencial) não se edita pela tela
+        if (atual.fixo) {
+            return res.status(403).json({ error: 'Horário fixo — não pode ser editado.' });
+        }
 
         const data = { updatedAt: new Date().toISOString() };
         if (titulo !== undefined) {
@@ -280,6 +313,7 @@ router.put('/atividades/:id', verifyToken, async (req, res) => {
             data.titulo = titulo.trim();
         }
         if (descricao !== undefined) data.descricao = (descricao || '').trim();
+        if (req.body.tipo !== undefined) data.tipo = req.body.tipo || null;
         if (prazo !== undefined) {
             if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
             // Quem só é atribuído (não foi quem criou) só pode ANTECIPAR o
@@ -339,6 +373,10 @@ router.delete('/atividades/:id', verifyToken, async (req, res) => {
         const docRef = db.collection('atividades').doc(req.params.id);
         const snap = await docRef.get();
         if (!snap.exists) return res.status(404).json({ error: 'Atividade não encontrada.' });
+        // Horário fixo só sai por quem criou (ex.: a grade do lab mudou)
+        if (snap.data().fixo && snap.data().criadoPor !== req.user.uid) {
+            return res.status(403).json({ error: 'Horário fixo — só quem criou pode excluir.' });
+        }
         if (!podeExcluirAtividade(req, snap.data())) {
             return res.status(403).json({ error: 'Essa atividade foi atribuída por outra pessoa — só quem atribuiu ou seu gestor pode excluir. Peça pra ela.' });
         }
@@ -369,6 +407,11 @@ router.put('/atividades/:id/status', verifyToken, async (req, res) => {
                 err.status = 403;
                 throw err;
             }
+            if (atividade.fixo) {
+                const err = new Error('Horário fixo — não muda de status.');
+                err.status = 403;
+                throw err;
+            }
 
             const data = {
                 status,
@@ -396,10 +439,16 @@ router.get('/setor/atividades', verifyToken, requireGestor, async (req, res) => 
             .get();
 
         const porUid = {};
+        const fixos = [];
         snap.forEach(doc => {
             const a = { id: doc.id, ...doc.data() };
+            if (a.fixo) { fixos.push(a); return; }
             if (!porUid[a.uid]) porUid[a.uid] = [];
             porUid[a.uid].push(a);
+        });
+        // Horário fixo do setor entra no quadro de cada funcionário
+        funcionarios.forEach(f => {
+            porUid[f.uid] = (porUid[f.uid] || []).concat(fixos);
         });
 
         res.json({ funcionarios, atividadesPorUid: porUid });
@@ -419,8 +468,10 @@ router.get('/setor/progresso', verifyToken, requireGestor, async (req, res) => {
             const atuaisSnap = await db.collection('atividades')
                 .where('uid', '==', f.uid)
                 .get();
-            const total = atuaisSnap.size;
-            const concluidas = atuaisSnap.docs.filter(d => d.data().status === 'concluido').length;
+            // Horário fixo não é tarefa — fica fora do progresso
+            const tarefas = atuaisSnap.docs.filter(d => !d.data().fixo);
+            const total = tarefas.length;
+            const concluidas = tarefas.filter(d => d.data().status === 'concluido').length;
 
             progresso.push({ uid: f.uid, nome: f.name, total, concluidas });
         }

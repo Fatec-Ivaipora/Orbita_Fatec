@@ -10,6 +10,33 @@ import { secureAction, escapeHTML as esc } from "../core/security.js";
 const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
 
+// Retorna as iniciais de um nome (máx 2 letras) para o avatar do seletor.
+function iniciaisNome(nome) {
+  const partes = (nome || '?').trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 1) return partes[0].charAt(0).toUpperCase();
+  return (partes[0].charAt(0) + partes[partes.length - 1].charAt(0)).toUpperCase();
+}
+
+// Gera o HTML de um item de pessoa no seletor de checkboxes do modal.
+function cbItemHtml(uid, nome, checked) {
+  const ini = iniciaisNome(nome);
+  return `<label>
+    <input type="checkbox" value="${esc(uid)}"${checked ? ' checked' : ''}>
+    <span class="cb-avatar">${esc(ini)}</span>
+    <span class="cb-nome">${esc(nome)}</span>
+    <span class="cb-check">✓</span>
+  </label>`;
+}
+
+// Formata nomes para Title Case, respeitando preposições portuguesas.
+function formatarNome(nome) {
+  if (!nome) return nome;
+  const prep = new Set(['de', 'da', 'do', 'dos', 'das', 'e', 'em', 'no', 'na', 'nos', 'nas', 'a', 'o', 'ao', 'à']);
+  return nome.toLowerCase().split(' ').map((p, i) =>
+    (i === 0 || !prep.has(p)) ? p.charAt(0).toUpperCase() + p.slice(1) : p
+  ).join(' ');
+}
+
 const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.'))
   ? `http://${window.location.hostname}:3000/api`
   : '/api';
@@ -50,6 +77,7 @@ let minhasAtividades = [];
 let atividadesPorUid = {};
 let funcionariosDoSetor = [];
 let draggedId = null;
+let _prazoFp = null; // instância Flatpickr do input de prazo
 // Lista de "todo mundo" pra delegar atividade — qualquer funcionário pode
 // atribuir tarefa pra qualquer outro, não só gestor pro próprio setor.
 // Buscada só na primeira vez que abre "Nova Atividade" (sob demanda), cacheada.
@@ -157,9 +185,7 @@ async function initApp(user, role) {
     await carregarAvisos();
   }
 
-  document.getElementById('board-select').addEventListener('change', (e) => {
-    renderBoard(e.target.value);
-  });
+  // board-switcher chips handle navigation; hidden select kept for compat
   await carregarMeuQuadro();
   renderBoard('__self__');
 }
@@ -244,20 +270,52 @@ function renderAvisos(avisos) {
     // Autor sempre pode remover o próprio; gestor (chefe do setor/ADM) modera
     // qualquer post do mural — todo aviso que ele vê já é do setor que
     // gerencia (souGestor cobre chefe_setor, chefeDeSetor e ADM).
-    const podeExcluir = a.autorUid === currentUser.uid || souGestor;
+    const souAutor = a.autorUid === currentUser.uid;
+    const podeExcluir = souAutor || souGestor;
+    const leitores = Array.isArray(a.lidoPor) ? a.lidoPor.filter(u => u !== a.autorUid) : [];
+    const qtdLeu = leitores.length;
     const data = new Date(a.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    // Autor vê contador de leituras; outros veem botão "✓ Li"
+    const acaoBtn = souAutor
+      ? (qtdLeu > 0
+          ? `<span class="aviso-lido-contador" title="Pessoas que marcaram como lido">👁 ${qtdLeu} ${qtdLeu === 1 ? 'leu' : 'leram'}</span>`
+          : `<span class="aviso-lido-contador aviso-lido-zero" title="Ninguém marcou como lido ainda">👁 0 leram</span>`)
+      : `<button type="button" class="aviso-card-lido" data-id="${a.id}" title="Marcar como lido">✓ Li</button>`;
     return `
       <div class="aviso-card" data-cor="${esc(a.cor)}" style="--tilt:${tilt}deg;">
         <div class="aviso-card-texto">${esc(a.texto)}</div>
         <div class="aviso-card-footer">
           <span>${esc(a.autorNome)} · ${data}</span>
-          ${podeExcluir ? `<button type="button" class="aviso-card-excluir" data-id="${a.id}" title="Remover aviso">🗑</button>` : ''}
+          <div class="aviso-card-footer-actions">
+            ${acaoBtn}
+            ${podeExcluir ? `<button type="button" class="aviso-card-excluir" data-id="${a.id}" title="Remover aviso">🗑</button>` : ''}
+          </div>
         </div>
       </div>
     `;
   }).join('');
 
   mural.querySelectorAll('.aviso-card-excluir').forEach(btn => btn.addEventListener('click', () => excluirAviso(btn.dataset.id)));
+  mural.querySelectorAll('.aviso-card-lido').forEach(btn => btn.addEventListener('click', () => marcarAvisoLido(btn.dataset.id, btn)));
+}
+
+async function marcarAvisoLido(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '✓ Lido'; }
+  try {
+    await apiFetch(`/processos/avisos/${id}/lido`, { method: 'PATCH' });
+    const card = btn ? btn.closest('.aviso-card') : null;
+    if (card) {
+      card.style.transition = 'opacity 0.35s, transform 0.35s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.85)';
+      setTimeout(() => carregarAvisos(), 360);
+    } else {
+      await carregarAvisos();
+    }
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Li'; }
+    console.error('Erro ao marcar aviso como lido:', err.message);
+  }
 }
 
 async function publicarAviso() {
@@ -287,6 +345,19 @@ async function excluirAviso(id) {
   }
 }
 
+function atualizarTituloSetor() {
+  const titleEl = document.getElementById('page-main-title');
+  const subtitleEl = document.getElementById('page-main-subtitle');
+  if (!titleEl) return;
+  const nome = setorAtual ? (CATEGORIES[setorAtual] || setorAtual) : null;
+  titleEl.textContent = nome ? `Agenda / Processos — ${nome}` : 'Agenda / Processos';
+  if (subtitleEl) {
+    subtitleEl.textContent = nome
+      ? `Agenda e atividades do setor de ${nome} — o que você marcou e o que foi atribuído, dia a dia.`
+      : 'Sua agenda da semana — o que você marcou e o que o chefe do setor atribuiu pra você, dia a dia.';
+  }
+}
+
 async function setupSetorScope(role) {
   const wrap = document.getElementById('proc-setor-select-wrap');
   if (role === 'adm_l1' || role === 'adm_l2') {
@@ -299,6 +370,7 @@ async function setupSetorScope(role) {
     `;
     document.getElementById('gestor-setor-select').addEventListener('change', async (e) => {
       setorAtual = e.target.value || null;
+      atualizarTituloSetor();
       await carregarPainelSetor();
     });
 
@@ -311,12 +383,14 @@ async function setupSetorScope(role) {
     setorAtual = me.setorId || null;
     if (setorAtual) {
       document.getElementById('gestor-setor-select').value = setorAtual;
+      atualizarTituloSetor();
       await carregarPainelSetor();
     }
   } else {
     let me;
     try { me = await apiFetch('/usuarios/me'); } catch (e) { me = {}; }
     setorAtual = me.setorId || null;
+    atualizarTituloSetor();
     await carregarPainelSetor();
   }
 }
@@ -327,6 +401,7 @@ async function carregarPainelSetor() {
   const listEl = document.getElementById('setor-progresso-list');
   const boardSelect = document.getElementById('board-select');
   boardSelect.innerHTML = '<option value="__self__">Minhas atividades</option>';
+  renderBoardSwitcher(); // reset visual switcher to just "Minhas atividades" chip
 
   if (!setorAtual) {
     listEl.innerHTML = '<div class="empty-state">Selecione um setor para ver o progresso da equipe.</div>';
@@ -351,10 +426,11 @@ async function carregarPainelSetor() {
       .forEach(f => {
         const opt = document.createElement('option');
         opt.value = f.uid;
-        opt.textContent = f.name || f.email;
+        opt.textContent = formatarNome(f.name || f.email);
         boardSelect.appendChild(opt);
       });
 
+    renderBoardSwitcher();
     document.getElementById('agenda-setor-wrap').classList.remove('hidden');
     renderAgendaSetor();
   } catch (err) {
@@ -378,7 +454,7 @@ function renderAgendaSetor() {
       const itens = (atividadesPorUid[f.uid] || [])
         .filter(a => a.prazo && a.status !== 'concluido' && chaveDia(new Date(a.prazo)) === chave)
         .sort((a, b) => new Date(a.prazo) - new Date(b.prazo));
-      return { nome: f.name || f.email, itens };
+      return { nome: formatarNome(f.name || f.email), itens };
     }).filter(p => p.itens.length);
 
     const col = document.createElement('div');
@@ -407,21 +483,68 @@ function renderPainelSetor(progresso) {
     return;
   }
 
-  progresso.forEach(p => {
-    const pct = p.total > 0 ? Math.round((p.concluidas / p.total) * 100) : 0;
-    const row = document.createElement('div');
-    row.className = 'setor-progresso-row';
-    row.title = 'Clique para ver as atividades desta pessoa';
-    row.innerHTML = `
-      <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
-      <div class="setor-progresso-info">
-        <div class="setor-progresso-nome">${esc(p.nome || p.uid)}</div>
-        <div class="setor-progresso-sub">${p.concluidas}/${p.total} concluídas</div>
+  // Paleta de cores para os avatares (cicla entre as pessoas)
+  const CORES_AVATAR = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16'];
+
+  progresso.forEach((p, i) => {
+    // Pega contagens por status do atividadesPorUid (mais granular que o endpoint)
+    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo);
+    const aFazer    = todasAts.filter(a => a.status === 'a_fazer').length;
+    const fazendo   = todasAts.filter(a => a.status === 'fazendo').length;
+    const concluido = todasAts.filter(a => a.status === 'concluido').length;
+    const total     = p.total || todasAts.length;
+    const pct       = total > 0 ? Math.round((concluido / total) * 100) : 0;
+
+    const cor = CORES_AVATAR[i % CORES_AVATAR.length];
+    const nomeRaw = p.nome || p.uid;
+    // Capitaliza corretamente (resolve ALLCAPS e minúsculas)
+    const nome = nomeRaw.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    // Iniciais (até 2 letras)
+    const iniciais = nome.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+
+    // Cor da barra de progresso
+    const barColor = pct === 100 ? '#10b981' : pct >= 50 ? '#3b82f6' : '#f59e0b';
+
+    const card = document.createElement('div');
+    card.className = 'setor-card';
+    card.title = 'Clique para ver as atividades desta pessoa';
+    card.innerHTML = `
+      <div class="setor-card-top">
+        <div class="setor-avatar" style="background:${cor}">${iniciais}</div>
+        <div class="setor-card-info">
+          <div class="setor-card-nome">${esc(nome)}</div>
+          <div class="setor-card-pct">${pct}% concluído</div>
+        </div>
+      </div>
+      <div class="setor-progresso-bar-wrap">
+        <div class="setor-progresso-bar" style="width:${pct}%;background:${barColor}"></div>
+      </div>
+      <div class="setor-card-stats">
+        <span class="setor-stat setor-stat-afazer" title="A fazer">
+          <span class="setor-stat-dot" style="background:#94a3b8"></span>${aFazer} a fazer
+        </span>
+        <span class="setor-stat setor-stat-fazendo" title="Em andamento">
+          <span class="setor-stat-dot" style="background:#3b82f6"></span>${fazendo} fazendo
+        </span>
+        <span class="setor-stat setor-stat-concluido" title="Concluídas">
+          <span class="setor-stat-dot" style="background:#10b981"></span>${concluido} concluídas
+        </span>
       </div>
     `;
-    row.addEventListener('click', () => verQuadroDe(p.uid));
-    listEl.appendChild(row);
+    card.addEventListener('click', () => verQuadroDe(p.uid));
+    listEl.appendChild(card);
   });
+}
+
+// Atualiza o anel de progresso (board-progresso) para o funcionário cujo
+// quadro está aberto. Chamada após renderBoard — garante que o progresso
+// reflita as atividades do colaborador selecionado e não só as do usuário.
+function atualizarProcessosFuncionario(uid) {
+  const atividades = (uid === '__self__' || !uid)
+    ? minhasAtividades
+    : (atividadesPorUid[uid] || []);
+  const comData = atividades.filter(a => a.prazo);
+  renderProgressoBoard(comData);
 }
 
 // Abre o quadro Kanban (A Fazer / Fazendo / Concluído) dessa pessoa a partir
@@ -463,8 +586,63 @@ async function recarregarQuadroAtual() {
 
 let boardAtual = '__self__';
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Board Switcher — chips visuais de avatar que substituem o <select> nativo
+// ─────────────────────────────────────────────────────────────────────────────
+const CHIP_COLORS = ['#6366f1','#8b5cf6','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+function iniciais(nome) {
+  return nome.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+}
+function chipColor(uid) {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) >>> 0;
+  return CHIP_COLORS[h % CHIP_COLORS.length];
+}
+
+function renderBoardSwitcher() {
+  const switcher = document.getElementById('board-switcher');
+  const boardSelect = document.getElementById('board-select');
+  if (!switcher || !boardSelect) return;
+
+  const options = [...boardSelect.options];
+  const activeUid = boardAtual || '__self__';
+
+  switcher.innerHTML = options.map(opt => {
+    const uid = opt.value;
+    const nome = opt.textContent.trim();
+    const isSelf = uid === '__self__';
+    const ativo = uid === activeUid;
+    const cor = isSelf ? '#64748b' : chipColor(uid);
+    const avatarContent = isSelf
+      ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>`
+      : iniciais(nome);
+    return `
+      <button class="board-chip${ativo ? ' board-chip-active' : ''}" data-uid="${uid}" title="${esc(nome)}" type="button">
+        <span class="board-chip-avatar" style="background:${cor}">${avatarContent}</span>
+        <span class="board-chip-nome">${esc(nome)}</span>
+      </button>`;
+  }).join('');
+
+  switcher.querySelectorAll('.board-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const uid = chip.dataset.uid;
+      if (uid === boardAtual) return;
+      boardSelect.value = uid;
+      renderBoard(uid);
+      atualizarProcessosFuncionario(uid);
+    });
+  });
+}
+
 function renderBoard(uidSelecionado) {
   boardAtual = uidSelecionado;
+  // Sync hidden select and visual switcher
+  const _bs = document.getElementById('board-select');
+  if (_bs) _bs.value = uidSelecionado;
+  document.querySelectorAll('.board-chip').forEach(c => {
+    c.classList.toggle('board-chip-active', c.dataset.uid === uidSelecionado);
+  });
   const ehMeuBoard = uidSelecionado === '__self__';
   // Chefe de Setor/ADM também pode arrastar (reagendar) e mudar status das
   // atividades da própria equipe, não só ver — o quadro de outra pessoa só
@@ -541,6 +719,7 @@ function renderBoard(uidSelecionado) {
 function inicioDoPeriodo(periodo) {
   const hoje = new Date();
   switch (periodo) {
+    case 'hoje': { const d = new Date(hoje); d.setHours(0,0,0,0); return d; }
     case 'semana': return segundaDaSemana(0);
     case 'mes': return new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     case 'semestre': return new Date(hoje.getFullYear(), hoje.getMonth() < 6 ? 0 : 6, 1);
@@ -556,19 +735,37 @@ function renderConcluidas(concluidasTodas, editavel) {
     ? concluidasTodas.filter(a => new Date(a.concluidoEm || a.updatedAt) >= inicio)
     : concluidasTodas;
 
-  document.getElementById('concluidas-contador').textContent = concluidas.length;
   const el = document.getElementById('agenda-concluidas');
+  // Atualiza título da seção para mostrar de quem são as concluídas
+  const tituloEl = document.querySelector('.agenda-concluidas-titulo');
+  const ehMeuBoard = boardAtual === '__self__';
+  if (tituloEl) {
+    if (ehMeuBoard) {
+      tituloEl.innerHTML = '✅ Minhas atividades concluídas <span class="concluidas-badge" id="concluidas-contador">0</span>';
+    } else {
+      const nomeVisto = nomePorUid(boardAtual);
+      tituloEl.innerHTML = `✅ Concluídas de ${nomeVisto} <span class="concluidas-badge" id="concluidas-contador">0</span>`;
+    }
+  }
 
   concluidas.sort((a, b) => new Date(b.concluidoEm || b.updatedAt) - new Date(a.concluidoEm || a.updatedAt));
   el.innerHTML = '';
+  document.getElementById('concluidas-contador').textContent = concluidas.length;
+
   if (!concluidas.length) {
-    el.innerHTML = '<div class="empty-state">Nenhuma atividade concluída nesse período.</div>';
+    const msg = ehMeuBoard
+      ? 'Nenhuma atividade sua concluída nesse período.'
+      : 'Nenhuma atividade concluída nesse período.';
+    el.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
-  concluidas.forEach(a => el.appendChild(criarCard(a, editavel && a.uid === currentUser.uid)));
+  concluidas.forEach(a => {
+    el.appendChild(criarCard(a, editavel));
+  });
 }
 
 function renderProgressoBoard(atividades) {
+  atividades = atividades.filter(a => !a.fixo); // horário fixo não é tarefa
   const el = document.getElementById('board-progresso');
   if (!atividades.length) { el.innerHTML = ''; return; }
   const concluidas = atividades.filter(a => a.status === 'concluido').length;
@@ -581,7 +778,7 @@ function renderProgressoBoard(atividades) {
 
 function nomePorUid(uid) {
   const f = funcionariosDoSetor.find(f => f.uid === uid) || (todasPessoas || []).find(p => p.uid === uid);
-  return f ? (f.name || f.email) : 'outra pessoa';
+  return f ? formatarNome(f.name || f.email) : 'outra pessoa';
 }
 
 function formatarHorario(iso) {
@@ -591,25 +788,50 @@ function formatarHorario(iso) {
 function criarCard(atividade, editavel) {
   const card = document.createElement('div');
   const agora = new Date();
-  const atrasada = atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
+  // Horário fixo (ex.: lab bloqueado por aula presencial): não move, não
+  // edita e nunca fica atrasado — é só um aviso de que o horário está ocupado.
+  const fixo = !!atividade.fixo;
+  const atrasada = !fixo && atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
 
-  card.className = `kanban-card ${atrasada ? 'atrasada' : ''}`;
-  card.draggable = editavel;
+  card.className = `kanban-card ${atrasada ? 'atrasada' : ''} ${fixo ? 'fixo' : ''}`;
+  card.draggable = editavel && !fixo;
   card.dataset.id = atividade.id;
   card.dataset.status = atividade.status;
 
   const coletiva = Array.isArray(atividade.atribuidos);
   const souAtribuidoLocal = atividade.uid === currentUser.uid || (coletiva && atividade.atribuidos.includes(currentUser.uid));
+  // Atribuído por outra pessoa — pode executar mas não pode adiar o prazo por conta própria
+  const souApenasAtribuido = souAtribuidoLocal && atividade.criadoPor !== currentUser.uid;
 
-  let etiqueta = '';
+  // --- Etiqueta de atribuição ---
+  let etiquetaHtml = '';
   if (coletiva) {
     const nomes = atividade.atribuidos.map(uid => uid === currentUser.uid ? 'Eu' : nomePorUid(uid));
-    etiqueta = `<span class="recorrencia-badge" title="Atividade coletiva — todo mundo vê o mesmo histórico">👥 ${esc(nomes.join(', '))}</span>`;
+    const visiveis = nomes.slice(0, 2);
+    const extras = nomes.length - visiveis.length;
+    const tooltip = 'Atividade coletiva: ' + nomes.join(', ');
+    const pillsHtml = visiveis.map(n => `<span class="coletiva-pill">${esc(n)}</span>`).join('');
+    const extraHtml = extras > 0 ? `<span class="coletiva-pill coletiva-pill-extra">+${extras}</span>` : '';
+    etiquetaHtml = `<div class="coletiva-wrap" title="${esc(tooltip)}">👥 ${pillsHtml}${extraHtml}</div>`;
+  } else if (fixo) {
+    // Horário fixo vale pro setor inteiro — não tem "Para/De"
   } else if (atividade.uid !== currentUser.uid) {
-    etiqueta = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
+    etiquetaHtml = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
   } else if (atividade.criadoPor !== atividade.uid) {
-    etiqueta = `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>`;
+    etiquetaHtml = `<span class="recorrencia-badge">De: ${esc(atividade.criadoPorNome || '—')}</span>`;
   }
+
+  // --- Badge de tipo (Pontual / Semanal) ---
+  const TIPO_CONFIG = {
+    pontual: { label: 'Pontual', classe: 'tipo-pontual', icon: '📌' },
+    semanal: { label: 'Semanal', classe: 'tipo-semanal', icon: '🔁' }
+  };
+  const tipoCfg = atividade.tipo ? TIPO_CONFIG[atividade.tipo] : null;
+  const tipoBadgeHtml = fixo
+    ? '<span class="tipo-badge tipo-fixo" title="Horário fixo — laboratório ocupado por aula presencial">🔒 Lab bloqueado</span>'
+    : tipoCfg
+    ? `<span class="tipo-badge ${tipoCfg.classe}" title="Tipo: ${tipoCfg.label}">${tipoCfg.icon} ${tipoCfg.label}</span>`
+    : '';
 
   // Excluir é mais restrito que editar/mover: quem só é atribuído a uma
   // atividade que outra pessoa criou não pode excluir direto — só quem
@@ -639,20 +861,41 @@ function criarCard(atividade, editavel) {
   card.innerHTML = `
     <div class="kanban-card-header">
       <span class="kanban-card-horario">${atividade.prazo ? formatarHorario(atividade.prazo) : ''}</span>
-      ${etiqueta}
-      ${atrasada ? '<span class="atrasada-badge">Atrasada</span>' : ''}
+      <div class="kanban-card-badges">
+        ${tipoBadgeHtml}
+        ${etiquetaHtml}
+        ${atrasada ? '<span class="atrasada-badge">Atrasada</span>' : ''}
+      </div>
     </div>
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
     ${historicoHtml}
-    ${editavel ? `
+    ${fixo ? `
+      <div class="kanban-card-actions">
+        <span class="fixo-aviso">Horário fixo — não reservar</span>
+        ${atividade.criadoPor === currentUser.uid ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : ''}
+      </div>
+    ` : editavel ? `
       <div class="kanban-card-actions">
         <select class="status-select">
           ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
         </select>
         <button class="btn-mover btn-editar-atividade" title="Editar">✎</button>
         ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : '<span class="btn-excluir-bloqueado" title="Atribuída por outra pessoa — peça pra ela excluir">🔒</span>'}
+        ${atividade.status === 'concluido' ? '<button class="btn-mover btn-reabrir-atividade" title="Reabrir atividade">↩ Reabrir</button>' : ''}
+        ${souApenasAtribuido && atividade.prazo && atividade.status !== 'concluido' ? '<button class="btn-mover btn-pedir-prazo" title="Pedir mais tempo">📅 Pedir prazo</button>' : ''}
       </div>
+      ${souApenasAtribuido && atividade.prazo && atividade.status !== 'concluido' ? `
+        <div class="card-solicitar-prazo hidden">
+          <label class="solicitar-prazo-label">Nova data sugerida</label>
+          <input type="datetime-local" class="solicitar-prazo-input form-input">
+          <textarea class="solicitar-prazo-motivo form-input" rows="2" placeholder="Motivo (opcional)..."></textarea>
+          <div class="solicitar-prazo-actions">
+            <button type="button" class="btn btn-primary btn-sm btn-solicitar-confirmar">Enviar solicitação</button>
+            <button type="button" class="btn btn-secondary btn-sm btn-solicitar-cancelar">Cancelar</button>
+          </div>
+        </div>
+      ` : ''}
       ${podeAndamentoInline ? `
         <div class="kanban-card-andamento-edit">
           <textarea class="andamento-input" rows="2" placeholder="Contar como está o andamento..."></textarea>
@@ -662,7 +905,10 @@ function criarCard(atividade, editavel) {
     ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
   `;
 
-  if (editavel) {
+  if (fixo) {
+    const btnExcluirFixo = card.querySelector('.btn-excluir-atividade');
+    if (btnExcluirFixo) btnExcluirFixo.onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+  } else if (editavel) {
     card.addEventListener('dragstart', () => { draggedId = atividade.id; });
     card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
     card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
@@ -673,7 +919,70 @@ function criarCard(atividade, editavel) {
       textarea.addEventListener('mousedown', (e) => e.stopPropagation()); // não deixa o drag do card "roubar" o clique de selecionar texto
       card.querySelector('.btn-salvar-andamento').onclick = () => adicionarAndamento(atividade.id, textarea.value.trim());
     }
+
+    // Botão Reabrir — desfaz conclusão acidental
+    const btnReabrir = card.querySelector('.btn-reabrir-atividade');
+    if (btnReabrir) {
+      btnReabrir.onclick = () => moverAtividade(atividade.id, 'a_fazer');
+    }
+
+    // Botão Pedir mais prazo — abre painel inline de solicitação
+    const btnPedirPrazo = card.querySelector('.btn-pedir-prazo');
+    const painelPrazo = card.querySelector('.card-solicitar-prazo');
+    if (btnPedirPrazo && painelPrazo) {
+      // Pré-preenche com a data atual da atividade
+      const inputData = painelPrazo.querySelector('.solicitar-prazo-input');
+      let _solicitarFp = null;
+      if (typeof flatpickr !== 'undefined') {
+        _solicitarFp = flatpickr(inputData, {
+          enableTime: true,
+          dateFormat: 'Y-m-dTH:i',
+          altInput: true,
+          altFormat: 'd/m/Y H:i',
+          time_24hr: true,
+          minuteIncrement: 5,
+          allowInput: false,
+        });
+        if (atividade.prazo) _solicitarFp.setDate(new Date(atividade.prazo), true);
+      } else if (atividade.prazo) {
+        const d = new Date(atividade.prazo);
+        const pad = (n) => String(n).padStart(2, '0');
+        inputData.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+      inputData.draggable = false;
+      inputData.addEventListener('mousedown', (e) => e.stopPropagation());
+      const motivo = painelPrazo.querySelector('.solicitar-prazo-motivo');
+      motivo.draggable = false;
+      motivo.addEventListener('mousedown', (e) => e.stopPropagation());
+
+      btnPedirPrazo.onclick = () => {
+        painelPrazo.classList.toggle('hidden');
+      };
+      painelPrazo.querySelector('.btn-solicitar-cancelar').onclick = () => {
+        painelPrazo.classList.add('hidden');
+      };
+      painelPrazo.querySelector('.btn-solicitar-confirmar').onclick = async () => {
+        const novaData = inputData.value;
+        const texto = motivo.value.trim();
+        if (!novaData) { alert('Escolha a data desejada.'); return; }
+        const d = new Date(novaData);
+        const opcoes = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+        const dataFormatada = d.toLocaleString('pt-BR', opcoes);
+        const mensagem = texto
+          ? `📅 Solicitou extensão de prazo para ${dataFormatada} — Motivo: ${texto}`
+          : `📅 Solicitou extensão de prazo para ${dataFormatada}`;
+        await adicionarAndamento(atividade.id, mensagem);
+        painelPrazo.classList.add('hidden');
+      };
+    }
   }
+
+  // Clique no card abre o modal de detalhe (ignora cliques em botões/inputs)
+  card.addEventListener('click', (e) => {
+    const interativo = e.target.closest('button, select, input, textarea, .card-solicitar-prazo, .kanban-card-andamento-edit');
+    if (interativo) return;
+    abrirDetalheCard(atividade);
+  });
 
   return card;
 }
@@ -751,8 +1060,12 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
   const prazoInput = document.getElementById('atividade-prazo');
   const preencherPrazo = (iso) => {
     const d = new Date(iso);
-    const pad = (n) => String(n).padStart(2, '0');
-    prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (_prazoFp) {
+      _prazoFp.setDate(d, true);
+    } else {
+      const pad = (n) => String(n).padStart(2, '0');
+      prazoInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
   };
 
   if (editar) {
@@ -777,12 +1090,46 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
 
   if (!editar) {
     wrap.classList.remove('hidden');
-    lista.innerHTML = `<label><input type="checkbox" value="${esc(currentUser.uid)}" checked> Eu mesmo</label>`;
+    lista.innerHTML = cbItemHtml(currentUser.uid, 'Eu mesmo', true);
   } else {
     wrap.classList.add('hidden');
   }
 
   abrirModal('modal-atividade');
+
+  // Seção "Repetir dias" — só para gestor em modo criação (não edição)
+  const repetirWrap = document.getElementById('atividade-repetir-wrap');
+  if (souGestor && !editar) {
+    repetirWrap.classList.remove('hidden');
+    // Sincroniza os chips com o dia selecionado no prazo
+    const sincronizarChipsDia = () => {
+      const val = document.getElementById('atividade-prazo').value;
+      const diasChips = document.querySelectorAll('#atividade-dias-chips input[type="checkbox"]');
+      diasChips.forEach(cb => { cb.disabled = false; cb.classList.remove('dia-base'); });
+      if (!val) return;
+      const diaSemana = new Date(val).getDay(); // local
+      diasChips.forEach(cb => {
+        if (parseInt(cb.value) === diaSemana) {
+          cb.checked = true;
+          cb.disabled = true; // o dia base não pode desmarcar
+          cb.closest('.dia-chip').classList.add('dia-chip-base');
+        } else {
+          cb.closest('.dia-chip').classList.remove('dia-chip-base');
+        }
+      });
+    };
+    const prazoEl2 = document.getElementById('atividade-prazo');
+    // Remove listener antigo e adiciona novo
+    const novoListener = () => sincronizarChipsDia();
+    prazoEl2._syncDias = novoListener;
+    prazoEl2.addEventListener('change', novoListener);
+    sincronizarChipsDia(); // já sincroniza com o valor atual
+  } else {
+    repetirWrap.classList.add('hidden');
+    // Limpa os listeners antigos
+    const prazoEl2 = document.getElementById('atividade-prazo');
+    if (prazoEl2._syncDias) { prazoEl2.removeEventListener('change', prazoEl2._syncDias); prazoEl2._syncDias = null; }
+  }
 
   // Gestor com um setor selecionado (Painel do Setor) vê só a equipe DESSE
   // setor pra atribuir — é o caso mais comum e uma lista com a escola
@@ -797,10 +1144,11 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
     if (editandoId !== null || !document.getElementById('modal-atividade').classList.contains('active')) return; // modal fechado ou trocou pra edição nesse meio-tempo
 
     const pessoas = listaSetor ? funcionariosDoSetor : (todasPessoas || []);
-    lista.innerHTML = `<label><input type="checkbox" value="${esc(currentUser.uid)}"> Eu mesmo</label>` +
+    lista.innerHTML =
+      cbItemHtml(currentUser.uid, 'Eu mesmo', false) +
       pessoas
         .filter(p => p.uid !== currentUser.uid)
-        .map(p => `<label><input type="checkbox" value="${esc(p.uid)}"> ${esc(p.name || p.email)}</label>`).join('');
+        .map(p => cbItemHtml(p.uid, formatarNome(p.name || p.email), false)).join('');
 
     // Pré-marca conforme o contexto: vendo o quadro de alguém (gestor) marca
     // essa pessoa; senão marca "Eu mesmo" — mas continua sendo só sugestão,
@@ -822,6 +1170,9 @@ async function salvarAtividade(e) {
   if (!titulo) return;
   if (!prazoInput) { alert('Informe o dia e horário da atividade.'); return; }
 
+  // tipo é determinado automaticamente: se repetir em múltiplos dias → semanal; senão → pontual
+  // (será sobrescrito abaixo após calcular prazos)
+
   const data = {
     titulo,
     descricao,
@@ -833,12 +1184,44 @@ async function salvarAtividade(e) {
     data.uids = uids;
   }
 
+  // Coleta dias selecionados para repetição (só em criação, não edição)
+  let diasSelecionados = [];
+  const repetirWrapSave = document.getElementById('atividade-repetir-wrap');
+  if (!editandoId && !repetirWrapSave.classList.contains('hidden')) {
+    diasSelecionados = [...document.querySelectorAll('#atividade-dias-chips input[type="checkbox"]:checked')]
+      .map(cb => parseInt(cb.value));
+  }
+
+  // Gera lista de prazos: o prazo base + prazos dos outros dias marcados (mesma semana)
+  const prazoBase = new Date(prazoInput);
+  const prazos = [];
+  if (!editandoId && diasSelecionados.length > 0) {
+    const diaDaSemanaBase = prazoBase.getDay();
+    diasSelecionados.forEach(dia => {
+      const diff = dia - diaDaSemanaBase;
+      const novaData = new Date(prazoBase);
+      novaData.setDate(novaData.getDate() + diff);
+      prazos.push(novaData.toISOString());
+    });
+  }
+  // Se nenhum dia extra, usa só o prazo base
+  if (prazos.length === 0) prazos.push(prazoBase.toISOString());
+
+  // Tipo automático: se repetir em múltiplos dias → semanal; senão → pontual
+  data.tipo = prazos.length > 1 ? 'semanal' : 'pontual';
+
+  const btnSalvar = document.getElementById('btn-salvar-atividade');
+  if (btnSalvar) { btnSalvar.disabled = true; btnSalvar.textContent = 'Salvando...'; }
+
   try {
     await secureAction(currentUser.uid, async () => {
       if (editandoId) {
         await apiFetch(`/processos/atividades/${editandoId}`, { method: 'PUT', body: JSON.stringify(data) });
       } else {
-        await apiFetch('/processos/atividades', { method: 'POST', body: JSON.stringify(data) });
+        // Cria uma atividade para cada dia selecionado (em paralelo)
+        await Promise.all(prazos.map(prazo =>
+          apiFetch('/processos/atividades', { method: 'POST', body: JSON.stringify({ ...data, prazo }) })
+        ));
       }
     });
     fecharModal('modal-atividade');
@@ -869,6 +1252,7 @@ async function salvarAtividade(e) {
       renderBoard(boardAtual);
     }
   } catch (err) {
+    if (btnSalvar) { btnSalvar.disabled = false; btnSalvar.textContent = 'Salvar Atividade'; }
     if (err.message.includes("Rate limit")) return;
     alert("Erro ao salvar atividade: " + err.message);
   }
@@ -888,12 +1272,114 @@ function setupEventListeners() {
   document.getElementById('form-atividade').onsubmit = salvarAtividade;
   document.getElementById('btn-semana-anterior').onclick = () => mudarSemana(-1);
   document.getElementById('btn-semana-proxima').onclick = () => mudarSemana(1);
-  document.getElementById('btn-toggle-concluidas').onclick = () => {
-    document.getElementById('agenda-concluidas').classList.toggle('hidden');
-    document.getElementById('concluidas-periodo').classList.toggle('hidden');
-  };
   document.getElementById('concluidas-periodo').addEventListener('change', () => renderBoard(boardAtual));
+
+  // Inicializa Flatpickr no input de prazo da modal
+  if (typeof flatpickr !== 'undefined') {
+    flatpickr.localize(flatpickr.l10ns.pt);
+    _prazoFp = flatpickr('#atividade-prazo', {
+      enableTime: true,
+      dateFormat: 'Y-m-dTH:i',
+      altInput: true,
+      altFormat: 'd/m/Y H:i',
+      time_24hr: true,
+      minuteIncrement: 5,
+      allowInput: false,
+      onChange: (selectedDates, dateStr, instance) => {
+        // Dispara "change" nativo para o _syncDias do gestor poder ouvir
+        instance.element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  }
 }
 
 window.abrirModal = (id) => document.getElementById(id).classList.add('active');
 window.fecharModal = (id) => document.getElementById(id).classList.remove('active');
+
+// ─── Modal de detalhe de card (estilo Trello) ─────────────────────────────────
+function abrirDetalheCard(atividade) {
+  const TIPO_CONFIG = {
+    pontual: { label: 'Pontual', classe: 'tipo-pontual', icon: '📌' },
+    semanal: { label: 'Semanal', classe: 'tipo-semanal', icon: '🔁' }
+  };
+  const STATUS_LABEL = { a_fazer: 'A fazer', em_andamento: 'Em andamento', concluido: 'Concluído' };
+  const STATUS_COR   = { a_fazer: '#64748b', em_andamento: '#2563eb', concluido: '#16a34a' };
+
+  // Título
+  document.getElementById('detalhe-titulo').textContent = atividade.titulo;
+
+  // Badges (tipo + status + atrasada)
+  const agora = new Date();
+  const atrasada = atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
+  const tipoCfg = atividade.tipo ? TIPO_CONFIG[atividade.tipo] : null;
+  let badgesHtml = '';
+  if (tipoCfg) badgesHtml += `<span class="tipo-badge ${tipoCfg.classe}">${tipoCfg.icon} ${tipoCfg.label}</span> `;
+  const cor = STATUS_COR[atividade.status] || '#64748b';
+  badgesHtml += `<span class="detalhe-status-badge" style="background:${cor}">${STATUS_LABEL[atividade.status] || atividade.status}</span>`;
+  if (atrasada) badgesHtml += ' <span class="atrasada-badge">Atrasada</span>';
+  document.getElementById('detalhe-badges').innerHTML = badgesHtml;
+
+  // Prazo
+  const prazoEl = document.getElementById('detalhe-prazo-info');
+  if (atividade.prazo) {
+    const d = new Date(atividade.prazo);
+    const fmt = d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    prazoEl.innerHTML = `<span class="detalhe-prazo-chip">🗓 ${fmt}</span>`;
+  } else {
+    prazoEl.textContent = '';
+  }
+
+  // Descrição
+  const descEl = document.getElementById('detalhe-descricao');
+  if (atividade.descricao) {
+    descEl.textContent = atividade.descricao;
+    descEl.classList.remove('detalhe-descricao-vazia');
+    descEl.closest('.detalhe-descricao-wrap').style.display = '';
+  } else {
+    descEl.closest('.detalhe-descricao-wrap').style.display = 'none';
+  }
+
+  // Histórico
+  const hist = Array.isArray(atividade.historico) ? atividade.historico : [];
+  const listaEl = document.getElementById('detalhe-historico-lista');
+  if (hist.length) {
+    listaEl.innerHTML = hist.map(h => `
+      <div class="detalhe-historico-item">
+        <span class="detalhe-hist-autor">${esc(h.autorNome || 'Alguém')}</span>
+        <span class="detalhe-hist-texto">${esc(h.texto)}</span>
+        <span class="detalhe-hist-data">${h.criadoEm ? new Date(h.criadoEm).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+      </div>
+    `).join('');
+    listaEl.closest('.detalhe-historico-wrap').style.display = '';
+  } else {
+    listaEl.innerHTML = '<span class="detalhe-vazio">Nenhum registro ainda.</span>';
+    listaEl.closest('.detalhe-historico-wrap').style.display = '';
+  }
+
+  // Form de andamento (só para quem está atribuído)
+  const coletiva = Array.isArray(atividade.atribuidos);
+  const souAtrib = atividade.uid === currentUser.uid || (coletiva && atividade.atribuidos.includes(currentUser.uid));
+  const formEl = document.getElementById('detalhe-andamento-form');
+  const simplesEl = document.getElementById('detalhe-actions-simples');
+  const inputEl = document.getElementById('detalhe-andamento-input');
+  inputEl.value = '';
+
+  if (souAtrib && atividade.status !== 'concluido') {
+    formEl.classList.remove('hidden');
+    simplesEl.classList.add('hidden');
+    const btnSalvar = document.getElementById('detalhe-btn-salvar');
+    btnSalvar.onclick = async () => {
+      const texto = inputEl.value.trim();
+      if (!texto) return;
+      btnSalvar.disabled = true;
+      await adicionarAndamento(atividade.id, texto);
+      fecharModal('modal-detalhe-card');
+      btnSalvar.disabled = false;
+    };
+  } else {
+    formEl.classList.add('hidden');
+    simplesEl.classList.remove('hidden');
+  }
+
+  abrirModal('modal-detalhe-card');
+}
