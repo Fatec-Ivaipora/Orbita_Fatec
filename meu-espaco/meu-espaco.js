@@ -82,6 +82,7 @@ let _prazoFp = null; // instância Flatpickr do input de prazo
 // atribuir tarefa pra qualquer outro, não só gestor pro próprio setor.
 // Buscada só na primeira vez que abre "Nova Atividade" (sob demanda), cacheada.
 let todasPessoas = null;
+let pessoasMeuSetor = null; // funcionário comum: só o próprio setor no seletor "Para"
 // Mesmo motivo das variáveis acima: setupComposerAviso() é chamado por
 // initApp() no carregamento rápido (cache), então CORES_AVISO precisa já
 // estar inicializada antes disso — senão dá "Cannot access before
@@ -488,7 +489,7 @@ function renderPainelSetor(progresso) {
 
   progresso.forEach((p, i) => {
     // Pega contagens por status do atividadesPorUid (mais granular que o endpoint)
-    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo);
+    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo && !a.doSetor);
     const aFazer    = todasAts.filter(a => a.status === 'a_fazer').length;
     const fazendo   = todasAts.filter(a => a.status === 'fazendo').length;
     const concluido = todasAts.filter(a => a.status === 'concluido').length;
@@ -765,7 +766,7 @@ function renderConcluidas(concluidasTodas, editavel) {
 }
 
 function renderProgressoBoard(atividades) {
-  atividades = atividades.filter(a => !a.fixo); // horário fixo não é tarefa
+  atividades = atividades.filter(a => !a.fixo && !a.doSetor); // horário fixo / do setor não é tarefa individual
   const el = document.getElementById('board-progresso');
   if (!atividades.length) { el.innerHTML = ''; return; }
   const concluidas = atividades.filter(a => a.status === 'concluido').length;
@@ -777,7 +778,7 @@ function renderProgressoBoard(atividades) {
 }
 
 function nomePorUid(uid) {
-  const f = funcionariosDoSetor.find(f => f.uid === uid) || (todasPessoas || []).find(p => p.uid === uid);
+  const f = funcionariosDoSetor.find(f => f.uid === uid) || (todasPessoas || []).find(p => p.uid === uid) || (pessoasMeuSetor || []).find(p => p.uid === uid);
   return f ? formatarNome(f.name || f.email) : 'outra pessoa';
 }
 
@@ -799,7 +800,8 @@ function criarCard(atividade, editavel) {
   card.dataset.status = atividade.status;
 
   const coletiva = Array.isArray(atividade.atribuidos);
-  const souAtribuidoLocal = atividade.uid === currentUser.uid || (coletiva && atividade.atribuidos.includes(currentUser.uid));
+  const doSetor = !!atividade.doSetor;
+  const souAtribuidoLocal = atividade.uid === currentUser.uid || doSetor || (coletiva && atividade.atribuidos.includes(currentUser.uid));
   // Atribuído por outra pessoa — pode executar mas não pode adiar o prazo por conta própria
   const souApenasAtribuido = souAtribuidoLocal && atividade.criadoPor !== currentUser.uid;
 
@@ -815,6 +817,8 @@ function criarCard(atividade, editavel) {
     etiquetaHtml = `<div class="coletiva-wrap" title="${esc(tooltip)}">👥 ${pillsHtml}${extraHtml}</div>`;
   } else if (fixo) {
     // Horário fixo vale pro setor inteiro — não tem "Para/De"
+  } else if (doSetor) {
+    etiquetaHtml = `<span class="recorrencia-badge setor-badge" title="Atividade do setor — todo mundo do setor vê e pode executar">🏢 Setor todo</span>`;
   } else if (atividade.uid !== currentUser.uid) {
     etiquetaHtml = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
   } else if (atividade.criadoPor !== atividade.uid) {
@@ -1131,20 +1135,32 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
     if (prazoEl2._syncDias) { prazoEl2.removeEventListener('change', prazoEl2._syncDias); prazoEl2._syncDias = null; }
   }
 
-  // Gestor com um setor selecionado (Painel do Setor) vê só a equipe DESSE
-  // setor pra atribuir — é o caso mais comum e uma lista com a escola
-  // inteira misturada só atrapalha. Fora desse contexto (funcionário comum,
-  // ou gestor sem setor escolhido ainda), mostra todo mundo — é o caso de
-  // "preciso pedir uma coisa específica pra alguém fora da minha área".
+  // Quem aparece no "Para":
+  // - gestor com setor selecionado (Painel do Setor): a equipe desse setor;
+  // - funcionário comum: só as pessoas do próprio setor;
+  // - gestor/ADM sem setor escolhido: todo mundo.
   if (!editar) {
     const listaSetor = souGestor && setorAtual && funcionariosDoSetor.length;
-    if (!listaSetor && !todasPessoas) {
+    if (!listaSetor && !souGestor && !pessoasMeuSetor) {
+      try { pessoasMeuSetor = await apiFetch('/processos/pessoas?escopo=setor'); } catch (e) { pessoasMeuSetor = []; }
+    }
+    if (!listaSetor && souGestor && !todasPessoas) {
       try { todasPessoas = await apiFetch('/processos/pessoas'); } catch (e) { todasPessoas = []; }
     }
     if (editandoId !== null || !document.getElementById('modal-atividade').classList.contains('active')) return; // modal fechado ou trocou pra edição nesse meio-tempo
 
-    const pessoas = listaSetor ? funcionariosDoSetor : (todasPessoas || []);
+    const pessoas = listaSetor ? funcionariosDoSetor : souGestor ? (todasPessoas || []) : (pessoasMeuSetor || []);
+    // "Setor todo" só faz sentido com um setor definido (gestor precisa ter
+    // escolhido um; funcionário comum usa o próprio, resolvido no servidor)
+    const podeSetorTodo = souGestor ? !!setorAtual : true;
+    const nomeSetor = setorAtual ? (CATEGORIES[setorAtual] || setorAtual) : 'meu setor';
     lista.innerHTML =
+      (podeSetorTodo ? `<label class="cb-setor-todo">
+        <input type="checkbox" value="__setor__">
+        <span class="cb-avatar cb-avatar-setor">🏢</span>
+        <span class="cb-nome">Setor todo <small>(${esc(nomeSetor)} — todo mundo vê)</small></span>
+        <span class="cb-check">✓</span>
+      </label>` : '') +
       cbItemHtml(currentUser.uid, 'Eu mesmo', false) +
       pessoas
         .filter(p => p.uid !== currentUser.uid)
@@ -1157,6 +1173,18 @@ async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
       marcarCheckbox(selecionadoAtual, true);
     } else {
       marcarCheckbox(currentUser.uid, true);
+    }
+
+    // "Setor todo" exclui escolher pessoas: marca ele, desmarca/trava o resto
+    const cbSetor = lista.querySelector('input[value="__setor__"]');
+    if (cbSetor) {
+      cbSetor.addEventListener('change', () => {
+        lista.querySelectorAll('input[type="checkbox"]:not([value="__setor__"])').forEach(cb => {
+          if (cbSetor.checked) cb.checked = false;
+          cb.disabled = cbSetor.checked;
+          cb.closest('label').classList.toggle('cb-desabilitado', cbSetor.checked);
+        });
+      });
     }
   }
 }
@@ -1181,7 +1209,12 @@ async function salvarAtividade(e) {
   if (!editandoId && !document.getElementById('atividade-para-wrap').classList.contains('hidden')) {
     const uids = [...document.querySelectorAll('#atividade-uid-lista input[type="checkbox"]:checked')].map(cb => cb.value);
     if (!uids.length) { alert('Marque pelo menos uma pessoa em "Para".'); return; }
-    data.uids = uids;
+    if (uids.includes('__setor__')) {
+      data.paraSetor = true;
+      if (souGestor && setorAtual) data.setorId = setorAtual;
+    } else {
+      data.uids = uids;
+    }
   }
 
   // Coleta dias selecionados para repetição (só em criação, não edição)

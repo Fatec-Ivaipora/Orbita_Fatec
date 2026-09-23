@@ -53,8 +53,11 @@ function requireGestor(req, res, next) {
 // Atividade coletiva (atribuída a várias pessoas de uma vez, ex.: tarefa que
 // atravessa turnos) guarda `atribuidos` (array) em vez de `uid` (string) —
 // essa função cobre os dois formatos num lugar só.
+// Atividade do SETOR (`doSetor`, ex.: agenda de laboratório) vale pra todo
+// mundo do setor — qualquer um dele conta como atribuído.
 function souAtribuido(req, atividade) {
     if (atividade.uid === req.user.uid) return true;
+    if (atividade.doSetor && atividade.setorId && atividade.setorId === req.user.setorId) return true;
     return Array.isArray(atividade.atribuidos) && atividade.atribuidos.includes(req.user.uid);
 }
 
@@ -82,13 +85,18 @@ function podeExcluirAtividade(req, atividade) {
 }
 
 
-// Lista todo mundo ativo (não só o próprio setor) — usada só pra popular o
-// seletor "Atribuir para" na hora de criar uma atividade pra outra pessoa.
-// Qualquer funcionário logado pode consultar (nome/e-mail não é dado sensível
-// aqui, já aparece em vários outros lugares do Órbita).
+// Lista quem está ativo — usada só pra popular o seletor "Para" na hora de
+// criar uma atividade pra outra pessoa. Com ?escopo=setor devolve só o setor
+// de quem pediu (funcionário comum só atribui dentro do próprio setor); sem
+// isso, todo mundo (ADM/gestor sem setor escolhido).
 router.get('/pessoas', verifyToken, async (req, res) => {
     try {
-        const snap = await db.collection('users').get();
+        let query = db.collection('users');
+        if (req.query.escopo === 'setor') {
+            if (!req.user.setorId) return res.json([]);
+            query = query.where('setorId', '==', req.user.setorId);
+        }
+        const snap = await query.get();
         const pessoas = [];
         snap.forEach(doc => {
             const d = doc.data();
@@ -216,10 +224,10 @@ router.get('/atividades', verifyToken, async (req, res) => {
             db.collection('atividades').where('uid', '==', req.user.uid).get(),
             db.collection('atividades').where('atribuidos', 'array-contains', req.user.uid).get(),
             db.collection('atividades').where('criadoPor', '==', req.user.uid).get(),
-            // Horários fixos do setor (ex.: lab bloqueado) aparecem na agenda de
-            // todo mundo do setor, não só de quem criou
+            // Atividades do setor (inclui os horários fixos, ex.: lab bloqueado)
+            // aparecem na agenda de todo mundo do setor, não só de quem criou
             setorId
-                ? db.collection('atividades').where('setorId', '==', setorId).where('fixo', '==', true).get()
+                ? db.collection('atividades').where('setorId', '==', setorId).where('doSetor', '==', true).get()
                 : Promise.resolve(null)
         ]);
         const porId = new Map();
@@ -243,6 +251,39 @@ router.post('/atividades', verifyToken, async (req, res) => {
         const { titulo, descricao, prazo } = req.body;
         if (!titulo || !titulo.trim()) return res.status(400).json({ error: 'Informe o título da atividade.' });
         if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
+
+        // Atividade do setor inteiro: um documento só, visível pra todos do setor.
+        // Gestor pode mandar setorId (chefe só o próprio, ADM qualquer um).
+        if (req.body.paraSetor) {
+            let setorAlvo = req.user.setorId || null;
+            if (req.body.setorId && ehGestorSetor(req)) {
+                const ehAdm = req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
+                if (!ehAdm && req.body.setorId !== req.user.setorId) {
+                    return res.status(403).json({ error: 'Você só pode criar atividade pro seu próprio setor.' });
+                }
+                setorAlvo = req.body.setorId;
+            }
+            if (!setorAlvo) return res.status(400).json({ error: 'Você não tem setor definido — contate o ADM.' });
+            const agora = new Date().toISOString();
+            const data = {
+                titulo: titulo.trim(),
+                descricao: (descricao || '').trim(),
+                prazo,
+                status: 'a_fazer',
+                historico: [],
+                criadoPor: req.user.uid,
+                criadoPorNome: req.user.name || req.user.email || '',
+                concluidoEm: null,
+                tipo: req.body.tipo || null,
+                uid: null,
+                doSetor: true,
+                setorId: setorAlvo,
+                createdAt: agora,
+                updatedAt: agora
+            };
+            const docRef = await db.collection('atividades').add(data);
+            return res.status(201).json({ id: docRef.id, ...data });
+        }
 
         const uidsBody = Array.isArray(req.body.uids) ? req.body.uids : (req.body.uid ? [req.body.uid] : []);
         const uidsAlvo = [...new Set(uidsBody.length ? uidsBody : [req.user.uid])];
@@ -442,11 +483,11 @@ router.get('/setor/atividades', verifyToken, requireGestor, async (req, res) => 
         const fixos = [];
         snap.forEach(doc => {
             const a = { id: doc.id, ...doc.data() };
-            if (a.fixo) { fixos.push(a); return; }
+            if (a.fixo || a.doSetor) { fixos.push(a); return; }
             if (!porUid[a.uid]) porUid[a.uid] = [];
             porUid[a.uid].push(a);
         });
-        // Horário fixo do setor entra no quadro de cada funcionário
+        // Atividade do setor (e horário fixo) entra no quadro de cada funcionário
         funcionarios.forEach(f => {
             porUid[f.uid] = (porUid[f.uid] || []).concat(fixos);
         });
@@ -468,8 +509,8 @@ router.get('/setor/progresso', verifyToken, requireGestor, async (req, res) => {
             const atuaisSnap = await db.collection('atividades')
                 .where('uid', '==', f.uid)
                 .get();
-            // Horário fixo não é tarefa — fica fora do progresso
-            const tarefas = atuaisSnap.docs.filter(d => !d.data().fixo);
+            // Horário fixo e atividade do setor não são tarefa individual — fora do progresso
+            const tarefas = atuaisSnap.docs.filter(d => !d.data().fixo && !d.data().doSetor);
             const total = tarefas.length;
             const concluidas = tarefas.filter(d => d.data().status === 'concluido').length;
 

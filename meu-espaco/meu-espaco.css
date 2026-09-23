@@ -820,6 +820,32 @@
   color: #b91c1c;
 }
 
+/* ---- ATIVIDADE DO SETOR ---- */
+.setor-badge {
+  background: rgba(14, 116, 144, 0.14);
+  color: #0e7490;
+}
+
+.cb-setor-todo {
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.12);
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.4rem;
+}
+
+.cb-avatar-setor {
+  background: #0e7490 !important;
+}
+
+.cb-setor-todo small {
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.cb-desabilitado {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .tipo-fixo {
   background: #dc2626;
   color: #fff;

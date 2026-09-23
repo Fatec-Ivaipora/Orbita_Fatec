@@ -138,6 +138,7 @@ async function main() {
         concluidoEm: null,
         tipo: 'semanal',
         fixo: true,
+        doSetor: true,
         createdAt: now,
         updatedAt: now,
       });
