@@ -488,7 +488,7 @@ function renderPainelSetor(progresso) {
 
   progresso.forEach((p, i) => {
     // Pega contagens por status do atividadesPorUid (mais granular que o endpoint)
-    const todasAts = atividadesPorUid[p.uid] || [];
+    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo);
     const aFazer    = todasAts.filter(a => a.status === 'a_fazer').length;
     const fazendo   = todasAts.filter(a => a.status === 'fazendo').length;
     const concluido = todasAts.filter(a => a.status === 'concluido').length;
@@ -736,26 +736,36 @@ function renderConcluidas(concluidasTodas, editavel) {
     : concluidasTodas;
 
   const el = document.getElementById('agenda-concluidas');
-  document.getElementById('concluidas-contador').textContent = '...';
+  // Atualiza título da seção para mostrar de quem são as concluídas
+  const tituloEl = document.querySelector('.agenda-concluidas-titulo');
+  const ehMeuBoard = boardAtual === '__self__';
+  if (tituloEl) {
+    if (ehMeuBoard) {
+      tituloEl.innerHTML = '✅ Minhas atividades concluídas <span class="concluidas-badge" id="concluidas-contador">0</span>';
+    } else {
+      const nomeVisto = nomePorUid(boardAtual);
+      tituloEl.innerHTML = `✅ Concluídas de ${nomeVisto} <span class="concluidas-badge" id="concluidas-contador">0</span>`;
+    }
+  }
 
   concluidas.sort((a, b) => new Date(b.concluidoEm || b.updatedAt) - new Date(a.concluidoEm || a.updatedAt));
   el.innerHTML = '';
-  // Exibe apenas as atividades do próprio usuário logado
-  const minhasConcluidas = concluidas.filter(a =>
-    a.uid === currentUser.uid ||
-    (Array.isArray(a.atribuidos) && a.atribuidos.includes(currentUser.uid))
-  );
-  document.getElementById('concluidas-contador').textContent = minhasConcluidas.length;
-  if (!minhasConcluidas.length) {
-    el.innerHTML = '<div class="empty-state">Nenhuma atividade sua concluída nesse período.</div>';
+  document.getElementById('concluidas-contador').textContent = concluidas.length;
+
+  if (!concluidas.length) {
+    const msg = ehMeuBoard
+      ? 'Nenhuma atividade sua concluída nesse período.'
+      : 'Nenhuma atividade concluída nesse período.';
+    el.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
-  minhasConcluidas.forEach(a => {
+  concluidas.forEach(a => {
     el.appendChild(criarCard(a, editavel));
   });
 }
 
 function renderProgressoBoard(atividades) {
+  atividades = atividades.filter(a => !a.fixo); // horário fixo não é tarefa
   const el = document.getElementById('board-progresso');
   if (!atividades.length) { el.innerHTML = ''; return; }
   const concluidas = atividades.filter(a => a.status === 'concluido').length;
@@ -778,10 +788,13 @@ function formatarHorario(iso) {
 function criarCard(atividade, editavel) {
   const card = document.createElement('div');
   const agora = new Date();
-  const atrasada = atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
+  // Horário fixo (ex.: lab bloqueado por aula presencial): não move, não
+  // edita e nunca fica atrasado — é só um aviso de que o horário está ocupado.
+  const fixo = !!atividade.fixo;
+  const atrasada = !fixo && atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
 
-  card.className = `kanban-card ${atrasada ? 'atrasada' : ''}`;
-  card.draggable = editavel;
+  card.className = `kanban-card ${atrasada ? 'atrasada' : ''} ${fixo ? 'fixo' : ''}`;
+  card.draggable = editavel && !fixo;
   card.dataset.id = atividade.id;
   card.dataset.status = atividade.status;
 
@@ -800,6 +813,8 @@ function criarCard(atividade, editavel) {
     const pillsHtml = visiveis.map(n => `<span class="coletiva-pill">${esc(n)}</span>`).join('');
     const extraHtml = extras > 0 ? `<span class="coletiva-pill coletiva-pill-extra">+${extras}</span>` : '';
     etiquetaHtml = `<div class="coletiva-wrap" title="${esc(tooltip)}">👥 ${pillsHtml}${extraHtml}</div>`;
+  } else if (fixo) {
+    // Horário fixo vale pro setor inteiro — não tem "Para/De"
   } else if (atividade.uid !== currentUser.uid) {
     etiquetaHtml = `<span class="recorrencia-badge">Para: ${esc(nomePorUid(atividade.uid))}</span>`;
   } else if (atividade.criadoPor !== atividade.uid) {
@@ -812,7 +827,9 @@ function criarCard(atividade, editavel) {
     semanal: { label: 'Semanal', classe: 'tipo-semanal', icon: '🔁' }
   };
   const tipoCfg = atividade.tipo ? TIPO_CONFIG[atividade.tipo] : null;
-  const tipoBadgeHtml = tipoCfg
+  const tipoBadgeHtml = fixo
+    ? '<span class="tipo-badge tipo-fixo" title="Horário fixo — laboratório ocupado por aula presencial">🔒 Lab bloqueado</span>'
+    : tipoCfg
     ? `<span class="tipo-badge ${tipoCfg.classe}" title="Tipo: ${tipoCfg.label}">${tipoCfg.icon} ${tipoCfg.label}</span>`
     : '';
 
@@ -853,7 +870,12 @@ function criarCard(atividade, editavel) {
     <div class="kanban-card-titulo">${esc(atividade.titulo)}</div>
     ${atividade.descricao ? `<div class="kanban-card-prazo">${esc(atividade.descricao)}</div>` : ''}
     ${historicoHtml}
-    ${editavel ? `
+    ${fixo ? `
+      <div class="kanban-card-actions">
+        <span class="fixo-aviso">Horário fixo — não reservar</span>
+        ${atividade.criadoPor === currentUser.uid ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : ''}
+      </div>
+    ` : editavel ? `
       <div class="kanban-card-actions">
         <select class="status-select">
           ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
@@ -883,7 +905,10 @@ function criarCard(atividade, editavel) {
     ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
   `;
 
-  if (editavel) {
+  if (fixo) {
+    const btnExcluirFixo = card.querySelector('.btn-excluir-atividade');
+    if (btnExcluirFixo) btnExcluirFixo.onclick = () => excluirAtividade(atividade.id, atividade.titulo);
+  } else if (editavel) {
     card.addEventListener('dragstart', () => { draggedId = atividade.id; });
     card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
     card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
