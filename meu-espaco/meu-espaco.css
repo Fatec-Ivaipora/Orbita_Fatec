@@ -239,10 +239,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   margin-top: 0.85rem;
   font-size: 0.72rem;
   color: rgba(0, 0, 0, 0.55);
   font-weight: 600;
+}
+.aviso-card-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 .aviso-card-excluir {
   background: none;
@@ -253,6 +260,39 @@
   padding: 0;
 }
 .aviso-card-excluir:hover { opacity: 1; }
+.aviso-card-lido {
+  background: none;
+  border: 1px solid rgba(0,0,0,0.25);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(0,0,0,0.5);
+  padding: 2px 8px;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.aviso-card-lido:hover {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+}
+.aviso-card-lido:disabled {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+  cursor: default;
+  opacity: 0.85;
+}
+.aviso-lido-contador {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(0,0,0,0.45);
+  white-space: nowrap;
+}
+.aviso-lido-zero {
+  opacity: 0.55;
+}
 
 /* ---- PAINEL DO SETOR (Chefe de Setor / ADM) ---- */
 .gestor-panel {
@@ -263,83 +303,107 @@
   margin-bottom: 2rem;
 }
 
+/* ── Painel do Setor — grid de cards ── */
 .setor-progresso-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.setor-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.1rem 1.1rem 0.9rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.12s ease, border-color 0.15s ease;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.7rem;
+}
+.setor-card:hover {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.09);
+  transform: translateY(-2px);
+  border-color: var(--primary-blue);
 }
 
-.setor-progresso-row {
+.setor-card-top {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.setor-progresso-row:hover {
-  border-color: var(--primary-blue);
-  background: rgba(15, 78, 184, 0.05);
+  gap: 0.75rem;
 }
 
-.setor-progresso-info {
+.setor-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.setor-card-info {
   flex: 1;
   min-width: 0;
 }
 
-.setor-progresso-nome {
+.setor-card-nome {
   font-weight: 700;
+  font-size: 0.92rem;
   color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.setor-progresso-sub {
-  font-size: 0.8rem;
+.setor-card-pct {
+  font-size: 0.75rem;
   color: var(--text-secondary);
-  margin-bottom: 0.35rem;
+  margin-top: 0.08rem;
 }
 
-.historico-dots {
+.setor-progresso-bar-wrap {
+  height: 5px;
+  background: #e5e7eb;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.setor-progresso-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s ease;
+  min-width: 2px;
+}
+
+.setor-card-stats {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
-.historico-dots .dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-/* ---- ANEL DE PROGRESSO (visual só, sem pontuação/ranking) ---- */
-.progress-ring {
-  --pct: 0;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: conic-gradient(var(--primary-blue) calc(var(--pct) * 1%), #e5e7eb 0);
+.setor-stat {
   display: flex;
   align-items: center;
-  justify-content: center;
-  position: relative;
+  gap: 0.3rem;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.setor-stat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.progress-ring::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  background: white;
-  border-radius: 50%;
-}
-
-.progress-ring span {
-  position: relative;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: var(--text-main);
-}
+/* mantém compatibilidade se algo usar .historico-dots */
+.historico-dots { display: flex; gap: 0.3rem; }
+.historico-dots .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
 /* ---- SELETOR DE QUADRO (visão do gestor sobre outro funcionário) ---- */
 .board-toolbar {
@@ -347,11 +411,80 @@
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+/* label "Ver quadro de:" removed — chips are self-explanatory */
+
+/* hidden select — apenas para rastreio de valor */
+.board-select-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.board-select {
-  width: auto;
-  display: inline-block;
+/* ── Board Switcher: chips de avatar ── */
+.board-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.board-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: white;
+  border: 1.5px solid var(--border-color, #e2e8f0);
+  border-radius: 999px;
+  padding: 4px 12px 4px 5px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s, background 0.15s;
+  white-space: nowrap;
+  line-height: 1;
+}
+.board-chip:hover {
+  border-color: #94a3b8;
+  color: var(--text-primary, #1e293b);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.board-chip-active {
+  border-color: transparent;
+  background: var(--primary, #6366f1);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+}
+.board-chip-active:hover {
+  background: #4f46e5;
+  color: white;
+  border-color: transparent;
+}
+.board-chip-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+.board-chip-active .board-chip-avatar {
+  background: rgba(255,255,255,0.25) !important;
+}
+.board-chip-nome {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .board-progresso {
@@ -488,13 +621,53 @@
   color: var(--text-secondary);
 }
 
-/* ---- ATIVIDADES CONCLUÍDAS (colapsável, com filtro de período) ---- */
+/* ---- ATIVIDADES CONCLUÍDAS ---- */
 .agenda-concluidas-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 2rem 0 1rem;
+  padding: 0.75rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+}
+
+.agenda-concluidas-titulo {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.concluidas-badge {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  margin: 1.5rem 0 1rem;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: #15803d;
+  color: white;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.concluidas-periodo-select {
+  padding: 0.3rem 0.6rem !important;
+  font-size: 0.8rem !important;
+  height: auto !important;
+  width: auto !important;
+  border-radius: 6px !important;
+  border: 1px solid #86efac !important;
+  background: white !important;
+  color: #15803d !important;
+  cursor: pointer;
 }
 
 .agenda-concluidas {
@@ -544,8 +717,18 @@
 .kanban-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 0.4rem;
   margin-bottom: 0.5rem;
+}
+
+/* Agrupador de badges no lado direito do header */
+.kanban-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .recorrencia-badge {
@@ -569,6 +752,58 @@
   text-transform: uppercase;
   background: rgba(249, 115, 22, 0.2);
   color: #c2410c;
+}
+
+/* ---- ATIVIDADE COLETIVA — pills de nomes ---- */
+.coletiva-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--primary-blue);
+  cursor: default;
+}
+
+.coletiva-pill {
+  display: inline-flex;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(15, 78, 184, 0.12);
+  color: var(--primary-blue);
+  font-size: 0.65rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.coletiva-pill-extra {
+  background: rgba(15, 78, 184, 0.22);
+  letter-spacing: 0;
+}
+
+/* ---- BADGE DE TIPO (Pontual / Semanal) ---- */
+.tipo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.63rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.tipo-pontual {
+  background: rgba(124, 58, 237, 0.12);
+  color: #6d28d9;
+}
+
+.tipo-semanal {
+  background: rgba(5, 150, 105, 0.12);
+  color: #047857;
 }
 
 .kanban-card-titulo {
@@ -662,7 +897,7 @@
 
 .btn-mover {
   background: rgba(255, 255, 255, 0.6);
-  border: none;
+  border: 1px solid transparent;
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -670,6 +905,7 @@
   font-weight: 800;
   color: var(--text-main);
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .btn-mover:hover:not(:disabled) {
@@ -680,6 +916,28 @@
 .btn-mover:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* Editar = azul */
+.btn-editar-atividade {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+.btn-editar-atividade:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  color: white !important;
+}
+
+/* Excluir = vermelho */
+.btn-excluir-atividade {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+.btn-excluir-atividade:hover:not(:disabled) {
+  background: #b91c1c !important;
+  color: white !important;
 }
 
 .status-atual {
@@ -760,27 +1018,86 @@
   color: var(--text-main);
 }
 
+/* ── Seletor de pessoas: chips em grade ── */
 .checkbox-lista {
   width: 100%;
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1.5px solid var(--border-color);
-  border-radius: 12px;
-  background: #f8fafc;
-  padding: 0.5rem 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
 }
+
+/* Checkbox nativo escondido */
+.checkbox-lista input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Cada chip */
 .checkbox-lista label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 5px 12px 5px 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-color, #e2e8f0);
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.checkbox-lista label:hover {
+  border-color: var(--primary-blue, #1e40af);
+  color: var(--primary-blue, #1e40af);
+  box-shadow: 0 1px 4px rgba(15,78,184,0.1);
+}
+
+/* Chip marcado */
+.checkbox-lista label:has(input:checked) {
+  background: var(--primary-blue, #1e40af);
+  border-color: var(--primary-blue, #1e40af);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15,78,184,0.25);
+}
+
+/* Avatar dentro do chip */
+.cb-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(15, 78, 184, 0.12);
+  color: var(--primary-blue, #1e40af);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.9rem;
-  color: var(--text-main);
-  cursor: pointer;
-  border-radius: 8px;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
 }
-.checkbox-lista label:hover { background: rgba(15, 78, 184, 0.06); }
-.checkbox-lista input[type="checkbox"] { cursor: pointer; }
+.checkbox-lista label:has(input:checked) .cb-avatar {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+
+/* Check mark — escondido nos chips (a cor já indica seleção) */
+.cb-check {
+  display: none;
+}
+
+.form-label-hint {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #64748b);
+}
 
 .form-input {
   width: 100%;
@@ -857,4 +1174,246 @@
     justify-content: center !important;
     padding: 0.8rem 1.25rem !important;
   }
+}
+
+/* ---- BOTÃO REABRIR ATIVIDADE ---- */
+.btn-reabrir-atividade {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-reabrir-atividade:hover {
+  background: #d1fae5;
+}
+
+/* ---- BOTÃO PEDIR MAIS PRAZO ---- */
+.btn-pedir-prazo {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-pedir-prazo:hover {
+  background: #dbeafe;
+}
+
+/* ---- PAINEL INLINE: SOLICITAR EXTENSÃO DE PRAZO ---- */
+.card-solicitar-prazo {
+  margin-top: 0.6rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.solicitar-prazo-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+.solicitar-prazo-input,
+.solicitar-prazo-motivo {
+  font-size: 0.82rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.solicitar-prazo-motivo {
+  resize: vertical;
+  min-height: 48px;
+}
+.solicitar-prazo-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Modal Detalhe de Card (estilo Trello) ──────────────────────────────── */
+.modal-detalhe-box {
+  max-width: 640px;
+  width: 95vw;
+}
+
+.detalhe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.detalhe-status-badge {
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.18rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.detalhe-prazo-chip {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.detalhe-section-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+
+.detalhe-descricao-wrap,
+.detalhe-historico-wrap {
+  margin-bottom: 1.1rem;
+}
+
+.detalhe-descricao-text {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.88rem;
+  color: #334155;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.detalhe-historico-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.75rem;
+  border-left: 3px solid #bfdbfe;
+  background: #f0f9ff;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 0.45rem;
+}
+.detalhe-hist-autor {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #1e40af;
+}
+.detalhe-hist-texto {
+  font-size: 0.85rem;
+  color: #1e293b;
+  white-space: pre-wrap;
+}
+.detalhe-hist-data {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.1rem;
+}
+.detalhe-vazio {
+  font-size: 0.83rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.detalhe-andamento-form { margin-bottom: 0.5rem; }
+
+/* Cursor pointer nos cards clicáveis */
+.kanban-card {
+  cursor: pointer;
+}
+
+/* ─── Chips de dias da semana (repetição de atividade) ─────────────────────── */
+.form-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: -0.3rem 0 0.5rem;
+  line-height: 1.4;
+}
+
+.dias-semana-chips {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.dia-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.75rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  user-select: none;
+  color: var(--text-secondary);
+}
+.dia-chip input[type="checkbox"] {
+  display: none;
+}
+.dia-chip:has(input:checked) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+.dia-chip-base {
+  background: #dbeafe !important;
+  border-color: #2563eb !important;
+  color: #1e40af !important;
+  cursor: default;
+  font-weight: 700;
+}
+.dia-chip-base::after {
+  content: ' ✓';
+  font-size: 0.7rem;
+}
+.dia-chip:hover:not(.dia-chip-base) {
+  border-color: #93c5fd;
+  background: #f0f9ff;
+}
+
+/* ---- FLATPICKR OVERRIDES ---- */
+.flatpickr-input[readonly] {
+  display: none !important; /* esconde o input original — só aparece o altInput */
+}
+.flatpickr-input.flatpickr-input + input.form-input {
+  cursor: pointer;
+}
+.flatpickr-calendar {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15) !important;
+  border: 1px solid var(--border-color) !important;
+  font-family: inherit !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+  background: var(--primary-blue) !important;
+  border-color: var(--primary-blue) !important;
+}
+.flatpickr-day:hover {
+  background: #eff6ff !important;
+}
+.flatpickr-time input:hover,
+.flatpickr-time input:focus {
+  background: #eff6ff !important;
+}
+.flatpickr-months .flatpickr-prev-month:hover svg,
+.flatpickr-months .flatpickr-next-month:hover svg {
+  fill: var(--primary-blue) !important;
 }

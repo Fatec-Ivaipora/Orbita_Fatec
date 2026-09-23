@@ -132,7 +132,15 @@ router.get('/avisos', verifyToken, async (req, res) => {
         if (!setorId) return res.json([]);
         const snap = await db.collection('avisos').where('setorId', '==', setorId).get();
         const avisos = [];
-        snap.forEach(doc => avisos.push({ id: doc.id, ...doc.data() }));
+        const uid = req.user.uid;
+        snap.forEach(doc => {
+            const d = { id: doc.id, ...doc.data() };
+            // Autor sempre vê o próprio aviso (para saber quantos leram)
+            // Outros usuários só veem se ainda não marcaram como lido
+            const souAutorDoAviso = d.autorUid === uid;
+            const jaLi = Array.isArray(d.lidoPor) && d.lidoPor.includes(uid);
+            if (souAutorDoAviso || !jaLi) avisos.push(d);
+        });
         avisos.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(avisos);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
@@ -176,6 +184,19 @@ router.delete('/avisos/:id', verifyToken, async (req, res) => {
         }
         await docRef.delete();
         res.json({ message: 'Aviso removido.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+
+// Marca aviso como lido pelo usuário atual — filtra no GET server-side
+router.patch('/avisos/:id/lido', verifyToken, async (req, res) => {
+    try {
+        const docRef = db.collection('avisos').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Aviso não encontrado.' });
+        const { FieldValue } = require('firebase-admin').firestore;
+        await docRef.update({ lidoPor: FieldValue.arrayUnion(req.user.uid) });
+        res.json({ ok: true });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -242,6 +263,7 @@ router.post('/atividades', verifyToken, async (req, res) => {
             criadoPor: req.user.uid,
             criadoPorNome: req.user.name || req.user.email || '',
             concluidoEm: null,
+            tipo: req.body.tipo || null,
             createdAt: now,
             updatedAt: now
         };
@@ -280,6 +302,7 @@ router.put('/atividades/:id', verifyToken, async (req, res) => {
             data.titulo = titulo.trim();
         }
         if (descricao !== undefined) data.descricao = (descricao || '').trim();
+        if (req.body.tipo !== undefined) data.tipo = req.body.tipo || null;
         if (prazo !== undefined) {
             if (!prazo) return res.status(400).json({ error: 'Informe o dia/horário da atividade.' });
             // Quem só é atribuído (não foi quem criou) só pode ANTECIPAR o
