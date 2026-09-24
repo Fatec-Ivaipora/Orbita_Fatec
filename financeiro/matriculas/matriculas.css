@@ -378,15 +378,19 @@ body.pagina-relatorio .layout-content {
    por linha de acordo com a largura da tela e quebra o resto pra próxima
    linha, todos do mesmo tamanho na mesma linha (22/09). */
 .comparativo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
+  align-items: start;
 }
 .comparativo-card {
   border: 1px solid var(--border-color, #E5E7EB);
   border-radius: 10px;
   padding: 0.9rem 1rem;
   background: var(--card-bg, #fff);
+  flex: 1 1 210px;
+  min-width: 210px;
+  max-width: 320px;
 }
 .comparativo-card-titulo {
   margin: 0 0 0.5rem;
@@ -408,8 +412,9 @@ body.pagina-relatorio .layout-content {
   color: var(--text-secondary, #64748B);
   padding-right: 0.5rem;
   white-space: normal;
-  word-break: break-word;
-  width: 62%;
+  word-break: normal;
+  overflow-wrap: normal;
+  width: 65%;
 }
 .comparativo-card-table td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
 .comparativo-card-table tr:last-child td { border-bottom: none; }
@@ -449,3 +454,18 @@ body.pagina-relatorio .layout-content {
 .modal-detalhe-total-content .data-table tr.linha-destaque td { font-weight: 700; }
 .modal-detalhe-total-content .data-table tr.linha-separador td { border-top: 2px solid var(--border-color, #E5E7EB); }
 .detalhe-total-sub { color: var(--text-secondary, #64748B); font-size: 0.8rem; margin: -0.75rem 0 0.5rem; line-height: 1.4; }
+
+/* Modal detalhe — seções verde/vermelho (Total de alunos) */
+.modal-detalhe-total-content .data-table tr.linha-secao-header td {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.5rem 0.2rem;
+  border-bottom: none;
+}
+.modal-detalhe-total-content .data-table tr.detalhe-secao-verde td  { color: #16a34a; }
+.modal-detalhe-total-content .data-table tr.detalhe-secao-vermelho td { color: #dc2626; }
+.modal-detalhe-total-content .data-table tr.detalhe-secao-neutro td { color: #64748b; }
+.modal-detalhe-total-content .data-table tr.detalhe-row-verde td    { color: #15803d; }
+.modal-detalhe-total-content .data-table tr.detalhe-row-vermelho td { color: #b91c1c; }

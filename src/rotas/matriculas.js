@@ -341,6 +341,9 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
                 porCursoSituacao,
                 porSituacaoTotal: cursoId ? (porCursoSituacao[cursos[0]] || {}) : (h.porSituacaoTotal || {}),
                 porPlano: cursoId ? {} : (h.porPlano || {}),
+                // Recorte por curso do histórico não guarda Cancelou por período —
+                // null faz a tela cair no Cancelou bruto daquele curso.
+                cancelouCalouro: cursoId ? null : (h.cancelouCalouro || 0),
                 situacoes: SITUACOES,
                 planosConfissao: PLANOS_CONFISSAO,
                 // A tela usa isto pra avisar que é ano fechado e que não há
@@ -362,11 +365,13 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         const porPlano = {};
         let total = 0;
         let pendentesRevisao = 0;
+        let cancelouCalouro = 0; // Cancelou de período 1º — entra na perda de captação
 
         snap.forEach(doc => {
             const a = doc.data();
             total++;
             if (a.revisarManualmente) pendentesRevisao++;
+            if (a.situacao === 'Cancelou' && a.periodo === '1º') cancelouCalouro++;
 
             const curso = a.curso || '—';
             if (!porCursoSituacao[curso]) porCursoSituacao[curso] = {};
@@ -382,6 +387,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             porCursoSituacao,
             porSituacaoTotal,
             porPlano,
+            cancelouCalouro,
             situacoes: SITUACOES,
             planosConfissao: PLANOS_CONFISSAO
         });
@@ -453,7 +459,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
 
             const soma = (...nomes) => nomes.reduce((acc, n) => acc + (porSituacaoTotal[n] || 0), 0);
             const calouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada');
-            const perdas = soma('Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão');
+            const perdas = soma('Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência', 'Desistente', 'Mudança de Curso');
             // Total de Calouros = todo mundo que entrou pela porta de calouro no
             // semestre, independente de ter ficado ou saído — mesma conta que a
             // planilha antiga usava (aba "Relatório Fatec", célula
@@ -469,24 +475,15 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             const totalCalouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada',
                 'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
                 '1ª Evasão', '2ª Evasão') + cancelouCalouro;
-            // Perda de captação: usa cancelouCalouro (separado por período, não
-            // o Cancelou bruto) — agora dá pra saber exatamente quantos
-            // cancelamentos eram de calouro e não misturar com veterano
-            // cancelando junto. Trancou fica de fora inteiro, calouro ou
-            // veterano: é usado pra reter matrícula, não pra medir perda de
-            // captação. Denominador é matrícula que de fato assinou (Matrícula
-            // Nova - Assinada), não a que ainda tá pendente (22/09).
-            const matriculasAssinadas = porSituacaoTotal['Matrícula Nova - Assinada'] || 0;
+            // Perda de captação = perdas de calouro ÷ TOTAL de calouros captados
+            // (quem entrou pela porta de calouro, ficando ou não) — mesma regra
+            // da planilha: 1 - ativos calouros / (ativos calouros + evasões +
+            // cancelou de calouro). Antes dividia só por "Matrícula Nova -
+            // Assinada" (quem FICOU), o que deixava o denominador sem os que
+            // saíram e inflava a taxa (fatec/2026.1: 37,4% → 26,4%) (24/09).
+            // Trancou fica de fora: é usado pra reter matrícula, não é perda
+            // de captação.
             const perdasCalouros = soma('1ª Evasão', '2ª Evasão') + cancelouCalouro;
-            // Rede de segurança pra semestre antigo mal tabulado na planilha
-            // original (ex.: 2023.2, cabeçalho corrompido — quase tudo ficou em
-            // "Matrícula Nova" bruta em vez de "Assinada", perda deu 241%): se a
-            // perda for maior que o que tá marcado como assinado, é sinal de que
-            // esse semestre não separou assinado/pendente direito na origem —
-            // cai pro total de calouro (assinada+pendente) em vez de estourar
-            // 100%. Não muda nenhum semestre que já está com o dado certo (ver
-            // 22/09).
-            const denominadorCaptacao = matriculasAssinadas >= perdasCalouros ? matriculasAssinadas : calouros;
 
             linhas.push({
                 semestre,
@@ -496,7 +493,10 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 calouros,
                 totalCalouros,
                 ativos: soma('Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
-                             'Matrícula Nova', 'Matrícula Nova - Assinada'),
+                             'Matrícula Nova', 'Matrícula Nova - Assinada',
+                             'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
+                             'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
+                             'Formando', 'Reprovado'),
                 pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
                 naoAssinou: porSituacaoTotal['Não Assinou'] || 0,
                 primeiraEvasao: porSituacaoTotal['1ª Evasão'] || 0,
@@ -507,10 +507,13 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 cancelouVeterano,
                 trancouCalouro,
                 trancouVeterano,
+                transferencia: porSituacaoTotal['Transferência'] || 0,
+                desistente: porSituacaoTotal['Desistente'] || 0,
+                mudancaDeCurso: porSituacaoTotal['Mudança de Curso'] || 0,
                 perdas,
                 // Mesmas contas dos cards do relatório de um semestre só.
-                perdaCaptacao: denominadorCaptacao > 0 ? (perdasCalouros / denominadorCaptacao) * 100 : null,
-                perdaTotal: total > 0 ? (perdas / total) * 100 : null,
+                perdaCaptacao: totalCalouros > 0 ? (perdasCalouros / totalCalouros) * 100 : null,
+                perdaTotal: total > 0 ? (perdas / total) * 100 : null,  // perdas já inclui Transferência e Desistente
                 // Bruto por situação — alimenta o botão "como chegou nesse
                 // número" (detalha Total de alunos / Total de Calouros
                 // captados clicando no valor) sem precisar de outra chamada.
