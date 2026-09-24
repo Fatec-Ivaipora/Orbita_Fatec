@@ -3,12 +3,22 @@
 // `secretaria_dp_registros`, para alimentar o módulo Relatório DP do Órbita.
 // A planilha Google NÃO é apagada — continua servindo de backup/histórico.
 // Rodar uma única vez: node scripts/migrar-secretaria-dp.js
+//
+// Variáveis de ambiente necessárias (no .env):
+//   SECRETARIA_DP_URL   — URL completa da implantação do Apps Script
+//   SECRETARIA_DP_TOKEN — token de acesso configurado no Apps Script
 
+require('dotenv').config();
 const { db } = require('../src/firebase');
 
-const BASE_URL = 'https://script.google.com/macros/s/AKfycbx9_8WcTIul-WvcUKmEGX5SQi0FLHMTZBRQ1cel6JlpI2_r3d2CiOrJppFjVxFq4r26kQ/exec';
-const TOKEN = 'fatecdp2026';
+const BASE_URL = process.env.SECRETARIA_DP_URL;
+const TOKEN    = process.env.SECRETARIA_DP_TOKEN;
 const COL_REGISTROS = 'secretaria_dp_registros';
+
+if (!BASE_URL || !TOKEN) {
+    console.error('Erro: defina SECRETARIA_DP_URL e SECRETARIA_DP_TOKEN no .env antes de rodar.');
+    process.exit(1);
+}
 
 function dedupKey(curso, nome, turma, disciplina) {
     return [curso, nome, turma, disciplina]
