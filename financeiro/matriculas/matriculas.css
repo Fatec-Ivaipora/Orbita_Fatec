@@ -469,3 +469,94 @@ body.pagina-relatorio .layout-content {
 .modal-detalhe-total-content .data-table tr.detalhe-secao-neutro td { color: #64748b; }
 .modal-detalhe-total-content .data-table tr.detalhe-row-verde td    { color: #15803d; }
 .modal-detalhe-total-content .data-table tr.detalhe-row-vermelho td { color: #b91c1c; }
+
+/* ============================================================
+   RANKING POR CURSO (relatorio.html)
+   ============================================================ */
+#tabela-ranking-curso { border-collapse: collapse; }
+#tabela-ranking-curso thead th {
+  background: var(--card-bg, #fff);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #64748B);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border-color, #E5E7EB);
+  white-space: nowrap;
+}
+.ranking-curso-row td { border-bottom: 1px solid var(--border-color, #E5E7EB); vertical-align: middle; padding: 0.55rem 0.75rem; }
+.ranking-curso-row:last-child td { border-bottom: none; }
+.ranking-curso-nome { font-size: 0.85rem; color: var(--text-main, #111827); font-weight: 500; }
+.ranking-num { text-align: right; font-size: 1.35rem; font-weight: 700; color: var(--text-main, #111827); white-space: nowrap; }
+.ranking-num-total { font-size: 1.55rem; color: var(--primary, #2563EB); }
+.ranking-num-captados { color: #7c3aed; }
+.ranking-num-ativos { color: #16a34a; }
+.ranking-primeiro .ranking-curso-nome { font-weight: 700; }
+.ranking-primeiro .ranking-num-total { font-size: 1.75rem; }
+
+/* ===== Resumo do semestre — estilo visual melhorado ===== */
+#rel-resumo-card .tabela-wrap { overflow-x: auto; }
+#tabela-resumo-semestre { width: 100%; max-width: 620px; table-layout: auto; border-collapse: collapse; }
+
+/* Base das células */
+#tabela-resumo-semestre td { padding: 0.42rem 0.6rem; border-bottom: 1px solid var(--border-color, #F1F5F9); }
+#tabela-resumo-semestre td:first-child {
+  color: var(--text-secondary, #64748B);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  padding-right: 1rem;
+  white-space: normal;
+  width: 100%;
+}
+#tabela-resumo-semestre td:last-child {
+  text-align: right;
+  font-size: 1.4rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-main, #111827);
+}
+
+/* Linhas de destaque (totais de seção) */
+#tabela-resumo-semestre tr.linha-destaque td:first-child {
+  color: var(--text-main, #111827);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+#tabela-resumo-semestre tr.linha-destaque td:last-child {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+/* Cores por seção — captação (azul), perdas (vermelho), geral (roxo) */
+#tabela-resumo-semestre tr.secao-soma td:last-child { color: #2563EB; }
+#tabela-resumo-semestre tr.secao-perda td:last-child { color: #DC2626; }
+#tabela-resumo-semestre tr.secao-geral td:last-child { color: #7c3aed; }
+#tabela-resumo-semestre tr.secao-geral-ativos td:last-child { color: #16a34a; }
+#tabela-resumo-semestre tr.secao-geral-pct td:last-child { color: var(--text-secondary, #64748B); font-size: 1.1rem; font-weight: 600; }
+
+/* Cabeçalhos de seção */
+#tabela-resumo-semestre tr.linha-secao td {
+  padding: 1.1rem 0.6rem 0.3rem;
+  border-bottom: 2px solid;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#tabela-resumo-semestre tr.linha-secao:first-child td { padding-top: 0.3rem; }
+/* cores dos cabeçalhos de seção */
+#tabela-resumo-semestre tr.linha-secao-soma td { color: #2563EB; border-color: #BFDBFE; }
+#tabela-resumo-semestre tr.linha-secao-perda td { color: #DC2626; border-color: #FECACA; }
+#tabela-resumo-semestre tr.linha-secao-geral td { color: #7c3aed; border-color: #DDD6FE; }
+
+/* Lupa nos cards do Relatório + subtotal no detalhe (25/09) */
+.kpi-lupa { font-size: 0.72rem; font-weight: 600; margin-top: 0.35rem; opacity: 0.85; }
+.kpi-lupa:hover { opacity: 1; }
+.modal-detalhe-total-content .data-table tr.linha-subtotal td {
+  font-weight: 700;
+  border-top: 1px dashed var(--border-color, #CBD5E1);
+}
