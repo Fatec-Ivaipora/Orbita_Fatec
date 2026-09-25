@@ -170,6 +170,25 @@ function campoEditavel(rotulo, valor, chave) {
   return `<div><dt>${rotulo}</dt><dd><span${attr}>${esc(valor)}</span></dd></div>`;
 }
 
+// Disciplina · Turma · período · semestre — o que o docente/coordenação
+// precisa ver no topo da folha impressa. Usa o que foi preenchido no
+// formulário e completa com o "2026.2 - T.3 - 2° PER - DISCIPLINA" que o AVA
+// manda no nome do curso (25/09).
+export function identificacaoTurma(r) {
+  const ct = String(r.cursoTurma || '');
+  const m = ct.match(/^(\d{4}\.\d)\s*-\s*T\s*\.?\s*(\d+)\s*-\s*(\d{1,2})\s*[°ºo]?\s*PER\w*\s*-\s*(.+)$/i);
+  const turmaCod = (`${r.turma || ''} ${ct}`.match(/\bT\s*\.?\s*(\d+)\b/i) || [])[1];
+  const disciplina = r.disciplina || (m ? m[4].trim() : '');
+  const periodo = r.periodo || (m ? m[3] : '');
+  const semestre = r.semestre || (m ? m[1] : '');
+  return {
+    disciplina,
+    turma: turmaCod ? `Turma T.${turmaCod}` : '',
+    periodo: periodo ? `${periodo}º período` : '',
+    semestre
+  };
+}
+
 export function montarRelatorioHTML(r) {
   const qs = (r.questoes || []).slice().sort((a, b) => a.n - b.n);
   const resumo = r.resumo || {};
@@ -295,10 +314,21 @@ export function montarRelatorioHTML(r) {
     </section>` : '';
 
   const html = `
-    <div class="rd-doc-kicker">Análise psicométrica das questões da avaliação</div>
+    <div class="rd-doc-topo">
+      <img class="rd-doc-logo" src="/img/medfatec-logo.png" alt="MED FATEC">
+      <div class="rd-doc-kicker">Análise psicométrica das questões da avaliação</div>
+    </div>
     <h1><span class="editavel" contenteditable="true" data-campo="titulo">${esc(r.titulo || 'Avaliação sem título')}</span></h1>
+    ${(() => {
+      const id = identificacaoTurma(r);
+      const resto = [id.turma, id.periodo, id.semestre].filter(Boolean).map(esc).join(' · ');
+      return (id.disciplina || resto)
+        ? `<p class="rd-doc-ident">${id.disciplina ? `<b>${esc(id.disciplina)}</b>` : ''}${id.disciplina && resto ? ' · ' : ''}${resto}</p>`
+        : '';
+    })()}
     <p class="rd-doc-sub">Relatório gerado a partir do export de Estatísticas do questionário (AVA) — ${esc(r.nomeArquivo || 'arquivo do AVA')}</p>
 
+    ${(r.avisos || []).length ? `<div class="rd-erro rd-aviso-arquivo">⚠ ${r.avisos.map(esc).join('<br>')}</div>` : ''}
     <dl class="rd-meta">${meta}</dl>
     <p class="rd-nota-edit">
       <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>

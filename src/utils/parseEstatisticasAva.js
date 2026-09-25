@@ -315,8 +315,8 @@ function extrairDeGrade(linhas) {
         });
     }
 
-    lerAnaliseDeRespostas(linhas, questoes, fimDaTabela);
-    return { meta, questoes, achouTabela: questoes.length > 0 };
+    const avisos = lerAnaliseDeRespostas(linhas, questoes, fimDaTabela) || [];
+    return { meta, questoes, achouTabela: questoes.length > 0, avisos };
 }
 
 // O cabeçalho do questionário vem de dois jeitos conforme a versão do AVA:
@@ -352,14 +352,30 @@ const SEM_RESPOSTA = ['nao ha resposta', 'no answer'];
 //       mesma ordem da tabela de questões;
 //   (b) Moodle mais antigo — um cabeçalho só, com Q# na primeira coluna.
 function lerAnaliseDeRespostas(linhas, questoes, inicio) {
-    const ehCabecalho = linha => linha.map(chave)
-        .some(c => CABECALHO_RESPOSTAS.some(a => c.startsWith(a)));
+    // Dois cabeçalhos de bloco convivem no MESMO arquivo, conforme o tipo da
+    // questão: "Resposta do modelo | Crédito parcial | Número | Frequência" e
+    // "Parte da questão | Resposta | Crédito parcial | Número | Frequência"
+    // (este com o código da alternativa na 1ª coluna). Antes só o primeiro
+    // era reconhecido: as alternativas dos blocos do segundo tipo iam todas
+    // pra última questão do primeiro — ex.: Q6 com 299 alternativas e da Q7
+    // em diante vazias (25/09).
+    const ehCabecalho = linha => {
+        const c = linha.map(chave);
+        if (c.some(x => CABECALHO_RESPOSTAS.some(a => x.startsWith(a)))) return true;
+        return c.some(x => x.startsWith('parte da questao')) && c.some(x => x === 'resposta');
+    };
 
     const cabecalhos = [];
     for (let i = Math.max(0, inicio - 1); i < linhas.length; i++) {
         if (ehCabecalho(linhas[i])) cabecalhos.push(i);
     }
-    if (!cabecalhos.length) return;
+    if (!cabecalhos.length) return [];
+
+    // Linha de alternativa sempre traz a contagem ou a frequência. O que não
+    // traz (ex.: a página de erro em HTML que o AVA cola no fim do CSV quando
+    // corta o export no meio) não é alternativa.
+    const ehDados = (get, cols) => num(get(cols.contagem)) !== null || num(get(cols.freq)) !== null;
+    const veioCortado = linhas.some(l => /^\s*<(!doctype|html)/i.test(txt(l[0])));
 
     const colunasDe = (linha) => {
         const cab = linha.map(chave);
@@ -371,7 +387,7 @@ function lerAnaliseDeRespostas(linhas, questoes, inicio) {
         };
         return {
             q: col('q', 'numero da questao'),
-            texto: col(...CABECALHO_RESPOSTAS),
+            texto: col(...CABECALHO_RESPOSTAS, 'resposta'),
             credito: col('credito parcial', 'partial credit'),
             contagem: col('numero', 'contagem', 'count'),
             freq: col('frequencia', 'frequency')
@@ -393,10 +409,10 @@ function lerAnaliseDeRespostas(linhas, questoes, inicio) {
                 const v = num(rot);
                 if (v !== null && porN.has(Math.round(v))) atual = porN.get(Math.round(v));
             }
-            if (!atual) continue;
+            if (!atual || !ehDados(get, primeiras)) continue;
             adicionarAlternativa(atual, get(primeiras.texto), get(primeiras.credito), get(primeiras.contagem), get(primeiras.freq));
         }
-        return;
+        return veioCortado ? ['O arquivo veio cortado do AVA (tem uma página de erro no fim). Baixe o CSV de novo e gere outro relatório.'] : [];
     }
 
     // Formato (a): um bloco por questão, na ordem
@@ -409,9 +425,29 @@ function lerAnaliseDeRespostas(linhas, questoes, inicio) {
         for (let i = idxCab + 1; i < fim; i++) {
             const linha = linhas[i];
             const get = idx => (idx === undefined || idx >= linha.length) ? '' : txt(linha[idx]);
+            if (!ehDados(get, cols)) continue;
             adicionarAlternativa(questao, get(cols.texto), get(cols.credito), get(cols.contagem), get(cols.freq));
         }
     });
+
+    // Os blocos vêm na ordem das questões; se vier menos bloco que questão, o
+    // export foi cortado e as últimas ficam sem alternativas — avisa em vez
+    // de deixar o relatório parecer completo.
+    const avisos = [];
+    if (cabecalhos.length < questoes.length) {
+        const primeiraSem = questoes[cabecalhos.length];
+        avisos.push(
+            `O arquivo trouxe as alternativas de só ${cabecalhos.length} das ${questoes.length} questões ` +
+            `(da Q${primeiraSem ? primeiraSem.n : cabecalhos.length + 1} em diante veio sem)` +
+            (veioCortado ? ' — o AVA cortou o export no meio (tem uma página de erro no fim do arquivo)' : '') +
+            '. Os índices de cada questão estão completos; para ter as alternativas, baixe o CSV de novo e gere outro relatório.'
+        );
+    } else if (cabecalhos.length > questoes.length) {
+        avisos.push(`O arquivo tem ${cabecalhos.length} blocos de alternativas para ${questoes.length} questões — confira as alternativas antes de usar o relatório.`);
+    } else if (veioCortado) {
+        avisos.push('O arquivo veio com uma página de erro do AVA no fim — confira se nada ficou faltando.');
+    }
+    return avisos;
 }
 
 function adicionarAlternativa(questao, texto, credito, contagem, freq) {
@@ -568,13 +604,40 @@ function parseEstatisticas(buffer, nomeArquivo) {
 
 function finalizar(resultado) {
     if (!resultado || !resultado.achouTabela || !resultado.questoes.length) {
+        // Com 1 tentativa só, o AVA nem gera as colunas de facilidade e
+        // discriminação — não é arquivo errado, é prova sem dado estatístico.
+        const n = resultado && resultado.meta ? resultado.meta.nAlunos : undefined;
+        if (n !== undefined && n !== null && n < 2) {
+            throw new ErroDeLeitura(
+                `Esta avaliação tem só ${n} tentativa${n === 1 ? '' : 's'} — com isso o AVA não calcula facilidade ` +
+                'nem discriminação, então não há o que analisar. Use o export de uma aplicação com a turma toda.'
+            );
+        }
         throw new ErroDeLeitura(
             'Não encontrei a tabela de estatísticas por questão neste arquivo. ' +
             'Confira se ele é o download da página "Estatísticas" do questionário no AVA.'
         );
     }
     resultado.questoes.sort((a, b) => a.n - b.n);
-    return { meta: resultado.meta || {}, questoes: resultado.questoes };
+    return { meta: resultado.meta || {}, questoes: resultado.questoes, avisos: resultado.avisos || [] };
+}
+
+// "2026.2 - T.3 - 2° PER - MECANISMOS DE DEFESAS E DOENÇAS" (o "Nome do curso"
+// no export) → semestre, turma, período e disciplina, pra tela de novo
+// relatório já vir preenchida e o professor só confirmar (25/09).
+function sugerirCabecalho(meta) {
+    const cursoTurma = txt(meta && meta.cursoTurma);
+    const base = { titulo: txt(meta && meta.titulo), cursoTurma };
+    const m = cursoTurma.match(/^(\d{4}\.\d)\s*-\s*(T\s*\.?\s*\d+)\s*-\s*(\d{1,2})\s*[°ºo]?\s*PER\w*\s*-\s*(.+)$/i);
+    if (!m) return base;
+    const periodo = parseInt(m[3], 10);
+    return {
+        ...base,
+        semestre: m[1],
+        turma: `${m[2].replace(/\s+/g, '').toUpperCase()} - ${periodo}º PER`,
+        periodo,
+        disciplina: m[4].trim()
+    };
 }
 
 // ---- Psicometria derivada ---------------------------------------
@@ -700,6 +763,7 @@ function analisar(questoes) {
 
 module.exports = {
     parseEstatisticas,
+    sugerirCabecalho,
     analisar,
     classificar,
     precisaRevisao,

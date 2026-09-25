@@ -15,8 +15,8 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../.
 import { escapeHTML as esc } from "../../core/security.js";
 import { getEffectiveLevel } from "../../core/permissions.js";
 import {
-  montarRelatorioHTML, CORES_HEX, pct, dataCurta
-} from "./relatorio-render.js";
+  montarRelatorioHTML, identificacaoTurma, CORES_HEX, pct, dataCurta
+} from "./relatorio-render.js?v=5";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -31,6 +31,8 @@ let currentUser = null;
 let currentRole = null;
 let appInitialized = false;
 let initializedRole = null;
+
+const TITULO_PAGINA = document.title;
 
 let relatorios = [];
 let relatorioAtual = null;
@@ -63,13 +65,22 @@ async function apiFetch(endpoint, options = {}) {
 
 const el = id => document.getElementById(id);
 
+// Turma "T.1", "T.2"... — vem do campo turma ou, nos relatórios antigos, do
+// "2026.2 - T.3 - 2° PER - ..." que o AVA manda no nome do curso.
+function turmaDe(r) {
+  const m = `${r.turma || ''} ${r.cursoTurma || ''}`.match(/\bT\s*\.?\s*(\d+)\b/i);
+  return m ? `T.${m[1]}` : '';
+}
+
 function relatorioVisivel(r) {
   const disc = el('rd-filtro-disciplina').value;
   const sem = el('rd-filtro-semestre').value;
+  const turma = el('rd-filtro-turma').value;
   const busca = el('rd-filtro-busca').value.trim().toLowerCase();
 
   if (disc && (r.disciplina || '') !== disc) return false;
   if (sem && (r.semestre || '') !== sem) return false;
+  if (turma && turmaDe(r) !== turma) return false;
   if (busca) {
     const alvo = `${r.titulo || ''} ${r.cursoTurma || ''} ${r.turma || ''} ${r.disciplina || ''} ${r.professor || ''}`.toLowerCase();
     if (!alvo.includes(busca)) return false;
@@ -94,39 +105,55 @@ function renderLista() {
     return;
   }
 
-  alvo.innerHTML = visiveis.map(r => {
-    const resumo = r.resumo || {};
-    const revisar = resumo.paraRevisar || 0;
-    const meta = [
-      r.disciplina || r.cursoTurma,
-      r.turma,
-      r.semestre,
-      dataCurta(r.aplicacao),
-      r.nAlunos ? `${r.nAlunos} alunos` : null,
-      podeVerAutoria() && r.criadoPorNome ? r.criadoPorNome : null
-    ].filter(Boolean).join(' · ');
+  // Separado por turma (T.1 / T.2 / T.3...), cada grupo com seu cabeçalho;
+  // relatório sem turma identificada fica por último.
+  const grupos = new Map();
+  visiveis.forEach(r => {
+    const t = turmaDe(r) || 'Sem turma';
+    if (!grupos.has(t)) grupos.set(t, []);
+    grupos.get(t).push(r);
+  });
+  const ordem = [...grupos.keys()].sort((a, b) =>
+    (a === 'Sem turma') - (b === 'Sem turma') || a.localeCompare(b, 'pt-BR', { numeric: true }));
 
-    return `
-      <div class="rd-row" data-id="${esc(r.id)}">
-        <div class="rd-row-corpo">
-          <div class="rd-row-badges">
-            <span class="badge badge-neutro">${resumo.total || 0} questões</span>
-            <span class="badge" style="background:${CORES_HEX['Excelente']}">disc. ${pct(resumo.discriminacaoMedia, 1)}</span>
-            ${revisar ? `<span class="badge badge-alerta">${revisar} para revisar</span>` : ''}
-          </div>
-          <div class="rd-row-titulo">${esc(r.titulo || 'Avaliação sem título')}</div>
-          <div class="rd-row-meta">${esc(meta)}</div>
+  alvo.innerHTML = ordem.map(t => `
+    <div class="rd-grupo-turma">${esc(t === 'Sem turma' ? t : `Turma ${t}`)}
+      <span>${grupos.get(t).length} relatório${grupos.get(t).length === 1 ? '' : 's'}</span>
+    </div>` + grupos.get(t).map(linhaRelatorio).join('')).join('');
+}
+
+function linhaRelatorio(r) {
+  const resumo = r.resumo || {};
+  const revisar = resumo.paraRevisar || 0;
+  const meta = [
+    r.disciplina || r.cursoTurma,
+    r.turma,
+    r.semestre,
+    dataCurta(r.aplicacao),
+    r.nAlunos ? `${r.nAlunos} alunos` : null,
+    podeVerAutoria() && r.criadoPorNome ? r.criadoPorNome : null
+  ].filter(Boolean).join(' · ');
+
+  return `
+    <div class="rd-row" data-id="${esc(r.id)}">
+      <div class="rd-row-corpo">
+        <div class="rd-row-badges">
+          <span class="badge badge-neutro">${resumo.total || 0} questões</span>
+          <span class="badge" style="background:${CORES_HEX['Excelente']}">disc. ${pct(resumo.discriminacaoMedia, 1)}</span>
+          ${revisar ? `<span class="badge badge-alerta">${revisar} para revisar</span>` : ''}
         </div>
-        <div class="rd-row-acoes">
-          <button class="rd-icon-btn" data-acao="abrir" data-id="${esc(r.id)}" title="Abrir relatório">
-            <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-          <button class="rd-icon-btn perigo action-execute" data-acao="excluir" data-id="${esc(r.id)}" title="Excluir relatório">
-            <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>
-        </div>
-      </div>`;
-  }).join('');
+        <div class="rd-row-titulo">${esc(r.titulo || 'Avaliação sem título')}</div>
+        <div class="rd-row-meta">${esc(meta)}</div>
+      </div>
+      <div class="rd-row-acoes">
+        <button class="rd-icon-btn" data-acao="abrir" data-id="${esc(r.id)}" title="Abrir relatório">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button class="rd-icon-btn perigo action-execute" data-acao="excluir" data-id="${esc(r.id)}" title="Excluir relatório">
+          <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>`;
 }
 
 function podeVerAutoria() {
@@ -136,6 +163,7 @@ function podeVerAutoria() {
 function preencherFiltros() {
   const disciplinas = [...new Set(relatorios.map(r => r.disciplina).filter(Boolean))].sort();
   const semestres = [...new Set(relatorios.map(r => r.semestre).filter(Boolean))].sort().reverse();
+  const turmas = [...new Set(relatorios.map(turmaDe).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
 
   const encher = (id, valores, rotuloTodos) => {
     const sel = el(id);
@@ -146,6 +174,7 @@ function preencherFiltros() {
   };
   encher('rd-filtro-disciplina', disciplinas, 'Todas as disciplinas');
   encher('rd-filtro-semestre', semestres, 'Todos os semestres');
+  encher('rd-filtro-turma', turmas, 'Todas as turmas');
 }
 
 async function carregarLista() {
@@ -203,6 +232,7 @@ function modalNovo() {
       <p class="modal-sub">Suba o export de <b>Estatísticas do questionário</b> do AVA. O que você preencher aqui vale mais que o que vier no arquivo.</p>
 
       <div id="rd-erro-box"></div>
+      <div id="rd-previa-box"></div>
 
       <div class="rd-dropzone" id="rd-dropzone">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>
@@ -251,6 +281,7 @@ function modalNovo() {
     if (!f) return;
     zona.classList.add('tem-arquivo');
     el('rd-dropzone-txt').textContent = f.name;
+    preencherPeloArquivo(f);
   };
 
   zona.onclick = () => inputArquivo.click();
@@ -268,6 +299,81 @@ function modalNovo() {
 
   el('rd-novo-cancelar').onclick = fecharModal;
   el('rd-novo-gerar').onclick = gerarRelatorio;
+}
+
+// Normaliza nome de disciplina pra comparar "MEDICINA BASEADAS EM EVIDÊNCIAS
+// II" com "Medicina Baseada em Evidências II": sem acento, sem caixa, sem
+// palavrinha de ligação e sem plural simples.
+function tokensDisciplina(nome) {
+  const PARADAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'a', 'o']);
+  return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(t => t && !PARADAS.has(t))
+    .map(t => t.length > 3 ? t.replace(/s$/, '') : t);
+}
+
+function acharDisciplina(nome, periodo) {
+  const alvo = tokensDisciplina(nome);
+  if (!alvo.length) return null;
+  let melhor = null, melhorNota = 0;
+  categorias.forEach(c => {
+    const t = tokensDisciplina(c.nome || c.disciplina);
+    if (!t.length) return;
+    const comuns = t.filter(x => alvo.includes(x)).length;
+    let nota = comuns / Math.max(t.length, alvo.length);
+    if (periodo && Number(c.periodo) === Number(periodo)) nota += 0.05; // desempate pelo período
+    if (nota > melhorNota) { melhorNota = nota; melhor = c; }
+  });
+  return melhorNota >= 0.6 ? melhor : null;
+}
+
+// Lê o arquivo no servidor SEM gravar e preenche o formulário com o que vem
+// no cabeçalho do export — o professor só confere e gera (25/09).
+async function preencherPeloArquivo(arquivo) {
+  const box = el('rd-previa-box');
+  if (!box) return;
+  el('rd-erro-box').innerHTML = '';
+  box.innerHTML = '<div class="rd-previa">Lendo o arquivo...</div>';
+  try {
+    const p = await apiFetch(`/${MODULO}/previa`, {
+      method: 'POST',
+      body: JSON.stringify({ nomeArquivo: arquivo.name, arquivoBase64: await lerArquivoBase64(arquivo) })
+    });
+    const s = p.sugestao || {};
+    const avisosCampos = [];
+
+    if (s.titulo && !el('rd-novo-titulo').value.trim()) el('rd-novo-titulo').value = s.titulo;
+    if (s.turma) el('rd-novo-turma').value = s.turma;
+    if (s.semestre) {
+      const sel = el('rd-novo-semestre');
+      if (![...sel.options].some(o => o.value === s.semestre)) sel.add(new Option(s.semestre, s.semestre));
+      sel.value = s.semestre;
+    }
+    const campoDisc = el('rd-novo-disciplina');
+    if (s.disciplina) {
+      if (campoDisc.tagName === 'SELECT') {
+        const achada = acharDisciplina(s.disciplina, s.periodo);
+        const opcao = achada && [...campoDisc.options].find(o => o.dataset.id === String(achada.id));
+        if (opcao) campoDisc.value = opcao.value;
+        else avisosCampos.push(`Não achei “${s.disciplina}” na lista de disciplinas — escolha manualmente.`);
+      } else {
+        campoDisc.value = s.disciplina;
+      }
+    }
+
+    const aplicada = p.aplicacao ? ` · aplicada em ${dataCurta(p.aplicacao)}` : '';
+    const alternativas = p.comAlternativas < p.totalQuestoes
+      ? ` · <b>alternativas em ${p.comAlternativas} de ${p.totalQuestoes}</b>` : '';
+    const avisos = [...(p.avisos || []), ...avisosCampos];
+    box.innerHTML = `
+      <div class="rd-previa">
+        ✓ <b>${p.totalQuestoes} questões</b>${p.nAlunos != null ? ` · ${p.nAlunos} alunos` : ''}${aplicada}${alternativas}<br>
+        Preenchi os campos abaixo com o que veio no arquivo${s.cursoTurma ? ` (<i>${esc(s.cursoTurma)}</i>)` : ''} — confira e clique em “Gerar relatório”.
+      </div>
+      ${avisos.length ? `<div class="rd-erro">⚠ ${avisos.map(esc).join('<br>')}</div>` : ''}`;
+  } catch (err) {
+    box.innerHTML = '';
+    mostrarErro(err.message);
+  }
 }
 
 function mostrarErro(msg) {
@@ -323,6 +429,10 @@ function aplicarRelatorio(r) {
   el('rd-doc').innerHTML = html;
   el('rd-doc-toolbar-titulo').textContent = tituloToolbar;
   el('rd-doc-toolbar-meta').textContent = metaToolbar;
+  // O navegador imprime o título da aba no topo da folha — vai com
+  // disciplina e turma pra ninguém confundir as folhas de T.1/T.2/T.3.
+  const id = identificacaoTurma(r);
+  document.title = [id.disciplina, id.turma, r.titulo].filter(Boolean).join(' — ') || TITULO_PAGINA;
 }
 
 async function abrirRelatorio(rOuId) {
@@ -339,6 +449,7 @@ async function abrirRelatorio(rOuId) {
 
 function voltarParaLista() {
   relatorioAtual = null;
+  document.title = TITULO_PAGINA;
   el('rd-view-relatorio').classList.add('hidden');
   el('rd-view-lista').classList.remove('hidden');
 }
@@ -398,7 +509,7 @@ function ligarEventos() {
   el('rd-btn-imprimir-resumo').onclick = () => imprimir(true);
   el('rd-btn-salvar-cabecalho').onclick = salvarCabecalho;
 
-  ['rd-filtro-disciplina', 'rd-filtro-semestre'].forEach(id => { el(id).onchange = renderLista; });
+  ['rd-filtro-disciplina', 'rd-filtro-semestre', 'rd-filtro-turma'].forEach(id => { el(id).onchange = renderLista; });
   el('rd-filtro-busca').oninput = renderLista;
 
   el('rd-lista').addEventListener('click', e => {

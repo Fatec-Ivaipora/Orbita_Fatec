@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
-const { parseEstatisticas, analisar, ErroDeLeitura } = require('../utils/parseEstatisticasAva');
+const { parseEstatisticas, analisar, sugerirCabecalho, ErroDeLeitura } = require('../utils/parseEstatisticasAva');
 
 const COL = 'banco_med_relatorios';
 const checkPermission = verifyToken.requireModulePermission('relatorio-desempenho');
@@ -50,23 +50,59 @@ const CAMPOS_LISTA = [
     'criadoPor', 'criadoPorNome', 'createdAt', 'updatedAt'
 ];
 
+// Base64 do corpo → Buffer; responde o erro e devolve null se não der.
+function lerArquivoDoCorpo(req, res) {
+    const { arquivoBase64, nomeArquivo } = req.body || {};
+    if (!arquivoBase64 || !nomeArquivo) {
+        res.status(400).json({ error: 'Envie o arquivo exportado do AVA.' });
+        return null;
+    }
+    let buffer;
+    try {
+        // Aceita tanto o base64 puro quanto o data URL que o FileReader gera.
+        const limpo = String(arquivoBase64).replace(/^data:[^;]*;base64,/, '');
+        buffer = Buffer.from(limpo, 'base64');
+    } catch (e) {
+        res.status(400).json({ error: 'Arquivo inválido ou corrompido.' });
+        return null;
+    }
+    if (!buffer.length) {
+        res.status(400).json({ error: 'O arquivo enviado está vazio.' });
+        return null;
+    }
+    return buffer;
+}
+
+// ---- POST /previa — lê o arquivo SEM gravar: devolve o cabeçalho que dá
+// pra preencher sozinho (disciplina, turma, semestre...) e os avisos, pro
+// professor conferir antes de gerar (25/09). ----
+router.post('/previa', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const buffer = lerArquivoDoCorpo(req, res);
+        if (!buffer) return;
+        const lido = await Promise.resolve(parseEstatisticas(buffer, req.body.nomeArquivo));
+        const meta = lido.meta || {};
+        res.json({
+            sugestao: sugerirCabecalho(meta),
+            aplicacao: meta.aplicacao || '',
+            nAlunos: meta.nAlunos !== undefined ? meta.nAlunos : null,
+            totalQuestoes: lido.questoes.length,
+            comAlternativas: lido.questoes.filter(q => (q.alternativas || []).length).length,
+            avisos: lido.avisos || []
+        });
+    } catch (err) {
+        if (err instanceof ErroDeLeitura) return res.status(422).json({ error: err.message });
+        console.error('Erro na prévia das estatísticas do AVA:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ---- POST /  — processa o export do AVA e grava o relatório ----
 router.post('/', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { arquivoBase64, nomeArquivo } = req.body || {};
-        if (!arquivoBase64 || !nomeArquivo) {
-            return res.status(400).json({ error: 'Envie o arquivo exportado do AVA.' });
-        }
-
-        let buffer;
-        try {
-            // Aceita tanto o base64 puro quanto o data URL que o FileReader gera.
-            const limpo = String(arquivoBase64).replace(/^data:[^;]*;base64,/, '');
-            buffer = Buffer.from(limpo, 'base64');
-        } catch (e) {
-            return res.status(400).json({ error: 'Arquivo inválido ou corrompido.' });
-        }
-        if (!buffer.length) return res.status(400).json({ error: 'O arquivo enviado está vazio.' });
+        const { nomeArquivo } = req.body || {};
+        const buffer = lerArquivoDoCorpo(req, res);
+        if (!buffer) return;
 
         // O parser devolve uma Promise só no caminho do PDF (pdf-parse é async).
         const lido = await Promise.resolve(parseEstatisticas(buffer, nomeArquivo));
@@ -95,6 +131,8 @@ router.post('/', verifyToken, checkPermission, async (req, res) => {
 
             questoes: analise.questoes,
             resumo: montarResumo(analise),
+            // Ex.: export cortado pelo AVA — aparece no topo do relatório.
+            avisos: lido.avisos || [],
 
             nomeArquivo: String(nomeArquivo).slice(0, 180),
             criadoPor: req.user.uid,
