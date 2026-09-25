@@ -386,3 +386,36 @@ details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
 @media print {
   body.rd-print-resumo .rd-anexo { display: none !important; }
 }
+
+/* Prévia do arquivo no "Novo relatório" — o que foi lido e preenchido (25/09) */
+.rd-previa {
+  background: #F0F9FF; border-left: 4px solid var(--med-azul-escuro, #1E3A8A); border-radius: 10px;
+  padding: 0.7rem 1rem; font-size: 0.82rem; color: #0F172A; line-height: 1.55; margin-bottom: 1rem;
+}
+
+/* Lista separada por turma (25/09) */
+.rd-grupo-turma {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  padding: 0.6rem 1.25rem; background: #F1F5F9; border-bottom: 1px solid var(--border-color);
+  font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #334155;
+}
+.rd-grupo-turma span { font-weight: 600; text-transform: none; letter-spacing: 0; color: #64748B; }
+
+/* Disciplina · Turma · período · semestre logo abaixo do título — sai na impressão (25/09) */
+.rd-doc-ident { margin: 0.1rem 0 0.4rem; font-size: 1rem; color: #0F172A; }
+.rd-doc-ident b { text-transform: uppercase; letter-spacing: 0.02em; }
+@media print {
+  .rd-doc-ident { font-size: 0.9rem; margin: 0 0 0.3rem; }
+}
+
+/* Logo MED FATEC no topo do documento — sai na impressão (25/09) */
+.rd-doc-topo {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding-bottom: 0.75rem; margin-bottom: 1rem; border-bottom: 2px solid var(--med-azul-escuro, #004F9F);
+}
+.rd-doc-logo { height: 40px; width: auto; display: block; }
+.rd-doc-topo .rd-doc-kicker { margin: 0; text-align: right; }
+@media print {
+  .rd-doc-topo { padding-bottom: 0.45rem; margin-bottom: 0.6rem; }
+  .rd-doc-logo { height: 30px; }
+}
