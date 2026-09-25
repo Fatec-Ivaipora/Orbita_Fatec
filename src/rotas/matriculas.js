@@ -23,14 +23,53 @@ const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 // Assinada" que já existia. Registros antigos com situação "Retorno" (19
 // alunos, todos de fatec/2026.1) não foram migrados — ficam como histórico,
 // só não aparecem mais como opção pra escolher num cadastro novo.
+// Grupos de situação — mesma definição de financeiro/matriculas/app.js
+// (topo do arquivo). Ativos = Veteranos + Calouros; Total = Ativos + Perdas +
+// Mudança de Curso — mudar de curso não é perda, o aluno continua na faculdade (25/09).
+const VETERANOS_SITS = ['Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Formando', 'Reprovado'];
+const CALOUROS_SITS = [
+    'Matrícula Nova', 'Matrícula Nova - Assinada',
+    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada'
+];
+// "Desistente" puro só existe no histórico (planilha 2023–2025); aluno do
+// sistema usa "Desistente — Calouro"/"Desistente — Veterano" (25/09).
+const PERDAS_SITS = ['Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência',
+    'Desistente — Calouro', 'Desistente — Veterano', 'Desistente'];
+
 const SITUACOES = [
     'Matrícula Nova', 'Matrícula Nova - Assinada', 'Rematrícula Assinada',
     'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
     'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     'Pendência Financeira', 'Não Assinou', 'Cancelou', 'Trancou',
     '1ª Evasão', '2ª Evasão', 'Transferência', 'Reprovado',
-    'Mudança de Curso', 'Formando', 'Desistente'
+    'Mudança de Curso', 'Formando', 'Desistente — Calouro', 'Desistente — Veterano'
 ];
+// Pro pivô do relatório: inclui o "Desistente" antigo, que ainda aparece nos
+// semestres fechados (histórico da planilha). Não é opção de cadastro.
+const SITUACOES_RELATORIO = [...SITUACOES, 'Desistente'];
+
+// Desistente sempre carrega o tipo pelo período: 1º = calouro, qualquer
+// outro = veterano. A perda de captação conta só o de calouro, então o tipo
+// não pode ficar diferente do período — o servidor acerta sozinho, mesmo se
+// escolherem errado na tela ou mudarem o período depois (25/09).
+const DESISTENTE_CALOURO = 'Desistente — Calouro';
+const DESISTENTE_VETERANO = 'Desistente — Veterano';
+function ehDesistente(situacao) {
+    return situacao === 'Desistente' || situacao === DESISTENTE_CALOURO || situacao === DESISTENTE_VETERANO;
+}
+function normalizarDesistente(situacao, periodo) {
+    if (!ehDesistente(situacao)) return situacao;
+    return (periodo || '').trim() === '1º' ? DESISTENTE_CALOURO : DESISTENTE_VETERANO;
+}
+// Conta um aluno nos contadores de desistente (vale pro valor novo e pro
+// "Desistente" antigo, que ainda é separado pelo período).
+function tipoDesistente(situacao, periodo) {
+    if (situacao === DESISTENTE_CALOURO) return 'calouro';
+    if (situacao === DESISTENTE_VETERANO) return 'veterano';
+    if (situacao === 'Desistente') return periodo === '1º' ? 'calouro' : 'veterano';
+    return null;
+}
 
 // Mesma lógica: o valor não carrega o semestre (a própria planilha original
 // prova que isso quebra — a aba "Matriz Fatec 2026.2" ainda tem cotas de
@@ -46,6 +85,13 @@ const ALUNOS_PAGE_SIZE_PADRAO = 30;
 
 function validarSemestre(semestre) {
     return /^\d{4}\.\d$/.test(semestre || '');
+}
+
+// "Desistente — Calouro"/"Desistente — Veterano" eram pseudo-situações de
+// filtro (derivadas do período); desde 25/09 são situações reais gravadas no
+// aluno, então o filtro é comparação direta.
+function passaSituacaoFiltro(aSituacao, aPeriodo, situacoes) {
+    return !situacoes.length || situacoes.includes(aSituacao);
 }
 
 // ==========================================
@@ -86,7 +132,7 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         // direto pros que batem, sem round-trip HTTP por página.
         const passaNoFiltro = (a) =>
             (!situacao || a.situacao === situacao) &&
-            (!situacoes.length || situacoes.includes(a.situacao)) &&
+            passaSituacaoFiltro(a.situacao, a.periodo, situacoes) &&
             (!planoConfissao || a.planoConfissao === planoConfissao) &&
             (!periodo || a.periodo === periodo) &&
             (!periodos.length || periodos.includes(a.periodo)) &&
@@ -163,17 +209,26 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
         if (periodo) filtrada = filtrada.where('periodo', '==', periodo);
         const temFiltroExtra = !!(cursoId || situacao || planoConfissao || periodo || periodos.length || situacoes.length);
 
+        const situacoesReais = situacoes;
+
         let total, filtrados;
         if (periodos.length && situacoes.length) {
+            // In-memory: lê documentos base (já filtrados por curso/plano/etc.)
+            // e aplica filtros de período e situação (incluindo pseudo-situações).
+            // Pré-filtra por situações reais no Firestore (reduz docs lidos); o
+            // in-memory abaixo refina pelo período e separa calouro/veterano.
+            if (situacoesReais.length) filtrada = filtrada.where('situacao', 'in', situacoesReais);
             const [totalSnap, docsSnap] = await Promise.all([base.count().get(), filtrada.get()]);
             total = totalSnap.data().count;
             filtrados = docsSnap.docs.filter(d => {
                 const a = d.data();
-                return periodos.includes(a.periodo) && situacoes.includes(a.situacao);
+                const passaPeriodo = !periodos.length || periodos.includes(a.periodo);
+                const passaSit = passaSituacaoFiltro(a.situacao, a.periodo, situacoes);
+                return passaPeriodo && passaSit;
             }).length;
         } else {
             if (periodos.length) filtrada = filtrada.where('periodo', 'in', periodos);
-            if (situacoes.length) filtrada = filtrada.where('situacao', 'in', situacoes);
+            if (situacoesReais.length) filtrada = filtrada.where('situacao', 'in', situacoesReais);
             const [totalSnap, filtradaSnap] = await Promise.all([
                 base.count().get(),
                 temFiltroExtra ? filtrada.count().get() : Promise.resolve(null)
@@ -196,7 +251,7 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
         if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre no formato AAAA.N (ex.: 2026.2).' });
         if (!nome || !nome.trim()) return res.status(400).json({ error: 'Informe o nome do aluno.' });
-        if (!SITUACOES.includes(situacao)) return res.status(400).json({ error: 'Situação inválida.' });
+        if (!SITUACOES.includes(situacao) && !ehDesistente(situacao)) return res.status(400).json({ error: 'Situação inválida.' });
         if (planoConfissao !== undefined && planoConfissao !== '' && !PLANOS_CONFISSAO.includes(planoConfissao)) {
             return res.status(400).json({ error: 'Plano/Confissão inválido.' });
         }
@@ -210,7 +265,7 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             nome: nome.trim(),
             cidade: (cidade || '').trim(),
             telefone: (telefone || '').trim(),
-            situacao,
+            situacao: normalizarDesistente(situacao, periodo),
             planoConfissao: planoConfissao || 'Não',
             observacoes: (observacoes || '').trim(),
             semestre,
@@ -245,7 +300,7 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
             dados.nome = nome.trim();
         }
         if (situacao !== undefined) {
-            if (!SITUACOES.includes(situacao)) return res.status(400).json({ error: 'Situação inválida.' });
+            if (!SITUACOES.includes(situacao) && !ehDesistente(situacao)) return res.status(400).json({ error: 'Situação inválida.' });
             dados.situacao = situacao;
         }
         if (planoConfissao !== undefined) {
@@ -261,6 +316,15 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
         if (cursoId !== undefined && curso !== undefined) {
             dados.cursoId = cursoId;
             dados.curso = curso;
+        }
+
+        // Desistente: acerta calouro/veterano pelo período final (o que veio
+        // agora ou o que já estava gravado, se só um dos dois mudou).
+        if (situacao !== undefined || periodo !== undefined) {
+            const atual = (await db.collection(COL_ALUNOS).doc(req.params.id).get()).data() || {};
+            const situacaoFinal = dados.situacao !== undefined ? dados.situacao : atual.situacao;
+            const periodoFinal = dados.periodo !== undefined ? dados.periodo : atual.periodo;
+            if (ehDesistente(situacaoFinal)) dados.situacao = normalizarDesistente(situacaoFinal, periodoFinal);
         }
 
         // Depois que a linha migrada da planilha ganha uma situação/plano válido
@@ -344,7 +408,17 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
                 // Recorte por curso do histórico não guarda Cancelou por período —
                 // null faz a tela cair no Cancelou bruto daquele curso.
                 cancelouCalouro: cursoId ? null : (h.cancelouCalouro || 0),
-                situacoes: SITUACOES,
+                cancelouVeterano: cursoId ? null : (h.cancelouVeterano || 0),
+                // Quebra por curso gravada pelo importar-historico-matriculas.js
+                // --so-quebras (25/09); com ela o "Calouros captados" do ranking
+                // por curso fecha com o card.
+                cancelouCalouroPorCurso: h.cancelouCalouroPorCurso || {},
+                desistenteCalouroPorCurso: h.desistenteCalouroPorCurso || {},
+                trancouCalouro: cursoId ? null : (h.trancouCalouro || 0),
+                trancouVeterano: cursoId ? null : (h.trancouVeterano || 0),
+                desistenteCalouro: cursoId ? null : (h.desistenteCalouro || 0),
+                desistenteVeterano: cursoId ? null : (h.desistenteVeterano || 0),
+                situacoes: SITUACOES_RELATORIO,
                 planosConfissao: PLANOS_CONFISSAO,
                 // A tela usa isto pra avisar que é ano fechado e que não há
                 // detalhamento por aluno pra abrir.
@@ -365,15 +439,28 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         const porPlano = {};
         let total = 0;
         let pendentesRevisao = 0;
-        let cancelouCalouro = 0; // Cancelou de período 1º — entra na perda de captação
+        let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0; // por período
+        let desistenteCalouro = 0, desistenteVeterano = 0;
+        const cancelouCalouroPorCurso = {};
+        const desistenteCalouroPorCurso = {};
 
         snap.forEach(doc => {
             const a = doc.data();
             total++;
-            if (a.revisarManualmente) pendentesRevisao++;
-            if (a.situacao === 'Cancelou' && a.periodo === '1º') cancelouCalouro++;
-
             const curso = a.curso || '—';
+            if (a.revisarManualmente) pendentesRevisao++;
+            if (a.situacao === 'Cancelou') {
+                a.periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++;
+                if (a.periodo === '1º') cancelouCalouroPorCurso[curso] = (cancelouCalouroPorCurso[curso] || 0) + 1;
+            }
+            if (a.situacao === 'Trancou') { a.periodo === '1º' ? trancouCalouro++ : trancouVeterano++; }
+            const tipoDes = tipoDesistente(a.situacao, a.periodo);
+            if (tipoDes === 'calouro') {
+                desistenteCalouro++;
+                desistenteCalouroPorCurso[curso] = (desistenteCalouroPorCurso[curso] || 0) + 1;
+            } else if (tipoDes === 'veterano') {
+                desistenteVeterano++;
+            }
             if (!porCursoSituacao[curso]) porCursoSituacao[curso] = {};
             porCursoSituacao[curso][a.situacao] = (porCursoSituacao[curso][a.situacao] || 0) + 1;
             porSituacaoTotal[a.situacao] = (porSituacaoTotal[a.situacao] || 0) + 1;
@@ -387,8 +474,11 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             porCursoSituacao,
             porSituacaoTotal,
             porPlano,
-            cancelouCalouro,
-            situacoes: SITUACOES,
+            cancelouCalouro, cancelouVeterano, trancouCalouro, trancouVeterano,
+            desistenteCalouro, desistenteVeterano,
+            cancelouCalouroPorCurso,
+            desistenteCalouroPorCurso,
+            situacoes: SITUACOES_RELATORIO,
             planosConfissao: PLANOS_CONFISSAO
         });
     } catch (err) {
@@ -429,6 +519,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             // Cancelou/Trancou por tipo (calouro = período 1º, veterano = resto)
             // — a situação sozinha não separa isso, período sim (pedido 22/09).
             let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0;
+            let desistenteCalouro = 0, desistenteVeterano = 0;
 
             if (hist.exists) {
                 const h = hist.data();
@@ -439,6 +530,8 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 cancelouVeterano = h.cancelouVeterano || 0;
                 trancouCalouro = h.trancouCalouro || 0;
                 trancouVeterano = h.trancouVeterano || 0;
+                desistenteCalouro = h.desistenteCalouro || 0;
+                desistenteVeterano = h.desistenteVeterano || 0;
             } else {
                 const snap = await db.collection(COL_ALUNOS)
                     .where('modulo', '==', modulo)
@@ -451,6 +544,9 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                     porSituacaoTotal[sit] = (porSituacaoTotal[sit] || 0) + 1;
                     if (sit === 'Cancelou') { periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++; }
                     if (sit === 'Trancou') { periodo === '1º' ? trancouCalouro++ : trancouVeterano++; }
+                    const tipoDes = tipoDesistente(sit, periodo);
+                    if (tipoDes === 'calouro') desistenteCalouro++;
+                    else if (tipoDes === 'veterano') desistenteVeterano++;
                 });
             }
 
@@ -458,8 +554,9 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             if (!total) continue;
 
             const soma = (...nomes) => nomes.reduce((acc, n) => acc + (porSituacaoTotal[n] || 0), 0);
-            const calouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada');
-            const perdas = soma('Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência', 'Desistente', 'Mudança de Curso');
+            const veteranos = soma(...VETERANOS_SITS);
+            const calouros = soma(...CALOUROS_SITS);
+            const perdas = soma(...PERDAS_SITS);
             // Total de Calouros = todo mundo que entrou pela porta de calouro no
             // semestre, independente de ter ficado ou saído — mesma conta que a
             // planilha antiga usava (aba "Relatório Fatec", célula
@@ -474,29 +571,22 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             // a planilha original também não somava essa linha aqui.
             const totalCalouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada',
                 'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
-                '1ª Evasão', '2ª Evasão') + cancelouCalouro;
-            // Perda de captação = perdas de calouro ÷ TOTAL de calouros captados
-            // (quem entrou pela porta de calouro, ficando ou não) — mesma regra
-            // da planilha: 1 - ativos calouros / (ativos calouros + evasões +
-            // cancelou de calouro). Antes dividia só por "Matrícula Nova -
-            // Assinada" (quem FICOU), o que deixava o denominador sem os que
-            // saíram e inflava a taxa (fatec/2026.1: 37,4% → 26,4%) (24/09).
-            // Trancou fica de fora: é usado pra reter matrícula, não é perda
-            // de captação.
-            const perdasCalouros = soma('1ª Evasão', '2ª Evasão') + cancelouCalouro;
+                '1ª Evasão', '2ª Evasão') + cancelouCalouro + desistenteCalouro;
+            // Perda de captação = (Cancelou de calouro + Desistente de calouro)
+            // ÷ TOTAL de calouros captados (quem entrou pela porta de calouro,
+            // ficando ou não). Regra confirmada pela coordenação (25/09):
+            // Evasões ficam de fora (saída antes de começar — não é culpa de captação)
+            // e Desistente Veterano fica de fora (conta na perda sobre o total, não aqui).
+            const perdasCalouros = cancelouCalouro + desistenteCalouro;
 
             linhas.push({
                 semestre,
                 historico,
                 total,
-                veteranos: porSituacaoTotal['Rematrícula Assinada'] || 0,
+                veteranos,
                 calouros,
                 totalCalouros,
-                ativos: soma('Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
-                             'Matrícula Nova', 'Matrícula Nova - Assinada',
-                             'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
-                             'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
-                             'Formando', 'Reprovado'),
+                ativos: veteranos + calouros,
                 pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
                 naoAssinou: porSituacaoTotal['Não Assinou'] || 0,
                 primeiraEvasao: porSituacaoTotal['1ª Evasão'] || 0,
@@ -507,13 +597,15 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 cancelouVeterano,
                 trancouCalouro,
                 trancouVeterano,
+                desistenteCalouro,
+                desistenteVeterano,
                 transferencia: porSituacaoTotal['Transferência'] || 0,
-                desistente: porSituacaoTotal['Desistente'] || 0,
+                desistente: desistenteCalouro + desistenteVeterano,
                 mudancaDeCurso: porSituacaoTotal['Mudança de Curso'] || 0,
                 perdas,
                 // Mesmas contas dos cards do relatório de um semestre só.
                 perdaCaptacao: totalCalouros > 0 ? (perdasCalouros / totalCalouros) * 100 : null,
-                perdaTotal: total > 0 ? (perdas / total) * 100 : null,  // perdas já inclui Transferência e Desistente
+                perdaTotal: total > 0 ? (perdas / total) * 100 : null,  // todo mundo que saiu, de qualquer forma (PERDAS_SITS)
                 // Bruto por situação — alimenta o botão "como chegou nesse
                 // número" (detalha Total de alunos / Total de Calouros
                 // captados clicando no valor) sem precisar de outra chamada.
@@ -634,7 +726,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
 
             const periodoNovo = (override.periodo !== undefined && override.periodo !== null) ? override.periodo.toString().trim() : periodoSugerido;
             const situacaoNovaBruta = override.situacao;
-            const situacaoNova = SITUACOES.includes(situacaoNovaBruta) ? situacaoNovaBruta : 'Não Assinou';
+            const situacaoNova = SITUACOES.includes(situacaoNovaBruta) ? normalizarDesistente(situacaoNovaBruta, periodoNovo) : 'Não Assinou';
 
             docsParaGravar.push({
                 modulo: origem.modulo,

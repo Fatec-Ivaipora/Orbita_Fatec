@@ -11,6 +11,33 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   ? `http://${window.location.hostname}:3000/api`
   : '/api';
 
+// ==========================================
+// GRUPOS DE SITUAÇÃO — definição ÚNICA, usada em todas as contas da tela
+// (cards, resumo, ranking por curso, detalhes). A mesma lista existe em
+// src/rotas/matriculas.js (comparativo) — mudou aqui, muda lá (25/09).
+//   Veteranos = "Total de Rematrícula" da planilha (assinada + pendência +
+//               não assinou) + formando/reprovado — ainda são alunos da casa.
+//   Calouros  = "Ativos calouros" da planilha (matrícula nova, assinada,
+//               retorno) + transferência de entrada.
+//   Ativos    = Veteranos + Calouros          (sempre fecha)
+//   Total     = Ativos + Perdas + Mudança de curso   (sempre fecha)
+// Mudança de Curso NÃO é perda: o aluno continua estudando na faculdade, só
+// trocou de curso — fica numa linha própria, igual na planilha (25/09).
+// Antes cada lugar tinha a própria cópia da lista: "Retorno" ficava fora de
+// Ativos e de Perdas, e o ranking chamava de veterano quem tinha trancado.
+// ==========================================
+const VETERANOS_SITS = ['Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Formando', 'Reprovado'];
+const CALOUROS_SITS = [
+  'Matrícula Nova', 'Matrícula Nova - Assinada',
+  'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+  'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada'
+];
+const ATIVOS_SITS = [...VETERANOS_SITS, ...CALOUROS_SITS];
+// "Desistente" puro só existe no histórico; no sistema é Calouro/Veterano (25/09).
+const PERDAS_SITS = ['Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência',
+  'Desistente — Calouro', 'Desistente — Veterano', 'Desistente'];
+const MUDANCA_CURSO_SITS = ['Mudança de Curso'];
+
 let currentUser = null;
 let appInitialized = false;
 let initializedRole = null;
@@ -383,6 +410,16 @@ function popularSelectsOpcoes() {
   }
 
   const selectSituacaoAluno = document.getElementById('aluno-situacao');
+  // Desistente: 1º período = calouro, outro = veterano — acerta sozinho ao
+  // escolher a situação ou mudar o período (o servidor também garante isso).
+  const acertarDesistente = () => {
+    const sel = document.getElementById('aluno-situacao');
+    const per = (document.getElementById('aluno-periodo')?.value || '').trim();
+    if (!sel || !/^Desistente/.test(sel.value)) return;
+    sel.value = per === '1º' ? 'Desistente — Calouro' : 'Desistente — Veterano';
+  };
+  selectSituacaoAluno?.addEventListener('change', acertarDesistente);
+  document.getElementById('aluno-periodo')?.addEventListener('change', acertarDesistente);
   if (selectSituacaoAluno) {
     selectSituacaoAluno.innerHTML = opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   }
@@ -465,10 +502,17 @@ function setupPeriodoMultiSelect() {
 
 // Mesmo filtro tipo Excel, agora pra Situação — lista vem de opcoes.situacoes
 // (carregada do servidor), não é fixa como a de período.
+function getSituacoesDisplay() {
+  // Desde 25/09 "Desistente — Calouro/Veterano" são situações reais do
+  // cadastro — o filtro usa a mesma lista, sem expandir nada.
+  return opcoes.situacoes;
+}
+
 function montarSituacaoMultiSelect() {
   const opcoesEl = document.getElementById('situacao-opcoes');
   if (!opcoesEl) return;
-  opcoesEl.innerHTML = opcoes.situacoes.map(s => `
+  const display = getSituacoesDisplay();
+  opcoesEl.innerHTML = display.map(s => `
     <label>
       <input type="checkbox" class="situacao-checkbox" value="${esc(s)}" ${situacoesDesmarcadas.has(s) ? '' : 'checked'}>
       ${esc(s)}
@@ -480,7 +524,8 @@ function montarSituacaoMultiSelect() {
 function atualizarBotaoSituacao() {
   const btn = document.getElementById('situacao-btn');
   if (!btn) return;
-  const marcados = opcoes.situacoes.length - situacoesDesmarcadas.size;
+  const display = getSituacoesDisplay();
+  const marcados = display.length - situacoesDesmarcadas.size;
   if (situacoesDesmarcadas.size === 0) btn.textContent = 'Todas as situações';
   else if (marcados === 0) btn.textContent = 'Nenhuma situação';
   else btn.textContent = `${marcados} situação(ões) selecionada(s)`;
@@ -488,7 +533,7 @@ function atualizarBotaoSituacao() {
 
 function situacoesFiltroAtual() {
   if (situacoesDesmarcadas.size === 0) return [];
-  return opcoes.situacoes.filter(s => !situacoesDesmarcadas.has(s));
+  return getSituacoesDisplay().filter(s => !situacoesDesmarcadas.has(s));
 }
 
 function setupSituacaoMultiSelect() {
@@ -508,7 +553,7 @@ function setupSituacaoMultiSelect() {
 
   wrap.querySelectorAll('.multi-select-acoes button').forEach(acaoBtn => {
     acaoBtn.addEventListener('click', () => {
-      situacoesDesmarcadas = acaoBtn.dataset.acao === 'nenhum' ? new Set(opcoes.situacoes) : new Set();
+      situacoesDesmarcadas = acaoBtn.dataset.acao === 'nenhum' ? new Set(getSituacoesDisplay()) : new Set();
       montarSituacaoMultiSelect();
       if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     });
@@ -532,7 +577,7 @@ const SITUACAO_GRUPO = {
   'Matrícula Nova': 'alerta', 'Pendência Financeira': 'alerta', 'Não Assinou': 'alerta',
   'Matrícula Nova - Retorno': 'alerta', 'Matrícula Nova - Transferência': 'alerta',
   'Cancelou': 'critica', 'Trancou': 'critica', '1ª Evasão': 'critica', '2ª Evasão': 'critica',
-  'Desistente': 'critica', 'Reprovado': 'critica',
+  'Desistente': 'critica', 'Desistente — Calouro': 'critica', 'Desistente — Veterano': 'critica', 'Reprovado': 'critica',
   'Transferência': 'neutra', 'Mudança de Curso': 'neutra'
 };
 function situacaoBadgeClasse(situacao) {
@@ -896,6 +941,22 @@ async function initPaginaRelatorio() {
     window.print();
   });
 
+  // Lupa do resumo → abre modal de detalhe usando dados do relatório atual
+  // (vale pro resumo e pros cards do topo: Total de alunos, Ativos, Captados)
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.btn-detalhe-total[data-relatorio-chave]');
+    if (!btn) return;
+    abrirDetalheRelatorio(btn.dataset.relatorioChave);
+  });
+
+  // Fechar modal de detalhe
+  document.getElementById('btn-fechar-detalhe-total')?.addEventListener('click', () => {
+    document.getElementById('modal-detalhe-total')?.classList.add('hidden');
+  });
+  document.getElementById('modal-detalhe-total')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+  });
+
   relatorioEmAndamento = carregarRelatorio();
   await relatorioEmAndamento;
 }
@@ -961,9 +1022,9 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
 const LINHAS_COMPARATIVO = [
   { secao: 'O que somou (captação)' },
   { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)',
-    formula: 'Rematrícula Assinada' },
+    formula: 'Rematrícula Assinada + Pendência Financeira + Não Assinou + Formando + Reprovado (o "Total de Rematrícula" da planilha)' },
   { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
-    formula: 'Matrícula Nova + Matrícula Nova - Assinada' },
+    formula: 'Matrícula Nova + Matrícula Nova - Assinada + Retorno + Matrícula Nova - Transferência (calouros ainda ativos)' },
   { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true, detalhavel: true,
     formula: 'Matrícula Nova + Matrícula Nova - Assinada + 1ª Evasão + 2ª Evasão + Retorno + Cancelou (só o de calouro) — todo mundo que entrou pela porta de calouro, ficando ou não.' },
 
@@ -991,26 +1052,30 @@ const LINHAS_COMPARATIVO = [
     formula: 'Situação = Trancou, período 2º em diante' },
   { chave: 'transferencia', rotulo: 'Transferência',
     formula: 'Situação = Transferência — saiu para outra instituição' },
-  { chave: 'desistente', rotulo: 'Desistente',
-    formula: 'Situação = Desistente — desistiu da matrícula' },
-  { chave: 'mudancaDeCurso', rotulo: 'Mudança de Curso',
-    formula: 'Situação = Mudança de Curso — saiu para outro curso da instituição' },
+  { chave: 'desistente', rotulo: 'Desistente (total)',
+    formula: 'Desistente — Calouro + Desistente — Veterano' },
+  { chave: 'desistenteCalouro', rotulo: 'Desistente — calouro', ocultarSeZerado: true,
+    formula: 'Situação = Desistente — Calouro (período 1º) — entra na perda de captação' },
+  { chave: 'desistenteVeterano', rotulo: 'Desistente — veterano', ocultarSeZerado: true,
+    formula: 'Situação = Desistente — Veterano (período 2º em diante) — entra na perda sobre o total, não na captação' },
   { chave: 'perdas', rotulo: 'Total de perdas', destaque: true,
-    formula: 'Cancelou + Trancou + 1ª Evasão + 2ª Evasão + Transferência + Desistente + Mudança de Curso (todo mundo que saiu)' },
+    formula: 'Cancelou + Trancou + 1ª Evasão + 2ª Evasão + Transferência + Desistente (todo mundo que saiu da faculdade). Mudança de Curso não entra — continua estudando.' },
 
   { secao: 'Total geral' },
   { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira',
     formula: 'Situação = Pendência Financeira — continua Ativo, só falta resolver o pagamento. Não é perda.' },
   { chave: 'naoAssinou', rotulo: 'Não assinou',
     formula: 'Situação = Não Assinou — continua Ativo, só falta assinar. Não é perda.' },
+  { chave: 'mudancaDeCurso', rotulo: 'Mudança de curso', ocultarSeZerado: true,
+    formula: 'Situação = Mudança de Curso — trocou de curso dentro da faculdade. Não é perda (continua estudando) e não conta como ativo no curso antigo. Ativos + Perdas + Mudança de curso = Total de alunos.' },
   { chave: 'ativos', rotulo: 'Ativos', destaque: true, detalhavel: true,
-    formula: 'Rematrícula Assinada + Pendência Financeira + Não Assinou + Matrícula Nova + Matrícula Nova - Assinada + Matrícula Nova - Transferência + Matrícula Nova - Transferência Assinada + Matrícula Nova - Retorno + Matrícula Nova - Retorno Assinada + Formando + Reprovado' },
+    formula: 'Veteranos + Calouros (Rematrícula Assinada + Pendência + Não Assinou + Formando + Reprovado + Matrícula Nova + Assinada + Retorno + Transferência de entrada). Ativos + Total de perdas + Mudança de curso = Total de alunos.' },
   { chave: 'total', rotulo: 'Total de alunos', destaque: true, detalhavel: true,
     formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
   { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
-    formula: '(Cancelou de calouro + 1ª Evasão + 2ª Evasão) ÷ Total de Calouros captados (mesma regra da planilha). Cancelou de veterano e Trancou ficam de fora — não são perda de captação.' },
+    formula: '(Cancelou Calouro + Desistente Calouro) ÷ Total de Calouros captados. Evasões, Desistente Veterano, Cancelou Veterano e Trancou ficam de fora.' },
   { chave: 'perdaTotal', rotulo: '% de perda sobre o total', percentual: true,
-    formula: '(Cancelou + Trancou + 1ª Evasão + 2ª Evasão + Transferência + Desistente) ÷ Total de alunos.' }
+    formula: 'Total de perdas ÷ Total de alunos — todo mundo que saiu da faculdade, não importa a forma (Cancelou + Trancou + 1ª/2ª Evasão + Transferência + Desistente), calouro ou veterano. Mudança de Curso não entra: continua estudando.' }
 ];
 
 async function initPaginaComparativo() {
@@ -1043,6 +1108,7 @@ function atualizarLabelImpressaoComparativo() {
 // Guardado pra alimentar o modal "como chegou nesse número" sem precisar
 // buscar de novo — atualizado toda vez que o comparativo recarrega.
 let ultimoComparativo = { modulo: 'fatec', linhas: [] };
+let ultimoRelatorioLinha = null; // dados do semestre atual na tela de relatório
 
 async function carregarComparativo() {
   const modulo = document.getElementById('comp-modulo-select')?.value || 'fatec';
@@ -1119,14 +1185,8 @@ function renderComparativo(dados) {
 // que reconstruída aqui a partir do `porSituacaoTotal` bruto que a API
 // manda, pra não precisar duplicar isso nos dois lados sem necessidade.
 const COMPONENTES_TOTAL = {
-  // Ativos: situações que contam como ativo no semestre
-  ativos: [
-    'Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
-    'Matrícula Nova', 'Matrícula Nova - Assinada',
-    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
-    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
-    'Formando', 'Reprovado'
-  ],
+  // Ativos: situações que contam como ativo no semestre (ver ATIVOS_SITS no topo)
+  ativos: ATIVOS_SITS,
   // Total de alunos = a soma de TODAS as situações do semestre, sem exceção.
   total: null,
   // Total de Calouros captados: mesmas situações da fórmula em
@@ -1139,57 +1199,52 @@ const COMPONENTES_TOTAL = {
   ]
 };
 
+// Monta o "como chegou nesse número" (lupa 🔍) com subtotal por grupo, pra
+// conferir a soma na tela — usado no Relatório (cards e resumo) e no
+// Comparativo. Total = Ativos + Perdas + Mudança de curso; Ativos =
+// Veteranos + Calouros. Os grupos são os do topo do arquivo (25/09).
+function montarDetalhe(chave, ps, linha) {
+  const itens = [];
+  const grupo = (titulo, sits, cor, rotuloSubtotal) => {
+    const rows = sits.map(s => [s, ps[s] || 0]).filter(([, q]) => q > 0);
+    const sub = rows.reduce((a, [, q]) => a + q, 0);
+    itens.push({ secao: titulo, tipo: `header-${cor}` });
+    if (rows.length) rows.forEach(([nome, qtd]) => itens.push({ nome, qtd, tipo: cor }));
+    else itens.push({ nome: '(nenhum)', qtd: 0, tipo: cor });
+    itens.push({ nome: rotuloSubtotal, qtd: sub, tipo: cor, subtotal: true });
+    return sub;
+  };
+
+  if (chave === 'ativos' || chave === 'total') {
+    const vet = grupo('Veteranos', VETERANOS_SITS, 'verde', 'Subtotal veteranos');
+    const cal = grupo('Calouros', CALOUROS_SITS, 'verde', 'Subtotal calouros');
+    if (chave === 'ativos') return itens;
+    itens.push({ nome: `= Ativos (${vet} veteranos + ${cal} calouros)`, qtd: vet + cal, tipo: 'verde', subtotal: true });
+    grupo('Perdas — saíram da faculdade', PERDAS_SITS, 'vermelho', 'Subtotal perdas');
+    if (MUDANCA_CURSO_SITS.some(s => ps[s])) grupo('Mudou de curso — continua na faculdade', MUDANCA_CURSO_SITS, 'neutro', 'Subtotal mudança de curso');
+    const conhecidas = new Set([...ATIVOS_SITS, ...PERDAS_SITS, ...MUDANCA_CURSO_SITS]);
+    const outros = Object.entries(ps).filter(([s, q]) => !conhecidas.has(s) && q > 0);
+    if (outros.length) {
+      itens.push({ secao: '⚠ Outros — situação fora dos grupos', tipo: 'header-neutro' });
+      outros.forEach(([nome, qtd]) => itens.push({ nome, qtd, tipo: 'neutro' }));
+    }
+  } else if (chave === 'totalCalouros') {
+    COMPONENTES_TOTAL.totalCalouros.forEach(situacao => {
+      const qtd = ps[situacao] || 0;
+      if (qtd > 0) itens.push([situacao, qtd]);
+    });
+    if (linha.cancelouCalouro) itens.push(['Cancelou (calouro)', linha.cancelouCalouro]);
+    if (linha.desistenteCalouro) itens.push(['Desistente (calouro)', linha.desistenteCalouro]);
+  }
+  return itens;
+}
+
 function abrirDetalheTotal(semestre, chave) {
   const linha = (ultimoComparativo.linhas || []).find(l => l.semestre === semestre);
   if (!linha) return;
   const porSituacaoTotal = linha.porSituacaoTotal || {};
 
-  const ATIVOS_SITS = [
-    'Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou',
-    'Matrícula Nova', 'Matrícula Nova - Assinada',
-    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
-    'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada',
-    'Formando', 'Reprovado'
-  ];
-  const PERDAS_SITS = [
-    'Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão',
-    'Transferência', 'Desistente', 'Mudança de Curso'
-  ];
-
-  const linhasDetalhe = [];
-  if (chave === 'total') {
-    // Ativos primeiro (verde), depois perdas (vermelho), depois resto
-    const ativosRows = ATIVOS_SITS.map(s => [s, porSituacaoTotal[s] || 0]).filter(([,q]) => q > 0);
-    const perdasRows = PERDAS_SITS.map(s => [s, porSituacaoTotal[s] || 0]).filter(([,q]) => q > 0);
-    const conhecidas = new Set([...ATIVOS_SITS, ...PERDAS_SITS]);
-    const outrosRows = Object.entries(porSituacaoTotal)
-      .filter(([s]) => !conhecidas.has(s) && porSituacaoTotal[s] > 0)
-      .sort((a, b) => b[1] - a[1]);
-
-    if (ativosRows.length) {
-      linhasDetalhe.push({ secao: 'Ativos', tipo: 'header-verde' });
-      ativosRows.forEach(([nome, qtd]) => linhasDetalhe.push({ nome, qtd, tipo: 'verde' }));
-    }
-    if (perdasRows.length) {
-      linhasDetalhe.push({ secao: 'Perdas', tipo: 'header-vermelho' });
-      perdasRows.forEach(([nome, qtd]) => linhasDetalhe.push({ nome, qtd, tipo: 'vermelho' }));
-    }
-    if (outrosRows.length) {
-      linhasDetalhe.push({ secao: 'Outros', tipo: 'header-neutro' });
-      outrosRows.forEach(([nome, qtd]) => linhasDetalhe.push({ nome, qtd, tipo: 'neutro' }));
-    }
-  } else if (chave === 'totalCalouros') {
-    COMPONENTES_TOTAL.totalCalouros.forEach(situacao => {
-      const qtd = porSituacaoTotal[situacao] || 0;
-      if (qtd > 0) linhasDetalhe.push([situacao, qtd]);
-    });
-    if (linha.cancelouCalouro) linhasDetalhe.push(['Cancelou (calouro)', linha.cancelouCalouro]);
-  } else if (chave === 'ativos') {
-    COMPONENTES_TOTAL.ativos.forEach(situacao => {
-      const qtd = porSituacaoTotal[situacao] || 0;
-      if (qtd > 0) linhasDetalhe.push([situacao, qtd]);
-    });
-  }
+  const linhasDetalhe = montarDetalhe(chave, porSituacaoTotal, linha);
 
   const def = LINHAS_COMPARATIVO.find(d => d.chave === chave);
   document.getElementById('detalhe-total-titulo').textContent = `${def?.rotulo || chave} — ${semestre}`;
@@ -1210,9 +1265,42 @@ function abrirDetalheTotal(semestre, chave) {
                   : 'detalhe-secao-neutro';
         return `<tr class="${cls} linha-secao-header"><td colspan="2">${esc(item.secao)}</td></tr>`;
       }
-      const cls = item.tipo === 'verde' ? 'detalhe-row-verde'
+      const cls = (item.tipo === 'verde' ? 'detalhe-row-verde'
                 : item.tipo === 'vermelho' ? 'detalhe-row-vermelho'
-                : '';
+                : '') + (item.subtotal ? ' linha-subtotal' : '');
+      return `<tr class="${cls}"><td>${esc(item.nome)}</td><td>${item.qtd}</td></tr>`;
+    }).join('') +
+    `<tr class="linha-destaque linha-separador"><td>Total</td><td>${totalValor}</td></tr>`;
+
+  document.getElementById('modal-detalhe-total').classList.remove('hidden');
+}
+
+function abrirDetalheRelatorio(chave) {
+  const linha = ultimoRelatorioLinha;
+  if (!linha) return;
+  const porSituacaoTotal = linha.porSituacaoTotal || {};
+
+  const linhasDetalhe = montarDetalhe(chave, porSituacaoTotal, linha);
+
+  const def = LINHAS_COMPARATIVO.find(d => d.chave === chave);
+  document.getElementById('detalhe-total-titulo').textContent = `${def?.rotulo || chave} — ${linha.semestre}`;
+  document.getElementById('detalhe-total-sub').textContent = def?.formula || '';
+  const totalValor = chave === 'total' ? linha.total : (chave === 'ativos' ? linha.ativos : linha[chave]);
+  document.getElementById('detalhe-total-tbody').innerHTML =
+    linhasDetalhe.map(item => {
+      if (Array.isArray(item)) {
+        const [nome, qtd] = item;
+        return `<tr><td>${esc(nome)}</td><td>${qtd}</td></tr>`;
+      }
+      if (item.secao) {
+        const cls = item.tipo === 'header-verde' ? 'detalhe-secao-verde'
+                  : item.tipo === 'header-vermelho' ? 'detalhe-secao-vermelho'
+                  : 'detalhe-secao-neutro';
+        return `<tr class="${cls} linha-secao-header"><td colspan="2">${esc(item.secao)}</td></tr>`;
+      }
+      const cls = (item.tipo === 'verde' ? 'detalhe-row-verde'
+                : item.tipo === 'vermelho' ? 'detalhe-row-vermelho'
+                : '') + (item.subtotal ? ' linha-subtotal' : '');
       return `<tr class="${cls}"><td>${esc(item.nome)}</td><td>${item.qtd}</td></tr>`;
     }).join('') +
     `<tr class="linha-destaque linha-separador"><td>Total</td><td>${totalValor}</td></tr>`;
@@ -1243,8 +1331,8 @@ function renderRelatorio(dados) {
   // assinou ainda ou é matrícula nova) — 1ª Evasão e Cancelou são coisas
   // diferentes (saiu antes x depois das aulas começarem/1ª mensalidade).
   document.getElementById('kpi-total').textContent = total;
-  document.getElementById('kpi-veteranos').textContent = porSituacaoTotal['Rematrícula Assinada'] || 0;
-  document.getElementById('kpi-calouros').textContent = somaSituacoes(porSituacaoTotal, 'Matrícula Nova', 'Matrícula Nova - Assinada');
+  document.getElementById('kpi-veteranos').textContent = somaSituacoes(porSituacaoTotal, ...VETERANOS_SITS);
+  document.getElementById('kpi-calouros').textContent = somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS);
   // "Total de Calouros captados" = todo mundo que entrou pela porta de
   // calouro, independente de ter ficado — mesma conta da planilha antiga
   // (aba Relatório Fatec, célula que soma matrícula nova + assinada + 1ª/2ª
@@ -1256,14 +1344,12 @@ function renderRelatorio(dados) {
   const totalCalourosCaptados = somaSituacoes(porSituacaoTotal,
     'Matrícula Nova', 'Matrícula Nova - Assinada',
     'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
-    '1ª Evasão', '2ª Evasão') + cancelouCalouro;
+    '1ª Evasão', '2ª Evasão') + cancelouCalouro + (dados.desistenteCalouro || 0);
   document.getElementById('kpi-total-calouros').textContent = totalCalourosCaptados;
-  document.getElementById('kpi-ativos').textContent = somaSituacoes(porSituacaoTotal, 'Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Matrícula Nova', 'Matrícula Nova - Assinada', 'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada', 'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Formando', 'Reprovado');
+  document.getElementById('kpi-ativos').textContent = somaSituacoes(porSituacaoTotal, ...ATIVOS_SITS);
   document.getElementById('kpi-pendencia').textContent = porSituacaoTotal['Pendência Financeira'] || 0;
   document.getElementById('kpi-nao-assinou').textContent = porSituacaoTotal['Não Assinou'] || 0;
   document.getElementById('kpi-1-evasao').textContent = porSituacaoTotal['1ª Evasão'] || 0;
-  document.getElementById('kpi-cancelou').textContent = porSituacaoTotal['Cancelou'] || 0;
-  document.getElementById('kpi-trancou').textContent = porSituacaoTotal['Trancou'] || 0;
 
   const card2Evasao = document.getElementById('kpi-2-evasao-card');
   if ((porSituacaoTotal['2ª Evasão'] || 0) > 0) {
@@ -1273,14 +1359,36 @@ function renderRelatorio(dados) {
     card2Evasao.classList.add('hidden');
   }
 
-  // "Perda de captação" = (Cancelou de calouro + 1ª/2ª Evasão) ÷ Total de
-  // Calouros captados — mesma regra da planilha (1 - ativos calouros / todos
-  // que entraram como calouro). Antes o denominador era só "Matrícula Nova -
-  // Assinada" (quem ficou), o que inflava a taxa (24/09). Trancou fica de fora.
+  // Cancelou e Trancou — breakdown por período (calouro = 1º, veterano = 2º+)
+  const cancelouCalouroBd = (dados.cancelouCalouro ?? null) !== null ? dados.cancelouCalouro : (porSituacaoTotal['Cancelou'] || 0);
+  const cancelouVeteranoBd = (dados.cancelouVeterano ?? null) !== null ? dados.cancelouVeterano : 0;
+  const trancouCalouroBd  = dados.trancouCalouro  || 0;
+  const trancouVeteranoBd = dados.trancouVeterano || 0;
+  const desistCalouroBd   = dados.desistenteCalouro  || 0;
+  const desistVeteranoBd  = dados.desistenteVeterano || 0;
+  document.getElementById('kpi-cancelou-calouro').textContent  = cancelouCalouroBd;
+  document.getElementById('kpi-cancelou-veterano').textContent = cancelouVeteranoBd;
+  document.getElementById('kpi-trancou-calouro').textContent   = trancouCalouroBd;
+  document.getElementById('kpi-trancou-veterano').textContent  = trancouVeteranoBd;
+  const cardDesistC = document.getElementById('kpi-desistente-calouro-card');
+  const cardDesistV = document.getElementById('kpi-desistente-veterano-card');
+  if (desistCalouroBd > 0) {
+    cardDesistC.classList.remove('hidden');
+    document.getElementById('kpi-desistente-calouro').textContent = desistCalouroBd;
+  } else { cardDesistC.classList.add('hidden'); }
+  if (desistVeteranoBd > 0) {
+    cardDesistV.classList.remove('hidden');
+    document.getElementById('kpi-desistente-veterano').textContent = desistVeteranoBd;
+  } else { cardDesistV.classList.add('hidden'); }
+
+  // "Perda de captação" = (Cancelou de calouro + Desistente de calouro) ÷
+  // Total de Calouros captados. Evasões, Trancou e Desistente de veterano NÃO
+  // entram no numerador — regra confirmada pela coordenação (25/09). O
+  // denominador é todo mundo que entrou como calouro, ficando ou não.
   // "Perda total" continua olhando todo mundo que saiu, de qualquer jeito,
   // sobre o total do semestre — inclui veterano de propósito.
-  const perdasCalouros = somaSituacoes(porSituacaoTotal, '1ª Evasão', '2ª Evasão') + cancelouCalouro;
-  const totalPerdas = somaSituacoes(porSituacaoTotal, 'Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência', 'Desistente', 'Mudança de Curso');
+  const perdasCalouros = cancelouCalouro + (dados.desistenteCalouro || 0);
+  const totalPerdas = somaSituacoes(porSituacaoTotal, ...PERDAS_SITS);
   const formatarPercentual = (numerador, denominador) =>
     denominador > 0 ? `${((numerador / denominador) * 100).toFixed(1)}%` : '—';
   document.getElementById('kpi-perda-captacao').textContent = formatarPercentual(perdasCalouros, totalCalourosCaptados);
@@ -1296,7 +1404,156 @@ function renderRelatorio(dados) {
 
   // Pivô Situação x Curso — só lista situação que tem pelo menos 1 aluno em
   // algum curso, senão a tabela fica enorme com linha zerada de ponta a ponta.
-  const thead = document.getElementById('situacao-curso-thead');
+  // ---- RESUMO DO SEMESTRE (mesma estrutura dos cards comparativos) ----
+  const cancelouCalouroDados = (dados.cancelouCalouro ?? null) !== null ? dados.cancelouCalouro : (porSituacaoTotal['Cancelou'] || 0);
+  const cancelouVeteranoDados = (dados.cancelouVeterano ?? null) !== null ? dados.cancelouVeterano : Math.max(0, (porSituacaoTotal['Cancelou'] || 0) - cancelouCalouroDados);
+  const trancouCalouroDados = dados.trancouCalouro || 0;
+  const trancouVeteranoDados = dados.trancouVeterano || 0;
+  {
+    const ativosTotal = somaSituacoes(porSituacaoTotal, ...ATIVOS_SITS);
+    const totalPerdas2 = somaSituacoes(porSituacaoTotal, ...PERDAS_SITS);
+    const totalCalouros2 = somaSituacoes(porSituacaoTotal,
+      'Matrícula Nova', 'Matrícula Nova - Assinada',
+      'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+      '1ª Evasão', '2ª Evasão') + cancelouCalouroDados + (dados.desistenteCalouro || 0);
+    // % Perda Captação: Cancelou Calouro + Desistente Calouro — evasões e Desistente Veterano NÃO entram
+    const perdasCalouros2 = cancelouCalouroDados + (dados.desistenteCalouro || 0);
+    const linhaRes = {
+      semestre: document.getElementById('rel-semestre-select')?.value || '',
+      veteranos: somaSituacoes(porSituacaoTotal, ...VETERANOS_SITS),
+      calouros: somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS),
+      totalCalouros: totalCalouros2,
+      primeiraEvasao: porSituacaoTotal['1ª Evasão'] || 0,
+      segundaEvasao: porSituacaoTotal['2ª Evasão'] || 0,
+      cancelouCalouro: cancelouCalouroDados,
+      cancelouVeterano: cancelouVeteranoDados,
+      trancouCalouro: trancouCalouroDados,
+      trancouVeterano: trancouVeteranoDados,
+      transferencia: porSituacaoTotal['Transferência'] || 0,
+      desistente: (dados.desistenteCalouro || 0) + (dados.desistenteVeterano || 0),
+      desistenteCalouro: dados.desistenteCalouro || 0,
+      desistenteVeterano: dados.desistenteVeterano || 0,
+      mudancaDeCurso: porSituacaoTotal['Mudança de Curso'] || 0,
+      perdas: totalPerdas2,
+      pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
+      naoAssinou: porSituacaoTotal['Não Assinou'] || 0,
+      ativos: ativosTotal,
+      total,
+      perdaCaptacao: totalCalouros2 > 0 ? (perdasCalouros2 / totalCalouros2) * 100 : null,
+      perdaTotal: total > 0 ? (totalPerdas2 / total) * 100 : null,
+      porSituacaoTotal,
+    };
+    ultimoRelatorioLinha = linhaRes;
+
+    const fmt = (v, pct) => {
+      if (pct) return v == null ? '—' : `${v.toFixed(1)}%`;
+      return v == null ? '—' : String(v);
+    };
+    const resumoTbody = document.getElementById('resumo-semestre-tbody');
+    if (resumoTbody) {
+      // mapa secao → classe CSS
+      const SECAO_CLASSE = {
+        'O que somou (captação)': 'soma',
+        'O que diminuiu (perdas)': 'perda',
+        'Total geral': 'geral',
+      };
+      let secaoAtual = 'soma';
+      resumoTbody.innerHTML = LINHAS_COMPARATIVO.map(def => {
+        if (def.secao) {
+          secaoAtual = SECAO_CLASSE[def.secao] || 'geral';
+          return `<tr class="linha-secao linha-secao-${secaoAtual}"><td colspan="2">${esc(def.secao)}</td></tr>`;
+        }
+        const val = linhaRes[def.chave];
+        if (def.ocultarSeZerado && !val) return '';
+        // classe de cor da linha
+        let corClasse = `secao-${secaoAtual}`;
+        if (def.chave === 'ativos') corClasse = 'secao-geral-ativos';
+        if (def.percentual) corClasse = 'secao-geral-pct';
+        const classes = ['linha-comparativo', def.destaque ? 'linha-destaque' : '', corClasse].filter(Boolean).join(' ');
+        const titulo = def.formula ? ` title="${esc(def.formula)}"` : '';
+        const valorHtml = def.detalhavel
+          ? `<button type="button" class="btn-detalhe-total" data-relatorio-chave="${esc(def.chave)}" title="Ver como chegou nesse número">${fmt(val, def.percentual)} <span class="btn-detalhe-total-icone">🔍</span></button>`
+          : fmt(val, def.percentual);
+        return `<tr class="${classes}"><td${titulo}>${esc(def.rotulo)}</td><td${titulo}>${valorHtml}</td></tr>`;
+      }).join('');
+    }
+  }
+  // ---- fim resumo ----
+
+  // ---- RANKING POR CURSO (decrescente por total) ----
+  {
+    // Veteranos + Calouros = Ativos; Ativos + Perdas = Total (por curso e na
+    // linha TOTAL, que bate com os cards). Antes "Veteranos" era Total −
+    // Calouros captados, que jogava trancou/cancelou/desistente de veterano
+    // pra dentro de veterano (Psicologia 2026.2 mostrava 221 veteranos, eram
+    // 215 + 6 trancados) (25/09).
+    const cancelouCalouroPorCurso = dados.cancelouCalouroPorCurso || {};
+    const desistenteCalouroPorCurso = dados.desistenteCalouroPorCurso || {};
+    // Semestre fechado não guarda Cancelou por período por curso — usa o
+    // Cancelou bruto do curso (a planilha chamava essa linha de "cancelamento
+    // de CALOURO").
+    const semQuebraPorCurso = !!dados.historico && !Object.keys(cancelouCalouroPorCurso).length;
+    const CALOUROS_CAPTADOS_SITS = [
+      'Matrícula Nova', 'Matrícula Nova - Assinada',
+      'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+      '1ª Evasão', '2ª Evasão'
+    ];
+
+    const somaCurso = (sitMap, ...sits) => sits.reduce((acc, s) => acc + (sitMap[s] || 0), 0);
+
+    const cursoRows = (dados.cursos || []).map(curso => {
+      const sitMap = (dados.porCursoSituacao || {})[curso] || {};
+      const totalCurso = Object.values(sitMap).reduce((a, b) => a + b, 0);
+      const cancelouCalouroC = semQuebraPorCurso ? (sitMap['Cancelou'] || 0) : (cancelouCalouroPorCurso[curso] || 0);
+      const desistenteCalouroC = semQuebraPorCurso ? 0 : (desistenteCalouroPorCurso[curso] || 0);
+      const calourosCapCurso = somaCurso(sitMap, ...CALOUROS_CAPTADOS_SITS) + cancelouCalouroC + desistenteCalouroC;
+      const veteranosCurso = somaCurso(sitMap, ...VETERANOS_SITS);
+      const calourosCurso = somaCurso(sitMap, ...CALOUROS_SITS);
+      const ativosCurso = veteranosCurso + calourosCurso;
+      const perdasCurso = somaCurso(sitMap, ...PERDAS_SITS);
+      const mudancaCurso = somaCurso(sitMap, ...MUDANCA_CURSO_SITS);
+      const outrosCurso = totalCurso - ativosCurso - perdasCurso - mudancaCurso; // situação fora dos grupos — deveria ser 0
+      if (outrosCurso) console.warn('[Relatório] situação sem grupo em', curso, sitMap);
+      return { curso, totalCurso, veteranosCurso, calourosCurso, ativosCurso, perdasCurso, mudancaCurso, calourosCapCurso, outrosCurso };
+    }).sort((a, b) => b.totalCurso - a.totalCurso);
+
+    const somaCol = (k) => cursoRows.reduce((acc, r) => acc + r[k], 0);
+
+    const rankingTbody = document.getElementById('ranking-curso-tbody');
+    if (rankingTbody) {
+      if (!cursoRows.length) {
+        rankingTbody.innerHTML = '<tr><td colspan="8" class="tabela-msg">Nenhum aluno lançado para esse semestre ainda.</td></tr>';
+      } else {
+        const linhaCurso = (r, i) => `
+          <tr class="ranking-curso-row${i === 0 ? ' ranking-primeiro' : ''}">
+            <td class="ranking-curso-nome">${esc(r.curso)}</td>
+            <td class="ranking-num ranking-num-total">${r.totalCurso}</td>
+            <td class="ranking-num">${r.veteranosCurso}</td>
+            <td class="ranking-num">${r.calourosCurso}</td>
+            <td class="ranking-num ranking-num-ativos">${r.ativosCurso}</td>
+            <td class="ranking-num">${r.perdasCurso}</td>
+            <td class="ranking-num">${r.mudancaCurso}</td>
+            <td class="ranking-num ranking-num-captados">${r.calourosCapCurso}</td>
+          </tr>`;
+        const outros = somaCol('outrosCurso');
+        rankingTbody.innerHTML = cursoRows.map(linhaCurso).join('') + `
+          <tr class="ranking-curso-row ranking-total">
+            <td class="ranking-curso-nome"><strong>TOTAL</strong></td>
+            <td class="ranking-num ranking-num-total"><strong>${somaCol('totalCurso')}</strong></td>
+            <td class="ranking-num"><strong>${somaCol('veteranosCurso')}</strong></td>
+            <td class="ranking-num"><strong>${somaCol('calourosCurso')}</strong></td>
+            <td class="ranking-num ranking-num-ativos"><strong>${somaCol('ativosCurso')}</strong></td>
+            <td class="ranking-num"><strong>${somaCol('perdasCurso')}</strong></td>
+            <td class="ranking-num"><strong>${somaCol('mudancaCurso')}</strong></td>
+            <td class="ranking-num ranking-num-captados"><strong>${somaCol('calourosCapCurso')}</strong></td>
+          </tr>` + (outros ? `
+          <tr><td colspan="8" class="tabela-msg">⚠ ${outros} aluno(s) com situação fora de Ativos/Perdas/Mudança de curso — a conta não fecha com o Total.</td></tr>` : '');
+      }
+    }
+  }
+  // ---- fim ranking ----
+
+    const thead = document.getElementById('situacao-curso-thead');
   const tbody = document.getElementById('situacao-curso-tbody');
   if (!cursos.length) {
     thead.innerHTML = '';

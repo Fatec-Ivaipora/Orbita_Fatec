@@ -17,6 +17,9 @@
 //   node scripts/importar-historico-matriculas.js                 (dry-run)
 //   node scripts/importar-historico-matriculas.js --detalhe       (mostra os números)
 //   node scripts/importar-historico-matriculas.js --commit        (grava)
+//   node scripts/importar-historico-matriculas.js --so-quebras    (grava SÓ as
+//        quebras calouro/veterano por curso nos documentos que já existem,
+//        com update — não toca em total/situações/plano) (25/09)
 //
 // A planilha original NÃO é alterada.
 
@@ -32,6 +35,7 @@ const PLANILHA_PATH = argPlanilha ? argPlanilha.slice('--planilha='.length) : PL
 
 const COMMIT = process.argv.includes('--commit');
 const DETALHE = process.argv.includes('--detalhe');
+const SO_QUEBRAS = process.argv.includes('--so-quebras');
 
 const COL_HISTORICO = 'matriculas_historico';
 const COL_CONFIG = 'matriculas_config';
@@ -175,6 +179,10 @@ async function main() {
         // vivo), mas na Matriz o período de cada aluno tá preservado, então dá
         // pra cruzar aqui na importação (pedido 22/09).
         let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0;
+        let desistenteCalouro = 0, desistenteVeterano = 0;
+        // Por curso: sem isso a coluna "Calouros captados" do ranking por curso
+        // não fecha com o card do semestre (25/09).
+        const cancelouCalouroPorCurso = {}, desistenteCalouroPorCurso = {};
         let total = 0, fantasmas = 0;
 
         for (const linha of linhas) {
@@ -214,8 +222,15 @@ async function main() {
             porSituacaoTotal[sit] = (porSituacaoTotal[sit] || 0) + 1;
             porPlano[pl] = (porPlano[pl] || 0) + 1;
 
-            if (sit === 'Cancelou') { periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++; }
+            if (sit === 'Cancelou') {
+                periodo === '1º' ? cancelouCalouro++ : cancelouVeterano++;
+                if (periodo === '1º') cancelouCalouroPorCurso[curso] = (cancelouCalouroPorCurso[curso] || 0) + 1;
+            }
             if (sit === 'Trancou') { periodo === '1º' ? trancouCalouro++ : trancouVeterano++; }
+            if (sit === 'Desistente') {
+                periodo === '1º' ? desistenteCalouro++ : desistenteVeterano++;
+                if (periodo === '1º') desistenteCalouroPorCurso[curso] = (desistenteCalouroPorCurso[curso] || 0) + 1;
+            }
         }
 
         documentos.push({
@@ -233,6 +248,10 @@ async function main() {
                 cancelouVeterano,
                 trancouCalouro,
                 trancouVeterano,
+                desistenteCalouro,
+                desistenteVeterano,
+                cancelouCalouroPorCurso,
+                desistenteCalouroPorCurso,
                 // Procedência: deixa explícito que veio da planilha antiga e que
                 // não existe aluno por trás desses números dentro do sistema.
                 origem: 'planilha-historica',
@@ -273,6 +292,37 @@ async function main() {
             console.log('  por situação:', JSON.stringify(d.dados.porSituacaoTotal));
             console.log('  por plano   :', JSON.stringify(d.dados.porPlano));
         }
+    }
+
+    if (SO_QUEBRAS) {
+        // Confere antes de gravar: o total e o cancelouCalouro recalculados
+        // precisam bater com o que já está no banco — se não baterem, a
+        // planilha mudou desde a importação e não é seguro misturar.
+        console.log('\nConferindo com o que já está gravado...');
+        const QUEBRAS = ['cancelouCalouroPorCurso', 'desistenteCalouroPorCurso', 'desistenteCalouro', 'desistenteVeterano'];
+        const atualizacoes = [];
+        for (const d of documentos) {
+            const atual = await db.collection(COL_HISTORICO).doc(d.id).get();
+            if (!atual.exists) { console.log(`  ${d.id}: não existe no banco — pulado`); continue; }
+            const a = atual.data();
+            const somaPorCurso = Object.values(d.dados.cancelouCalouroPorCurso).reduce((x, y) => x + y, 0);
+            const ok = a.total === d.dados.total && (a.cancelouCalouro || 0) === d.dados.cancelouCalouro
+                && somaPorCurso === d.dados.cancelouCalouro;
+            console.log(`  ${d.id.padEnd(18)} total ${a.total}→${d.dados.total}  cancelouCalouro ${a.cancelouCalouro || 0}→${d.dados.cancelouCalouro} (por curso soma ${somaPorCurso})  desistente calouro ${d.dados.desistenteCalouro}/veterano ${d.dados.desistenteVeterano}  ${ok ? 'OK' : 'DIVERGE'}`);
+            if (!ok) { console.error('\nDivergência com o banco — nada foi gravado.'); process.exit(1); }
+            const campos = {};
+            QUEBRAS.forEach(k => { campos[k] = d.dados[k]; });
+            atualizacoes.push([d.id, campos]);
+        }
+        if (!COMMIT) {
+            console.log('\nDry-run: nada foi gravado. Rode com --so-quebras --commit pra gravar só essas quebras.');
+            process.exit(0);
+        }
+        const loteQ = db.batch();
+        atualizacoes.forEach(([id, campos]) => loteQ.update(db.collection(COL_HISTORICO).doc(id), campos));
+        await loteQ.commit();
+        console.log(`\n${atualizacoes.length} documentos atualizados (só as quebras por curso).`);
+        process.exit(0);
     }
 
     if (!COMMIT) {
