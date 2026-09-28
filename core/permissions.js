@@ -229,6 +229,13 @@ export const ROLE_PERMISSIONS = {
     label: "Professor Medicina",
     modules: ["banco-med-fatec", "relatorio-desempenho"]
   },
+  // Setor Comercial — por enquanto só o Meu Espaço (Painel do Setor, Quadro
+  // de Avisos, atividades). Módulo próprio do comercial ainda vai ser criado;
+  // quando existir, entra aqui e no defaultPermissions de auth.js.
+  comercial: {
+    label: "Comercial",
+    modules: ["dashboard", "fidelidade"]
+  },
   visitante: {
     label: "Visitante",
     modules: ["dashboard", "fidelidade"]
