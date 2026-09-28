@@ -14,7 +14,9 @@ const agenda = require('./comercial-agenda');
 const checkPermission = verifyToken.requireModulePermission('auloes');
 const COL = 'comercial_auloes';
 const STATUS = ['agendado', 'realizado', 'cancelado'];
-const TURNOS = ['MANHÃ', 'TARDE', 'NOITE', 'MANHÃ E TARDE', 'TARDE E NOITE', 'DIA TODO'];
+// "MANHÃ, TARDE E NOITE": colégio com turmas nos 3 turnos no mesmo dia
+// (ex.: Reni Correia Gamper) — pedido do Comercial.
+const TURNOS = ['MANHÃ', 'TARDE', 'NOITE', 'MANHÃ E TARDE', 'TARDE E NOITE', 'MANHÃ, TARDE E NOITE', 'DIA TODO'];
 
 const texto = (v, max = 200) => (v ?? '').toString().trim().slice(0, max);
 const maiusculo = (v, max = 200) => texto(v, max).toUpperCase();
@@ -98,7 +100,7 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
         let q = db.collection(COL).where('data', '>=', de);
         if (ate) q = q.where('data', '<=', ate);
         const snap = await q.get();
-        const ordemTurno = (t) => ['MANHÃ', 'MANHÃ E TARDE', 'DIA TODO', 'TARDE', 'TARDE E NOITE', 'NOITE'].indexOf(t);
+        const ordemTurno = (t) => ['MANHÃ', 'MANHÃ E TARDE', 'MANHÃ, TARDE E NOITE', 'DIA TODO', 'TARDE', 'TARDE E NOITE', 'NOITE'].indexOf(t);
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         lista.sort((a, b) => (a.data || '').localeCompare(b.data || '') || ordemTurno(a.turno) - ordemTurno(b.turno));
         res.json(lista);
