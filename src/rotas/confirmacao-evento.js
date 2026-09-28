@@ -418,3 +418,7 @@ router.delete('/eventos/:id/itens/:itemId', verifyToken, checkPermission, async 
 });
 
 module.exports = router;
+// Reaproveitado pela Aula Experimental (Comercial) pra sugerir o professor
+// do curso — mesma consulta, sem duplicar SQL.
+module.exports.buscarProfessoresAtivosEdubox = buscarProfessoresAtivosEdubox;
+module.exports.CURSOS = CURSOS;

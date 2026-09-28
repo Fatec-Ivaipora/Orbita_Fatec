@@ -6,7 +6,8 @@ export const CATEGORIES = {
   saude: "Gestão Saúde",
   secretaria: "Secretaria",
   financeiro: "Financeiro",
-  medicina: "Medicina"
+  medicina: "Medicina",
+  comercial: "Comercial"
 };
 
 export const MODULES = {
@@ -158,6 +159,42 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
     url: "/docencia/banco-provas/index.html"
   },
+  // Controle de assinatura de contrato dos matriculados (planilha "MATRÍCULAS
+  // FATEC - CONTROLE DE ASSINATURA" do Comercial) — todo o setor vê e edita.
+  contratos: {
+    id: "contratos",
+    category: "comercial",
+    title: "Contratos",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 17c1.5-2 2.5-2 3.5 0s2 2 4.5-1"/></svg>`,
+    url: "/comercial/contratos/index.html"
+  },
+  // Agenda de aula experimental (quem vem conhecer o curso antes de se
+  // matricular) — com mensagens prontas pro professor e pro aluno.
+  "aula-experimental": {
+    id: "aula-experimental",
+    category: "comercial",
+    title: "Aula Experimental",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>`,
+    url: "/comercial/aula-experimental/index.html"
+  },
+  // Agenda de aulões/redações/palestras nos colégios (aba "AULÕES - REDAÇÃO"
+  // da planilha CONNECT 2026).
+  auloes: {
+    id: "auloes",
+    category: "comercial",
+    title: "Aulões - Redações",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+    url: "/comercial/auloes/index.html"
+  },
+  // Palestras da Fatec em colégios/empresas e quem leva o palestrante (aba
+  // 2026.2 da planilha PALESTRAS FATEC).
+  palestras: {
+    id: "palestras",
+    category: "comercial",
+    title: "Palestras",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+    url: "/comercial/palestras/index.html"
+  },
   "confirmacao-evento": {
     id: "confirmacao-evento",
     category: "docencia",
@@ -176,11 +213,11 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras"]
   },
   ti: {
     label: "T.I.",
@@ -234,7 +271,7 @@ export const ROLE_PERMISSIONS = {
   // quando existir, entra aqui e no defaultPermissions de auth.js.
   comercial: {
     label: "Comercial",
-    modules: ["dashboard", "fidelidade"]
+    modules: ["dashboard", "fidelidade", "contratos", "aula-experimental", "auloes", "palestras"]
   },
   visitante: {
     label: "Visitante",

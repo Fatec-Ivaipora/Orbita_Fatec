@@ -1,0 +1,212 @@
+/* ==========================================================================
+   Tema visual do Comercial (Contratos, Aula Experimental, Aulões) — carregado
+   DEPOIS dos CSS de cada tela. Só aparência: nada aqui muda comportamento.
+   ========================================================================== */
+:root {
+  --cm-azul: #0F4EB8;
+  --cm-azul-escuro: #0A3A8C;
+  --cm-azul-claro: #E8F0FE;
+  --cm-laranja: #EB7025;
+  --cm-verde: #10B981;
+  --cm-vermelho: #EF4444;
+  --cm-roxo: #7C3AED;
+  --cm-sombra: 0 1px 2px rgba(15, 30, 60, 0.06), 0 8px 24px rgba(15, 30, 60, 0.06);
+  --cm-sombra-hover: 0 2px 4px rgba(15, 30, 60, 0.08), 0 14px 32px rgba(15, 30, 60, 0.12);
+  --cm-raio: 16px;
+}
+
+.layout-content { background: linear-gradient(180deg, #eef3fb 0, #f4f7fb 320px); }
+
+/* ---------- Cabeçalho em faixa ---------- */
+.page-header {
+  position: relative; overflow: hidden;
+  background: linear-gradient(120deg, var(--cm-azul-escuro) 0%, var(--cm-azul) 55%, #2f7bea 100%);
+  border: none; border-radius: 20px; padding: 1.75rem 2rem;
+  box-shadow: 0 12px 30px rgba(15, 78, 184, 0.25);
+  margin-bottom: 1.5rem;
+}
+.page-header::before, .page-header::after {
+  content: ''; position: absolute; border-radius: 50%; pointer-events: none;
+  background: rgba(255, 255, 255, 0.08);
+}
+.page-header::before { width: 260px; height: 260px; right: -60px; top: -120px; }
+.page-header::after { width: 160px; height: 160px; right: 180px; bottom: -110px; background: rgba(235, 112, 37, 0.18); }
+.page-header > * { position: relative; z-index: 1; }
+.page-header .page-title { color: #fff; font-size: 1.9rem; letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.75rem; }
+.page-header .page-subtitle { color: rgba(255, 255, 255, 0.82); }
+.cm-selo {
+  display: inline-block; margin-bottom: 0.5rem; padding: 0.2rem 0.7rem; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 0.7rem; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.cm-titulo-icone {
+  display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16); color: #fff; flex-shrink: 0;
+}
+.page-header .btn-primary {
+  background: var(--cm-laranja); color: #fff; box-shadow: 0 6px 16px rgba(235, 112, 37, 0.4); border: none;
+}
+.page-header .btn-primary:hover { background: #f08040; }
+.page-header .btn-secondary {
+  background: rgba(255, 255, 255, 0.14); color: #fff; border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.page-header .btn-secondary:hover { background: rgba(255, 255, 255, 0.24); border-color: rgba(255, 255, 255, 0.5); }
+
+/* ---------- Barra de período/semestre ---------- */
+.semestre-bar {
+  background: #fff; border-radius: var(--cm-raio); padding: 0.9rem 1.25rem; box-shadow: var(--cm-sombra);
+  border: 1px solid #e6ecf5;
+}
+.semestre-bar label { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; color: var(--text-secondary); }
+.semestre-bar .select-filter { font-weight: 700; border-color: #cfdcf2; background: var(--cm-azul-claro); color: var(--cm-azul-escuro); }
+
+/* ---------- KPIs com ícone ---------- */
+.kpi-grid { gap: 1rem; }
+.kpi-card {
+  position: relative; border: 1px solid #e6ecf5; border-left-width: 1px !important; border-radius: var(--cm-raio);
+  padding: 1.25rem 1.35rem 1.2rem 4.6rem; box-shadow: var(--cm-sombra); transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden; min-height: 96px;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--cm-sombra-hover); }
+.kpi-card::before {
+  content: ''; position: absolute; left: 1.2rem; top: 1.25rem; width: 42px; height: 42px; border-radius: 12px;
+  background: var(--cm-azul-claro) var(--kpi-icone, none) center / 22px no-repeat;
+}
+.kpi-card::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--kpi-cor, var(--cm-azul)); }
+.kpi-value { font-size: 1.85rem; letter-spacing: -0.02em; }
+.kpi-label { font-size: 0.72rem; letter-spacing: 0.07em; }
+
+/* ícones (SVG inline via data URI) e cores por tipo de card */
+.kpi-card { --kpi-icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230F4EB8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'/%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E"); }
+.kpi-sem { --kpi-cor: var(--cm-laranja); --kpi-icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EB7025' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolyline points='12 6 12 12 16 14'/%3E%3C/svg%3E"); }
+.kpi-sem::before { background-color: #fff3ea; }
+.kpi-ass { --kpi-cor: var(--cm-verde); --kpi-icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310B981' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/%3E%3Cpolyline points='22 4 12 14.01 9 11.01'/%3E%3C/svg%3E"); }
+.kpi-ass::before { background-color: #e7f8f1; }
+.kpi-des { --kpi-cor: var(--cm-vermelho); --kpi-icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EF4444' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='15' y1='9' x2='9' y2='15'/%3E%3Cline x1='9' y1='9' x2='15' y2='15'/%3E%3C/svg%3E"); }
+.kpi-des::before { background-color: #fdeeee; }
+.kpi-menor { --kpi-cor: var(--cm-roxo); --kpi-icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C3AED' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M3 7v14M21 7v14M6 21V7M18 21V7M9 7h6M9 11h6M9 15h6'/%3E%3C/svg%3E"); }
+.kpi-menor::before { background-color: #f1ebfe; }
+
+/* ---------- Botões de curso/cidade ---------- */
+.cursos-bar { gap: 0.45rem; margin-bottom: 1.1rem; }
+.curso-chip {
+  background: #fff; border-color: #e1e8f3; box-shadow: 0 1px 2px rgba(15, 30, 60, 0.05);
+  padding: 0.5rem 0.95rem; transition: all 0.15s;
+}
+.curso-chip:hover { border-color: var(--cm-azul); color: var(--cm-azul); transform: translateY(-1px); }
+.curso-chip.ativo { background: linear-gradient(120deg, var(--cm-azul-escuro), var(--cm-azul)); box-shadow: 0 6px 14px rgba(15, 78, 184, 0.28); }
+
+/* ---------- Abas segmentadas ---------- */
+.abas { background: #fff; padding: 0.35rem; border-radius: 14px; box-shadow: var(--cm-sombra); border: 1px solid #e6ecf5; display: inline-flex; margin-bottom: 1rem; }
+.aba { border: none; border-radius: 10px; padding: 0.6rem 1.15rem; background: transparent; }
+.aba:hover { background: #f4f7fb; }
+.aba.ativa[data-status] { box-shadow: 0 4px 12px rgba(15, 30, 60, 0.1); }
+
+/* ---------- Painel de filtros ---------- */
+.filters-bar {
+  background: #fff; border: 1px solid #e6ecf5; border-radius: var(--cm-raio); padding: 0.85rem 1rem;
+  box-shadow: var(--cm-sombra); margin-bottom: 1rem;
+}
+.filters-bar .search-input, .filters-bar .select-filter { background: #f7f9fc; border-color: #e1e8f3; }
+.filtro-resumo { margin: 0 0 0.75rem 0.25rem; }
+
+/* ---------- Tabela ---------- */
+.card { border-radius: var(--cm-raio); border: 1px solid #e6ecf5; box-shadow: var(--cm-sombra); }
+.data-table th {
+  background: #f7f9fc; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7a90;
+  position: sticky; top: 0; z-index: 1;
+}
+.data-table td { padding: 0.95rem 1rem; }
+.data-table tbody tr { transition: background 0.12s; }
+.data-table tbody tr:hover td { background: #f5f9ff; }
+.data-table tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--cm-azul); }
+.ct-nome { color: #0b1f33; }
+.cm-avatar {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--cm-azul-claro); color: var(--cm-azul); font-size: 0.72rem; font-weight: 800; margin-right: 0.55rem;
+  vertical-align: middle; flex-shrink: 0;
+}
+.cm-pessoa { display: inline-flex; align-items: center; min-width: 230px; }
+.acoes-col .btn-acao, .ae-msg-botoes .btn-acao {
+  border-radius: 9px; padding: 0.4rem 0.7rem; box-shadow: 0 1px 2px rgba(15, 30, 60, 0.05); transition: all 0.15s;
+}
+.acoes-col .btn-acao:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(15, 30, 60, 0.1); }
+.acoes-col .btn-acao.ok { background: #ecfdf5; }
+.status-badge { padding: 0.3rem 0.75rem; letter-spacing: 0.02em; }
+.mes-linha td { background: linear-gradient(90deg, var(--cm-azul-claro), #f7faff) !important; }
+
+/* ---------- Estado inicial (antes de escolher o período) ---------- */
+#msg-inicial > div {
+  padding: 3.5rem 1rem !important; font-weight: 600;
+  background: radial-gradient(circle at 50% 0, var(--cm-azul-claro), #fff 70%);
+}
+#msg-inicial > div::before { content: '👆'; display: block; font-size: 2rem; margin-bottom: 0.5rem; }
+
+/* ---------- Janelas ---------- */
+.modal-content { border-radius: 20px; padding: 0 2rem 1.75rem; overflow-x: hidden; }
+.modal-content > h2 {
+  margin: 0 -2rem 1rem; padding: 1.3rem 2rem; color: #fff; font-size: 1.25rem;
+  background: linear-gradient(120deg, var(--cm-azul-escuro), var(--cm-azul));
+}
+.modal-content .form-group input, .modal-content .form-group select, .modal-content .form-group textarea { border-radius: 10px; }
+.hist-lista { border-radius: 14px; }
+.hist-quem { background: var(--cm-azul-claro); color: var(--cm-azul); }
+
+.toast { border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2); }
+
+@media (max-width: 640px) {
+  .page-header { padding: 1.3rem 1.25rem; }
+  .page-header .page-title { font-size: 1.45rem; }
+  .abas { display: flex; }
+}
+
+/* ==========================================================================
+   Relatório impresso (botão "Imprimir relatório") — padrão Órbita: logo da
+   Fatec no cabeçalho, só aparece no papel. Imprime exatamente o que está
+   filtrado na tela. O shell do app tem altura travada (overflow), sem esse
+   reset a impressão corta tudo depois da 1ª página.
+   ========================================================================== */
+.rel-cabecalho-print { display: none; }
+.rel-print-logo { height: 38px; width: auto; }
+
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+
+  html, body, .layout-wrapper, .layout-main, .layout-content {
+    height: auto !important; overflow: visible !important; display: block !important;
+    background: #fff !important; margin: 0 !important; padding: 0 !important;
+  }
+  .layout-sidebar, .layout-header, .page-header, .semestre-bar, .filters-bar, .cursos-bar, .abas,
+  .modal-overlay, .toast, #msg-inicial, .acoes-col, .ct-obs-mais, .ae-agenda-ok, .layout-auth-guard,
+  .kpi-card::before { display: none !important; }
+
+  .rel-cabecalho-print {
+    display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+    border-bottom: 2px solid #0F4EB8; padding-bottom: 12px; margin-bottom: 14px;
+  }
+  .rel-cabecalho-print h1 { margin: 0; font-size: 17px; color: #0F4EB8; }
+  .rel-cabecalho-print p { margin: 3px 0 0; font-size: 11.5px; color: #475569; }
+  .rel-data-emissao { font-size: 11px; color: #475569; white-space: nowrap; }
+
+  .filtro-resumo { display: none !important; }
+  .kpi-grid { display: grid !important; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi-card { padding: 8px 10px !important; min-height: 0; box-shadow: none !important; border: 1px solid #d7deea !important; break-inside: avoid; }
+  .kpi-card::after { height: 3px; }
+  .kpi-value { font-size: 18px; }
+  .kpi-label { font-size: 9px; }
+  .kpi-hint { font-size: 8.5px; }
+
+  .card { box-shadow: none !important; border: 1px solid #d7deea !important; overflow: visible !important; }
+  .tabela-wrap { overflow: visible !important; }
+  .data-table { font-size: 10.5px; }
+  .data-table th { position: static; font-size: 8.5px; padding: 6px 8px; }
+  .data-table td { padding: 5px 8px; }
+  .data-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .data-table thead { display: table-header-group; }
+  .ct-obs { max-width: none; }
+  .cm-pessoa { min-width: 0; }
+  .data-table td, .data-table td * { font-size: 10.5px !important; }
+  .cm-avatar { display: none; }
+  .status-badge, .turno-badge, .ct-menor, .ae-hoje { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .mes-linha td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

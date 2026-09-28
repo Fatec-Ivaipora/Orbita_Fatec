@@ -1,0 +1,16 @@
+/* Aulões - Redações — base visual vem de contratos.css e aula-experimental.css */
+.mes-linha td {
+  background: #eef4ff !important; color: var(--primary-blue); font-weight: 800; font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 0.55rem 1rem !important;
+}
+.mes-linha .mes-qtd { color: var(--text-secondary); font-weight: 700; margin-left: 0.5rem; text-transform: none; letter-spacing: 0; }
+.turno-badge { display: inline-flex; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.72rem; font-weight: 800; white-space: nowrap; background: #f1f5f9; color: var(--text-main); }
+.turno-manha { background: #fef9c3; color: #854d0e; }
+.turno-tarde { background: #ffedd5; color: #9a3412; }
+.turno-noite { background: #e0e7ff; color: #3730a3; }
+.tipo-badge { font-size: 0.78rem; font-weight: 700; color: var(--purple); }
+.st-agendado { background: #fff7ed; color: #c2410c; }
+.st-realizado { background: #d1fae5; color: #047857; }
+.st-cancelado { background: #f1f5f9; color: var(--text-secondary); text-decoration: line-through; }
+tr.linha-passada td { opacity: 0.75; }
+.ae-atencao { display: inline-block; margin-left: 0.35rem; font-size: 0.68rem; font-weight: 800; color: var(--red); }
