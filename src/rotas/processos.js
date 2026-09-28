@@ -143,12 +143,52 @@ router.get('/avisos', verifyToken, async (req, res) => {
         const uid = req.user.uid;
         snap.forEach(doc => {
             const d = { id: doc.id, ...doc.data() };
-            // Autor sempre vê o próprio aviso (para saber quantos leram)
-            // Outros usuários só veem se ainda não marcaram como lido
+            // Marcar como lido NÃO tira mais o aviso da tela (28/09) — quem
+            // leu escolhe quando tirar (`ocultoPor`, PATCH /ocultar). Leitura
+            // antiga (lidoPor sem registro em `leituras`) é da época em que
+            // "Li" já escondia — continua escondida pra não voltar tudo pra
+            // tela de quem já tinha tirado.
             const souAutorDoAviso = d.autorUid === uid;
             const jaLi = Array.isArray(d.lidoPor) && d.lidoPor.includes(uid);
-            if (souAutorDoAviso || !jaLi) avisos.push(d);
+            const leituraAntiga = jaLi && !(d.leituras && d.leituras[uid]);
+            const ocultei = (Array.isArray(d.ocultoPor) && d.ocultoPor.includes(uid)) || leituraAntiga;
+            if (!souAutorDoAviso && ocultei) return;
+            d.jaLi = jaLi;
+            avisos.push(d);
         });
+
+        // Autor vê QUEM leu. Leitura nova já grava nome/data em `leituras`;
+        // leitura antiga só tem o uid — busca o nome só desses (getAll dos
+        // uids que faltam, nada de ler a coleção users inteira).
+        const faltaNome = new Set();
+        avisos.forEach(a => {
+            if (a.autorUid !== uid) return;
+            (a.lidoPor || []).forEach(u => {
+                if (u !== a.autorUid && !(a.leituras && a.leituras[u])) faltaNome.add(u);
+            });
+        });
+        const nomePorUid = {};
+        if (faltaNome.size) {
+            const refs = [...faltaNome].map(u => db.collection('users').doc(u));
+            const docs = await db.getAll(...refs);
+            docs.forEach(s => { if (s.exists) nomePorUid[s.id] = s.data().name || s.data().email || ''; });
+        }
+        avisos.forEach(a => {
+            if (a.autorUid === uid) {
+                a.leitores = (a.lidoPor || [])
+                    .filter(u => u !== a.autorUid)
+                    .map(u => {
+                        const l = a.leituras && a.leituras[u];
+                        return { uid: u, nome: l ? l.nome : (nomePorUid[u] || 'Usuário removido'), em: l ? l.em : null };
+                    })
+                    .sort((x, y) => (y.em || '').localeCompare(x.em || ''));
+            }
+            // Quem leu e quando é informação só do autor.
+            delete a.lidoPor;
+            delete a.leituras;
+            delete a.ocultoPor;
+        });
+
         avisos.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(avisos);
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
@@ -196,14 +236,45 @@ router.delete('/avisos/:id', verifyToken, async (req, res) => {
 });
 
 
-// Marca aviso como lido pelo usuário atual — filtra no GET server-side
+// Marca aviso como lido pelo usuário atual. Grava nome/data em `leituras`
+// pro autor ver quem leu. NÃO tira da tela — isso é o PATCH /ocultar,
+// escolha de quem leu.
+function dadosLeitura(req) {
+    const { FieldValue } = require('firebase-admin').firestore;
+    const uid = req.user.uid;
+    return {
+        lidoPor: FieldValue.arrayUnion(uid),
+        [`leituras.${uid}`]: { nome: req.user.name || req.user.email || '', em: new Date().toISOString() }
+    };
+}
+
 router.patch('/avisos/:id/lido', verifyToken, async (req, res) => {
     try {
         const docRef = db.collection('avisos').doc(req.params.id);
         const snap = await docRef.get();
         if (!snap.exists) return res.status(404).json({ error: 'Aviso não encontrado.' });
+        const aviso = snap.data();
+        // Se já leu, não sobrescreve a data da primeira leitura.
+        if (aviso.leituras && aviso.leituras[req.user.uid]) return res.json({ ok: true });
+        await docRef.update(dadosLeitura(req));
+        res.json({ ok: true });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Tira o aviso da tela de quem pediu (só pra essa pessoa). Tirar da tela
+// também conta como leitura, caso ainda não tenha marcado "Li".
+router.patch('/avisos/:id/ocultar', verifyToken, async (req, res) => {
+    try {
+        const docRef = db.collection('avisos').doc(req.params.id);
+        const snap = await docRef.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Aviso não encontrado.' });
         const { FieldValue } = require('firebase-admin').firestore;
-        await docRef.update({ lidoPor: FieldValue.arrayUnion(req.user.uid) });
+        const aviso = snap.data();
+        const jaLeu = aviso.leituras && aviso.leituras[req.user.uid];
+        await docRef.update({
+            ...(jaLeu ? {} : dadosLeitura(req)),
+            ocultoPor: FieldValue.arrayUnion(req.user.uid)
+        });
         res.json({ ok: true });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
