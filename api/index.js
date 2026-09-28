@@ -75,6 +75,10 @@ const rotasBancoMedFatec = require('../src/rotas/banco-med-fatec');
 const rotasRelatorioDesempenho = require('../src/rotas/relatorio-desempenho');
 const rotasBancoProvas = require('../src/rotas/banco-provas');
 const rotasConfirmacaoEvento = require('../src/rotas/confirmacao-evento');
+const rotasContratos = require('../src/rotas/contratos');
+const rotasAulaExperimental = require('../src/rotas/aula-experimental');
+const rotasAuloes = require('../src/rotas/auloes');
+const rotasPalestras = require('../src/rotas/palestras');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
@@ -99,6 +103,10 @@ app.use('/api/banco-med-fatec', rotasBancoMedFatec);
 app.use('/api/relatorio-desempenho', rotasRelatorioDesempenho);
 app.use('/api/banco-provas', rotasBancoProvas);
 app.use('/api/confirmacao-evento', rotasConfirmacaoEvento);
+app.use('/api/contratos', rotasContratos);
+app.use('/api/aula-experimental', rotasAulaExperimental);
+app.use('/api/auloes', rotasAuloes);
+app.use('/api/palestras', rotasPalestras);
 
 // Exportação obrigatória para o Vercel Serverless
 

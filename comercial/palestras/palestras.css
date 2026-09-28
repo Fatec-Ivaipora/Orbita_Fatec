@@ -1,0 +1,34 @@
+/* Palestras — base visual vem de contratos/aula-experimental/auloes + comercial-tema.css */
+.pl-alerta {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1.15rem; margin-bottom: 1rem;
+  border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-weight: 700; font-size: 0.9rem;
+}
+.pl-alerta button { margin-left: auto; border: 1px solid #fdba74; background: #fff; color: #c2410c; border-radius: 9px; padding: 0.4rem 0.8rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+
+.pl-local { font-weight: 700; color: #0b1f33; }
+.pl-tema { font-size: 0.82rem; color: var(--text-main); margin-top: 0.15rem; }
+.pl-palestrante { font-weight: 700; color: var(--purple); font-size: 0.85rem; }
+.pl-leva { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 700; padding: 0.25rem 0.65rem; border-radius: 20px; white-space: nowrap; }
+.tp-comercial { background: #e8f0fe; color: #0F4EB8; }
+.tp-outro { background: #f1f5f9; color: #334155; }
+.tp-proprio { background: #ecfdf5; color: #047857; }
+.tp-nao_necessario { background: #f8fafc; color: #94a3b8; }
+.tp-verificar { background: #fef2f2; color: #b91c1c; animation: pl-pulso 2s ease-in-out infinite; }
+@keyframes pl-pulso { 50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12); } }
+.pl-pagar { display: block; margin-top: 0.3rem; font-size: 0.7rem; font-weight: 800; color: #b45309; }
+.st-agendada { background: #fff7ed; color: #c2410c; }
+.st-realizada { background: #d1fae5; color: #047857; }
+.st-cancelada { background: #f1f5f9; color: var(--text-secondary); text-decoration: line-through; }
+.mes-linha.sem-data td { background: linear-gradient(90deg, #fff7ed, #fffaf5) !important; color: #c2410c; }
+
+.pl-transporte { border: 1px solid #e1e8f3; background: #f8fbff; border-radius: 14px; padding: 1rem; margin-bottom: 1.1rem; }
+.pl-transporte-titulo { display: block; font-weight: 800; color: var(--text-main); margin-bottom: 0.6rem; font-size: 0.9rem; }
+.pl-opcoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.pl-sem-data { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.4rem !important; font-size: 0.75rem !important; text-transform: none !important; letter-spacing: 0 !important; cursor: pointer; }
+.pl-sem-data input { width: auto !important; }
+
+@media print {
+  .pl-alerta { display: none !important; }
+  .tp-verificar { animation: none; }
+  .pl-leva, .st-agendada, .st-realizada { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

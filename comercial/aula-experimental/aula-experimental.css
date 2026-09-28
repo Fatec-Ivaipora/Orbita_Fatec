@@ -1,0 +1,35 @@
+/* Aula Experimental — base visual vem de /comercial/contratos/contratos.css */
+.ae-dia { font-weight: 700; white-space: nowrap; }
+.ae-hoje { display: inline-block; margin-left: 0.35rem; padding: 0.05rem 0.45rem; border-radius: 20px; background: var(--accent-orange); color: white; font-size: 0.68rem; font-weight: 800; }
+.ae-dica { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.3rem; }
+
+.status-badge { display: inline-flex; padding: 0.25rem 0.65rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.st-agendada { background: #fff7ed; color: #c2410c; }
+.st-realizada { background: #d1fae5; color: #047857; }
+.st-faltou { background: #fee2e2; color: #b91c1c; }
+.st-cancelada { background: #f1f5f9; color: var(--text-secondary); text-decoration: line-through; }
+
+.ae-msg-bloco { border: 1px solid var(--border-color); border-radius: 12px; padding: 0.9rem; margin-bottom: 1rem; }
+.ae-msg-topo { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.ae-msg-botoes { display: flex; gap: 0.4rem; }
+.ae-msg-botoes .btn-acao, .acoes-col .btn-acao {
+  border: 1px solid var(--border-color); background: white; border-radius: 8px; padding: 0.35rem 0.7rem;
+  font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit; color: var(--text-main); text-decoration: none;
+}
+.ae-msg-botoes .btn-acao.ok { border-color: var(--green); color: #047857; }
+.ae-msg-bloco textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.7rem;
+  font-family: inherit; font-size: 0.88rem; line-height: 1.45; background: #f8fafc; resize: vertical;
+}
+
+/* Seleção de quem da equipe do Comercial vai (vira atividade no Meu Espaço) */
+.equipe-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.equipe-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.85rem; border-radius: 20px;
+  border: 1px solid var(--border-color); background: #f8fafc; font-size: 0.82rem; font-weight: 700;
+  color: var(--text-main); cursor: pointer; font-family: inherit; user-select: none;
+}
+.equipe-chip input { display: none; }
+.equipe-chip:has(input:checked) { background: var(--primary-blue); border-color: var(--primary-blue); color: white; }
+.equipe-chip:has(input:checked)::before { content: '✓'; }
+.ae-agenda-ok { font-size: 0.7rem; font-weight: 700; color: #047857; }

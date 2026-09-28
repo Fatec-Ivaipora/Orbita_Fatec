@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contratos - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=3">
+    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
+</head>
+<body>
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="rel-cabecalho-print">
+                    <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                    <div>
+                        <h1>Relatório de Contratos</h1>
+                        <p id="print-filtros"></p>
+                    </div>
+                    <div class="rel-data-emissao" id="print-data-emissao"></div>
+                </div>
+                <div class="page-header">
+                    <div>
+                        <span class="cm-selo">Comercial</span>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 17c1.5-2 2.5-2 3.5 0s2 2 4.5-1"/></svg></span>Contratos</h1>
+                        <p class="page-subtitle">Controle de assinatura de contrato dos alunos matriculados</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn-secondary hidden" id="btn-imprimir" title="Imprime o que está filtrado na tela, com o logo">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir relatório
+                        </button>
+                        <button class="btn-primary action-execute" id="btn-novo" disabled>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Novo aluno
+                        </button>
+                    </div>
+                </div>
+
+                <div class="semestre-bar">
+                    <label for="sel-semestre">Semestre</label>
+                    <select id="sel-semestre" class="select-filter">
+                        <option value="">Selecione o semestre...</option>
+                    </select>
+                </div>
+
+                <div id="conteudo" class="hidden">
+                    <div class="cursos-bar" id="cursos-bar"></div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card"><div class="kpi-label">Matriculados</div><div class="kpi-value" id="kpi-total">0</div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label">Sem assinatura</div><div class="kpi-value" id="kpi-sem">0</div></div>
+                        <div class="kpi-card kpi-ass"><div class="kpi-label">Assinados</div><div class="kpi-value" id="kpi-ass">0</div><div class="kpi-hint" id="kpi-ass-pct"></div></div>
+                        <div class="kpi-card kpi-des"><div class="kpi-label">Desistentes</div><div class="kpi-value" id="kpi-des">0</div></div>
+                        <div class="kpi-card kpi-menor"><div class="kpi-label">Menores de 18 sem assinatura</div><div class="kpi-value" id="kpi-menor">0</div><div class="kpi-hint">Contrato precisa do responsável</div></div>
+                    </div>
+
+                    <div class="abas" id="abas">
+                        <button type="button" class="aba ativa" data-status="sem_assinatura">Sem assinatura <span class="aba-qtd" id="qtd-sem">0</span></button>
+                        <button type="button" class="aba" data-status="assinado">Assinados <span class="aba-qtd" id="qtd-ass">0</span></button>
+                        <button type="button" class="aba" data-status="desistente">Desistentes <span class="aba-qtd" id="qtd-des">0</span></button>
+                    </div>
+
+                    <div class="filters-bar">
+                        <div class="search-wrap">
+                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="busca" class="search-input" placeholder="Buscar por nome, telefone ou observação...">
+                        </div>
+                        <select id="filtro-curso" class="select-filter"><option value="">Todos os cursos</option></select>
+                        <select id="filtro-cidade" class="select-filter"><option value="">Todas as cidades</option></select>
+                        <label class="filtro-check"><input type="checkbox" id="filtro-menor"> Só menores de 18</label>
+                        <button type="button" class="btn-secondary hidden" id="btn-limpar-filtros">Limpar filtros</button>
+                    </div>
+                    <div class="filtro-resumo" id="filtro-resumo"></div>
+
+                    <div class="card">
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Nome</th>
+                                        <th>Matrícula</th>
+                                        <th>Curso</th>
+                                        <th>Cidade</th>
+                                        <th>Contato</th>
+                                        <th>Observações</th>
+                                        <th>Venc. boleto</th>
+                                        <th>Contrato</th>
+                                        <th class="action-execute acoes-col">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-corpo"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="msg-inicial" class="card"><div class="tabela-msg" style="padding:3rem 1rem;text-align:center;color:var(--text-secondary);">Selecione o semestre acima para ver os contratos.</div></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Aluno (novo/editar) -->
+    <div id="modal-aluno" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="modal-aluno-titulo">Novo aluno</h2>
+            <p class="modal-subtitle" id="modal-aluno-sub"></p>
+            <div class="ct-ultima-alt" id="modal-ultima-alt"></div>
+            <form id="form-aluno">
+                <div class="form-group">
+                    <label for="f-nome">Nome *</label>
+                    <input type="text" id="f-nome" required maxlength="150" style="text-transform:uppercase">
+                </div>
+                <div class="form-grid-3">
+                    <div class="form-group">
+                        <label for="f-matricula">Data da matrícula</label>
+                        <input type="date" id="f-matricula">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-curso">Curso</label>
+                        <input type="text" id="f-curso" list="lista-cursos" maxlength="80" style="text-transform:uppercase">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-cidade">Cidade</label>
+                        <input type="text" id="f-cidade" list="lista-cidades" maxlength="80" style="text-transform:uppercase">
+                    </div>
+                </div>
+                <div class="form-grid-3">
+                    <div class="form-group">
+                        <label for="f-contato">Contato (telefone)</label>
+                        <input type="text" id="f-contato" maxlength="60" placeholder="(43)99999-9999">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-boleto">Vencimento do boleto</label>
+                        <input type="date" id="f-boleto">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-status">Situação</label>
+                        <select id="f-status">
+                            <option value="sem_assinatura">Sem assinatura</option>
+                            <option value="assinado">Assinado</option>
+                            <option value="desistente">Desistente</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-grid-2" id="grupo-assinado">
+                    <div class="form-group">
+                        <label for="f-assinado-por">Contrato assinado — registrado por</label>
+                        <input type="text" id="f-assinado-por" maxlength="60">
+                    </div>
+                    <div class="form-group">
+                        <label for="f-assinado-em">Data da assinatura</label>
+                        <input type="date" id="f-assinado-em">
+                    </div>
+                </div>
+                <label class="form-check"><input type="checkbox" id="f-menor"> Menor de 18 anos (contrato assinado pelo responsável)</label>
+                <div class="form-group">
+                    <label for="f-obs">Observações / histórico de contatos</label>
+                    <textarea id="f-obs" rows="5" maxlength="4000" placeholder="Ex.: 1º contato 17/09 - e-mail"></textarea>
+                </div>
+                <div class="modal-actions-split">
+                    <button type="button" class="btn-perigo hidden" id="btn-excluir">Excluir registro</button>
+                    <div style="display:flex;gap:0.75rem;margin-left:auto;">
+                        <button type="button" class="btn-secondary" id="btn-cancelar-aluno">Cancelar</button>
+                        <button type="submit" class="btn-primary" id="btn-salvar-aluno">Salvar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Histórico do aluno (observações + registrar contato) -->
+    <div id="modal-contato" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Histórico do aluno</h2>
+            <p class="modal-subtitle" id="modal-contato-aluno"></p>
+            <div class="hist-info" id="hist-info"></div>
+            <div class="hist-lista" id="hist-lista"></div>
+            <form id="form-contato" class="action-execute">
+                <div class="form-group">
+                    <label for="c-texto">Registrar novo contato</label>
+                    <textarea id="c-texto" rows="3" maxlength="500" required placeholder="Ex.: liguei, vem assinar dia 02/10 de manhã"></textarea>
+                </div>
+                <p class="modal-subtitle">Entra no topo do histórico com a data de hoje e o seu nome.</p>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-contato">Fechar</button>
+                    <button type="submit" class="btn-primary">Registrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <datalist id="lista-cursos"></datalist>
+    <datalist id="lista-cidades"></datalist>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/comercial/contratos/app.js?v=5"></script>
+</body>
+</html>
