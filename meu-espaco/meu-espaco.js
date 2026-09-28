@@ -273,15 +273,23 @@ function renderAvisos(avisos) {
     // gerencia (souGestor cobre chefe_setor, chefeDeSetor e ADM).
     const souAutor = a.autorUid === currentUser.uid;
     const podeExcluir = souAutor || souGestor;
-    const leitores = Array.isArray(a.lidoPor) ? a.lidoPor.filter(u => u !== a.autorUid) : [];
+    const leitores = Array.isArray(a.leitores) ? a.leitores : [];
     const qtdLeu = leitores.length;
     const data = new Date(a.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    // Autor vê contador de leituras; outros veem botão "✓ Li"
+    // Autor vê quem leu (clica no contador pra abrir a lista). Quem não é o
+    // autor marca "✓ Li" — o aviso continua na tela até a própria pessoa
+    // escolher "Tirar da tela".
     const acaoBtn = souAutor
       ? (qtdLeu > 0
-          ? `<span class="aviso-lido-contador" title="Pessoas que marcaram como lido">👁 ${qtdLeu} ${qtdLeu === 1 ? 'leu' : 'leram'}</span>`
+          ? `<button type="button" class="aviso-lido-contador aviso-lido-toggle" title="Ver quem leu">👁 ${qtdLeu} ${qtdLeu === 1 ? 'leu' : 'leram'}</button>`
           : `<span class="aviso-lido-contador aviso-lido-zero" title="Ninguém marcou como lido ainda">👁 0 leram</span>`)
-      : `<button type="button" class="aviso-card-lido" data-id="${a.id}" title="Marcar como lido">✓ Li</button>`;
+      : (a.jaLi
+          ? `<span class="aviso-card-lido aviso-card-lido-ok">✓ Lido</span>`
+          : `<button type="button" class="aviso-card-lido" data-id="${a.id}" title="Marcar como lido">✓ Li</button>`)
+        + `<button type="button" class="aviso-card-ocultar" data-id="${a.id}" title="Tirar este aviso da minha tela">Tirar da tela</button>`;
+    const listaLeitores = souAutor && qtdLeu > 0
+      ? `<ul class="aviso-leitores hidden">${leitores.map(l => `<li><span>${esc(l.nome)}</span>${l.em ? `<small>${new Date(l.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</li>`).join('')}</ul>`
+      : '';
     return `
       <div class="aviso-card" data-cor="${esc(a.cor)}" style="--tilt:${tilt}deg;">
         <div class="aviso-card-texto">${esc(a.texto)}</div>
@@ -292,18 +300,33 @@ function renderAvisos(avisos) {
             ${podeExcluir ? `<button type="button" class="aviso-card-excluir" data-id="${a.id}" title="Remover aviso">🗑</button>` : ''}
           </div>
         </div>
+        ${listaLeitores}
       </div>
     `;
   }).join('');
 
   mural.querySelectorAll('.aviso-card-excluir').forEach(btn => btn.addEventListener('click', () => excluirAviso(btn.dataset.id)));
-  mural.querySelectorAll('.aviso-card-lido').forEach(btn => btn.addEventListener('click', () => marcarAvisoLido(btn.dataset.id, btn)));
+  mural.querySelectorAll('button.aviso-card-lido').forEach(btn => btn.addEventListener('click', () => marcarAvisoLido(btn.dataset.id, btn)));
+  mural.querySelectorAll('.aviso-card-ocultar').forEach(btn => btn.addEventListener('click', () => ocultarAviso(btn.dataset.id, btn)));
+  mural.querySelectorAll('.aviso-lido-toggle').forEach(btn => btn.addEventListener('click', () => {
+    btn.closest('.aviso-card').querySelector('.aviso-leitores')?.classList.toggle('hidden');
+  }));
 }
 
 async function marcarAvisoLido(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '✓ Lido'; }
   try {
     await apiFetch(`/processos/avisos/${id}/lido`, { method: 'PATCH' });
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Li'; }
+    console.error('Erro ao marcar aviso como lido:', err.message);
+  }
+}
+
+async function ocultarAviso(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await apiFetch(`/processos/avisos/${id}/ocultar`, { method: 'PATCH' });
     const card = btn ? btn.closest('.aviso-card') : null;
     if (card) {
       card.style.transition = 'opacity 0.35s, transform 0.35s';
@@ -314,8 +337,8 @@ async function marcarAvisoLido(id, btn) {
       await carregarAvisos();
     }
   } catch (err) {
-    if (btn) { btn.disabled = false; btn.textContent = '✓ Li'; }
-    console.error('Erro ao marcar aviso como lido:', err.message);
+    if (btn) btn.disabled = false;
+    console.error('Erro ao tirar aviso da tela:', err.message);
   }
 }
 
