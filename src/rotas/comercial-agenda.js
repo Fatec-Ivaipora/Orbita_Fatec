@@ -12,7 +12,7 @@ const { db } = require('../firebase');
 const SETOR_COMERCIAL = 'comercial';
 
 // Horário padrão quando o agendamento só tem turno (ou nada).
-const HORA_POR_TURNO = { 'MANHÃ': '08:00', 'MANHÃ E TARDE': '08:00', 'DIA TODO': '08:00', 'TARDE': '13:30', 'TARDE E NOITE': '13:30', 'NOITE': '19:00' };
+const HORA_POR_TURNO = { 'MANHÃ': '08:00', 'MANHÃ E TARDE': '08:00', 'MANHÃ, TARDE E NOITE': '08:00', 'DIA TODO': '08:00', 'TARDE': '13:30', 'TARDE E NOITE': '13:30', 'NOITE': '19:00' };
 
 // Equipe do Comercial (quem pode ser marcado como responsável). Poucos docs.
 async function equipeComercial() {
