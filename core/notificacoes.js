@@ -91,8 +91,9 @@ function avisarAvisosNovos(avisos) {
   const dispensados = new Set(ler(sessionStorage, K_AVISOS_SESSAO, []));
   const pendentes = avisos.filter(a => !a.jaLi && a.autorUid !== meuUid && !dispensados.has(a.id));
   pendentes.slice(0, MAX_AVISOS_SEPARADOS).forEach(a => mostrar({
-    titulo: `📢 Aviso de ${nomeCurto(a.autorNome)}`,
-    texto: (a.texto || '').slice(0, 200),
+    titulo: '📢 Aviso do setor',
+    texto: (a.texto || '').slice(0, 400),
+    meta: `De: ${nomeProprio(a.autorNome)}${a.createdAt ? ' · ' + new Date(a.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às') : ''}`,
     acao: 'Ver no mural',
     link: '/meu-espaco/index.html#avisos-section',
     tag: `aviso|${a.id}`,
@@ -104,6 +105,12 @@ function avisarAvisosNovos(avisos) {
   if (resto > 0) {
     mostrar({ titulo: `📢 Mais ${resto} aviso(s) não lido(s)`, texto: 'Veja todos no Quadro de Avisos do Meu Espaço.', acao: 'Abrir mural', link: '/meu-espaco/index.html#avisos-section', tag: 'avisos-resto', classe: 'notif-aviso' });
   }
+}
+
+function nomeProprio(nome) {
+  const minusculas = ['da', 'de', 'do', 'das', 'dos', 'e'];
+  return (nome || 'Alguém').toLowerCase().split(/\s+/).filter(Boolean)
+    .map((p, i) => (i > 0 && minusculas.includes(p)) ? p : p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 }
 
 function nomeCurto(nome) {
@@ -179,23 +186,24 @@ function conferirLembretes() {
       if (agora < adiado.ate) return; // ainda não é hora de lembrar de novo
       chave = `${a.id}|${a.prazo}|adiado${adiado.ate}`;
       const diff = Math.round((prazo - agora) / 60000);
-      titulo = diff > 0 ? `⏰ Lembrete: em ${diff} min (${hora})` : `⏰ Lembrete: era às ${hora}`;
+      titulo = diff > 0 ? `⏰ Lembrete · começa em ${diff} min · ${hora}` : `⏰ Lembrete · era às ${hora}`;
       classe = 'notif-urgente';
     } else {
       if (agora >= prazo) return;
       const min = MINUTOS_ANTES.slice().sort((x, y) => x - y).find(m => agora >= prazo - m * 60000);
       if (!min) return; // ainda falta mais de 30 min
       chave = `${a.id}|${a.prazo}|${min}`;
-      titulo = `⏰ Em ${Math.max(1, Math.round((prazo - agora) / 60000))} min (${hora})`;
+      titulo = `⏰ Começa em ${Math.max(1, Math.round((prazo - agora) / 60000))} min · ${hora}`;
       classe = min <= 10 ? 'notif-urgente' : 'notif-lembrete';
     }
     ativos.add(chave);
     if (fechados[chave]) return;
-    const existente = container().querySelector(`[data-tag="${CSS.escape(chave)}"]`);
+    const existente = listaNotif().querySelector(`[data-tag="${CSS.escape(chave)}"]`);
     if (existente) { existente.querySelector('.orbita-notif-titulo').textContent = titulo; return; }
     mostrar({
       titulo,
       texto: a.titulo,
+      meta: detalhesAtividade(a),
       acao: 'Abrir agenda',
       link: '/meu-espaco/index.html',
       tag: chave,
@@ -205,20 +213,58 @@ function conferirLembretes() {
     });
   });
   // Tira da tela lembrete que venceu ou foi trocado pelo de 10 min.
-  container().querySelectorAll('.orbita-notif[data-tag*="|"]').forEach(el => {
+  listaNotif().querySelectorAll('.orbita-notif[data-tag*="|"]').forEach(el => {
     if (!el.dataset.tag.startsWith('aviso|') && !ativos.has(el.dataset.tag)) el.remove();
   });
 }
 
-// ---------- Exibição (no Órbita + notificação do sistema) ----------
+// Linha de detalhe do lembrete: dia + as 2 primeiras linhas da descrição
+// (local, contato... — os módulos do Comercial já gravam isso lá).
+function detalhesAtividade(a) {
+  const d = new Date(a.prazo);
+  const hoje = new Date();
+  const amanha = new Date(); amanha.setDate(hoje.getDate() + 1);
+  const dia = d.toDateString() === hoje.toDateString() ? 'Hoje' : d.toDateString() === amanha.toDateString() ? 'Amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const desc = (a.descricao || '').split('\n').map(l => l.trim()).filter(l => l && !/^Agendado em|^Semestre /.test(l)).slice(0, 2);
+  return [`${dia} às ${hora}`, ...desc].join('\n');
+}
+
+// ---------- Exibição (janela no centro da tela + notificação do sistema) ----------
 function container() {
   let c = document.getElementById('orbita-notificacoes');
   if (!c) {
     c = document.createElement('div');
     c.id = 'orbita-notificacoes';
+    c.className = 'oculto';
+    c.innerHTML = `
+      <div class="orbita-notif-janela" role="dialog" aria-modal="true" aria-label="Notificações do Órbita">
+        <div class="orbita-notif-cabecalho"><h2>🔔 Notificações</h2><span class="orbita-notif-contador">0</span></div>
+        <div class="orbita-notif-lista"></div>
+        <div class="orbita-notif-permissao oculto"></div>
+        <div class="orbita-notif-pe"><small>Esc ou "Fechar" dispensa por agora.</small><button type="button" class="orbita-notif-fechar-tudo">Fechar</button></div>
+      </div>`;
     document.body.appendChild(c);
+    const fecharTudo = () => {
+      c.querySelectorAll('.orbita-notif').forEach(el => { if (el._aoFechar) el._aoFechar(); el.remove(); });
+      c.querySelector('.orbita-notif-permissao').classList.add('oculto');
+      c.classList.add('oculto');
+    };
+    c.querySelector('.orbita-notif-fechar-tudo').onclick = fecharTudo;
+    c.addEventListener('click', (e) => { if (e.target === c) fecharTudo(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !c.classList.contains('oculto')) fecharTudo(); });
+    // Mostra/esconde a janela e atualiza o contador conforme entram/saem itens.
+    new MutationObserver(() => {
+      const n = c.querySelectorAll('.orbita-notif').length;
+      c.querySelector('.orbita-notif-contador').textContent = n;
+      c.classList.toggle('oculto', n === 0);
+    }).observe(c.querySelector('.orbita-notif-lista'), { childList: true });
   }
   return c;
+}
+
+function listaNotif() {
+  return container().querySelector('.orbita-notif-lista');
 }
 
 // ---------- Ações do lembrete: "✓ Feita" e "Adiar" (sem abrir o Meu Espaço) ----------
@@ -334,16 +380,18 @@ export function recarregarNotificacoes() {
   if (pegarToken) atualizar(pegarToken);
 }
 
-function mostrar({ titulo, texto, acao, link, tag, classe, avisoId, aoFechar, atividade }) {
-  const c = container();
-  if (c.querySelector(`[data-tag="${CSS.escape(tag)}"]`)) return;
+function mostrar({ titulo, texto, meta, acao, link, tag, classe, avisoId, aoFechar, atividade }) {
+  const lista = listaNotif();
+  if (lista.querySelector(`[data-tag="${CSS.escape(tag)}"]`)) return;
   const el = document.createElement('div');
   el.className = `orbita-notif ${classe || ''}`;
   el.dataset.tag = tag;
+  el._aoFechar = aoFechar;
   el.innerHTML = `
-    <button type="button" class="orbita-notif-fechar" title="Fechar">×</button>
+    <button type="button" class="orbita-notif-fechar" title="Dispensar">×</button>
     <div class="orbita-notif-titulo">${esc(titulo)}</div>
     <div class="orbita-notif-texto">${esc(texto)}</div>
+    ${meta ? `<div class="orbita-notif-meta">${esc(meta)}</div>` : ''}
     <div class="orbita-notif-rodape">
       ${avisoId ? '<button type="button" class="orbita-notif-li" title="Marcar como lido (igual ao mural)">✓ Li</button>' : ''}
       ${atividade ? '<button type="button" class="orbita-notif-li orbita-notif-feita" title="Marcar a atividade como concluída">✓ Feita</button><button type="button" class="orbita-notif-btn-adiar" title="Adiar">⏰ Adiar</button>' : ''}
@@ -355,9 +403,10 @@ function mostrar({ titulo, texto, acao, link, tag, classe, avisoId, aoFechar, at
     el.querySelector('.orbita-notif-feita').onclick = () => marcarFeita(atividade, el);
     el.querySelector('.orbita-notif-btn-adiar').onclick = () => abrirAdiar(atividade, el);
   }
-  c.prepend(el);
-  // no máximo 5 na tela
-  [...c.querySelectorAll('.orbita-notif:not(.notif-permissao)')].slice(5).forEach(x => x.remove());
+  // Lembrete (mais urgente) no topo; aviso depois.
+  if (atividade) lista.prepend(el); else lista.appendChild(el);
+  // no máximo 6 na janela
+  [...lista.querySelectorAll('.orbita-notif')].slice(6).forEach(x => x.remove());
 
   // Notificação do sistema (Windows/celular): uma vez por item, e só quando
   // a pessoa não está olhando a aba do Órbita.
@@ -367,38 +416,36 @@ function mostrar({ titulo, texto, acao, link, tag, classe, avisoId, aoFechar, at
     Object.keys(enviadas).forEach(k => { if (enviadas[k] < Date.now()) delete enviadas[k]; });
     gravar(localStorage, K_SISTEMA, enviadas);
     try {
-      const n = new Notification(titulo, { body: texto, icon: '/img/favicon.png', tag });
+      const n = new Notification(`${titulo} — ${texto}`.slice(0, 120), { body: meta || texto, icon: '/img/favicon.png', tag });
       n.onclick = () => { window.focus(); if (link) location.href = link; n.close(); };
     } catch (e) {}
   }
 }
 
 // Pede permissão com um convite no Órbita (o navegador bloqueia pedido
-// "do nada"); "Agora não" fica lembrado.
+// "do nada"); "Agora não" fica lembrado. Fica no rodapé da janela.
 function oferecerPermissao() {
   if (!('Notification' in window) || Notification.permission !== 'default') return;
   if (localStorage.getItem(K_PERM_DISPENSADA) === '1') return;
   const c = container();
-  if (c.querySelector('[data-tag="permissao"]')) return;
-  const el = document.createElement('div');
-  el.className = 'orbita-notif notif-permissao';
-  el.dataset.tag = 'permissao';
-  el.innerHTML = `
-    <div class="orbita-notif-titulo">🔔 Quer ser avisado das suas atividades?</div>
-    <div class="orbita-notif-texto">O Órbita avisa 30 e 10 minutos antes, mesmo com a aba minimizada.</div>
+  const box = c.querySelector('.orbita-notif-permissao');
+  if (!box || box.dataset.pronto) return;
+  box.dataset.pronto = '1';
+  box.innerHTML = `
+    <div><strong>🔔 Receber também no Windows/celular?</strong><br><span>O Órbita avisa 30 e 10 minutos antes das atividades, mesmo com a aba minimizada.</span></div>
     <div class="orbita-notif-botoes">
       <button type="button" class="orbita-notif-sim">Ativar</button>
       <button type="button" class="orbita-notif-nao">Agora não</button>
     </div>`;
-  el.querySelector('.orbita-notif-sim').onclick = async () => {
-    el.remove();
+  box.classList.remove('oculto');
+  box.querySelector('.orbita-notif-sim').onclick = async () => {
+    box.classList.add('oculto');
     try { await Notification.requestPermission(); } catch (e) {}
   };
-  el.querySelector('.orbita-notif-nao').onclick = () => {
+  box.querySelector('.orbita-notif-nao').onclick = () => {
     localStorage.setItem(K_PERM_DISPENSADA, '1');
-    el.remove();
+    box.classList.add('oculto');
   };
-  c.appendChild(el);
 }
 
 function injetarEstilo() {
@@ -406,39 +453,57 @@ function injetarEstilo() {
   const s = document.createElement('style');
   s.id = 'orbita-notif-estilo';
   s.textContent = `
-    #orbita-notificacoes { position: fixed; top: 1rem; right: 1rem; z-index: 11000; display: flex; flex-direction: column; gap: 0.6rem; width: min(360px, calc(100vw - 2rem)); pointer-events: none; }
-    .orbita-notif { pointer-events: auto; position: relative; background: #fff; border-radius: 14px; padding: 0.9rem 2.2rem 0.9rem 1rem; box-shadow: 0 12px 32px rgba(15, 30, 60, 0.22); border-left: 5px solid #0F4EB8; font-family: inherit; animation: orbitaNotifEntra 0.25s ease-out; }
+    #orbita-notificacoes { position: fixed; inset: 0; z-index: 11000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(3, 20, 38, 0.55); backdrop-filter: blur(3px); animation: orbitaNotifFundo 0.2s ease-out; }
+    #orbita-notificacoes.oculto { display: none; }
+    .orbita-notif-janela { width: min(580px, 100%); max-height: 88vh; display: flex; flex-direction: column; background: #f4f7fb; border-radius: 22px; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35); overflow: hidden; animation: orbitaNotifEntra 0.25s ease-out; font-family: inherit; }
+    .orbita-notif-cabecalho { display: flex; align-items: center; gap: 0.75rem; padding: 1.1rem 1.4rem; color: #fff; background: linear-gradient(120deg, #0A3A8C, #0F4EB8 60%, #2f7bea); }
+    .orbita-notif-cabecalho h2 { margin: 0; font-size: 1.2rem; font-weight: 800; }
+    .orbita-notif-cabecalho span { margin-left: auto; background: rgba(255, 255, 255, 0.2); border-radius: 20px; padding: 0.15rem 0.7rem; font-weight: 800; font-size: 0.85rem; }
+    .orbita-notif-lista { padding: 1rem 1.1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem; }
+    .orbita-notif { position: relative; background: #fff; border-radius: 16px; padding: 1.1rem 2.6rem 1rem 1.2rem; box-shadow: 0 2px 8px rgba(15, 30, 60, 0.08); border-left: 6px solid #0F4EB8; }
     .orbita-notif.notif-aviso { border-left-color: #EB7025; }
     .orbita-notif.notif-lembrete { border-left-color: #0F4EB8; }
-    .orbita-notif.notif-urgente { border-left-color: #EF4444; background: #fff7f7; }
-    .orbita-notif.notif-permissao { border-left-color: #10B981; }
-    .orbita-notif-titulo { font-weight: 800; color: #0b1f33; font-size: 0.92rem; margin-bottom: 0.25rem; }
-    .orbita-notif-texto { color: #475569; font-size: 0.84rem; white-space: pre-line; line-height: 1.4; }
-    .orbita-notif-rodape { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+    .orbita-notif.notif-urgente { border-left-color: #EF4444; background: #fff8f8; }
+    .orbita-notif-titulo { display: inline-block; font-weight: 800; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.25rem 0.65rem; border-radius: 20px; margin-bottom: 0.55rem; background: #e8f0fe; color: #0F4EB8; }
+    .notif-aviso .orbita-notif-titulo { background: #fff1e6; color: #c2410c; }
+    .notif-urgente .orbita-notif-titulo { background: #fee2e2; color: #b91c1c; }
+    .orbita-notif-texto { color: #0b1f33; font-size: 1.08rem; font-weight: 700; line-height: 1.4; white-space: pre-line; }
+    .notif-aviso .orbita-notif-texto { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+    .orbita-notif-meta { margin-top: 0.4rem; color: #475569; font-size: 0.88rem; line-height: 1.45; white-space: pre-line; }
+    .orbita-notif-rodape { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.85rem; }
     .orbita-notif-rodape:empty { display: none; }
-    .orbita-notif-li { border: 1px solid #10B981; background: #ecfdf5; color: #047857; border-radius: 20px; padding: 0.25rem 0.75rem; font-weight: 800; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
-    .orbita-notif-li:hover { background: #10B981; color: #fff; }
+    .orbita-notif-li { border: 1px solid #10B981; background: #10B981; color: #fff; border-radius: 10px; padding: 0.5rem 1rem; font-weight: 800; font-size: 0.9rem; cursor: pointer; font-family: inherit; }
+    .orbita-notif-li:hover { background: #059669; border-color: #059669; }
     .orbita-notif-li:disabled { opacity: 0.7; cursor: default; }
-    .orbita-notif-acao { display: inline-block; font-size: 0.8rem; font-weight: 800; color: #0F4EB8; text-decoration: none; }
-    .orbita-notif-rodape { flex-wrap: wrap; }
-    .orbita-notif-btn-adiar { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 20px; padding: 0.25rem 0.75rem; font-weight: 800; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+    .orbita-notif-btn-adiar { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 10px; padding: 0.5rem 1rem; font-weight: 800; font-size: 0.9rem; cursor: pointer; font-family: inherit; }
     .orbita-notif-btn-adiar:hover { border-color: #0F4EB8; color: #0F4EB8; }
-    .orbita-notif-adiar { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px dashed #e2e8f0; }
-    .orbita-notif-adiar-titulo { font-size: 0.75rem; font-weight: 800; color: #475569; margin-bottom: 0.4rem; }
-    .orbita-notif-adiar-opcoes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-    .orbita-notif-adiar-opcoes button, .orbita-notif-adiar-ok { border: 1px solid #bfdbfe; background: #eff6ff; color: #0F4EB8; border-radius: 8px; padding: 0.3rem 0.6rem; font-weight: 800; font-size: 0.76rem; cursor: pointer; font-family: inherit; }
-    .orbita-notif-adiar-opcoes button:hover, .orbita-notif-adiar-ok:hover { background: #0F4EB8; color: #fff; }
-    .orbita-notif-adiar-livre { display: flex; gap: 0.35rem; margin-top: 0.45rem; }
-    .orbita-notif-adiar-livre input { flex: 1; min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.25rem 0.4rem; font-family: inherit; font-size: 0.78rem; }
-    .orbita-notif-adiar-obs { font-size: 0.72rem; color: #64748b; margin-top: 0.45rem; }
-    .orbita-notif-msg { margin-top: 0.45rem; font-size: 0.75rem; font-weight: 700; color: #047857; }
-    .orbita-notif-msg.erro { color: #b91c1c; }
+    .orbita-notif-acao { font-size: 0.9rem; font-weight: 800; color: #0F4EB8; text-decoration: none; margin-left: auto; }
     .orbita-notif-acao:hover { text-decoration: underline; }
-    .orbita-notif-fechar { position: absolute; top: 0.4rem; right: 0.55rem; border: none; background: none; font-size: 1.2rem; color: #94a3b8; cursor: pointer; line-height: 1; }
-    .orbita-notif-botoes { display: flex; gap: 0.5rem; margin-top: 0.65rem; }
-    .orbita-notif-botoes button { border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; padding: 0.4rem 0.8rem; font-weight: 700; font-size: 0.8rem; cursor: pointer; font-family: inherit; }
-    .orbita-notif-sim { background: #10B981 !important; border-color: #10B981 !important; color: #fff; }
-    @keyframes orbitaNotifEntra { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+    .orbita-notif-fechar { position: absolute; top: 0.55rem; right: 0.7rem; border: none; background: none; font-size: 1.5rem; color: #94a3b8; cursor: pointer; line-height: 1; }
+    .orbita-notif-fechar:hover { color: #475569; }
+    .orbita-notif-adiar { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #e2e8f0; }
+    .orbita-notif-adiar-titulo { font-size: 0.85rem; font-weight: 800; color: #334155; margin-bottom: 0.5rem; }
+    .orbita-notif-adiar-opcoes { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .orbita-notif-adiar-opcoes button, .orbita-notif-adiar-ok { border: 1px solid #bfdbfe; background: #eff6ff; color: #0F4EB8; border-radius: 10px; padding: 0.45rem 0.85rem; font-weight: 800; font-size: 0.88rem; cursor: pointer; font-family: inherit; }
+    .orbita-notif-adiar-opcoes button:hover, .orbita-notif-adiar-ok:hover { background: #0F4EB8; color: #fff; }
+    .orbita-notif-adiar-livre { display: flex; gap: 0.45rem; margin-top: 0.55rem; }
+    .orbita-notif-adiar-livre input { flex: 1; min-width: 0; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.45rem 0.6rem; font-family: inherit; font-size: 0.9rem; }
+    .orbita-notif-adiar-obs { font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; }
+    .orbita-notif-msg { margin-top: 0.5rem; font-size: 0.85rem; font-weight: 700; color: #047857; }
+    .orbita-notif-msg.erro { color: #b91c1c; }
+    .orbita-notif-permissao { margin: 0 1.1rem; padding: 0.85rem 1rem; border-radius: 14px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 0.88rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .orbita-notif-permissao.oculto { display: none; }
+    .orbita-notif-permissao > div:first-child { flex: 1; min-width: 220px; }
+    .orbita-notif-botoes { display: flex; gap: 0.5rem; }
+    .orbita-notif-botoes button { border: 1px solid #a7f3d0; background: #fff; border-radius: 10px; padding: 0.45rem 0.9rem; font-weight: 800; font-size: 0.85rem; cursor: pointer; font-family: inherit; color: #065f46; }
+    .orbita-notif-sim { background: #10B981 !important; border-color: #10B981 !important; color: #fff !important; }
+    .orbita-notif-pe { display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; padding: 0.85rem 1.1rem 1.1rem; }
+    .orbita-notif-pe small { color: #64748b; margin-right: auto; }
+    .orbita-notif-fechar-tudo { border: none; background: #0F4EB8; color: #fff; border-radius: 12px; padding: 0.6rem 1.4rem; font-weight: 800; font-size: 0.95rem; cursor: pointer; font-family: inherit; }
+    .orbita-notif-fechar-tudo:hover { background: #0A3A8C; }
+    @keyframes orbitaNotifEntra { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+    @keyframes orbitaNotifFundo { from { opacity: 0; } to { opacity: 1; } }
+    @media (max-width: 520px) { .orbita-notif-acao { margin-left: 0; } }
     @media print { #orbita-notificacoes { display: none !important; } }
   `;
   document.head.appendChild(s);
