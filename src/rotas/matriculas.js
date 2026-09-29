@@ -62,6 +62,17 @@ function normalizarDesistente(situacao, periodo) {
     if (!ehDesistente(situacao)) return situacao;
     return (periodo || '').trim() === '1º' ? DESISTENTE_CALOURO : DESISTENTE_VETERANO;
 }
+// Período sempre no padrão "1º", "2º"... (ou "DP"). O campo era texto livre e
+// entraram 129 alunos como "1" em vez de "1º" — o filtro de período (que
+// busca "1º") não achava ninguém dos calouros de 2027.1 (29/09). Aceita
+// "1", "1°", "1o", "1 º", "1ª" e devolve "1º"; "dp" vira "DP".
+function normalizarPeriodo(periodo) {
+    const p = (periodo || '').toString().trim();
+    if (/^dp$/i.test(p)) return 'DP';
+    const m = p.match(/^(\d{1,2})\s*(º|°|o|ª)?$/i);
+    return m ? `${parseInt(m[1], 10)}º` : p;
+}
+
 // Conta um aluno nos contadores de desistente (vale pro valor novo e pro
 // "Desistente" antigo, que ainda é separado pelo período).
 function tipoDesistente(situacao, periodo) {
@@ -261,11 +272,11 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             modulo,
             cursoId: modulo === 'fatec' ? cursoId : null,
             curso: modulo === 'fatec' ? curso : 'Medicina',
-            periodo: (periodo || '').trim(),
+            periodo: normalizarPeriodo(periodo),
             nome: nome.trim(),
             cidade: (cidade || '').trim(),
             telefone: (telefone || '').trim(),
-            situacao: normalizarDesistente(situacao, periodo),
+            situacao: normalizarDesistente(situacao, normalizarPeriodo(periodo)),
             planoConfissao: planoConfissao || 'Não',
             observacoes: (observacoes || '').trim(),
             semestre,
@@ -309,7 +320,7 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
             }
             dados.planoConfissao = planoConfissao || 'Não';
         }
-        if (periodo !== undefined) dados.periodo = (periodo || '').trim();
+        if (periodo !== undefined) dados.periodo = normalizarPeriodo(periodo);
         if (cidade !== undefined) dados.cidade = (cidade || '').trim();
         if (telefone !== undefined) dados.telefone = (telefone || '').trim();
         if (observacoes !== undefined) dados.observacoes = (observacoes || '').trim();
@@ -686,7 +697,7 @@ router.get('/config/semestres', verifyToken, checkPermission, async (req, res) =
 // tocados — continuam intactos como histórico/relatório do semestre que fechou.
 // ==========================================
 function avancarPeriodo(periodoOriginal) {
-    const m = (periodoOriginal || '').trim().match(/^(\d+)º$/);
+    const m = normalizarPeriodo(periodoOriginal).match(/^(\d+)º$/);
     if (!m) return periodoOriginal || ''; // "DP", vazio ou fora do padrão — não mexe, fica pra revisão manual
     return `${parseInt(m[1], 10) + 1}º`;
 }
@@ -724,7 +735,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
             const periodoSugerido = avancarPeriodo(origem.periodo);
             if (periodoSugerido === origem.periodo && origem.periodo && override.periodo === undefined) avisosPeriodo.push(origem.nome);
 
-            const periodoNovo = (override.periodo !== undefined && override.periodo !== null) ? override.periodo.toString().trim() : periodoSugerido;
+            const periodoNovo = normalizarPeriodo((override.periodo !== undefined && override.periodo !== null) ? override.periodo : periodoSugerido);
             const situacaoNovaBruta = override.situacao;
             const situacaoNova = SITUACOES.includes(situacaoNovaBruta) ? normalizarDesistente(situacaoNovaBruta, periodoNovo) : 'Não Assinou';
 

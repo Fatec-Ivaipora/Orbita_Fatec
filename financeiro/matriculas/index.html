@@ -6,7 +6,8 @@
     <title>Relatório Matrículas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=105">
+    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=108">
+    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
 </head>
 <body class="pagina-relatorio">
     <!-- Auth Guard Padrão -->
@@ -20,7 +21,8 @@
             <div class="layout-content" id="matriculas-root">
                 <div class="page-header no-print">
                     <div>
-                        <h1 class="page-title">Relatório Matrículas</h1>
+                        <span class="cm-selo">Financeiro</span>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg></span>Relatório Matrículas</h1>
                         <p class="page-subtitle">Cadastro de situação de matrícula/rematrícula por curso e semestre</p>
                     </div>
                     <div class="page-header-actions">
@@ -144,7 +146,14 @@
                     </div>
                     <div class="form-group">
                         <label>Período</label>
-                        <input type="text" id="aluno-periodo" placeholder="1º, 2º...">
+                        <!-- Lista fechada: texto livre deixava gravar "1" em vez de "1º" e o filtro de período não achava o aluno -->
+                        <select id="aluno-periodo">
+                            <option value="">Selecione...</option>
+                            <option>1º</option><option>2º</option><option>3º</option><option>4º</option>
+                            <option>5º</option><option>6º</option><option>7º</option><option>8º</option>
+                            <option>9º</option><option>10º</option><option>11º</option><option>12º</option>
+                            <option>DP</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
@@ -193,6 +202,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/matriculas/app.js?v=105"></script>
+    <script type="module" src="/financeiro/matriculas/app.js?v=107"></script>
 </body>
 </html>
