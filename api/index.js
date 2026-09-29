@@ -79,6 +79,7 @@ const rotasContratos = require('../src/rotas/contratos');
 const rotasAulaExperimental = require('../src/rotas/aula-experimental');
 const rotasAuloes = require('../src/rotas/auloes');
 const rotasPalestras = require('../src/rotas/palestras');
+const rotasAgendaEspacos = require('../src/rotas/agenda-espacos');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
@@ -107,6 +108,7 @@ app.use('/api/contratos', rotasContratos);
 app.use('/api/aula-experimental', rotasAulaExperimental);
 app.use('/api/auloes', rotasAuloes);
 app.use('/api/palestras', rotasPalestras);
+app.use('/api/agenda-espacos', rotasAgendaEspacos);
 
 // Exportação obrigatória para o Vercel Serverless
 
