@@ -179,8 +179,10 @@ async function popularSelectSemestres(selectEl) {
   const valorAtual = selectEl.value;
   try {
     const { semestres } = await apiFetch('/matriculas/config/semestres');
-    selectEl.innerHTML = semestres.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    selectEl.value = semestres.includes(valorAtual) ? valorAtual : semestres[semestres.length - 1];
+    // Mais novo primeiro (pedido 29/09) — e continua vindo selecionado por padrão.
+    const ordenados = [...semestres].sort((a, b) => b.localeCompare(a));
+    selectEl.innerHTML = ordenados.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    selectEl.value = ordenados.includes(valorAtual) ? valorAtual : ordenados[0];
   } catch (err) {
     showToast('Erro ao carregar semestres: ' + err.message, 'error');
   }
@@ -848,7 +850,14 @@ function abrirModalAluno(aluno) {
   document.getElementById('modal-aluno-title').textContent = aluno ? 'Editar Aluno' : 'Novo Aluno';
   document.getElementById('aluno-id').value = aluno?.id || '';
   document.getElementById('aluno-nome').value = aluno?.nome || '';
-  document.getElementById('aluno-periodo').value = aluno?.periodo || '';
+  // Período é lista fechada; valor antigo fora da lista (ex.: cadastro velho)
+  // entra como opção extra pra não sumir ao abrir a edição.
+  const selPeriodo = document.getElementById('aluno-periodo');
+  const periodoAtual = aluno?.periodo || '';
+  if (periodoAtual && ![...selPeriodo.options].some(o => o.value === periodoAtual)) {
+    selPeriodo.insertAdjacentHTML('beforeend', `<option value="${esc(periodoAtual)}">${esc(periodoAtual)}</option>`);
+  }
+  selPeriodo.value = periodoAtual;
   document.getElementById('aluno-cidade').value = aluno?.cidade || '';
   document.getElementById('aluno-telefone').value = aluno?.telefone || '';
   document.getElementById('aluno-situacao').value = aluno?.situacao || opcoes.situacoes[0] || '';

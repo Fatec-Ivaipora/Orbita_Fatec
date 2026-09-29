@@ -560,3 +560,34 @@ body.pagina-relatorio .layout-content {
   font-weight: 700;
   border-top: 1px dashed var(--border-color, #CBD5E1);
 }
+
+/* Seletor de semestre maior e em destaque (pedido 29/09) — é o filtro mais
+   importante da tela e o número ficava pequeno demais. */
+#semestre-select, #rel-semestre-select, #indica-semestre-select, #vs-origem-select {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0F4EB8;
+  background-color: #e8f0fe;
+  border: 2px solid #0F4EB8;
+  border-radius: 10px;
+  padding: 0.55rem 2.2rem 0.55rem 1rem;
+  min-width: 140px;
+  letter-spacing: 0.02em;
+}
+#semestre-select option, #rel-semestre-select option, #indica-semestre-select option, #vs-origem-select option {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0b1f33;
+  background: #fff;
+}
+
+/* Tema visual (comercial-tema.css) nas telas de Matrículas: os cartões de
+   número daqui são muitos e pequenos — o ícone do tema ficava por cima do
+   número. Tira o ícone, volta o espaçamento e mantém a impressão própria
+   (3 cartões por linha). "body" na frente pra vencer o tema carregado depois. */
+body .kpi-card { padding: 1.25rem 1.5rem; min-height: 0; }
+body .kpi-card::before { display: none; }
+@media print {
+  body .kpi-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  body .kpi-card { padding: 0.75rem 1rem !important; }
+}
