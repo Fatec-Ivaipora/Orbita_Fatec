@@ -4,6 +4,13 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { firebaseConfig } from "../core/firebase-config.js";
 import { CATEGORIES } from "../core/permissions.js";
+import { avisoResolvidoNoMural, recarregarNotificacoes } from "../core/notificacoes.js";
+
+// "✓ Feita"/"Adiar" direto no lembrete (core/notificacoes.js) — atualiza o
+// quadro se o Meu Espaço estiver aberto.
+window.addEventListener('orbita:atividades-alteradas', async () => {
+  try { await recarregarQuadroAtual(); renderBoard(boardAtual); } catch (e) {}
+});
 
 import { secureAction, escapeHTML as esc } from "../core/security.js";
 
@@ -317,6 +324,7 @@ async function marcarAvisoLido(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '✓ Lido'; }
   try {
     await apiFetch(`/processos/avisos/${id}/lido`, { method: 'PATCH' });
+    avisoResolvidoNoMural(id); // tira a notificação desse aviso (core/notificacoes.js)
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = '✓ Li'; }
     console.error('Erro ao marcar aviso como lido:', err.message);
@@ -327,6 +335,7 @@ async function ocultarAviso(id, btn) {
   if (btn) btn.disabled = true;
   try {
     await apiFetch(`/processos/avisos/${id}/ocultar`, { method: 'PATCH' });
+    avisoResolvidoNoMural(id);
     const card = btn ? btn.closest('.aviso-card') : null;
     if (card) {
       card.style.transition = 'opacity 0.35s, transform 0.35s';
@@ -1092,6 +1101,7 @@ async function adicionarAndamento(id, texto) {
 async function moverAtividade(id, novoStatus) {
   try {
     await apiFetch(`/processos/atividades/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: novoStatus }) });
+    recarregarNotificacoes();
     await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
@@ -1103,6 +1113,7 @@ async function excluirAtividade(id, titulo) {
   if (!confirm(`Excluir a atividade "${titulo}"?`)) return;
   try {
     await apiFetch(`/processos/atividades/${id}`, { method: 'DELETE' });
+    recarregarNotificacoes();
     await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
@@ -1130,6 +1141,7 @@ async function reagendarAtividade(id, novoDia) {
 
   try {
     await apiFetch(`/processos/atividades/${id}`, { method: 'PUT', body: JSON.stringify({ prazo: novaData.toISOString() }) });
+    recarregarNotificacoes();
     await recarregarQuadroAtual();
     renderBoard(boardAtual);
   } catch (err) {
@@ -1345,6 +1357,7 @@ async function salvarAtividade(e) {
       }
     });
     fecharModal('modal-atividade');
+    recarregarNotificacoes();
     if (boardAtual !== '__self__') {
       // Editando/arrastando/movendo enquanto o quadro aberto é de um
       // colaborador — só recarrega os dados do setor, sem trocar de quadro.
