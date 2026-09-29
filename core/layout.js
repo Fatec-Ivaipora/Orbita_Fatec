@@ -1,4 +1,5 @@
 import { MODULES, CATEGORIES, getRoleConfig, hasPermission, getAccessLevel } from './permissions.js';
+import { iniciarNotificacoes } from './notificacoes.js';
 
 export function setupLayout(user, role, activeModuleId, onLogout) {
   // Carregar permissões EFETIVAS (cargo + overrides do usuário) do cache local
@@ -311,6 +312,10 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   
   const app = document.getElementById('app');
   if (app) app.classList.remove('hidden');
+
+  // Avisos novos + lembrete 30/10 min antes das atividades, em qualquer tela
+  // do Órbita (core/notificacoes.js). Nunca pode derrubar a página.
+  try { iniciarNotificacoes(role); } catch (e) { console.warn('Notificações indisponíveis:', e); }
 }
 
 // ==========================================
