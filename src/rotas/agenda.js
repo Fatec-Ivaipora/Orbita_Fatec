@@ -5,8 +5,35 @@ const verifyToken = require('../middlewares/auth');
 
 const checkPermission = verifyToken.requireModulePermission('agenda');
 
-// GET /api/agenda - Publico: retorna todos os eventos aprovados e pendentes (para visualização no calendário)
+// GET /api/agenda - Publico: só o necessário pro calendário público mostrar
+// horário ocupado/livre (sem dado pessoal de quem solicitou — nome, contato
+// e curso ficam de fora daqui; quem precisa disso é a tela interna da T.I.,
+// que já está autenticada e usa /api/agenda/completo).
 router.get('/', async (req, res) => {
+    try {
+        const snap = await db.collection('agenda').get();
+        const eventos = [];
+        snap.forEach(doc => {
+            const d = doc.data();
+            eventos.push({
+                id: doc.id,
+                localId: d.localId,
+                data: d.data,
+                horaInicio: d.horaInicio,
+                horaFim: d.horaFim,
+                nomeEvento: d.nomeEvento,
+                status: d.status
+            });
+        });
+        res.json(eventos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/agenda/completo - Privado (T.I.): mesma coleção, com os dados de
+// quem solicitou (nome, contato, curso) — usado pela tela de aprovação.
+router.get('/completo', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection('agenda').get();
         const eventos = [];

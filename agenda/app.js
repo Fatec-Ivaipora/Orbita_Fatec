@@ -80,7 +80,7 @@ async function carregarLocais() {
 
 async function carregarEventos() {
     try {
-        eventos = await apiFetch('/agenda');
+        eventos = await apiFetch('/agenda/completo');
         renderCalendar();
         renderPendentes();
         renderOcupacaoMap();

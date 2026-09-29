@@ -12,6 +12,20 @@ const CACHE_TTL = 60 * 1000; // 1 minuto de TTL
 const userRoleCache = new Map(); // uid -> { role, permissoes, lastFetched }
 const USER_CACHE_TTL = 60 * 1000; // 1 minuto de TTL
 
+// Rotas que continuam acessíveis mesmo com primeiroAcesso pendente — só o
+// necessário para a pessoa ver quem é ela (GET /me) e trocar a própria senha
+// (PUT /me/senha, que já é quem zera a flag). Tudo mais fica bloqueado até a
+// troca ser feita, para não depender só do modal do frontend.
+const ROTAS_LIBERADAS_PRIMEIRO_ACESSO = [
+    { method: 'GET', path: '/api/usuarios/me' },
+    { method: 'PUT', path: '/api/usuarios/me/senha' }
+];
+
+const rotaLiberadaPrimeiroAcesso = (req) => {
+    const caminho = req.originalUrl.split('?')[0];
+    return ROTAS_LIBERADAS_PRIMEIRO_ACESSO.some(r => r.method === req.method && r.path === caminho);
+};
+
 // Nível de acesso normalizado com retrocompatibilidade:
 // inteiro (1/2/3) ou formato legado { view, execute }
 const getAccessLevel = (perm) => {
@@ -54,6 +68,7 @@ const verifyToken = async (req, res, next) => {
             req.user.permissoes = cached.permissoes;
             req.user.setorId = cached.setorId;
             req.user.chefeDeSetor = cached.chefeDeSetor;
+            req.user.primeiroAcesso = cached.primeiroAcesso;
         } else {
             const { db } = require('../firebase');
             const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -71,14 +86,28 @@ const verifyToken = async (req, res, next) => {
             // acesso a Matrículas e ainda vira chefe do setor Secretaria).
             req.user.setorId = userData.setorId || null;
             req.user.chefeDeSetor = userData.chefeDeSetor === true;
+            req.user.primeiroAcesso = userData.primeiroAcesso === true;
             userRoleCache.set(req.user.uid, {
                 role: req.user.role,
                 permissoes: req.user.permissoes,
                 setorId: req.user.setorId,
                 chefeDeSetor: req.user.chefeDeSetor,
+                primeiroAcesso: req.user.primeiroAcesso,
                 lastFetched: now
             });
         }
+
+        // Troca de senha obrigatória no primeiro acesso: antes só o frontend
+        // checava isso (modal), então chamar a API direto com o token válido
+        // ignorava a exigência por completo. Agora o backend também barra,
+        // liberando só o suficiente pra pessoa ver quem é e trocar a senha.
+        if (req.user.primeiroAcesso === true && !rotaLiberadaPrimeiroAcesso(req)) {
+            return res.status(403).json({
+                error: 'Troca de senha obrigatória no primeiro acesso.',
+                primeiroAcesso: true
+            });
+        }
+
         next();
     } catch (error) {
         console.error('Erro ao buscar cargo do usuário no Firestore:', error);
