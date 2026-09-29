@@ -368,15 +368,36 @@ function fechar(id) { document.getElementById(id).classList.add('hidden'); }
 
 // Cursos/professores (Edubox) e pessoas do setor só são buscados na primeira
 // vez que o formulário abre.
-async function carregarApoio() {
-  if (!apoio) {
-    try { apoio = await apiFetch('/aula-experimental/apoio'); } catch (e) { apoio = { cursos: [], professores: [], eduboxOk: false }; }
-    document.getElementById('f-curso').innerHTML = '<option value="">Selecione...</option>' +
-      apoio.cursos.map(c => `<option value="${esc(c.name)}" data-id="${c.id}">${esc(c.name)}</option>`).join('');
+// Nada disso pode segurar a abertura do formulário (em produção o Edubox
+// não responde e a rota de professores leva segundos): o modal abre na hora
+// e cada lista preenche quando chega. Cursos e equipe são rápidos; a lista
+// de professores (Edubox) é só sugestão — sem ela, digita-se o nome.
+let cursosPromise = null, equipePromise = null, apoioPromise = null;
+
+function carregarApoio(onCursos, onEquipe, onProfessores) {
+  cursosPromise = cursosPromise || apiFetch('/aula-experimental/cursos').catch(() => { cursosPromise = null; return []; });
+  equipePromise = equipePromise || apiFetch('/aula-experimental/equipe').then(e => (equipe = e)).catch(() => { equipePromise = null; return (equipe = []); });
+  apoioPromise = apoioPromise || apiFetch('/aula-experimental/apoio')
+    .then(a => (apoio = a))
+    .catch(() => (apoio = { cursos: [], professores: [], eduboxOk: false }));
+  cursosPromise.then(onCursos);
+  equipePromise.then(onEquipe);
+  apoioPromise.then(onProfessores);
+}
+
+function preencherCursos(cursos, selecionado) {
+  const sel = document.getElementById('f-curso');
+  if (!cursos.length) {
+    sel.innerHTML = '<option value="">Não carregou — feche e abra de novo</option>';
+    return;
   }
-  if (!equipe) {
-    try { equipe = await apiFetch('/aula-experimental/equipe'); } catch (e) { equipe = []; }
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    cursos.map(c => `<option value="${esc(c.name)}" data-id="${c.id}">${esc(c.name)}</option>`).join('');
+  if (selecionado && ![...sel.options].some(o => o.value === selecionado)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(selecionado)}">${esc(selecionado)}</option>`);
   }
+  sel.value = selecionado || '';
+  atualizarListaProfessores();
 }
 
 // Botões com a equipe do Comercial — quem for marcado ganha a atividade na
@@ -392,13 +413,19 @@ function uidsSelecionados() {
   return [...document.querySelectorAll('#f-equipe input:checked')].map(i => i.value);
 }
 
+// Se a pessoa já mexeu nos botões antes da equipe terminar de carregar,
+// respeita o que está marcado; senão usa o padrão.
+function uidsSelecionadosOu(padrao) {
+  return document.querySelector('#f-equipe input') ? uidsSelecionados() : padrao;
+}
+
 function atualizarListaProfessores() {
   const opt = document.getElementById('f-curso').selectedOptions[0];
   const cursoId = opt ? opt.dataset.id : '';
   const dica = document.getElementById('dica-professor');
   if (!apoio || !apoio.eduboxOk) {
     document.getElementById('lista-professores').innerHTML = '';
-    dica.textContent = apoio && !apoio.eduboxOk ? 'Lista do Edubox indisponível agora — digite o nome.' : '';
+    dica.textContent = !apoio ? 'Buscando professores no Edubox... (pode digitar o nome)' : 'Lista do Edubox indisponível agora — digite o nome.';
     return;
   }
   const doCurso = cursoId ? apoio.professores.filter(p => (p.cursoIds || []).includes(cursoId)) : [];
@@ -409,8 +436,7 @@ function atualizarListaProfessores() {
     : '';
 }
 
-async function abrirModalAula(id) {
-  await carregarApoio();
+function abrirModalAula(id) {
   emEdicaoId = id;
   const a = id ? aulas.find(x => x.id === id) : null;
   document.getElementById('modal-aula-titulo').textContent = a ? 'Editar aula experimental' : 'Agendar aula experimental';
@@ -418,16 +444,24 @@ async function abrirModalAula(id) {
     ? `Agendado por ${a.createdBy} · última alteração: ${a.updatedBy} em ${new Date(a.updatedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
     : '';
   const cursoSel = document.getElementById('f-curso');
-  if (a && a.curso && ![...cursoSel.options].some(o => o.value === a.curso)) {
-    cursoSel.insertAdjacentHTML('beforeend', `<option value="${esc(a.curso)}">${esc(a.curso)}</option>`);
-  }
+  const cursoAtual = a?.curso || '';
+  if (cursoSel.options.length <= 1) cursoSel.innerHTML = '<option value="">Carregando cursos...</option>';
+  else { preencherCursos([...cursoSel.options].filter(o => o.dataset.id).map(o => ({ id: o.dataset.id, name: o.value })), cursoAtual); }
   document.getElementById('f-aluno').value = a?.alunoNome || '';
   document.getElementById('f-contato').value = a?.alunoContato || '';
-  cursoSel.value = a?.curso || '';
   document.getElementById('f-data').value = a?.data || '';
   document.getElementById('f-horario').value = a?.horario || '';
   document.getElementById('f-professor').value = a?.professor || '';
-  renderEquipe(a ? (a.responsaveis || []).map(r => r.uid) : [currentUser.uid]);
+  const equipeMarcada = a ? (a.responsaveis || []).map(r => r.uid) : [currentUser.uid];
+  if (equipe) renderEquipe(equipeMarcada);
+  else document.getElementById('f-equipe').innerHTML = '<span class="ct-sub">Carregando equipe...</span>';
+  // Listas chegam depois, sem travar a abertura (só aplica se o modal ainda
+  // for do mesmo agendamento).
+  carregarApoio(
+    (cursos) => { if (emEdicaoId === id) preencherCursos(cursos, document.getElementById('f-curso').value || cursoAtual); },
+    () => { if (emEdicaoId === id) renderEquipe(uidsSelecionadosOu(equipeMarcada)); },
+    () => { if (emEdicaoId === id) atualizarListaProfessores(); }
+  );
   document.getElementById('f-sala').value = a?.sala || '';
   document.getElementById('f-status').value = a?.status || 'agendada';
   document.getElementById('grupo-status').classList.toggle('hidden', !a);
