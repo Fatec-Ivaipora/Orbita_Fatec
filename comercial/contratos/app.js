@@ -24,6 +24,9 @@ let initializedRole = null;
 
 let registros = [];
 let semestreAtual = '';
+let semestres = []; // lista cadastrada (config/comercial_contratos), mais novo primeiro
+let equipe = null;  // [{uid, nome}] do Comercial, pra "quem vai coletar"
+let equipePromise = null;
 let abaAtual = 'sem_assinatura';
 let emEdicaoId = null;
 let contatoId = null;
@@ -164,15 +167,44 @@ async function initApp(user, role) {
   wireEventos();
 }
 
-// Semestres de um ano atrás até o ano que vem (a matrícula do 1º semestre
-// começa no 2º semestre do ano anterior — ex.: planilha "2027.1" em ago/2026).
-function montarSemestres() {
+// Semestres = lista cadastrada pelo próprio setor (começa em 2027.1; os
+// anteriores não aparecem). "+ Novo semestre" acrescenta. Busca só a lista
+// (1 doc) — os alunos continuam só depois de escolher o semestre.
+async function montarSemestres(selecionar = '') {
   const sel = document.getElementById('sel-semestre');
-  const ano = new Date().getFullYear();
-  const opcoes = [];
-  for (let a = ano + 1; a >= ano - 1; a--) opcoes.push(`${a}.2`, `${a}.1`);
+  try {
+    // Roda já no initApp — no caminho rápido (login em cache) o usuário do
+    // Firebase ainda não está pronto pra dar token; espera ele confirmar.
+    await auth.authStateReady();
+    if (auth.currentUser) currentUser = auth.currentUser;
+    semestres = await apiFetch('/contratos/semestres');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Erro ao carregar semestres</option>';
+    return;
+  }
   sel.innerHTML = '<option value="">Selecione o semestre...</option>' +
-    opcoes.map(s => `<option value="${s}">${s}</option>`).join('');
+    semestres.map(s => `<option value="${s}">${s}</option>`).join('');
+  if (selecionar) {
+    sel.value = selecionar;
+    sel.dispatchEvent(new Event('change'));
+  }
+}
+
+function sugerirProximoSemestre() {
+  const ultimo = semestres[0] || `${new Date().getFullYear()}.1`;
+  const [a, s] = ultimo.split('.').map(Number);
+  return s === 1 ? `${a}.2` : `${a + 1}.1`;
+}
+
+async function criarSemestre(e) {
+  e.preventDefault();
+  const semestre = document.getElementById('n-semestre').value.trim();
+  try {
+    await apiFetch('/contratos/semestres', { method: 'POST', body: JSON.stringify({ semestre }) });
+    fecharModal('modal-semestre');
+    await montarSemestres(semestre);
+    showToast(`Semestre ${semestre} criado.`);
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 function wireEventos() {
@@ -187,6 +219,14 @@ function wireEventos() {
       document.getElementById('msg-inicial').classList.remove('hidden');
     }
   });
+
+  document.getElementById('btn-novo-semestre').addEventListener('click', () => {
+    document.getElementById('n-semestre').value = sugerirProximoSemestre();
+    abrirModal('modal-semestre');
+    document.getElementById('n-semestre').focus();
+  });
+  document.getElementById('btn-cancelar-semestre').addEventListener('click', () => fecharModal('modal-semestre'));
+  document.getElementById('form-semestre').addEventListener('submit', criarSemestre);
 
   document.querySelectorAll('.aba').forEach(btn => btn.addEventListener('click', () => {
     abaAtual = btn.dataset.status;
@@ -330,6 +370,8 @@ function renderTudo() {
   const total = sem + ass + des;
   document.getElementById('kpi-total').textContent = total;
   document.getElementById('kpi-sem').textContent = sem;
+  const comColeta = base.filter(r => r.status === 'sem_assinatura' && r.coletaData && r.coletaResponsavel).length;
+  document.getElementById('kpi-sem-coleta').textContent = comColeta ? `${comColeta} com coleta agendada` : '';
   document.getElementById('kpi-ass').textContent = ass;
   document.getElementById('kpi-des').textContent = des;
   const ativos = sem + ass;
@@ -366,9 +408,12 @@ function renderTabela(base) {
     const linhasObs = obs.split('\n');
     const obsCurta = linhasObs.slice(0, 2).join('\n');
     const temMais = linhasObs.length > 2;
+    const coletaTag = r.status === 'sem_assinatura' && r.coletaData && r.coletaResponsavel
+      ? `<span class="ct-coleta-tag ${r.coletaData < hojeLocal() ? 'atrasada' : ''}" title="Coleta de assinatura agendada — está na agenda do Comercial">✍️ ${fmtData(r.coletaData).slice(0, 5)}${r.coletaHora ? ' ' + r.coletaHora : ''} · ${esc(primeiroNome(r.coletaResponsavel.nome))}</span>`
+      : '';
     const contrato = r.status === 'assinado'
       ? `<span class="ct-assinado">✓ ${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · ') || 'Assinado')}</span>`
-      : (r.assinadoPor || r.assinadoEm ? `<span class="ct-sub">${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · '))}</span>` : '<span class="ct-vazio">—</span>');
+      : (r.assinadoPor || r.assinadoEm ? `<span class="ct-sub">${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · '))}</span>` : (coletaTag ? '' : '<span class="ct-vazio">—</span>')) + (coletaTag ? `<div>${coletaTag}</div>` : '');
     let acoes = `<button class="btn-acao" data-acao="contato" data-id="${r.id}" title="Ver histórico e registrar contato">🕘 Histórico</button>`;
     if (r.status === 'sem_assinatura') {
       acoes += `<button class="btn-acao ok" data-acao="assinado" data-id="${r.id}">✓ Assinou</button>`;
@@ -415,6 +460,26 @@ async function mudarStatus(id, status) {
   } catch (err) { showToast(err.message, 'error'); }
 }
 
+function carregarEquipe() {
+  equipePromise = equipePromise || apiFetch('/contratos/equipe')
+    .then(e => (equipe = e))
+    .catch(() => { equipePromise = null; return (equipe = []); });
+  return equipePromise;
+}
+
+function primeiroNome(nome) {
+  const p = (nome || '').trim().split(/\s+/)[0] || '';
+  return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+}
+
+// Uma pessoa só coleta (radio). "Ninguém ainda" = sem coleta agendada.
+function renderColetaEquipe(selecionado) {
+  const box = document.getElementById('f-coleta-equipe');
+  if (!equipe || !equipe.length) { box.innerHTML = '<span class="ct-sub">Não foi possível carregar a equipe do Comercial.</span>'; return; }
+  const chip = (valor, rotulo) => `<label class="equipe-chip"><input type="radio" name="coleta-resp" value="${valor}" ${selecionado === valor ? 'checked' : ''}>${esc(rotulo)}</label>`;
+  box.innerHTML = chip('', 'Ninguém ainda') + equipe.map(p => chip(p.uid, p.nome.split(/\s+/).map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' '))).join('');
+}
+
 function abrirModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function fecharModal(id) { document.getElementById(id).classList.add('hidden'); }
 
@@ -441,7 +506,22 @@ function abrirModalAluno(id) {
   document.getElementById('f-assinado-em').value = r?.assinadoEm || '';
   document.getElementById('f-menor').checked = !!r?.menor18;
   document.getElementById('f-obs').value = r?.observacoes || '';
+  // Coleta de assinatura — equipe carrega sem travar a abertura.
+  document.getElementById('f-coleta-data').value = r?.coletaData || '';
+  document.getElementById('f-coleta-hora').value = r?.coletaHora || '';
+  document.getElementById('f-coleta-local').value = r?.coletaLocal || '';
+  const coletor = r?.coletaResponsavel?.uid || '';
+  if (equipe) renderColetaEquipe(coletor);
+  else {
+    document.getElementById('f-coleta-equipe').innerHTML = '<span class="ct-sub">Carregando equipe...</span>';
+    carregarEquipe().then(() => { if (emEdicaoId === id) renderColetaEquipe(coletor); });
+  }
   document.getElementById('btn-excluir').classList.toggle('hidden', !r);
+  // Mudar de semestre só faz sentido pra aluno já cadastrado.
+  const selSem = document.getElementById('f-semestre');
+  selSem.innerHTML = semestres.map(s => `<option value="${s}">${s}</option>`).join('');
+  selSem.value = r?.semestre || semestreAtual;
+  document.getElementById('grupo-semestre').classList.toggle('hidden', !r || semestres.length < 2);
   atualizarGrupoAssinado();
   abrirModal('modal-aluno');
   document.getElementById('f-nome').focus();
@@ -452,7 +532,7 @@ async function salvarAluno(e) {
   const btn = document.getElementById('btn-salvar-aluno');
   const status = document.getElementById('f-status').value;
   const body = {
-    semestre: semestreAtual,
+    semestre: emEdicaoId ? (document.getElementById('f-semestre').value || semestreAtual) : semestreAtual,
     nome: document.getElementById('f-nome').value,
     dataMatricula: document.getElementById('f-matricula').value,
     curso: document.getElementById('f-curso').value,
@@ -463,6 +543,10 @@ async function salvarAluno(e) {
     assinadoPor: document.getElementById('f-assinado-por').value,
     assinadoEm: document.getElementById('f-assinado-em').value,
     observacoes: document.getElementById('f-obs').value,
+    coletaResponsavelUid: document.querySelector('#f-coleta-equipe input:checked')?.value || '',
+    coletaData: document.getElementById('f-coleta-data').value,
+    coletaHora: document.getElementById('f-coleta-hora').value,
+    coletaLocal: document.getElementById('f-coleta-local').value,
     status
   };
   btn.disabled = true;
@@ -477,9 +561,17 @@ async function salvarAluno(e) {
     } else {
       salvo = await apiFetch('/contratos', { method: 'POST', body: JSON.stringify(body) });
     }
-    substituir(salvo);
     fecharModal('modal-aluno');
-    showToast(emEdicaoId ? 'Alterações salvas.' : 'Aluno cadastrado.');
+    if (salvo.semestre && salvo.semestre !== semestreAtual) {
+      // Foi pra outro semestre: sai da lista deste.
+      registros = registros.filter(x => x.id !== salvo.id);
+      montarFiltros();
+      renderTudo();
+      showToast(`${salvo.nome} passou para o semestre ${salvo.semestre}.`);
+    } else {
+      substituir(salvo);
+      showToast(emEdicaoId ? 'Alterações salvas.' : 'Aluno cadastrado.');
+    }
   } catch (err) {
     showToast(err.message, 'error');
   } finally {

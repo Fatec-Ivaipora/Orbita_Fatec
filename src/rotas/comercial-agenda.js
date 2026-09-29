@@ -33,6 +33,12 @@ async function validarResponsaveis(uids) {
         .map(s => ({ uid: s.id, nome: s.data().name || s.data().email || '' }));
 }
 
+// "RAFAELA TROPP" -> "Rafaela" (título da atividade fica curto).
+function primeiroNomeProprio(nome) {
+    const p = (nome || '').trim().split(/\s+/)[0] || '';
+    return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+}
+
 // 'AAAA-MM-DD' + 'HH:MM' no horário de Brasília -> ISO (mesmo formato do
 // `prazo` que o Meu Espaço grava).
 function prazoIso(data, hora) {
@@ -61,11 +67,20 @@ async function sincronizarAtividade(p) {
 
     const agora = new Date().toISOString();
     const uids = p.responsaveis.map(r => r.uid);
+    // Regra do Comercial (29/09): compromisso que nasce dos módulos (palestra,
+    // aulão, aula experimental, coleta de assinatura) aparece na agenda de
+    // TODO o setor — `doSetor` + `setorId`, o mesmo mecanismo que o Meu Espaço
+    // já usa pra "atividade do setor". Quem é o responsável continua em
+    // uid/atribuidos e vai no título. O que cada um cria direto no Meu Espaço
+    // segue pessoal (não passa por aqui).
     const quem = uids.length === 1
-        ? { uid: uids[0], atribuidos: null, setorId: SETOR_COMERCIAL }
-        : { uid: null, atribuidos: uids, setorId: null };
+        ? { uid: uids[0], atribuidos: null }
+        : { uid: null, atribuidos: uids };
+    const nomes = p.responsaveis.map(r => primeiroNomeProprio(r.nome)).join(', ');
     const dados = {
-        titulo: p.titulo,
+        titulo: `${p.titulo} · ${nomes}`,
+        doSetor: true,
+        setorId: SETOR_COMERCIAL,
         descricao: p.descricao,
         prazo: prazoIso(p.data, p.hora),
         status: p.concluido ? 'concluido' : 'a_fazer',
