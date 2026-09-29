@@ -1541,3 +1541,13 @@ button.aviso-lido-toggle:hover { color: rgba(0,0,0,0.75); }
 .board-progresso-item { display: flex; align-items: center; gap: 0.75rem; }
 .board-progresso-item .board-progresso-texto strong { color: var(--text-main); }
 .prog-setor .progress-ring { filter: hue-rotate(150deg); }
+
+/* Agenda do setor: bloco único com o que é do setor (lab bloqueado etc.) */
+.agenda-setor-bloco-setor {
+  background: rgba(14, 116, 144, 0.07);
+  border-left: 3px solid #0e7490;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
+.agenda-setor-bloco-setor strong { color: #0e7490; }
+.agenda-setor-item-fixo { color: #b91c1c; }

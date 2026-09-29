@@ -464,34 +464,61 @@ async function carregarPainelSetor() {
 
 // Visão geral do setor: todo mundo, dia a dia, na mesma semana do quadro
 // pessoal abaixo — pra ver de relance quem tem o quê marcado em cada dia.
+// O que é do SETOR (horário fixo tipo lab 12/20 bloqueado, "setor todo")
+// aparece UMA vez, num bloco "Setor" — antes vinha repetido embaixo de cada
+// funcionário (o backend manda esses itens dentro da lista de cada um) e a
+// agenda ficava enorme (29/09). Embaixo do nome de cada pessoa ficam só as
+// tarefas dela (inclusive compromisso do setor em que ela é a responsável).
+function ehItemDoSetorTodo(a) {
+  return !!a.fixo || (!!a.doSetor && !ehCompromissoDoSetor(a));
+}
+
 function renderAgendaSetor() {
   const el = document.getElementById('agenda-setor');
   const dias = diasDaSemana(semanaOffset);
   const fmtCurto = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const noDia = (a, chave) => a.prazo && a.status !== 'concluido' && chaveDia(new Date(a.prazo)) === chave;
+  const porHorario = (a, b) => new Date(a.prazo) - new Date(b.prazo);
+  const item = (a) => `<div class="agenda-setor-item ${a.fixo ? 'agenda-setor-item-fixo' : ''}">${formatarHorario(a.prazo)} — ${a.fixo ? '🔒 ' : ''}${esc(a.titulo)}</div>`;
 
   el.innerHTML = '';
   dias.forEach(dia => {
     const chave = chaveDia(dia);
     const hoje = chaveDia(new Date()) === chave;
 
+    // Itens do setor, sem repetir (vêm duplicados dentro de cada pessoa).
+    const doSetor = new Map();
+    Object.values(atividadesPorUid).flat()
+      .filter(a => ehItemDoSetorTodo(a) && noDia(a, chave))
+      .forEach(a => doSetor.set(a.id, a));
+    const itensSetor = [...doSetor.values()].sort(porHorario);
+
     const porPessoa = funcionariosDoSetor.map(f => {
       const itens = (atividadesPorUid[f.uid] || [])
-        .filter(a => a.prazo && a.status !== 'concluido' && chaveDia(new Date(a.prazo)) === chave)
-        .sort((a, b) => new Date(a.prazo) - new Date(b.prazo));
+        .filter(a => !ehItemDoSetorTodo(a) && (!a.doSetor || responsaveisDe(a).includes(f.uid)) && noDia(a, chave))
+        .sort(porHorario);
       return { nome: formatarNome(f.name || f.email), itens };
     }).filter(p => p.itens.length);
+
+    const blocoSetor = itensSetor.length ? `
+      <div class="agenda-setor-pessoa agenda-setor-bloco-setor">
+        <strong>🏢 Setor</strong>
+        ${itensSetor.map(item).join('')}
+      </div>` : '';
 
     const col = document.createElement('div');
     col.className = 'agenda-dia agenda-setor-dia';
     col.innerHTML = `
       <h3 class="agenda-dia-title ${hoje ? 'agenda-dia-hoje' : ''}">${DIA_LABEL[dia.getDay()]} <span>${fmtCurto(dia)}</span></h3>
       <div class="agenda-dia-body">
-        ${porPessoa.length ? porPessoa.map(p => `
+        ${blocoSetor}
+        ${porPessoa.map(p => `
           <div class="agenda-setor-pessoa">
             <strong>${esc(p.nome)}</strong>
-            ${p.itens.map(a => `<div class="agenda-setor-item">${formatarHorario(a.prazo)} — ${esc(a.titulo)}</div>`).join('')}
+            ${p.itens.map(item).join('')}
           </div>
-        `).join('') : '<div class="empty-state" style="padding:1rem;">Nada marcado</div>'}
+        `).join('')}
+        ${!blocoSetor && !porPessoa.length ? '<div class="empty-state" style="padding:1rem;">Nada marcado</div>' : ''}
       </div>
     `;
     el.appendChild(col);
