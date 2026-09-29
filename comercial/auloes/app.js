@@ -414,7 +414,9 @@ function uidsSelecionados() {
 }
 
 async function abrirModal(id) {
-  await carregarEquipe();
+  // Não espera a equipe pra abrir (no Vercel a 1ª chamada pode levar
+  // segundos) — os botões aparecem quando ela chegar.
+  const equipePronta = carregarEquipe();
   emEdicaoId = id;
   const i = id ? itens.find(x => x.id === id) : null;
   document.getElementById('modal-titulo').textContent = i ? 'Editar agendamento' : 'Agendar aulão';
@@ -429,7 +431,12 @@ async function abrirModal(id) {
   set('f-cidade', i?.cidade);
   set('f-tipo', i ? i.tipo : 'Aulão de redação');
   set('f-turma', i?.turma);
-  renderEquipe(i ? (i.responsaveis || []).map(r => r.uid) : [currentUser.uid]);
+  const marcados = i ? (i.responsaveis || []).map(r => r.uid) : [currentUser.uid];
+  if (equipe) renderEquipe(marcados);
+  else {
+    document.getElementById('f-equipe').innerHTML = '<span class="ct-sub">Carregando equipe...</span>';
+    equipePronta.then(() => { if (emEdicaoId === id) renderEquipe(marcados); });
+  }
   set('f-palestrante', i?.palestrante);
   set('f-contato-colegio', i?.contatoColegio);
   set('f-publico', i?.publicoEstimado);

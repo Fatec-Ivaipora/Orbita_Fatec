@@ -81,10 +81,22 @@ router.get('/equipe', verifyToken, checkPermission, async (req, res) => {
 // Lista de cursos (mesma da Confirmação de Presença) + professores ativos no
 // Edubox. O Edubox fora do ar não pode travar o cadastro — devolve só os
 // cursos e a tela deixa digitar o professor à mão.
+//
+// Em produção (Vercel) o Edubox, que fica na rede da Fatec, não responde —
+// sem limite a rota ficava ~16s pendurada esperando a conexão desistir, e a
+// tela parecia travada ao abrir "Agendar aula" (29/09). Por isso: cursos têm
+// rota própria e instantânea, e o Edubox tem no máximo 4s.
+const EDUBOX_TIMEOUT_MS = 4000;
+
+router.get('/cursos', verifyToken, checkPermission, (req, res) => {
+    res.json(confirmacaoEvento.CURSOS);
+});
+
 router.get('/apoio', verifyToken, checkPermission, async (req, res) => {
     const cursos = confirmacaoEvento.CURSOS;
     try {
-        const { professores } = await confirmacaoEvento.buscarProfessoresAtivosEdubox();
+        const limite = new Promise((_, rej) => setTimeout(() => rej(new Error(`sem resposta em ${EDUBOX_TIMEOUT_MS / 1000}s`)), EDUBOX_TIMEOUT_MS));
+        const { professores } = await Promise.race([confirmacaoEvento.buscarProfessoresAtivosEdubox(), limite]);
         res.json({ cursos, professores: professores.map(p => ({ nome: p.nome, cursoIds: p.cursoIds })), eduboxOk: true });
     } catch (err) {
         console.error('[aula-experimental] Edubox indisponível:', err.message);

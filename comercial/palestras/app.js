@@ -449,7 +449,9 @@ function atualizarSemData() {
 }
 
 async function abrirModal(id) {
-  await carregarEquipe();
+  // Não espera a equipe pra abrir (no Vercel a 1ª chamada pode levar
+  // segundos) — os botões aparecem quando ela chegar.
+  const equipePronta = carregarEquipe();
   emEdicaoId = id;
   const i = id ? itens.find(x => x.id === id) : null;
   document.getElementById('modal-titulo').textContent = i ? 'Editar palestra' : 'Agendar palestra';
@@ -473,8 +475,14 @@ async function abrirModal(id) {
   document.getElementById('f-pagar').checked = !!i?.pagarDeslocamento;
   const t = i ? i.transporte : 'comercial';
   document.querySelectorAll('input[name="transporte"]').forEach(r => { r.checked = r.value === t; });
-  renderEquipe(i ? (i.responsaveis || []).map(r => r.uid) : []);
-  renderEquipe(i ? (i.envolvidos || []).map(r => r.uid) : [], 'f-envolvidos');
+  const levam = i ? (i.responsaveis || []).map(r => r.uid) : [];
+  const envolvidos = i ? (i.envolvidos || []).map(r => r.uid) : [];
+  const desenharEquipe = () => { renderEquipe(levam); renderEquipe(envolvidos, 'f-envolvidos'); };
+  if (equipe) desenharEquipe();
+  else {
+    ['f-equipe', 'f-envolvidos'].forEach(b => { document.getElementById(b).innerHTML = '<span class="ct-sub">Carregando equipe...</span>'; });
+    equipePronta.then(() => { if (emEdicaoId === id) desenharEquipe(); });
+  }
   atualizarTransporte();
   atualizarSemData();
   document.getElementById('grupo-status').classList.toggle('hidden', !i);
