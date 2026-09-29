@@ -200,7 +200,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 3,
                 'aula-experimental': 3,
                 auloes: 3,
-                palestras: 3
+                palestras: 3,
+                'agenda-espacos': 3
             },
             ti: {
                 emprestimo: 3,
@@ -223,7 +224,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             rh: {
                 emprestimo: 1,
@@ -246,7 +248,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             financeiro: {
                 emprestimo: 1,
@@ -269,7 +272,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             // Coordenador perdeu acesso à Licitação (18/08) — passou a ser
             // tarefa exclusiva do Financeiro. Orçamento e Cobrança seguem a
@@ -305,7 +309,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -330,7 +335,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 3
             },
             // Coordenação da Medicina — só o Banco de Questões (nível 3, pode
             // criar/editar questões e provas); nenhum outro módulo.
@@ -355,7 +361,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             // Professor da Medicina — mesmo nível de acesso do coord_medicina.
             professor_medicina: {
@@ -379,7 +386,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             },
             // Setor Comercial — por enquanto só Meu Espaço, nenhum módulo.
             comercial: {
@@ -403,7 +411,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 3,
                 'aula-experimental': 3,
                 auloes: 3,
-                palestras: 3
+                palestras: 3,
+                'agenda-espacos': 2
             },
             visitante: {
                 emprestimo: 2,
@@ -426,7 +435,8 @@ const requireModulePermission = (moduleName) => {
                 contratos: 1,
                 'aula-experimental': 1,
                 auloes: 1,
-                palestras: 1
+                palestras: 1,
+                'agenda-espacos': 2
             }
         };
 

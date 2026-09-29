@@ -195,6 +195,15 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
     url: "/comercial/palestras/index.html"
   },
+  // Agenda de espaços (auditório e salas) — Secretaria e ADM editam, todo
+  // mundo consulta e pode pedir reserva.
+  "agenda-espacos": {
+    id: "agenda-espacos",
+    category: "secretaria",
+    title: "Agenda Interna Fatec IVP",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h3v3H8z"/></svg>`,
+    url: "/secretaria/agenda-espacos/index.html"
+  },
   "confirmacao-evento": {
     id: "confirmacao-evento",
     category: "docencia",
@@ -213,30 +222,30 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
   },
   ti: {
     label: "T.I.",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "acessos"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "acessos", "agenda-espacos"]
   },
   rh: {
     label: "RH",
-    modules: ["dashboard", "fidelidade", "carga-horaria", "funcionarios"]
+    modules: ["dashboard", "fidelidade", "carga-horaria", "funcionarios", "agenda-espacos"]
   },
   financeiro: {
     label: "Financeiro",
-    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento", "cobranca"]
+    modules: ["dashboard", "fidelidade", "licitacao", "matriculas", "orcamento", "cobranca", "agenda-espacos"]
   },
   // Coordenador perdeu acesso à Licitação (18/08) — passou a ser tarefa
   // exclusiva do Financeiro, pra não misturar semestre ativo entre uma
   // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento"]
+    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da
@@ -245,7 +254,7 @@ export const ROLE_PERMISSIONS = {
   // a ler a permissão real do Firestore.
   sec: {
     label: "Secretaria",
-    modules: ["dashboard", "fidelidade", "matriculas", "relatorio-dp"]
+    modules: ["dashboard", "fidelidade", "matriculas", "relatorio-dp", "agenda-espacos"]
   },
   // Coordenação da Medicina — só enxerga o Banco de Questões (MED FATEC),
   // nenhum outro módulo administrativo. Cargo dedicado (em vez de dar
@@ -257,25 +266,25 @@ export const ROLE_PERMISSIONS = {
   // pra eles, e o redirect direto pro banco-med-fatec em meu-espaco.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["banco-med-fatec", "relatorio-desempenho"]
+    modules: ["banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (só Banco de
   // Questões), cargo separado só pra aparecer com rótulo próprio na tela de
   // Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["banco-med-fatec", "relatorio-desempenho"]
+    modules: ["banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
   },
   // Setor Comercial — por enquanto só o Meu Espaço (Painel do Setor, Quadro
   // de Avisos, atividades). Módulo próprio do comercial ainda vai ser criado;
   // quando existir, entra aqui e no defaultPermissions de auth.js.
   comercial: {
     label: "Comercial",
-    modules: ["dashboard", "fidelidade", "contratos", "aula-experimental", "auloes", "palestras"]
+    modules: ["dashboard", "fidelidade", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
   },
   visitante: {
     label: "Visitante",
-    modules: ["dashboard", "fidelidade"]
+    modules: ["dashboard", "fidelidade", "agenda-espacos"]
   }
 };
 
