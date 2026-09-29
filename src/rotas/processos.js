@@ -57,8 +57,22 @@ function requireGestor(req, res, next) {
 // mundo do setor — qualquer um dele conta como atribuído.
 function souAtribuido(req, atividade) {
     if (atividade.uid === req.user.uid) return true;
-    if (atividade.doSetor && atividade.setorId && atividade.setorId === req.user.setorId) return true;
+    if (atividade.doSetor && !temResponsavel(atividade) && atividade.setorId && atividade.setorId === req.user.setorId) return true;
     return Array.isArray(atividade.atribuidos) && atividade.atribuidos.includes(req.user.uid);
+}
+
+// Atividade do setor COM responsável nomeado (ex.: palestra/aulão/coleta de
+// assinatura do Comercial): todo o setor VÊ, mas só o responsável (ou ADM)
+// mexe — pedido do Comercial (29/09). Atividade do setor sem responsável
+// (ex.: lab bloqueado, "setor todo") segue valendo pra todo mundo do setor.
+function temResponsavel(atividade) {
+    return !!atividade.uid || (Array.isArray(atividade.atribuidos) && atividade.atribuidos.length > 0);
+}
+function ehCompromissoDoSetor(atividade) {
+    return !!atividade.doSetor && !atividade.fixo && temResponsavel(atividade);
+}
+function souResponsavel(req, atividade) {
+    return atividade.uid === req.user.uid || (Array.isArray(atividade.atribuidos) && atividade.atribuidos.includes(req.user.uid));
 }
 
 // Dono/atribuído da atividade, quem criou, ou o gestor (chefe do mesmo setor
@@ -66,6 +80,9 @@ function souAtribuido(req, atividade) {
 // reagendar (drag-and-drop). Exclusão e adiar prazo têm regra própria, mais
 // restrita — ver podeExcluirAtividade() e a checagem de prazo no PUT.
 function podeGerenciarAtividade(req, atividade) {
+    if (ehCompromissoDoSetor(atividade)) {
+        return souResponsavel(req, atividade) || req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
+    }
     const souCriador = atividade.criadoPor === req.user.uid;
     const souGestorDoSetor = ehGestorSetor(req) &&
         (req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || atividade.setorId === req.user.setorId);
@@ -78,6 +95,9 @@ function podeGerenciarAtividade(req, atividade) {
 // criou a própria atividade (criadoPor === uid, iniciativa própria) ou é
 // gestor.
 function podeExcluirAtividade(req, atividade) {
+    // Compromisso do setor nasce de um módulo (Palestras, Aulões, Contratos...)
+    // e é apagado por lá — excluir pelo Meu Espaço só quebraria o vínculo.
+    if (ehCompromissoDoSetor(atividade)) return req.user.role === 'adm_l1' || req.user.role === 'adm_l2';
     const souCriador = atividade.criadoPor === req.user.uid;
     const souGestorDoSetor = ehGestorSetor(req) &&
         (req.user.role === 'adm_l1' || req.user.role === 'adm_l2' || atividade.setorId === req.user.setorId);
@@ -580,8 +600,10 @@ router.get('/setor/progresso', verifyToken, requireGestor, async (req, res) => {
             const atuaisSnap = await db.collection('atividades')
                 .where('uid', '==', f.uid)
                 .get();
-            // Horário fixo e atividade do setor não são tarefa individual — fora do progresso
-            const tarefas = atuaisSnap.docs.filter(d => !d.data().fixo && !d.data().doSetor);
+            // Horário fixo e atividade do setor "de todo mundo" não são tarefa
+            // individual — fora do progresso. Compromisso do setor em que a
+            // pessoa é a responsável (palestra, coleta...) conta pra ela.
+            const tarefas = atuaisSnap.docs.filter(d => !d.data().fixo && (!d.data().doSetor || ehCompromissoDoSetor(d.data())));
             const total = tarefas.length;
             const concluidas = tarefas.filter(d => d.data().status === 'concluido').length;
 

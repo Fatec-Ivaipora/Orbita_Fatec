@@ -6,7 +6,8 @@
     <title>Contratos - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=3">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
+    <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
 </head>
 <body>
@@ -48,8 +49,12 @@
                 <div class="semestre-bar">
                     <label for="sel-semestre">Semestre</label>
                     <select id="sel-semestre" class="select-filter">
-                        <option value="">Selecione o semestre...</option>
+                        <option value="">Carregando semestres...</option>
                     </select>
+                    <button type="button" class="btn-secondary action-execute" id="btn-novo-semestre" title="Cadastrar um semestre novo na lista">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Novo semestre
+                    </button>
                 </div>
 
                 <div id="conteudo" class="hidden">
@@ -57,7 +62,7 @@
 
                     <div class="kpi-grid">
                         <div class="kpi-card"><div class="kpi-label">Matriculados</div><div class="kpi-value" id="kpi-total">0</div></div>
-                        <div class="kpi-card kpi-sem"><div class="kpi-label">Sem assinatura</div><div class="kpi-value" id="kpi-sem">0</div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label">Sem assinatura</div><div class="kpi-value" id="kpi-sem">0</div><div class="kpi-hint" id="kpi-sem-coleta"></div></div>
                         <div class="kpi-card kpi-ass"><div class="kpi-label">Assinados</div><div class="kpi-value" id="kpi-ass">0</div><div class="kpi-hint" id="kpi-ass-pct"></div></div>
                         <div class="kpi-card kpi-des"><div class="kpi-label">Desistentes</div><div class="kpi-value" id="kpi-des">0</div></div>
                         <div class="kpi-card kpi-menor"><div class="kpi-label">Menores de 18 sem assinatura</div><div class="kpi-value" id="kpi-menor">0</div><div class="kpi-hint">Contrato precisa do responsável</div></div>
@@ -152,6 +157,10 @@
                         </select>
                     </div>
                 </div>
+                <div class="form-group hidden" id="grupo-semestre">
+                    <label for="f-semestre">Semestre (mudar o aluno de semestre)</label>
+                    <select id="f-semestre"></select>
+                </div>
                 <div class="form-grid-2" id="grupo-assinado">
                     <div class="form-group">
                         <label for="f-assinado-por">Contrato assinado — registrado por</label>
@@ -163,6 +172,24 @@
                     </div>
                 </div>
                 <label class="form-check"><input type="checkbox" id="f-menor"> Menor de 18 anos (contrato assinado pelo responsável)</label>
+                <div class="ct-coleta" id="grupo-coleta">
+                    <label class="ct-coleta-titulo">✍️ Coleta de assinatura <span class="ct-sub" style="font-weight:600;">— aparece na agenda de todo o Comercial no Meu Espaço</span></label>
+                    <div class="equipe-chips" id="f-coleta-equipe"><span class="ct-sub">Carregando equipe...</span></div>
+                    <div class="form-grid-3" style="margin-top:0.75rem;">
+                        <div class="form-group">
+                            <label for="f-coleta-data">Data</label>
+                            <input type="date" id="f-coleta-data">
+                        </div>
+                        <div class="form-group">
+                            <label for="f-coleta-hora">Hora</label>
+                            <input type="time" id="f-coleta-hora">
+                        </div>
+                        <div class="form-group">
+                            <label for="f-coleta-local">Local</label>
+                            <input type="text" id="f-coleta-local" maxlength="120" placeholder="Ex.: na Fatec, casa do aluno">
+                        </div>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label for="f-obs">Observações / histórico de contatos</label>
                     <textarea id="f-obs" rows="5" maxlength="4000" placeholder="Ex.: 1º contato 17/09 - e-mail"></textarea>
@@ -199,11 +226,29 @@
         </div>
     </div>
 
+    <!-- Modal: novo semestre -->
+    <div id="modal-semestre" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Novo semestre</h2>
+            <p class="modal-subtitle">O semestre entra na lista do seletor para o setor cadastrar os alunos dele.</p>
+            <form id="form-semestre">
+                <div class="form-group">
+                    <label for="n-semestre">Semestre (AAAA.1 ou AAAA.2)</label>
+                    <input type="text" id="n-semestre" required maxlength="6" pattern="\d{4}\.[12]" placeholder="Ex.: 2027.2">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancelar-semestre">Cancelar</button>
+                    <button type="submit" class="btn-primary">Criar semestre</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <datalist id="lista-cursos"></datalist>
     <datalist id="lista-cidades"></datalist>
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=5"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=7"></script>
 </body>
 </html>

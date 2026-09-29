@@ -512,7 +512,8 @@ function renderPainelSetor(progresso) {
 
   progresso.forEach((p, i) => {
     // Pega contagens por status do atividadesPorUid (mais granular que o endpoint)
-    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo && !a.doSetor);
+    // Compromisso do setor em que a pessoa é a responsável conta pra ela.
+    const todasAts = (atividadesPorUid[p.uid] || []).filter(a => !a.fixo && (!a.doSetor || (ehCompromissoDoSetor(a) && responsaveisDe(a).includes(p.uid))));
     const aFazer    = todasAts.filter(a => a.status === 'a_fazer').length;
     const fazendo   = todasAts.filter(a => a.status === 'fazendo').length;
     const concluido = todasAts.filter(a => a.status === 'concluido').length;
@@ -568,7 +569,7 @@ function atualizarProcessosFuncionario(uid) {
     ? minhasAtividades
     : (atividadesPorUid[uid] || []);
   const comData = atividades.filter(a => a.prazo);
-  renderProgressoBoard(comData);
+  renderProgressoBoard(comData, (uid === '__self__' || !uid) ? currentUser.uid : uid);
 }
 
 // Abre o quadro Kanban (A Fazer / Fazendo / Concluído) dessa pessoa a partir
@@ -734,7 +735,7 @@ function renderBoard(uidSelecionado) {
     avisoEl.classList.add('hidden');
   }
 
-  renderProgressoBoard(editavel ? comData.filter(a => a.uid === currentUser.uid) : comData);
+  renderProgressoBoard(comData, ehMeuBoard ? currentUser.uid : uidSelecionado);
   renderConcluidas(atividades.filter(a => a.status === 'concluido'), editavel);
 }
 
@@ -788,16 +789,27 @@ function renderConcluidas(concluidasTodas, editavel) {
   });
 }
 
-function renderProgressoBoard(atividades) {
-  atividades = atividades.filter(a => !a.fixo && !a.doSetor); // horário fixo / do setor não é tarefa individual
+// Duas conclusões separadas (pedido do Comercial, 29/09):
+// - Individual: o que é da pessoa (dela, coletiva em que está, e compromisso
+//   do setor em que ela é a responsável). Delegado pra outro não conta.
+// - Do setor: tudo que é do setor (compromissos + "setor todo"), de todos.
+// Horário fixo (lab bloqueado) não é tarefa — fica fora das duas.
+function renderProgressoBoard(atividades, uidDono) {
   const el = document.getElementById('board-progresso');
-  if (!atividades.length) { el.innerHTML = ''; return; }
-  const concluidas = atividades.filter(a => a.status === 'concluido').length;
-  const pct = Math.round((concluidas / atividades.length) * 100);
-  el.innerHTML = `
-    <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
-    <div class="board-progresso-texto">${concluidas} de ${atividades.length} atividades concluídas nesta semana</div>
-  `;
+  const individuais = atividades.filter(a => !a.fixo && (!a.doSetor || ehCompromissoDoSetor(a)) && responsaveisDe(a).includes(uidDono));
+  const doSetor = atividades.filter(a => a.doSetor && !a.fixo);
+  const bloco = (lista, rotulo, classe) => {
+    if (!lista.length) return '';
+    const concluidas = lista.filter(a => a.status === 'concluido').length;
+    const pct = Math.round((concluidas / lista.length) * 100);
+    return `
+      <div class="board-progresso-item ${classe}">
+        <div class="progress-ring" style="--pct:${pct}"><span>${pct}%</span></div>
+        <div class="board-progresso-texto"><strong>${rotulo}</strong><br>${concluidas} de ${lista.length} concluídas nesta semana</div>
+      </div>`;
+  };
+  el.innerHTML = bloco(individuais, uidDono === currentUser.uid ? 'Minhas atividades' : 'Atividades da pessoa', 'prog-individual')
+    + bloco(doSetor, 'Atividades do setor', 'prog-setor');
 }
 
 function nomePorUid(uid) {
@@ -809,28 +821,51 @@ function formatarHorario(iso) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Compromisso do setor = atividade do setor COM responsável nomeado (ex.:
+// palestra, aulão, coleta de assinatura do Comercial). Todo o setor vê, mas
+// só o responsável mexe/conclui, e aparece com outra cor pra quem não é ele.
+// Atividade do setor sem responsável (lab bloqueado, "setor todo") não muda.
+function responsaveisDe(a) {
+  if (a.uid) return [a.uid];
+  return Array.isArray(a.atribuidos) ? a.atribuidos : [];
+}
+function ehCompromissoDoSetor(a) {
+  return !!a.doSetor && !a.fixo && responsaveisDe(a).length > 0;
+}
+
 function criarCard(atividade, editavel) {
   const card = document.createElement('div');
   const agora = new Date();
+  const compromissoSetor = ehCompromissoDoSetor(atividade);
+  const souResponsavel = responsaveisDe(atividade).includes(currentUser.uid);
+  // Compromisso do setor de outra pessoa: só leitura (não conclui, não
+  // arrasta, não edita) — e com cor própria.
+  const deOutro = compromissoSetor && !souResponsavel;
+  if (deOutro) editavel = false;
   // Horário fixo (ex.: lab bloqueado por aula presencial): não move, não
   // edita e nunca fica atrasado — é só um aviso de que o horário está ocupado.
   const fixo = !!atividade.fixo;
   const atrasada = !fixo && atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
 
-  card.className = `kanban-card ${atrasada ? 'atrasada' : ''} ${fixo ? 'fixo' : ''}`;
+  card.className = `kanban-card ${atrasada ? 'atrasada' : ''} ${fixo ? 'fixo' : ''} ${compromissoSetor ? 'compromisso-setor' : ''} ${deOutro ? 'de-outro' : ''}`;
   card.draggable = editavel && !fixo;
   card.dataset.id = atividade.id;
   card.dataset.status = atividade.status;
 
   const coletiva = Array.isArray(atividade.atribuidos);
   const doSetor = !!atividade.doSetor;
-  const souAtribuidoLocal = atividade.uid === currentUser.uid || doSetor || (coletiva && atividade.atribuidos.includes(currentUser.uid));
+  const souAtribuidoLocal = atividade.uid === currentUser.uid || (doSetor && !compromissoSetor) || (coletiva && atividade.atribuidos.includes(currentUser.uid));
   // Atribuído por outra pessoa — pode executar mas não pode adiar o prazo por conta própria
   const souApenasAtribuido = souAtribuidoLocal && atividade.criadoPor !== currentUser.uid;
 
   // --- Etiqueta de atribuição ---
   let etiquetaHtml = '';
-  if (coletiva) {
+  if (compromissoSetor) {
+    const nomes = responsaveisDe(atividade).map(uid => uid === currentUser.uid ? 'Eu' : nomePorUid(uid)).filter(n => n !== 'outra pessoa');
+    etiquetaHtml = souResponsavel
+      ? `<span class="recorrencia-badge setor-badge" title="Compromisso do setor — todo o setor vê, você é o responsável">🏢 Setor · você é o responsável</span>`
+      : `<span class="recorrencia-badge setor-badge-outro" title="Compromisso do setor — só o responsável pode concluir">🏢 Setor${nomes.length ? ' · Resp.: ' + esc(nomes.join(', ')) : ''}</span>`;
+  } else if (coletiva) {
     const nomes = atividade.atribuidos.map(uid => uid === currentUser.uid ? 'Eu' : nomePorUid(uid));
     const visiveis = nomes.slice(0, 2);
     const extras = nomes.length - visiveis.length;
@@ -863,7 +898,8 @@ function criarCard(atividade, editavel) {
   // Excluir é mais restrito que editar/mover: quem só é atribuído a uma
   // atividade que outra pessoa criou não pode excluir direto — só quem
   // criou (pra si ou delegando) ou o gestor vendo o quadro do setor dele.
-  const podeExcluir = editavel && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
+  // Compromisso do setor é apagado no módulo de origem (Palestras, Contratos...).
+  const podeExcluir = editavel && !compromissoSetor && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
 
   // Quem está atribuído pode ACRESCENTAR uma entrada no histórico de
   // andamento (nunca sobrescrever/apagar as de outra pessoa) — é assim que
@@ -907,8 +943,8 @@ function criarCard(atividade, editavel) {
         <select class="status-select">
           ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
         </select>
-        <button class="btn-mover btn-editar-atividade" title="Editar">✎</button>
-        ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : '<span class="btn-excluir-bloqueado" title="Atribuída por outra pessoa — peça pra ela excluir">🔒</span>'}
+        ${compromissoSetor ? '' : '<button class="btn-mover btn-editar-atividade" title="Editar">✎</button>'}
+        ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : `<span class="btn-excluir-bloqueado" title="${compromissoSetor ? 'Compromisso do setor — altere ou exclua no módulo de origem (Comercial)' : 'Atribuída por outra pessoa — peça pra ela excluir'}">🔒</span>`}
         ${atividade.status === 'concluido' ? '<button class="btn-mover btn-reabrir-atividade" title="Reabrir atividade">↩ Reabrir</button>' : ''}
         ${souApenasAtribuido && atividade.prazo && atividade.status !== 'concluido' ? '<button class="btn-mover btn-pedir-prazo" title="Pedir mais tempo">📅 Pedir prazo</button>' : ''}
       </div>
@@ -929,7 +965,7 @@ function criarCard(atividade, editavel) {
           <button type="button" class="btn btn-secondary btn-sm btn-salvar-andamento">Adicionar ao histórico</button>
         </div>
       ` : ''}
-    ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span></div>`}
+    ` : `<div class="kanban-card-actions"><span class="status-atual">${COL_LABEL[atividade.status]}</span>${deOutro ? '<span class="so-responsavel" title="Só o responsável pode mudar o status">🔒 só o responsável conclui</span>' : ''}</div>`}
   `;
 
   if (fixo) {
@@ -938,7 +974,8 @@ function criarCard(atividade, editavel) {
   } else if (editavel) {
     card.addEventListener('dragstart', () => { draggedId = atividade.id; });
     card.querySelector('.status-select').onchange = (e) => moverAtividade(atividade.id, e.target.value);
-    card.querySelector('.btn-editar-atividade').onclick = () => abrirModalAtividade({ editar: atividade });
+    const btnEditar = card.querySelector('.btn-editar-atividade');
+    if (btnEditar) btnEditar.onclick = () => abrirModalAtividade({ editar: atividade });
     if (podeExcluir) card.querySelector('.btn-excluir-atividade').onclick = () => excluirAtividade(atividade.id, atividade.titulo);
     if (podeAndamentoInline) {
       const textarea = card.querySelector('.andamento-input');

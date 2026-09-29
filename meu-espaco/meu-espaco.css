@@ -1521,3 +1521,23 @@ button.aviso-lido-toggle:hover { color: rgba(0,0,0,0.75); }
 .flatpickr-months .flatpickr-next-month:hover svg {
   fill: var(--primary-blue) !important;
 }
+
+/* ---- COMPROMISSO DO SETOR (palestra, aulão, coleta de assinatura...) ----
+   Todo o setor vê; só o responsável conclui. Cor própria pra quem NÃO é o
+   responsável enxergar na hora que é compromisso de outra pessoa. */
+.kanban-card.compromisso-setor { border-left: 5px solid #0e7490; }
+.kanban-card.de-outro {
+  background: #eef6f9;
+  border: 1px dashed rgba(14, 116, 144, 0.45);
+  border-left: 5px solid #94a3b8;
+  opacity: 0.92;
+}
+.kanban-card.de-outro .kanban-card-titulo { color: #475569; }
+.setor-badge-outro { background: rgba(100, 116, 139, 0.15); color: #475569; }
+.so-responsavel { margin-left: 0.5rem; font-size: 0.72rem; font-weight: 700; color: #64748b; }
+
+/* Duas conclusões: individual e do setor */
+.board-progresso { flex-wrap: wrap; gap: 1.5rem; }
+.board-progresso-item { display: flex; align-items: center; gap: 0.75rem; }
+.board-progresso-item .board-progresso-texto strong { color: var(--text-main); }
+.prog-setor .progress-ring { filter: hue-rotate(150deg); }

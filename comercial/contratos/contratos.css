@@ -257,3 +257,13 @@
 .hist-vazio { padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
 .ct-obs-link { cursor: pointer; }
 .ct-obs-link:hover .ct-obs { color: var(--primary-blue); }
+
+/* Coleta de assinatura (quem do Comercial vai coletar e quando) */
+.ct-coleta { border: 1px solid #e1e8f3; background: #f8fbff; border-radius: 14px; padding: 1rem; margin-bottom: 1.1rem; }
+.ct-coleta-titulo { display: block; font-weight: 800; color: var(--text-main); margin-bottom: 0.6rem; font-size: 0.9rem; }
+.ct-coleta .form-group { margin-bottom: 0; }
+.ct-coleta-tag {
+  display: inline-block; margin-top: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 20px; white-space: nowrap;
+  background: #e8f0fe; color: #0F4EB8; font-size: 0.72rem; font-weight: 800;
+}
+.ct-coleta-tag.atrasada { background: #fef2f2; color: #b91c1c; }
