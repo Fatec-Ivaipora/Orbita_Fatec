@@ -133,7 +133,7 @@ export const MODULES = {
     category: "financeiro",
     title: "Cobrança",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/><line x1="4.9" y1="4.9" x2="7" y2="7"/></svg>`,
-    url: "/financeiro/cobranca/index.html"
+    url: "/financeiro/cobranca/edubox.html"
   },
   "banco-med-fatec": {
     id: "banco-med-fatec",
@@ -260,20 +260,18 @@ export const ROLE_PERMISSIONS = {
   // nenhum outro módulo administrativo. Cargo dedicado (em vez de dar
   // banco-med-fatec pro cargo "coordenador" geral) pra não vazar acesso
   // pra coordenadores de outros cursos.
-  // Sem "dashboard"/"fidelidade" de propósito — esses dois cargos não usam
-  // Meu Espaço nem Cartão FATEC (ver CARGOS_SO_MODULO_PROPRIO em
-  // core/layout.js, que tira a exceção "todo cargo sempre vê esses dois" só
-  // pra eles, e o redirect direto pro banco-med-fatec em meu-espaco.js).
+  // Tem o Meu Espaço (30/09/2026, pedido da direção); o Cartão FATEC não
+  // (ver CARGOS_SEM_CARTAO em core/layout.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
+    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
   },
-  // Professor da Medicina — mesmo acesso do coord_medicina (só Banco de
-  // Questões), cargo separado só pra aparecer com rótulo próprio na tela de
-  // Usuários (não misturar professor com coordenador na listagem).
+  // Professor da Medicina — mesmo acesso do coord_medicina (Meu Espaço +
+  // Banco de Questões), cargo separado só pra aparecer com rótulo próprio na
+  // tela de Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
+    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
   },
   // Setor Comercial — por enquanto só o Meu Espaço (Painel do Setor, Quadro
   // de Avisos, atividades). Módulo próprio do comercial ainda vai ser criado;

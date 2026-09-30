@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cobrança - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
+    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=3">
+</head>
+<body>
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="rel-cabecalho-print">
+                    <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
+                    <div>
+                        <h1 id="print-titulo">Cobrança</h1>
+                        <p id="print-filtros"></p>
+                    </div>
+                    <div class="rel-data-emissao" id="print-data-emissao"></div>
+                </div>
+
+                <div class="page-header">
+                    <div>
+                        <span class="cm-selo">Financeiro</span>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></span>Cobrança</h1>
+                        <p class="page-subtitle">Pendências do Edubox — atualiza sozinho às 7h, 12h, 17h e 22h</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn-secondary" id="btn-imprimir" title="Imprime o que está na tela, com o logo">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Imprimir
+                        </button>
+                        <button class="btn-secondary" id="btn-modelos" title="Textos das mensagens de WhatsApp">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Mensagens
+                        </button>
+                        <a class="btn-secondary" href="/financeiro/cobranca/index.html" title="Cobrança antiga, importada da planilha">Base antiga</a>
+                        <button class="btn-primary" id="btn-atualizar" title="Busca agora no Edubox (leva alguns segundos)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+                            <span id="btn-atualizar-texto">Atualizar agora</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="cb-status" id="cb-status">Carregando...</div>
+                <div class="cb-aviso hidden" id="aviso-advogado"></div>
+
+                <div class="cb-barra">
+                    <div class="abas" id="abas-grupo">
+                        <button type="button" class="aba ativa" data-grupo="graduacao">🎓 Graduação <small>(16 cursos)</small></button>
+                        <button type="button" class="aba" data-grupo="medicina">🩺 Medicina</button>
+                    </div>
+                    <div class="cb-visoes" id="visoes">
+                        <button type="button" data-visao="painel" class="ativa">Painel</button>
+                        <button type="button" data-visao="lista">Lista de cobrança</button>
+                        <button type="button" data-visao="semana">Fechamento semanal</button>
+                    </div>
+                    <select id="sel-semestre" class="select-filter" title="Semestre das parcelas"></select>
+                </div>
+
+                <!-- ============ PAINEL ============ -->
+                <section id="visao-painel">
+                    <div class="kpi-grid">
+                        <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">A cobrar pelo Financeiro</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
+                        <div class="kpi-card kpi-menor"><div class="kpi-label">Jurídico / advogado — vencido</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
+                        <div class="kpi-card kpi-ass"><div class="kpi-label">Parcelas normais de quem está com advogado</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label">Recebido na semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
+                    </div>
+
+                    <div class="cb-duas">
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Vencido por tempo de atraso</div>
+                            <div id="faixas"></div>
+                        </div>
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">A vencer (ainda não é cobrança)</div>
+                            <div class="cb-avencer" id="a-vencer"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Jurídico / advogado por plano <small class="cb-sub">— sempre todos os semestres: no Edubox o acordo fica no semestre da dívida original</small></div>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Plano</th><th class="num">Alunos</th><th class="num">Vencido</th><th class="num">A vencer</th><th class="num">Recebido na semana</th></tr></thead>
+                                <tbody id="tb-planos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Vencido por curso</div>
+                        <div class="tabela-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Curso</th><th class="num">Alunos</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total vencido</th></tr></thead>
+                                <tbody id="tb-cursos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============ LISTA ============ -->
+                <section id="visao-lista" class="hidden">
+                    <div class="filters-bar">
+                        <div class="search-wrap">
+                            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" class="search-input" id="l-busca" placeholder="Nome ou CPF...">
+                        </div>
+                        <select class="select-filter" id="l-controle">
+                            <option value="">Todos (cobrados e não cobrados)</option>
+                            <option value="nao-semana">Não cobrados nesta semana</option>
+                            <option value="nao-15">Não cobrados há 15 dias</option>
+                            <option value="nao-30">Não cobrados há 30 dias</option>
+                            <option value="nunca">Nunca cobrados</option>
+                            <option value="sim-semana">Cobrados nesta semana</option>
+                            <option value="promessa">Com promessa de pagamento</option>
+                        </select>
+                        <select class="select-filter" id="l-lado" title="Quem está com o advogado não pode ser cobrado pelo Financeiro">
+                            <option value="cobrar">Cobrança do Financeiro</option>
+                            <option value="advogado">Com o advogado (não cobrar)</option>
+                        </select>
+                        <select class="select-filter" id="l-faixa">
+                            <option value="">Qualquer atraso</option>
+                            <option value="1-30">Até 30 dias</option>
+                            <option value="31-60">31 a 60 dias</option>
+                            <option value="61-90">61 a 90 dias</option>
+                            <option value="90+">Mais de 90 dias</option>
+                        </select>
+                        <select class="select-filter" id="l-curso"><option value="">Todos os cursos</option></select>
+                    </div>
+                    <div class="cb-contadores" id="l-contadores"></div>
+                    <div class="card">
+                        <div class="tabela-wrap">
+                            <table class="data-table cb-lista">
+                                <thead><tr><th>Aluno</th><th>Parcelas vencidas</th><th class="num">Valor</th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
+                                <tbody id="tb-alunos"><tr><td colspan="5" class="tabela-msg">Carregando...</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="cb-mais hidden" id="l-mais-wrap"><button type="button" class="btn-secondary" id="l-mais">Mostrar mais</button></div>
+                    </div>
+                </section>
+
+                <!-- ============ SEMANA ============ -->
+                <section id="visao-semana" class="hidden">
+                    <div class="cb-semana-nav">
+                        <button type="button" class="btn-icon" id="s-anterior" title="Semana anterior">‹</button>
+                        <button type="button" class="btn-secondary" id="s-atual">Esta semana</button>
+                        <button type="button" class="btn-icon" id="s-proxima" title="Próxima semana">›</button>
+                        <strong id="s-rotulo"></strong>
+                    </div>
+                    <div id="s-aviso"></div>
+                    <div class="cb-duas" id="s-lados"></div>
+                    <div class="cb-duas">
+                        <div class="card">
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Recebido por dia</div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Dia</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total</th></tr></thead><tbody id="s-dias"></tbody></table></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Forma de recebimento</div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Tipo de baixa</th><th class="num">Financeiro</th><th class="num">Jurídico</th></tr></thead><tbody id="s-tipos"></tbody></table></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Recebido por curso</div>
+                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Curso</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total</th></tr></thead><tbody id="s-cursos"></tbody></table></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: WhatsApp -->
+    <div id="modal-zap" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>💬 Cobrar pelo WhatsApp</h2>
+            <p class="modal-subtitle" id="zap-sub"></p>
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <label for="zap-modelo">Modelo</label>
+                    <select id="zap-modelo"></select>
+                </div>
+                <div class="form-group">
+                    <label for="zap-numero">Celular</label>
+                    <input type="text" id="zap-numero" placeholder="(43) 99999-9999">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="zap-texto">Mensagem (pode ajustar antes de enviar)</label>
+                <textarea id="zap-texto" rows="11"></textarea>
+            </div>
+            <div class="cb-zap-ok hidden" id="zap-ok">✅ Registrado no histórico do aluno como cobrado pelo WhatsApp.</div>
+            <div class="modal-actions-split">
+                <label class="cb-check"><input type="checkbox" id="zap-seguir" checked> Depois de enviar, ir para o próximo não cobrado</label>
+                <div style="display:flex;gap:0.75rem;margin-left:auto;">
+                    <button type="button" class="btn-secondary" id="zap-fechar">Fechar</button>
+                    <button type="button" class="btn-secondary hidden" id="zap-proximo">Próximo ›</button>
+                    <button type="button" class="btn-primary cb-btn-zap" id="zap-enviar">Enviar no WhatsApp</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Aluno (parcelas + histórico + registrar ação) -->
+    <div id="modal-aluno" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2 id="al-nome"></h2>
+            <p class="modal-subtitle" id="al-sub"></p>
+            <div class="cb-duas cb-duas-modal">
+                <div>
+                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">Parcelas vencidas</div>
+                    <div class="cb-parcelas" id="al-parcelas"></div>
+                </div>
+                <div>
+                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">Registrar ação</div>
+                    <form id="form-acao">
+                        <div class="form-group">
+                            <select id="ac-tipo">
+                                <option value="ligacao">📞 Ligação</option>
+                                <option value="whatsapp">💬 WhatsApp</option>
+                                <option value="email">✉️ E-mail</option>
+                                <option value="contato">🙋 Atendimento presencial</option>
+                                <option value="negociacao">🤝 Negociação</option>
+                                <option value="promessa_pagamento">📅 Promessa de pagamento</option>
+                                <option value="enviado_advocacia">⚖️ Enviado ao advogado</option>
+                                <option value="outro">📝 Outro / observação</option>
+                            </select>
+                        </div>
+                        <div class="form-grid-2 hidden" id="ac-promessa">
+                            <div class="form-group"><label for="ac-data">Vai pagar em</label><input type="date" id="ac-data"></div>
+                            <div class="form-group"><label for="ac-valor">Valor (R$)</label><input type="number" id="ac-valor" step="0.01" min="0"></div>
+                        </div>
+                        <div class="form-group"><textarea id="ac-obs" rows="3" placeholder="O que foi conversado (opcional)"></textarea></div>
+                        <button type="submit" class="btn-primary" id="ac-salvar">Registrar</button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-secao-titulo" style="padding:1rem 0 0.4rem;">Histórico de cobrança</div>
+            <div class="cb-historico" id="al-historico"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="al-fechar">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: modelos de mensagem -->
+    <div id="modal-modelos" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Modelos de mensagem</h2>
+            <p class="modal-subtitle">Campos que se preenchem sozinhos: <code>{primeiro_nome}</code> <code>{nome}</code> <code>{valor_total}</code> <code>{qtd_parcelas}</code> <code>{lista_parcelas}</code> <code>{vencimento_mais_antigo}</code> <code>{dias_atraso}</code> <code>{curso}</code></p>
+            <div id="modelos-lista"></div>
+            <button type="button" class="btn-secondary" id="modelos-novo">+ Novo modelo</button>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="modelos-cancelar">Cancelar</button>
+                <button type="button" class="btn-primary" id="modelos-salvar">Salvar modelos</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=4"></script>
+</body>
+</html>

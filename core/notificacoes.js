@@ -30,9 +30,6 @@ const K_AVISOS_SESSAO = 'orbita_avisos_dispensados'; // aviso fechado no × (só
 const K_ADIADOS = 'orbita_lembretes_adiados';        // "lembrar de novo" sem mudar o horário
 const MAX_AVISOS_SEPARADOS = 3;
 
-// Cargos que não usam Meu Espaço (só Banco de Questões) — nada a avisar.
-const CARGOS_SEM_MEU_ESPACO = ['coord_medicina', 'professor_medicina'];
-
 let iniciado = false;
 let meuUid = null;
 let atividades = [];
@@ -43,7 +40,7 @@ const gravar = (store, k, v) => { try { store.setItem(k, JSON.stringify(v)); } c
 const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 
 export function iniciarNotificacoes(role) {
-  if (iniciado || CARGOS_SEM_MEU_ESPACO.includes(role)) return;
+  if (iniciado) return;
   iniciado = true;
   injetarEstilo();
   const app = getApps()[0];
