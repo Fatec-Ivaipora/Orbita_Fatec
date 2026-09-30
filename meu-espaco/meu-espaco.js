@@ -161,16 +161,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// Cargos exclusivos do Banco de Questões (Medicina) não têm nada a fazer no
-// Meu Espaço/Cartão FATEC — manda direto pro único módulo que eles têm.
-const CARGOS_SO_BANCO_MED_FATEC = ['coord_medicina', 'professor_medicina'];
-
 async function initApp(user, role) {
-  if (CARGOS_SO_BANCO_MED_FATEC.includes(role)) {
-    window.location.href = '/banco-med-fatec/index.html';
-    return;
-  }
-
   if (appInitialized && initializedRole === role) return;
   appInitialized = true;
   initializedRole = role;
@@ -873,6 +864,8 @@ function criarCard(atividade, editavel) {
   const card = document.createElement('div');
   const agora = new Date();
   const compromissoSetor = ehCompromissoDoSetor(atividade);
+  // Reserva de auditório/sala (Agenda Interna): muda só por lá.
+  const daAgendaInterna = atividade.origem && atividade.origem.modulo === 'agenda-espacos';
   const souResponsavel = responsaveisDe(atividade).includes(currentUser.uid);
   // Compromisso do setor de outra pessoa: só leitura (não conclui, não
   // arrasta, não edita) — e com cor própria.
@@ -884,7 +877,7 @@ function criarCard(atividade, editavel) {
   const atrasada = !fixo && atividade.status !== 'concluido' && atividade.prazo && agora > new Date(atividade.prazo);
 
   card.className = `kanban-card ${atrasada ? 'atrasada' : ''} ${fixo ? 'fixo' : ''} ${compromissoSetor ? 'compromisso-setor' : ''} ${deOutro ? 'de-outro' : ''}`;
-  card.draggable = editavel && !fixo;
+  card.draggable = editavel && !fixo && !daAgendaInterna;
   card.dataset.id = atividade.id;
   card.dataset.status = atividade.status;
 
@@ -909,6 +902,8 @@ function criarCard(atividade, editavel) {
     const pillsHtml = visiveis.map(n => `<span class="coletiva-pill">${esc(n)}</span>`).join('');
     const extraHtml = extras > 0 ? `<span class="coletiva-pill coletiva-pill-extra">+${extras}</span>` : '';
     etiquetaHtml = `<div class="coletiva-wrap" title="${esc(tooltip)}">👥 ${pillsHtml}${extraHtml}</div>`;
+  } else if (daAgendaInterna) {
+    etiquetaHtml = `<span class="recorrencia-badge setor-badge" title="Reserva de auditório/sala — alterar ou cancelar na Agenda Interna">🏛 Agenda Interna</span>`;
   } else if (fixo) {
     // Horário fixo vale pro setor inteiro — não tem "Para/De"
   } else if (doSetor) {
@@ -935,7 +930,7 @@ function criarCard(atividade, editavel) {
   // atividade que outra pessoa criou não pode excluir direto — só quem
   // criou (pra si ou delegando) ou o gestor vendo o quadro do setor dele.
   // Compromisso do setor é apagado no módulo de origem (Palestras, Contratos...).
-  const podeExcluir = editavel && !compromissoSetor && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
+  const podeExcluir = editavel && !compromissoSetor && !daAgendaInterna && (atividade.criadoPor === currentUser.uid || boardAtual !== '__self__');
 
   // Quem está atribuído pode ACRESCENTAR uma entrada no histórico de
   // andamento (nunca sobrescrever/apagar as de outra pessoa) — é assim que
@@ -979,8 +974,8 @@ function criarCard(atividade, editavel) {
         <select class="status-select">
           ${ORDEM_STATUS.map(s => `<option value="${s}" ${s === atividade.status ? 'selected' : ''}>${COL_LABEL[s]}</option>`).join('')}
         </select>
-        ${compromissoSetor ? '' : '<button class="btn-mover btn-editar-atividade" title="Editar">✎</button>'}
-        ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : `<span class="btn-excluir-bloqueado" title="${compromissoSetor ? 'Compromisso do setor — altere ou exclua no módulo de origem (Comercial)' : 'Atribuída por outra pessoa — peça pra ela excluir'}">🔒</span>`}
+        ${compromissoSetor || daAgendaInterna ? '' : '<button class="btn-mover btn-editar-atividade" title="Editar">✎</button>'}
+        ${podeExcluir ? '<button class="btn-mover btn-excluir-atividade" title="Excluir">🗑</button>' : `<span class="btn-excluir-bloqueado" title="${daAgendaInterna ? 'Reserva da Agenda Interna — altere ou cancele por lá' : compromissoSetor ? 'Compromisso do setor — altere ou exclua no módulo de origem (Comercial)' : 'Atribuída por outra pessoa — peça pra ela excluir'}">🔒</span>`}
         ${atividade.status === 'concluido' ? '<button class="btn-mover btn-reabrir-atividade" title="Reabrir atividade">↩ Reabrir</button>' : ''}
         ${souApenasAtribuido && atividade.prazo && atividade.status !== 'concluido' ? '<button class="btn-mover btn-pedir-prazo" title="Pedir mais tempo">📅 Pedir prazo</button>' : ''}
       </div>

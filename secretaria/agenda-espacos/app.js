@@ -53,6 +53,7 @@ let visao = 'semana';
 let referencia = new Date();       // semana/mês exibidos
 let semestreSel = '';
 let emEdicao = null;               // reserva aberta no formulário
+let coordenadores = null;          // [{uid, nome}] — sugestão no "Responsável" (só quem edita)
 const cacheDia = {};               // disponibilidade por data (formulário)
 
 async function apiFetch(endpoint, options = {}) {
@@ -258,6 +259,13 @@ function atualizarRotulo() {
 
 // ---------- EVENTOS ----------
 function wireEventos() {
+  document.getElementById('f-responsavel').addEventListener('input', avisoCoordenador);
+  document.getElementById('f-responsavel-coord').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-nome]');
+    if (!b) return;
+    document.getElementById('f-responsavel').value = b.dataset.nome;
+    avisoCoordenador();
+  });
   document.querySelectorAll('#visoes button').forEach(b => b.addEventListener('click', () => {
     visao = b.dataset.visao;
     document.querySelectorAll('#visoes button').forEach(x => x.classList.toggle('ativa', x === b));
@@ -492,6 +500,58 @@ function renderLista(lista) {
     </table></div></div>`;
 }
 
+// ---------- COORDENADOR NA AGENDA ----------
+// Mesma regra do servidor (agenda-espacos.js > acharCoordenador): reserva de
+// coordenador vai pra agenda do Meu Espaço dele. Aqui só avisa na tela.
+const IGNORAR_NOME = new Set(['prof', 'profa', 'professor', 'professora', 'coord', 'coordenador', 'coordenadora',
+  'coordenacao', 'dr', 'dra', 'de', 'da', 'do', 'das', 'dos', 'e', 'curso']);
+function tokensNome(nome) {
+  return (nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !IGNORAR_NOME.has(t));
+}
+function acharCoordenador(texto) {
+  const t = tokensNome(texto);
+  if (!t.length || !coordenadores) return null;
+  const c = coordenadores.filter(x => {
+    const n = tokensNome(x.nome);
+    if (!n.length) return false;
+    return t.join(' ') === n.join(' ') || (t.length >= 2 && t.every(y => n.includes(y))) || (n.length >= 2 && n.every(y => t.includes(y)));
+  });
+  return c.length === 1 ? c[0] : null;
+}
+async function carregarCoordenadores() {
+  if (coordenadores || !podeEditar) return;
+  try { coordenadores = await apiFetch('/agenda-espacos/coordenadores'); } catch (e) { coordenadores = []; }
+  const lista = document.getElementById('lista-responsaveis');
+  const ja = new Set([...lista.options].map(o => o.value));
+  lista.insertAdjacentHTML('afterbegin', coordenadores.filter(c => !ja.has(c.nome)).map(c => `<option value="${esc(c.nome)}">Coordenador(a)</option>`).join(''));
+  avisoCoordenador();
+}
+// Secretaria costuma digitar só o primeiro nome ("Vanessa") — não dá pra
+// garantir que é a coordenadora (tem Vanessa em outro setor). Se o primeiro
+// nome bate com UM coordenador, pergunta; o clique completa o nome.
+function sugestaoCoordenador(texto) {
+  const t = tokensNome(texto);
+  if (t.length !== 1 || !coordenadores) return null;
+  const c = coordenadores.filter(x => tokensNome(x.nome)[0] === t[0]);
+  return c.length === 1 ? c[0] : null;
+}
+function avisoCoordenador() {
+  const el = document.getElementById('f-responsavel-coord');
+  if (!podeEditar) {
+    // coordenador pedindo pra si: o servidor reconhece pelo login
+    el.innerHTML = '';
+    return;
+  }
+  const texto = document.getElementById('f-responsavel').value;
+  const c = acharCoordenador(texto);
+  if (c) { el.innerHTML = `📅 Coordenador(a) — vai para a agenda do Meu Espaço de <b>${esc(c.nome)}</b>.`; return; }
+  const s = sugestaoCoordenador(texto);
+  el.innerHTML = s
+    ? `É o(a) coordenador(a) <b>${esc(s.nome)}</b>? <button type="button" class="btn-secondary ae-btn-coord" data-nome="${esc(s.nome)}">Sim, usar</button> <span>(aí vai para a agenda dele(a))</span>`
+    : '';
+}
+
 // ---------- FORMULÁRIO ----------
 function abrir(id) { document.getElementById(id).classList.remove('hidden'); }
 function fechar(id) { document.getElementById(id).classList.add('hidden'); }
@@ -508,6 +568,8 @@ function preencher(r) {
   document.getElementById('grupo-ate').classList.add('hidden');
   document.getElementById('grupo-fds').classList.add('hidden');
   document.getElementById('erro-reserva').classList.add('hidden');
+  avisoCoordenador();
+  carregarCoordenadores();
 }
 
 function atualizarGrupoExterno() {
@@ -825,14 +887,14 @@ async function salvar(e) {
   btn.disabled = true;
   try {
     if (emEdicao) {
-      await apiFetch(`/agenda-espacos/${emEdicao.id}`, { method: 'PUT', body: JSON.stringify({ ...body, data: v('f-data') }) });
-      showToast('Reserva atualizada.');
+      const r = await apiFetch(`/agenda-espacos/${emEdicao.id}`, { method: 'PUT', body: JSON.stringify({ ...body, data: v('f-data') }) });
+      showToast(`Reserva atualizada.${r.coordenador ? ` Está na agenda de ${r.coordenador}.` : ''}`);
     } else {
       const datas = gerarDatas();
       const r = await apiFetch(podeEditar ? '/agenda-espacos' : '/agenda-espacos/pedidos', { method: 'POST', body: JSON.stringify({ ...body, datas }) });
-      showToast(podeEditar
+      showToast((podeEditar
         ? `Reserva salva${r.criadas.length > 1 ? ` (${r.criadas.length} datas)` : ''}.`
-        : 'Pedido enviado! A Secretaria vai aprovar ou recusar.');
+        : 'Pedido enviado! A Secretaria vai aprovar ou recusar.') + (r.coordenador ? ` Já está na agenda de ${r.coordenador}.` : ''));
       if (r.avisos && r.avisos.length) showToast(`Atenção: há pedido pendente no mesmo horário (${r.avisos.length}).`, 'error');
     }
     Object.keys(cacheDia).forEach(k => delete cacheDia[k]);

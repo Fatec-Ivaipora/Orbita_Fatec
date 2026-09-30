@@ -1,0 +1,120 @@
+/* Cobrança (dados do Edubox) — complementa contratos.css + comercial-tema.css */
+
+.cb-status {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  background: #fff; border: 1px solid #e6ecf5; border-radius: 12px; padding: 0.6rem 0.9rem;
+  font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; box-shadow: var(--cm-sombra);
+}
+.cb-status strong { color: var(--text-main); }
+.cb-status .cb-pill { border-radius: 20px; padding: 0.1rem 0.6rem; font-weight: 700; font-size: 0.75rem; }
+.cb-pill.ok { background: #ecfdf5; color: #047857; }
+.cb-pill.off { background: #fef2f2; color: #b91c1c; }
+.cb-pill.run { background: #eff6ff; color: #1d4ed8; }
+.cb-girando { display: inline-block; width: 12px; height: 12px; border: 2px solid #93c5fd; border-top-color: #1d4ed8; border-radius: 50%; animation: cb-gira 0.8s linear infinite; }
+@keyframes cb-gira { to { transform: rotate(360deg); } }
+
+.cb-barra { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.cb-barra .abas { margin-bottom: 0; }
+.aba.ativa[data-grupo="graduacao"] { background: #eff6ff; border-color: var(--cm-azul); color: var(--cm-azul); }
+.aba.ativa[data-grupo="medicina"] { background: #fdf2f8; border-color: #be185d; color: #9d174d; }
+.aba small { font-weight: 500; opacity: 0.75; }
+.cb-visoes { display: inline-flex; background: #fff; border: 1px solid #e6ecf5; border-radius: 12px; padding: 0.25rem; box-shadow: var(--cm-sombra); }
+.cb-visoes button { border: none; background: transparent; padding: 0.5rem 0.95rem; border-radius: 9px; font-weight: 600; color: var(--text-secondary); cursor: pointer; font-family: inherit; }
+.cb-visoes button.ativa { background: var(--cm-azul); color: #fff; }
+#sel-semestre { margin-left: auto; min-width: 190px; }
+
+.kpi-card { position: relative; }
+.cb-kpi-vencido { border-left: 4px solid var(--cm-vermelho); }
+.cb-kpi-vencido .kpi-value { color: #b91c1c; }
+
+.cb-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+.cb-duas > .card { margin-bottom: 0; }
+.cb-bloco { padding: 1rem 1.1rem; }
+.cb-bloco .card-secao-titulo { padding: 0 0 0.6rem; }
+@media (max-width: 900px) { .cb-duas { grid-template-columns: 1fr; } #sel-semestre { margin-left: 0; } }
+
+.cb-faixa { display: grid; grid-template-columns: 90px 1fr 120px; align-items: center; gap: 0.6rem; margin: 0.45rem 0; font-size: 0.85rem; }
+.cb-faixa-barra { background: #f1f5f9; border-radius: 6px; height: 14px; overflow: hidden; }
+.cb-faixa-barra span { display: block; height: 100%; border-radius: 6px; }
+.cb-faixa b { text-align: right; }
+.cb-faixa small { display: block; text-align: right; color: var(--text-secondary); font-weight: 500; }
+.cb-avencer { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.cb-avencer div { background: #f7f9fc; border-radius: 12px; padding: 0.75rem; }
+.cb-avencer span { display: block; font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; }
+.cb-avencer b { font-size: 1.15rem; }
+
+.data-table th.num, .data-table td.num { text-align: right; white-space: nowrap; }
+.data-table tfoot td { font-weight: 800; border-top: 2px solid #e2e8f0; }
+
+/* ---------- Lista ---------- */
+.cb-contadores { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 0.9rem 0.2rem; font-size: 0.85rem; color: var(--text-secondary); }
+.cb-contadores b { color: var(--text-main); }
+.cb-contadores span { background: #fff; border: 1px solid #e6ecf5; border-radius: 20px; padding: 0.25rem 0.75rem; }
+.cb-lista td { vertical-align: middle; }
+.cb-aluno-nome { font-weight: 700; color: var(--text-main); cursor: pointer; }
+.cb-aluno-nome:hover { color: var(--cm-azul); text-decoration: underline; }
+.cb-sub { font-size: 0.75rem; color: var(--text-secondary); }
+.cb-atraso { display: inline-block; border-radius: 20px; padding: 0.05rem 0.5rem; font-size: 0.72rem; font-weight: 700; margin-left: 0.3rem; }
+.cb-atraso.f1 { background: #fef9c3; color: #854d0e; }
+.cb-atraso.f2 { background: #ffedd5; color: #c2410c; }
+.cb-atraso.f3 { background: #fee2e2; color: #b91c1c; }
+.cb-atraso.f4 { background: #7f1d1d; color: #fff; }
+.cb-tag-jur { display: inline-block; background: #ede9fe; color: #6d28d9; border-radius: 6px; padding: 0 0.4rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.3rem; }
+.cb-cobrado { display: inline-flex; align-items: center; gap: 0.3rem; border-radius: 20px; padding: 0.15rem 0.6rem; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.cb-cobrado.recente { background: #ecfdf5; color: #047857; }
+.cb-cobrado.antigo { background: #fff7ed; color: #c2410c; }
+.cb-cobrado.nunca { background: #f1f5f9; color: #64748b; }
+.cb-promessa { display: block; font-size: 0.72rem; color: #1d4ed8; margin-top: 0.2rem; font-weight: 600; }
+.cb-promessa.vencida { color: #b91c1c; }
+.cb-btn-zap { background: #16a34a !important; border-color: #16a34a !important; }
+.cb-btn-zap:hover { background: #15803d !important; }
+.acoes-col .btn-acao.zap { color: #16a34a; border-color: #bbf7d0; }
+.acoes-col .btn-acao.zap:hover { background: #f0fdf4; }
+.cb-lista tr.cb-sem-cel .btn-acao.zap { opacity: 0.4; }
+.cb-mais { text-align: center; padding: 0.9rem; }
+
+/* ---------- Modais ---------- */
+.cb-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; }
+.cb-zap-ok { background: #ecfdf5; color: #047857; border-radius: 10px; padding: 0.6rem 0.8rem; font-weight: 600; font-size: 0.85rem; }
+.cb-duas-modal { gap: 1.5rem; margin-bottom: 0; }
+.cb-parcelas { max-height: 260px; overflow: auto; border: 1px solid #eef2f7; border-radius: 10px; }
+.cb-parcelas div { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0.65rem; font-size: 0.82rem; border-bottom: 1px solid #f1f5f9; }
+.cb-parcelas div:last-child { border-bottom: none; }
+.cb-parcelas .total { background: #f7f9fc; font-weight: 800; }
+.cb-historico { max-height: 260px; overflow: auto; }
+.cb-hist-item { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.55rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.84rem; }
+.cb-hist-item .ic { font-size: 1.1rem; line-height: 1.2; }
+.cb-hist-item .corpo { flex: 1; min-width: 0; }
+.cb-hist-item .quando { font-size: 0.75rem; color: var(--text-secondary); }
+.cb-hist-item .obs { white-space: pre-wrap; margin-top: 0.15rem; color: var(--text-main); }
+.cb-hist-item details summary { cursor: pointer; font-size: 0.75rem; color: var(--cm-azul); }
+.cb-hist-item details div { white-space: pre-wrap; font-size: 0.78rem; background: #f7f9fc; border-radius: 8px; padding: 0.5rem; margin-top: 0.3rem; }
+.cb-hist-item .btn-icon { flex-shrink: 0; }
+.cb-modelo { border: 1px solid #e6ecf5; border-radius: 12px; padding: 0.75rem; margin-bottom: 0.75rem; }
+.cb-modelo-topo { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.cb-modelo-topo input { flex: 1; }
+.cb-modelo input, .cb-modelo textarea { width: 100%; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem 0.6rem; font-family: inherit; font-size: 0.85rem; box-sizing: border-box; }
+
+/* ---------- Fechamento semanal ---------- */
+.cb-semana-nav { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.cb-semana-nav strong { margin-left: 0.4rem; font-size: 1.05rem; }
+.cb-lado { padding: 1.1rem 1.2rem; }
+.cb-lado h3 { margin: 0 0 0.8rem; font-size: 1rem; display: flex; align-items: center; gap: 0.4rem; }
+.cb-conta { display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.92rem; }
+.cb-conta:last-child { border-bottom: none; }
+.cb-conta b { white-space: nowrap; }
+.cb-conta.menos b { color: #047857; }
+.cb-conta.mais b { color: #b91c1c; }
+.cb-conta.resultado { border-top: 2px solid #e2e8f0; border-bottom: none; margin-top: 0.3rem; padding-top: 0.6rem; font-weight: 800; }
+.cb-conta small { display: block; color: var(--text-secondary); font-size: 0.72rem; font-weight: 400; }
+.cb-aviso { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; border-radius: 12px; padding: 0.6rem 0.9rem; font-size: 0.85rem; margin-bottom: 1rem; }
+
+@media print {
+  .cb-status, .cb-barra, .cb-semana-nav, .cb-mais, .cb-contadores { display: none !important; }
+  .cb-duas { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cb-lista .acoes-col { display: none !important; }
+  .kpi-card { break-inside: avoid; }
+}
+
+#visao-painel .kpi-value { font-size: 1.45rem; white-space: nowrap; }
+@media (max-width: 1300px) { #visao-painel .kpi-value { font-size: 1.25rem; } }

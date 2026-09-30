@@ -93,6 +93,104 @@ async function conflitos(espaco, data, inicio, fim, { ignorarId = null, somenteC
     );
 }
 
+// ---------- Agenda do coordenador (Meu Espaço) ----------
+// Reserva de coordenador vira compromisso pontual na agenda dele (coleção
+// `atividades`, a mesma do Meu Espaço), no dia/horário da reserva. Vale quando
+// o próprio coordenador pede, ou quando a Secretaria lança e o "Responsável"
+// bate com o nome de UM coordenador cadastrado (sem chute: nome ambíguo ou
+// que não bate não vai pra agenda de ninguém). A atividade acompanha a
+// reserva: editar atualiza; recusar/cancelar/excluir remove. A reserva guarda
+// `atividadeId`/`coordenadorUid`; a atividade guarda `origem`.
+const CARGOS_COORDENADOR = ['coordenador', 'coord_medicina'];
+const PALAVRAS_IGNORADAS = new Set(['prof', 'profa', 'professor', 'professora', 'coord', 'coordenador', 'coordenadora',
+    'coordenacao', 'dr', 'dra', 'de', 'da', 'do', 'das', 'dos', 'e', 'curso']);
+
+function tokensNome(nome) {
+    return (nome || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !PALAVRAS_IGNORADAS.has(t));
+}
+
+async function listaCoordenadores() {
+    const snap = await db.collection('users').where('role', 'in', CARGOS_COORDENADOR).get();
+    return snap.docs.filter(d => d.data().ativo !== false)
+        .map(d => ({ uid: d.id, nome: d.data().name || d.data().email || '' }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// "SILVANA ZURLO", "Prof. Silvana Zurlo", "Coordenação de Enfermagem"...
+// Aceita quando é o mesmo nome, quando 2+ palavras digitadas estão todas no
+// nome do coordenador, ou (cadastro com 2+ palavras) todas as do cadastro
+// estão no que foi digitado — e só UM coordenador bate.
+function acharCoordenador(texto, coordenadores) {
+    const t = tokensNome(texto);
+    if (!t.length) return null;
+    const candidatos = coordenadores.filter(c => {
+        const n = tokensNome(c.nome);
+        if (!n.length) return false;
+        // Só o primeiro nome não basta ("Paulo", "Vanessa" existem em outros
+        // setores) — precisa de nome + sobrenome, a não ser que o cadastro
+        // seja de uma palavra só ("Patricia", "Coord Enfermagem").
+        const mesmoNome = t.join(' ') === n.join(' ');
+        return mesmoNome || (t.length >= 2 && t.every(x => n.includes(x))) || (n.length >= 2 && n.every(x => t.includes(x)));
+    });
+    return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+function coordenadorDaReserva(r, coordenadores) {
+    if (r.pedidoPor && r.pedidoPor.uid) {
+        const c = coordenadores.find(x => x.uid === r.pedidoPor.uid);
+        if (c) return c;
+    }
+    return acharCoordenador(r.responsavel, coordenadores);
+}
+
+async function sincronizarAgendaCoordenador(id, r, req, coordenadores) {
+    coordenadores = coordenadores || await listaCoordenadores();
+    const coord = ['confirmada', 'pendente'].includes(r.status) ? coordenadorDaReserva(r, coordenadores) : null;
+    const col = db.collection('atividades');
+    let ref = r.atividadeId ? col.doc(r.atividadeId) : null;
+    let existe = ref ? (await ref.get()).exists : false;
+
+    // saiu da agenda (recusada/cancelada/sem coordenador) ou trocou de coordenador
+    if (existe && (!coord || r.coordenadorUid !== coord.uid)) {
+        await ref.delete();
+        existe = false;
+        ref = null;
+    }
+    if (!coord) {
+        if (r.atividadeId || r.coordenadorUid) await db.collection(COL).doc(id).update({ atividadeId: null, coordenadorUid: null });
+        return null;
+    }
+
+    const agora = new Date().toISOString();
+    const dados = {
+        titulo: `${r.espaco} — ${r.evento}${r.status === 'pendente' ? ' (aguardando aprovação)' : ''}`,
+        descricao: `Reserva na Agenda Interna · ${r.inicio}–${r.fim}${r.pessoas ? ` · ${r.pessoas} pessoas` : ''}${r.equipamentos ? ` · ${r.equipamentos}` : ''}`,
+        prazo: new Date(`${r.data}T${r.inicio}:00-03:00`).toISOString(),
+        tipo: 'pontual',
+        uid: coord.uid,
+        atribuidos: null,
+        doSetor: false,
+        origem: { modulo: 'agenda-espacos', id },
+        updatedAt: agora
+    };
+    let atividadeId;
+    if (existe) {
+        await ref.update(dados); // status/histórico ficam como o coordenador deixou
+        atividadeId = ref.id;
+    } else {
+        const novo = await col.add({
+            ...dados, status: 'a_fazer', concluidoEm: null, historico: [],
+            criadoPor: req.user.uid, criadoPorNome: quemFez(req), createdAt: agora
+        });
+        atividadeId = novo.id;
+    }
+    if (atividadeId !== r.atividadeId || coord.uid !== r.coordenadorUid) {
+        await db.collection(COL).doc(id).update({ atividadeId, coordenadorUid: coord.uid });
+    }
+    return coord;
+}
+
 function descreverConflitos(lista) {
     return lista.map(r => `${r.data.split('-').reverse().join('/')} ${r.inicio}–${r.fim} · ${r.espaco} · ${r.evento}${r.status === 'pendente' ? ' (pedido pendente)' : ''}`);
 }
@@ -110,6 +208,11 @@ router.put('/espacos', verifyToken, checkPermission, async (req, res) => {
         await DOC_ESPACOS.set({ espacos: lista, updatedAt: new Date().toISOString(), updatedBy: quemFez(req) }, { merge: true });
         res.json(lista);
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Coordenadores (sugestão no campo "Responsável" — só quem lança pra outros).
+router.get('/coordenadores', verifyToken, checkPermission, async (req, res) => {
+    try { res.json(ehEditor(req) ? await listaCoordenadores() : []); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ---------- Reservas ----------
@@ -185,7 +288,14 @@ async function criar(req, res, status) {
         criadas.push({ id: ref.id, ...doc });
     });
     await batch.commit();
-    res.status(201).json({ criadas, avisos: descreverConflitos(avisos) });
+
+    const coordenadores = await listaCoordenadores();
+    let coordenador = null;
+    for (const r of criadas) {
+        const c = await sincronizarAgendaCoordenador(r.id, r, req, coordenadores);
+        if (c) coordenador = c.nome;
+    }
+    res.status(201).json({ criadas, avisos: descreverConflitos(avisos), coordenador });
 }
 
 // Secretaria/ADM cria reserva confirmada (uma ou várias datas).
@@ -209,6 +319,7 @@ router.delete('/pedidos/:id', verifyToken, podeVer, async (req, res) => {
             return res.status(403).json({ error: 'Só dá pra cancelar o próprio pedido enquanto ele está pendente.' });
         }
         await ref.update({ status: 'cancelada', updatedAt: new Date().toISOString(), updatedBy: quemFez(req) });
+        await sincronizarAgendaCoordenador(ref.id, { ...r, status: 'cancelada' }, req);
         res.json({ ok: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -229,7 +340,8 @@ router.put('/:id', verifyToken, checkPermission, async (req, res) => {
         }
         const upd = { ...campos, data, updatedAt: new Date().toISOString(), updatedBy: quemFez(req) };
         await ref.update(upd);
-        res.json({ id: ref.id, ...snap.data(), ...upd });
+        const coord = await sincronizarAgendaCoordenador(ref.id, { ...snap.data(), ...upd }, req);
+        res.json({ id: ref.id, ...snap.data(), ...upd, coordenador: coord ? coord.nome : null });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -250,16 +362,26 @@ router.patch('/:id/status', verifyToken, checkPermission, async (req, res) => {
         if (status === 'recusada') upd.motivoRecusa = texto(req.body.motivo, 300);
         if (status === 'confirmada' && r.status === 'pendente') { upd.aprovadoPor = quemFez(req); upd.aprovadoEm = upd.updatedAt; }
         await ref.update(upd);
+        await sincronizarAgendaCoordenador(ref.id, { ...r, ...upd }, req);
         res.json({ id: ref.id, ...r, ...upd });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        await db.collection(COL).doc(req.params.id).delete();
+        const ref = db.collection(COL).doc(req.params.id);
+        const snap = await ref.get();
+        if (snap.exists && snap.data().atividadeId) {
+            const at = db.collection('atividades').doc(snap.data().atividadeId);
+            if ((await at.get()).exists) await at.delete();
+        }
+        await ref.delete();
         res.json({ message: 'Reserva excluída.' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
 module.exports.ESPACOS_INICIAIS = ESPACOS_INICIAIS;
+module.exports.sincronizarAgendaCoordenador = sincronizarAgendaCoordenador;
+module.exports.acharCoordenador = acharCoordenador;
+module.exports.listaCoordenadores = listaCoordenadores;
