@@ -265,8 +265,13 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
       .then(res => { if (res.ok) return res.json(); throw new Error(); });
 
     const promMe = fetchJson(`${API_BASE}/usuarios/me`);
+    // /config/permissions não é uma rota liberada durante o primeiro acesso
+    // pendente (só /me e /me/senha são) — o backend responde 403 nesse caso.
+    // Sem o .catch aqui, essa rejeição derrubava o Promise.all inteiro e
+    // o modal de troca de senha (que depende só de promMe) nunca aparecia,
+    // deixando a conta travada em 403 pra sempre sem explicação na tela.
     const promPerms = role !== 'adm_l1'
-      ? fetchJson(`${API_BASE}/usuarios/config/permissions`)
+      ? fetchJson(`${API_BASE}/usuarios/config/permissions`).catch(() => null)
       : Promise.resolve(null);
 
     Promise.all([promMe, promPerms])
