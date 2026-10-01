@@ -73,9 +73,10 @@
             <div class="user-details">
               <h2 id="user-name">Carregando Nome...</h2>
               <p id="user-email" class="user-email">email@fatec.sp.gov.br</p>
+              <span id="user-setor-badge" class="role-badge hidden"></span>
             </div>
           </div>
-          
+
           <div class="card-footer">
             <div class="footer-item">
               <span class="footer-label">ID CARD</span>
@@ -91,6 +92,30 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           Cartão pessoal e intransferível. O uso por terceiros é proibido e sujeito ao cancelamento do benefício.
         </p>
+
+        <!-- QR Code (compacto, parte do cartão) -->
+        <div class="qrcode-inline">
+          <div id="qrcode-active" class="qrcode-content">
+            <div class="qr-code-wrapper">
+              <div id="qrcode"></div>
+            </div>
+            <p class="qr-desc-compact">Apresente este código para parceiros garantir descontos.</p>
+
+            <button onclick="gerarPDF()" class="btn-print-card action-execute" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; background: none; border: 1.5px solid var(--primary); color: var(--primary); padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <span>Imprimir / Gerar PDF</span>
+            </button>
+          </div>
+
+          <!-- Conteúdo Suspenso: Caso usuário esteja inativo -->
+          <div id="qrcode-suspended" class="suspended-content hidden">
+            <div class="suspended-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <h4>Acesso Temporariamente Suspenso</h4>
+            <p>Seu cadastro está inativo no Órbita FATEC. Procure a secretaria ou o administrador do sistema para regularização.</p>
+          </div>
+        </div>
       </section>
 
       <!-- Clube de Vantagens (Parceiros) -->
@@ -124,35 +149,6 @@
         <!-- Total de Empresas Filiadas -->
         <div id="partners-total-container" class="partners-total-container hidden">
           <span id="partners-total-text" class="partners-total-text">Total: 0 empresas filiadas</span>
-        </div>
-      </section>
-
-      <!-- QR Code Section -->
-      <section class="qrcode-section">
-        <div class="qrcode-card">
-          <!-- Conteúdo normal: QR code ativo -->
-          <div id="qrcode-active" class="qrcode-content">
-            <h3 class="qr-title">Código de Identificação</h3>
-            <p class="qr-desc">Apresente este código para parceiros para garantir descontos.</p>
-            
-            <div class="qr-code-wrapper">
-              <div id="qrcode"></div>
-            </div>
-            
-            <button onclick="gerarPDF()" class="btn-print-card action-execute" style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem; background: none; border: 1.5px solid var(--primary); color: var(--primary); padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-              <span>Imprimir / Gerar PDF</span>
-            </button>
-          </div>
-
-          <!-- Conteúdo Suspenso: Caso usuário esteja inativo -->
-          <div id="qrcode-suspended" class="suspended-content hidden">
-            <div class="suspended-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            </div>
-            <h4>Acesso Temporariamente Suspenso</h4>
-            <p>Seu cadastro está inativo no Órbita FATEC. Procure a secretaria ou o administrador do sistema para regularização.</p>
-          </div>
         </div>
       </section>
     </main>

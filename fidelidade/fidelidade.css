@@ -311,12 +311,18 @@ body {
 }
 
 .role-badge {
-  font-size: 0.7rem;
+  display: inline-block;
+  width: fit-content;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
-  padding: 0.3rem 0.75rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 20px;
   letter-spacing: 0.5px;
+  margin-top: 0.4rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* Cores de badge por cargo */
@@ -349,8 +355,8 @@ body {
 }
 
 .avatar-container {
-  width: 58px;
-  height: 58px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
   display: flex;
@@ -364,7 +370,7 @@ body {
 #user-avatar-initials {
   font-family: var(--font-title);
   font-weight: 800;
-  font-size: 1.4rem;
+  font-size: 2rem;
   color: #ffffff;
 }
 
@@ -452,7 +458,22 @@ body {
   color: var(--error);
 }
 
-/* QR Code Card */
+/* QR Code compacto, integrado logo abaixo do cartão */
+.qrcode-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 1.1rem;
+}
+
+.qr-desc-compact {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 0.6rem;
+}
+
+/* QR Code Card (legado, mantido para compatibilidade de estilos) */
 .qrcode-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);

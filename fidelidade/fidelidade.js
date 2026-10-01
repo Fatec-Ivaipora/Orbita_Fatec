@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
 import { firebaseConfig } from "../core/firebase-config.js";
-import { getRoleConfig } from "../core/permissions.js";
+import { getRoleConfig, CATEGORIES } from "../core/permissions.js";
 import { getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 
 const fbApp = initializeApp(firebaseConfig);
@@ -422,6 +422,7 @@ function initFidelidade(userData) {
   const userNameEl = document.getElementById('user-name');
   const userEmailEl = document.getElementById('user-email');
   const userRoleBadgeEl = document.getElementById('user-role-badge');
+  const userSetorBadgeEl = document.getElementById('user-setor-badge');
   const userAvatarPhotoEl = document.getElementById('user-avatar-photo');
   const userAvatarInitialsEl = document.getElementById('user-avatar-initials');
   const userIdCodeEl = document.getElementById('user-id-code');
@@ -446,7 +447,19 @@ function initFidelidade(userData) {
     }
     userRoleBadgeEl.className = `role-badge ${roleClass}`;
   }
-  
+
+  // Setor (departamento) do funcionário — campo setorId já usado em Meu Espaço;
+  // CATEGORIES resolve pra um nome legível (ex.: "comercial" -> "Comercial").
+  if (userSetorBadgeEl) {
+    const setorLabel = CATEGORIES[userData.setorId];
+    if (setorLabel) {
+      userSetorBadgeEl.textContent = setorLabel;
+      userSetorBadgeEl.classList.remove('hidden');
+    } else {
+      userSetorBadgeEl.classList.add('hidden');
+    }
+  }
+
   const names = (userData.name || 'Visitante').trim().split(/\s+/);
   const initials = names.length > 1
     ? (names[0][0] + names[names.length - 1][0]).toUpperCase()
