@@ -256,7 +256,7 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
 
 router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
+        const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome, formando } = req.body;
         const semestre = (req.body.semestre || '').trim();
 
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
@@ -286,6 +286,11 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             // precisar buscar o documento do veterano de novo).
             indicadoPorAlunoId: indicadoPorAlunoId ? String(indicadoPorAlunoId) : null,
             indicadoPorNome: indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null,
+            // Marcação independente da situação — pedido da Lisa pra marcar o
+            // último período de cada curso sem sobrescrever a situação real
+            // (Rematrícula Assinada/Pendência/Não Assinou), que senão some do
+            // cadastro quando ela troca pra "Formando" na situação (01/10).
+            formando: !!formando,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             updatedAt: new Date().toISOString()
@@ -299,12 +304,13 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
 
 router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome } = req.body;
+        const { cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome, formando } = req.body;
         const dados = { updatedAt: new Date().toISOString() };
         if (indicadoPorAlunoId !== undefined) {
             dados.indicadoPorAlunoId = indicadoPorAlunoId ? String(indicadoPorAlunoId) : null;
             dados.indicadoPorNome = indicadoPorAlunoId ? (indicadoPorNome || '').toString().trim() : null;
         }
+        if (formando !== undefined) dados.formando = !!formando;
 
         if (nome !== undefined) {
             if (!nome.trim()) return res.status(400).json({ error: 'Informe o nome do aluno.' });
@@ -452,12 +458,23 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         let pendentesRevisao = 0;
         let cancelouCalouro = 0, cancelouVeterano = 0, trancouCalouro = 0, trancouVeterano = 0; // por período
         let desistenteCalouro = 0, desistenteVeterano = 0;
+        // Quantos registros deste semestre vieram da Virada de Semestre (têm
+        // origemAlunoId, gravado em /virar-semestre) vs. quantos foram
+        // matriculados direto neste semestre — pedido pra conferir a virada
+        // (01/10).
+        let vindosDeVirada = 0;
+        // Marcação independente de "formando" (campo `formando`, não a
+        // situação) — conta certo mesmo que a situação real seja Rematrícula
+        // Assinada/Pendência/Não Assinou (01/10).
+        let formandos = 0;
         const cancelouCalouroPorCurso = {};
         const desistenteCalouroPorCurso = {};
 
         snap.forEach(doc => {
             const a = doc.data();
             total++;
+            if (a.origemAlunoId) vindosDeVirada++;
+            if (a.formando) formandos++;
             const curso = a.curso || '—';
             if (a.revisarManualmente) pendentesRevisao++;
             if (a.situacao === 'Cancelou') {
@@ -489,6 +506,8 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             desistenteCalouro, desistenteVeterano,
             cancelouCalouroPorCurso,
             desistenteCalouroPorCurso,
+            vindosDeVirada,
+            formandos,
             situacoes: SITUACOES_RELATORIO,
             planosConfissao: PLANOS_CONFISSAO
         });
@@ -582,6 +601,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
             // a planilha original também não somava essa linha aqui.
             const totalCalouros = soma('Matrícula Nova', 'Matrícula Nova - Assinada',
                 'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+                'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
                 '1ª Evasão', '2ª Evasão') + cancelouCalouro + desistenteCalouro;
             // Perda de captação = (Cancelou de calouro + Desistente de calouro)
             // ÷ TOTAL de calouros captados (quem entrou pela porta de calouro,

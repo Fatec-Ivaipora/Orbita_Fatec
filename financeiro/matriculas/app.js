@@ -663,7 +663,7 @@ function renderTabelaAlunos(lista) {
   }
   tbody.innerHTML = lista.map(a => `
     <tr>
-      <td>${esc(a.nome)}${a.revisarManualmente ? '<span class="revisar-badge" title="Migrado da planilha com situação/plano fora do padrão — confira e edite.">⚠ revisar</span>' : ''}</td>
+      <td>${esc(a.nome)}${a.formando ? '<span class="revisar-badge" title="Marcado como formando — último período, não vai sozinho pro próximo semestre na Virada.">🎓 formando</span>' : ''}${a.revisarManualmente ? '<span class="revisar-badge" title="Migrado da planilha com situação/plano fora do padrão — confira e edite.">⚠ revisar</span>' : ''}</td>
       <td>${esc(a.curso)}</td>
       <td>${esc(a.periodo)}</td>
       <td>${esc(a.cidade)}</td>
@@ -817,6 +817,7 @@ function setupModalAluno() {
         situacao: document.getElementById('aluno-situacao').value,
         planoConfissao: document.getElementById('aluno-plano').value,
         observacoes: document.getElementById('aluno-observacoes').value,
+        formando: document.getElementById('aluno-formando').checked,
         indicadoPorAlunoId: alunoIndicadoPor?.id || null,
         indicadoPorNome: alunoIndicadoPor?.nome || null
       };
@@ -863,6 +864,7 @@ function abrirModalAluno(aluno) {
   document.getElementById('aluno-situacao').value = aluno?.situacao || opcoes.situacoes[0] || '';
   document.getElementById('aluno-plano').value = aluno?.planoConfissao || 'Não';
   document.getElementById('aluno-observacoes').value = aluno?.observacoes || '';
+  document.getElementById('aluno-formando').checked = !!aluno?.formando;
 
   const grupoCurso = document.getElementById('grupo-curso-aluno');
   const isFatec = (aluno ? aluno.modulo : moduloSelecionado) === 'fatec';
@@ -1035,7 +1037,7 @@ const LINHAS_COMPARATIVO = [
   { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
     formula: 'Matrícula Nova + Matrícula Nova - Assinada + Retorno + Matrícula Nova - Transferência (calouros ainda ativos)' },
   { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true, detalhavel: true,
-    formula: 'Matrícula Nova + Matrícula Nova - Assinada + 1ª Evasão + 2ª Evasão + Retorno + Cancelou (só o de calouro) — todo mundo que entrou pela porta de calouro, ficando ou não.' },
+    formula: 'Matrícula Nova + Matrícula Nova - Assinada + Retorno + Transferência de entrada + 1ª/2ª Evasão + Cancelou (só o de calouro) + Desistente (só o de calouro) — todo mundo que entrou pela porta de calouro, ficando ou não.' },
 
   // Pendência Financeira e Não Assinou NÃO são perda — quem tá nessas duas
   // situações continua Ativo (ver fórmula de "ativos" logo abaixo), só falta
@@ -1200,10 +1202,13 @@ const COMPONENTES_TOTAL = {
   total: null,
   // Total de Calouros captados: mesmas situações da fórmula em
   // src/rotas/matriculas.js, com Cancelou trocado pelo componente já
-  // separado por período (cancelouCalouro).
+  // separado por período (cancelouCalouro). Transferência de entrada entrou
+  // aqui em 01/10 — faltava, e por isso Captados saía menor que Calouros
+  // ativos em curso com transferência (a conta não batia).
   totalCalouros: [
     'Matrícula Nova', 'Matrícula Nova - Assinada',
     'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     '1ª Evasão', '2ª Evasão'
   ]
 };
@@ -1317,6 +1322,16 @@ function abrirDetalheRelatorio(chave) {
   document.getElementById('modal-detalhe-total').classList.remove('hidden');
 }
 
+// "2026.2" -> "2027.1", "2026.1" -> "2026.2" — só pro rótulo do card "Vão
+// para o próximo semestre" (pedido 01/10). Sem validação rígida: se o
+// semestre não bater no formato AAAA.N, devolve null e o rótulo genérico fica.
+function proximoSemestreLabel(semestre) {
+  const m = /^(\d{4})\.([12])$/.exec(semestre || '');
+  if (!m) return null;
+  const [, ano, n] = m;
+  return n === '1' ? `${ano}.2` : `${parseInt(ano, 10) + 1}.1`;
+}
+
 function renderRelatorio(dados) {
   const { total, pendentesRevisao, cursos, porCursoSituacao, porSituacaoTotal, porPlano, situacoes, planosConfissao } = dados;
 
@@ -1350,12 +1365,51 @@ function renderRelatorio(dados) {
   // Cancelou de calouro (período 1º) vem pronto do servidor; recorte por curso
   // de semestre fechado não tem essa quebra, aí usa o Cancelou bruto.
   const cancelouCalouro = (dados.cancelouCalouro ?? null) !== null ? dados.cancelouCalouro : (porSituacaoTotal['Cancelou'] || 0);
+  // Transferência de entrada (Matrícula Nova - Transferência[ Assinada]) faltava
+  // aqui — Captados saía menor que "Calouros" (ativos), que já contava essas
+  // situações. Entrou em 01/10 pra conta sempre fechar: Captados = Calouros
+  // ativos + quem entrou e já saiu (evasão/cancelou/desistente de calouro).
   const totalCalourosCaptados = somaSituacoes(porSituacaoTotal,
     'Matrícula Nova', 'Matrícula Nova - Assinada',
     'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+    'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
     '1ª Evasão', '2ª Evasão') + cancelouCalouro + (dados.desistenteCalouro || 0);
   document.getElementById('kpi-total-calouros').textContent = totalCalourosCaptados;
-  document.getElementById('kpi-ativos').textContent = somaSituacoes(porSituacaoTotal, ...ATIVOS_SITS);
+  const ativosTotal = somaSituacoes(porSituacaoTotal, ...ATIVOS_SITS);
+  document.getElementById('kpi-ativos').textContent = ativosTotal;
+  // Formandos — campo próprio `formando` (marcado à mão pela coordenação/
+  // financeiro pro último período de cada curso), independente da Situação:
+  // o aluno continua com a situação real (Rematrícula Assinada/Pendência/Não
+  // Assinou) e por isso segue contando certo em Total/Veteranos/Ativos — só
+  // ganha esse aviso a mais. Semestre fechado (histórico da planilha) não tem
+  // esse campo, aí cai pra situação "Formando" que a planilha já usava (01/10).
+  const formandos = (dados.formandos !== undefined && dados.formandos !== null)
+    ? dados.formandos
+    : (porSituacaoTotal['Formando'] || 0);
+  document.getElementById('kpi-formandos').textContent = formandos;
+  // "Vão para o próximo semestre" = Ativos menos quem já está marcado como
+  // formando — não é decisão automática da Virada, é só a estimativa de quem
+  // não deveria entrar na leva de cópia (pedido 01/10).
+  document.getElementById('kpi-vao-proximo').textContent = Math.max(0, ativosTotal - formandos);
+  const semestreAtualSel = document.getElementById('rel-semestre-select')?.value || '';
+  const proxSemLabel = document.getElementById('kpi-vao-proximo-sem');
+  if (proxSemLabel) proxSemLabel.textContent = proximoSemestreLabel(semestreAtualSel) || 'próximo semestre';
+  const vindosDeVirada = dados.vindosDeVirada ?? null;
+  const cardOrigem = document.getElementById('kpi-origem-grupo');
+  if (cardOrigem) {
+    // Só mostra quando tem alguém realmente vindo de virada — em 2026.2
+    // ninguém foi "virado" pra dentro (a virada é de 2026.2 pra 2027.1), então
+    // vindosDeVirada é sempre 0 e "Matrícula nova" ficaria igual ao Total do
+    // topo — duplicado à toa (pedido 01/10). Com isso, o card só aparece a
+    // partir do semestre que já recebeu gente pela Virada de Semestre.
+    if (vindosDeVirada !== null && vindosDeVirada > 0) {
+      cardOrigem.classList.remove('hidden');
+      document.getElementById('kpi-vindos-virada').textContent = vindosDeVirada;
+      document.getElementById('kpi-matricula-direta').textContent = total - vindosDeVirada;
+    } else {
+      cardOrigem.classList.add('hidden');
+    }
+  }
   document.getElementById('kpi-pendencia').textContent = porSituacaoTotal['Pendência Financeira'] || 0;
   document.getElementById('kpi-nao-assinou').textContent = porSituacaoTotal['Não Assinou'] || 0;
   document.getElementById('kpi-1-evasao').textContent = porSituacaoTotal['1ª Evasão'] || 0;
@@ -1389,6 +1443,17 @@ function renderRelatorio(dados) {
     cardDesistV.classList.remove('hidden');
     document.getElementById('kpi-desistente-veterano').textContent = desistVeteranoBd;
   } else { cardDesistV.classList.add('hidden'); }
+
+  // Transferência (saída) — situação própria, já entra em PERDAS_SITS pro %,
+  // mas não tinha card na tela (pedido 01/10).
+  const cardTransferencia = document.getElementById('kpi-transferencia-card');
+  const transferenciaBd = porSituacaoTotal['Transferência'] || 0;
+  if (transferenciaBd > 0) {
+    cardTransferencia.classList.remove('hidden');
+    document.getElementById('kpi-transferencia').textContent = transferenciaBd;
+  } else {
+    cardTransferencia.classList.add('hidden');
+  }
 
   // "Perda de captação" = (Cancelou de calouro + Desistente de calouro) ÷
   // Total de Calouros captados. Evasões, Trancou e Desistente de veterano NÃO
@@ -1424,6 +1489,7 @@ function renderRelatorio(dados) {
     const totalCalouros2 = somaSituacoes(porSituacaoTotal,
       'Matrícula Nova', 'Matrícula Nova - Assinada',
       'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+      'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
       '1ª Evasão', '2ª Evasão') + cancelouCalouroDados + (dados.desistenteCalouro || 0);
     // % Perda Captação: Cancelou Calouro + Desistente Calouro — evasões e Desistente Veterano NÃO entram
     const perdasCalouros2 = cancelouCalouroDados + (dados.desistenteCalouro || 0);
@@ -1505,6 +1571,7 @@ function renderRelatorio(dados) {
     const CALOUROS_CAPTADOS_SITS = [
       'Matrícula Nova', 'Matrícula Nova - Assinada',
       'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
+      'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
       '1ª Evasão', '2ª Evasão'
     ];
 
