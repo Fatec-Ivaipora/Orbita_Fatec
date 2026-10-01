@@ -77,8 +77,12 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   nav.className = 'layout-nav';
   
   // 1. Renderizar Módulos sem Categoria (Top-level)
+  // "fidelidade" (Cartão FATEC) escondido do menu de novo enquanto não há
+  // parceiros (empresas) cadastrados no Clube de Vantagens — o cartão sem
+  // nenhum parceiro fica vazio. Módulo/rota continuam existindo e
+  // funcionando normalmente, só não aparecem na navegação.
   const topLevelModules = Object.values(MODULES).filter(mod =>
-    !mod.category && podeVerModulo(mod.id));
+    !mod.category && mod.id !== 'fidelidade' && podeVerModulo(mod.id));
 
   topLevelModules.forEach(mod => {
     const link = document.createElement('a');
