@@ -26,6 +26,25 @@ const rotaLiberadaPrimeiroAcesso = (req) => {
     return ROTAS_LIBERADAS_PRIMEIRO_ACESSO.some(r => r.method === req.method && r.path === caminho);
 };
 
+// A troca pelo link "Redefinir senha" do e-mail (auth/redefinir-senha.html)
+// muda a senha só no Firebase Auth — a flag `primeiroAcesso` continuava true
+// e a pessoa ficava presa pedindo a troca de novo, sem ver nada (caso da
+// Hemilly, 30/09/2026). O Auth marca `tokensValidAfterTime` quando a senha
+// muda; se isso aconteceu depois de a conta ser marcada (criação), a troca
+// já foi feita. Margem de 1 min: a criação da conta também grava esse campo.
+async function senhaTrocadaDepoisDaMarcacao(uid, userData) {
+    try {
+        const desde = Date.parse(userData.primeiroAcessoDesde || userData.createdAt || '');
+        if (!desde) return false;
+        const { auth } = require('../firebase');
+        const conta = await auth.getUser(uid);
+        const trocouEm = Date.parse(conta.tokensValidAfterTime || '');
+        return !!trocouEm && trocouEm > desde + 60 * 1000;
+    } catch (e) {
+        return false;
+    }
+}
+
 // Nível de acesso normalizado com retrocompatibilidade:
 // inteiro (1/2/3) ou formato legado { view, execute }
 const getAccessLevel = (perm) => {
@@ -87,6 +106,10 @@ const verifyToken = async (req, res, next) => {
             req.user.setorId = userData.setorId || null;
             req.user.chefeDeSetor = userData.chefeDeSetor === true;
             req.user.primeiroAcesso = userData.primeiroAcesso === true;
+            if (req.user.primeiroAcesso && await senhaTrocadaDepoisDaMarcacao(req.user.uid, userData)) {
+                await db.collection('users').doc(req.user.uid).update({ primeiroAcesso: false });
+                req.user.primeiroAcesso = false;
+            }
             userRoleCache.set(req.user.uid, {
                 role: req.user.role,
                 permissoes: req.user.permissoes,

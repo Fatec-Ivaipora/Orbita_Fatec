@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=3">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=7">
 </head>
 <body>
     <div id="auth-guard" class="layout-auth-guard">
@@ -53,6 +53,17 @@
 
                 <div class="cb-status" id="cb-status">Carregando...</div>
                 <div class="cb-aviso hidden" id="aviso-advogado"></div>
+                <details class="cb-glossario">
+                    <summary>❓ Como ler os números desta tela</summary>
+                    <div>
+                        <p><b>🔴 Atrasado</b> — a mensalidade já venceu e <b>não foi paga</b>. É o que falta receber.</p>
+                        <p><b>📅 Já venceu</b> — soma de tudo que já venceu, <b>pago ou não</b>. Serve de base pro %.</p>
+                        <p><b>% de inadimplência</b> — atrasado ÷ já venceu. Ex.: 6% = de cada R$ 100 que venceram, R$ 6 não foram pagos. <b>Quanto menor, melhor.</b></p>
+                        <p><b>⏳ Ainda vai vencer</b> — mensalidade futura. Não é atraso.</p>
+                        <p><b>🟢 Entrou / pago</b> — dinheiro que já caiu (baixa feita no Edubox: PIX, boleto, caixa...).</p>
+                        <p><b>💼 Financeiro</b> — parcelas que o Financeiro cobra. <b>⚖️ Advogado</b> — acordo feito com a advogada. <b>🏛 Débito judicial</b> — está com a advogada, ainda sem acordo. Advogado e débito o Financeiro <b>não cobra</b>.</p>
+                    </div>
+                </details>
 
                 <div class="cb-barra">
                     <div class="abas" id="abas-grupo">
@@ -60,6 +71,7 @@
                         <button type="button" class="aba" data-grupo="medicina">🩺 Medicina</button>
                     </div>
                     <div class="cb-visoes" id="visoes">
+                        <button type="button" data-visao="diretor">📊 Visão do diretor</button>
                         <button type="button" data-visao="painel" class="ativa">Painel</button>
                         <button type="button" data-visao="lista">Lista de cobrança</button>
                         <button type="button" data-visao="semana">Fechamento semanal</button>
@@ -67,41 +79,78 @@
                     <select id="sel-semestre" class="select-filter" title="Semestre das parcelas"></select>
                 </div>
 
+                <!-- ============ VISÃO DO DIRETOR ============ -->
+                <section id="visao-diretor" class="hidden">
+                    <div class="cb-dir-topo">
+                        <div class="card cb-dir-big" id="d-inad"></div>
+                        <div class="card cb-dir-big" id="d-receb"></div>
+                        <div class="card cb-dir-big" id="d-cobr"></div>
+                    </div>
+                    <div class="card cb-bloco">
+                        <div class="card-secao-titulo">Semana a semana <small class="cb-sub">— 🟢 barras: dinheiro que entrou na semana · 🔴 linha: total atrasado na segunda-feira</small></div>
+                        <div id="d-grafico"></div>
+                    </div>
+                    <div class="card cb-bloco">
+                        <div class="card-secao-titulo">Inadimplência ao longo do ano <small class="cb-sub">— % do que já tinha vencido e estava atrasado, toda segunda-feira (reconstruído do Edubox)</small></div>
+                        <div id="d-inad-ano"></div>
+                    </div>
+                    <div class="cb-duas">
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Cursos com mais atraso <small class="cb-sub">— % de inadimplência de cada curso (atrasado ÷ já venceu)</small></div>
+                            <div id="d-cursos"></div>
+                        </div>
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Advogado e débito judicial <small class="cb-sub">— sempre o total, de todos os semestres</small></div>
+                            <div id="d-adv"></div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ============ PAINEL ============ -->
                 <section id="visao-painel">
                     <div class="kpi-grid">
-                        <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">A cobrar pelo Financeiro</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
-                        <div class="kpi-card kpi-menor"><div class="kpi-label">Jurídico / advogado — vencido</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
-                        <div class="kpi-card kpi-ass"><div class="kpi-label">Parcelas normais de quem está com advogado</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
-                        <div class="kpi-card kpi-sem"><div class="kpi-label">Recebido na semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
+                        <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">🔴 Atrasado — Financeiro cobra</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
+                        <div class="kpi-card kpi-menor"><div class="kpi-label">⚖️ Atrasado — Advogado (acordo feito)</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
+                        <div class="kpi-card kpi-ass"><div class="kpi-label">🏛 Atrasado — Débito judicial (sem acordo)</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label">🟢 Entrou nesta semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
+                    </div>
+
+                    <div class="card hidden" id="card-semestres">
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🔴 Atrasado por semestre <small class="cb-sub">— o que falta receber de cada semestre · clique num semestre pra ver só ele</small></div>
+                        <div class="tabela-wrap">
+                            <table class="data-table cb-semestres">
+                                <thead><tr><th>Semestre</th><th class="num">Alunos</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado</th><th class="num">🏛 Débito judicial</th><th class="num">Total atrasado</th></tr></thead>
+                                <tbody id="tb-semestres"></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <div class="cb-duas">
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">Vencido por tempo de atraso</div>
+                            <div class="card-secao-titulo">🔴 Atrasado — há quanto tempo</div>
                             <div id="faixas"></div>
                         </div>
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">A vencer (ainda não é cobrança)</div>
+                            <div class="card-secao-titulo">⏳ Ainda vai vencer <small class="cb-sub">— mensalidades futuras, não é atraso</small></div>
                             <div class="cb-avencer" id="a-vencer"></div>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Jurídico / advogado por plano <small class="cb-sub">— sempre todos os semestres: no Edubox o acordo fica no semestre da dívida original</small></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Advogado e Débito judicial por plano <small class="cb-sub">— pelo semestre da dívida original (é como o Edubox registra o acordo)</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Plano</th><th class="num">Alunos</th><th class="num">Vencido</th><th class="num">A vencer</th><th class="num">Recebido na semana</th></tr></thead>
+                                <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">🔴 Atrasado</th><th class="num">⏳ Ainda vai vencer</th><th class="num">🟢 Entrou na semana</th></tr></thead>
                                 <tbody id="tb-planos"></tbody>
                             </table>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Vencido por curso</div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🔴 Atrasado por curso <small class="cb-sub">— o que falta receber</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Curso</th><th class="num">Alunos</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total vencido</th></tr></thead>
+                                <thead><tr><th>Curso</th><th class="num">Alunos com atraso</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total atrasado</th></tr></thead>
                                 <tbody id="tb-cursos"></tbody>
                             </table>
                         </div>
@@ -124,10 +173,21 @@
                             <option value="sim-semana">Cobrados nesta semana</option>
                             <option value="promessa">Com promessa de pagamento</option>
                         </select>
-                        <select class="select-filter" id="l-lado" title="Quem está com o advogado não pode ser cobrado pelo Financeiro">
-                            <option value="cobrar">Cobrança do Financeiro</option>
-                            <option value="advogado">Com o advogado (não cobrar)</option>
+                        <select class="select-filter" id="l-lado" title="Parcela de plano Advogado / Débito judicial não é cobrada pelo Financeiro">
+                            <option value="cobrar">💼 Cobrança do Financeiro</option>
+                            <option value="advogado">⚖️ Advogado — acordo feito (não cobrar)</option>
+                            <option value="debito">🏛 Débito judicial — sem acordo (não cobrar)</option>
                         </select>
+                        <select class="select-filter hidden" id="l-pagando" title="Pagamentos no Edubox nos últimos 90 dias">
+                            <option value="">Qualquer situação de pagamento</option>
+                            <option value="sim">✅ Pagando (pagou nos últimos 90 dias)</option>
+                            <option value="nao">⚠️ Parado (sem pagamento há 90+ dias)</option>
+                        </select>
+                        <label class="cb-filtro-data" title="Vencimento da parcela — igual ao relatório de cobrança do Edubox">Vencimento
+                            <input type="date" class="select-filter" id="l-venc-de"> até <input type="date" class="select-filter" id="l-venc-ate">
+                        </label>
+                        <input type="text" class="select-filter" id="l-plano" list="l-planos" placeholder="Plano (ex.: concluintes)" title="Plano de pagamento da parcela no Edubox — digite parte do nome">
+                        <datalist id="l-planos"></datalist>
                         <select class="select-filter" id="l-faixa">
                             <option value="">Qualquer atraso</option>
                             <option value="1-30">Até 30 dias</option>
@@ -141,7 +201,7 @@
                     <div class="card">
                         <div class="tabela-wrap">
                             <table class="data-table cb-lista">
-                                <thead><tr><th>Aluno</th><th>Parcelas vencidas</th><th class="num">Valor</th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
+                                <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">🔴 Valor atrasado</th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
                                 <tbody id="tb-alunos"><tr><td colspan="5" class="tabela-msg">Carregando...</td></tr></tbody>
                             </table>
                         </div>
@@ -161,17 +221,23 @@
                     <div class="cb-duas" id="s-lados"></div>
                     <div class="cb-duas">
                         <div class="card">
-                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Recebido por dia</div>
-                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Dia</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total</th></tr></thead><tbody id="s-dias"></tbody></table></div>
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Dinheiro que entrou, por dia</div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Dia</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total</th></tr></thead><tbody id="s-dias"></tbody></table></div>
                         </div>
                         <div class="card">
-                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Forma de recebimento</div>
-                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Tipo de baixa</th><th class="num">Financeiro</th><th class="num">Jurídico</th></tr></thead><tbody id="s-tipos"></tbody></table></div>
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Como o dinheiro entrou <small class="cb-sub">— tipo de baixa no Edubox</small></div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Tipo de baixa</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th></tr></thead><tbody id="s-tipos"></tbody></table></div>
                         </div>
                     </div>
+                    <div class="card" id="s-retorno-card">
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">📣 Retorno das cobranças da semana <small class="cb-sub">— quem o Financeiro cobrou e quem pagou depois</small></div>
+                        <div class="cb-retorno-kpis" id="s-retorno-kpis"></div>
+                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Aluno</th><th>Cobrança</th><th>Por</th><th>Promessa</th><th class="num">🟢 Pagou depois da cobrança</th></tr></thead><tbody id="s-retorno"></tbody></table></div>
+                    </div>
+
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Recebido por curso</div>
-                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Curso</th><th class="num">Financeiro</th><th class="num">Jurídico</th><th class="num">Total</th></tr></thead><tbody id="s-cursos"></tbody></table></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Dinheiro que entrou, por curso</div>
+                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Curso</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total</th></tr></thead><tbody id="s-cursos"></tbody></table></div>
                     </div>
                 </section>
             </div>
@@ -216,7 +282,7 @@
             <p class="modal-subtitle" id="al-sub"></p>
             <div class="cb-duas cb-duas-modal">
                 <div>
-                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">Parcelas vencidas</div>
+                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">🔴 Parcelas atrasadas (não pagas)</div>
                     <div class="cb-parcelas" id="al-parcelas"></div>
                 </div>
                 <div>
@@ -267,6 +333,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=4"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=13"></script>
 </body>
 </html>

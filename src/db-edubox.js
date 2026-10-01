@@ -18,6 +18,18 @@ const pool = new Pool({
     max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000,
+    // conexão derrubada "em silêncio" pela nuvem do Edubox deixava a consulta
+    // esperando pra sempre: keep-alive + tempo-limite fazem ela falhar e tentar de novo
+    keepAlive: true,
+    query_timeout: 180000,
+});
+
+// Conexão parada que o servidor do Edubox derruba (nuvem do fornecedor) vira
+// evento 'error' no pool — sem esse handler o Node trata como erro fatal e
+// derruba o processo inteiro (API local, agente da Cobrança). O pool descarta
+// a conexão morta e abre outra na próxima consulta.
+pool.on('error', (err) => {
+    console.warn('[edubox] conexão derrubada pelo servidor (descartada):', err.message);
 });
 
 pool.on('connect', (client) => {
