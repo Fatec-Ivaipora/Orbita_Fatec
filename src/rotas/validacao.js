@@ -24,6 +24,7 @@ router.get('/:uid', async (req, res) => {
             valid: true,
             name: userData.name,
             role: userData.role,
+            fotoUrl: userData.fotoUrl || null,
             message: 'Cartão Válido'
         });
     } catch (err) {

@@ -155,8 +155,13 @@ window.gerarPDF = function() {
   const backText = document.createElement('span');
   backText.className = 'print-back-text';
   backText.textContent = 'FATEC — CARTÃO DE BENEFÍCIOS';
-  
+
+  const backNotice = document.createElement('span');
+  backNotice.className = 'print-back-notice';
+  backNotice.textContent = 'Uso pessoal e intransferível';
+
   cardBack.appendChild(clonedQRImg);
+  cardBack.appendChild(backNotice);
   cardBack.appendChild(backText);
   
   foldedCard.appendChild(clonedCard);
@@ -417,6 +422,7 @@ function initFidelidade(userData) {
   const userNameEl = document.getElementById('user-name');
   const userEmailEl = document.getElementById('user-email');
   const userRoleBadgeEl = document.getElementById('user-role-badge');
+  const userAvatarPhotoEl = document.getElementById('user-avatar-photo');
   const userAvatarInitialsEl = document.getElementById('user-avatar-initials');
   const userIdCodeEl = document.getElementById('user-id-code');
   const userStatusEl = document.getElementById('user-status');
@@ -442,10 +448,28 @@ function initFidelidade(userData) {
   }
   
   const names = (userData.name || 'Visitante').trim().split(/\s+/);
-  const initials = names.length > 1 
+  const initials = names.length > 1
     ? (names[0][0] + names[names.length - 1][0]).toUpperCase()
     : names[0][0].toUpperCase();
   if (userAvatarInitialsEl) userAvatarInitialsEl.textContent = initials;
+
+  // Foto do funcionário (opcional): quando cadastrada, substitui as iniciais.
+  // Até o RH terminar de organizar as fotos de todo mundo, o fallback de
+  // iniciais garante que o cartão continua funcionando normalmente.
+  if (userAvatarPhotoEl) {
+    if (userData.fotoUrl) {
+      userAvatarPhotoEl.onerror = () => {
+        userAvatarPhotoEl.classList.add('hidden');
+        if (userAvatarInitialsEl) userAvatarInitialsEl.classList.remove('hidden');
+      };
+      userAvatarPhotoEl.src = userData.fotoUrl;
+      userAvatarPhotoEl.classList.remove('hidden');
+      if (userAvatarInitialsEl) userAvatarInitialsEl.classList.add('hidden');
+    } else {
+      userAvatarPhotoEl.classList.add('hidden');
+      if (userAvatarInitialsEl) userAvatarInitialsEl.classList.remove('hidden');
+    }
+  }
   
   if (userData.ativo === false) {
     handleSuspension();
