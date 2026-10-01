@@ -46,6 +46,7 @@ const listas = {};          // grupo -> { alunos, controle, geradoEm }
 let filtrados = [];
 let mostrando = POR_PAGINA;
 let modelos = null;
+let semanasDados = null;    // resumo por semana (Visão do diretor)
 let alunoAberto = null;     // aluno do modal WhatsApp / detalhe
 let aguardando = null;      // timer do "Atualizar agora"
 
@@ -192,7 +193,12 @@ function montarSemestres() {
 }
 
 function renderTudo() {
-  if (visao === 'painel') renderPainel();
+  // aviso do semestre vale pra todas as visões (antes só o Painel atualizava)
+  const aviso = document.getElementById('aviso-advogado');
+  aviso.classList.toggle('hidden', semestre === 'todos');
+  aviso.textContent = `Semestre ${semestre}: tudo nesta tela é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  if (visao === 'diretor') renderDiretor();
+  else if (visao === 'painel') renderPainel();
   else if (visao === 'lista') abrirLista();
   else renderSemana();
 }
@@ -236,6 +242,7 @@ async function atualizarAgora() {
           fim('Atualizado com os dados do Edubox.');
           Object.keys(listas).forEach(k => delete listas[k]);
           semanaDados = null;
+          semanasDados = null;
           painel = null;
           await carregarPainel();
         } else if (st.status === 'erro' && st.erroEm > pedidoEm) {
@@ -259,9 +266,9 @@ function recorte() {
   const r = painel?.resumo?.[semestre]?.[grupo];
   return r || null;
 }
-// Jurídico é sempre o acumulado (ver somaBaixas).
+// Advogado/Débito seguem o mesmo semestre do resto (ver somaBaixas).
 function recorteJuridico() {
-  return painel?.resumo?.todos?.[grupo] || null;
+  return recorte();
 }
 
 // Soma das baixas de uma lista de dias, no grupo/semestre escolhidos.
@@ -272,15 +279,27 @@ function somaBaixas(dias) {
       t.financeiro += d[grupo].financeiro.valor; t.juridico += d[grupo].juridico.valor;
       t.financeiroAtraso += d[grupo].financeiro.emAtraso; t.juridicoAtraso += d[grupo].juridico.emAtraso;
     } else {
-      // Jurídico não filtra por semestre: no Edubox o acordo fica no semestre
-      // da dívida original (2017, 2021...), nunca no semestre atual.
+      // Advogado/Débito também seguem o semestre escolhido — o da dívida
+      // original, que é como o Edubox registra o acordo (pedido 01/10/2026).
       const s = d.porSemestre?.[semestre]?.[grupo];
-      if (s) { t.financeiro += s.financeiro; t.financeiroAtraso += s.financeiroAtraso; }
-      t.juridico += d[grupo].juridico.valor; t.juridicoAtraso += d[grupo].juridico.emAtraso;
+      if (s) for (const k in t) t[k] += s[k];
     }
   }
   return t;
 }
+
+// Advogado (Advogado Fatec / Advogado Medicina = acordo feito) x Débito
+// judicial (com a advogada, sem acordo), a partir dos planos jurídicos.
+function ladosJuridico(rj) {
+  const novo = () => ({ valor: 0, alunos: 0, aVencer: 0 });
+  const saida = { advogado: novo(), debito: novo() };
+  for (const [plano, x] of Object.entries((rj && rj.planosJuridico) || {})) {
+    const lado = /ADVOGADO/i.test(plano) ? saida.advogado : saida.debito;
+    lado.valor += x.vencido.valor; lado.alunos += x.vencido.alunos; lado.aVencer += x.aVencer.valor;
+  }
+  return saida;
+}
+function ehModoAdvogado(modo) { return modo === 'advogado' || modo === 'debito'; }
 
 function renderPainel() {
   const r = recorte();
@@ -290,22 +309,33 @@ function renderPainel() {
   const fin = r ? r.financeiro.vencido : vazio;
   const jur = rj ? rj.juridico.vencido : vazio;
   const finAdv = (r && r.financeiroComAdvogado) || vazio;
-  // Quem está com advogado não pode ser cobrado pelo Financeiro.
-  document.getElementById('k-vencido').textContent = brl(fin.valor - finAdv.valor);
-  document.getElementById('k-vencido-hint').textContent = `${plural(fin.alunos - finAdv.alunos, 'aluno', 'alunos')} · ${plural(fin.parcelas - finAdv.parcelas, 'parcela', 'parcelas')} · sem quem está com advogado`;
-  document.getElementById('k-jur').textContent = brl(jur.valor);
-  document.getElementById('k-jur-hint').textContent = `${plural(jur.alunos, 'aluno', 'alunos')} · ${brl(rj ? rj.juridico.aVencer.valor : 0)} a vencer · todos os semestres`;
-  document.getElementById('k-fin').textContent = brl(finAdv.valor);
-  document.getElementById('k-fin-hint').textContent = `${plural(finAdv.alunos, 'aluno', 'alunos')} — NÃO cobrar: está com o advogado`;
+  // Quem manda é o plano da parcela: parcela normal é do Financeiro mesmo
+  // que o aluno tenha acordo; Advogado (acordo feito) e Débito judicial (sem
+  // acordo) não são cobrados pelo Financeiro.
+  document.getElementById('k-vencido').textContent = brl(fin.valor);
+  const devFin = (r && r.devido && r.devido.financeiro) || 0;
+  document.getElementById('k-vencido-hint').textContent = `Falta receber de ${plural(fin.alunos, 'aluno', 'alunos')} (${plural(fin.parcelas, 'parcela', 'parcelas')})` +
+    (devFin ? ` · ${pct(fin.valor / devFin)} do que já venceu (${brlCurto(devFin)})` : '') +
+    (finAdv.alunos ? ` · ${plural(finAdv.alunos, 'aluno também tem', 'alunos também têm')} acordo com advogado` : '');
+  const lados = ladosJuridico(rj);
+  // "pagando" é por aluno (não por semestre): só faz sentido no total
+  const sit = semestre === 'todos' ? ((painel.situacaoAdvogado && painel.situacaoAdvogado[grupo]) || {}) : {};
+  const dicaJur = (x, s) => `Atrasado de ${plural(x.alunos, 'aluno', 'alunos')} · mais ${brlCurto(x.aVencer)} ainda vai vencer` +
+    (s && s.alunos ? ` · ${s.pagando} de ${s.alunos} alunos pagaram algo nos últimos 90 dias (${brlCurto(s.pago90)})` : '') + ' · o Financeiro não cobra';
+  document.getElementById('k-jur').textContent = brl(lados.advogado.valor);
+  document.getElementById('k-jur-hint').textContent = dicaJur(lados.advogado, sit.advogado);
+  document.getElementById('k-fin').textContent = brl(lados.debito.valor);
+  document.getElementById('k-fin-hint').textContent = dicaJur(lados.debito, sit.debito);
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
-  aviso.textContent = `Semestre ${semestre}: os valores do Financeiro são deste semestre. O Jurídico / advogado aparece sempre com todos os semestres, porque no Edubox o acordo fica registrado no semestre da dívida original.`;
+  aviso.textContent = `Semestre ${semestre}: tudo neste painel é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  renderSemestres();
 
   const b = somaBaixas(painel.semana.baixas);
   const hojeISO = iso(new Date());
   const bh = somaBaixas(painel.semana.baixas.filter(d => d.data === hojeISO));
   document.getElementById('k-recebido').textContent = brl(b.financeiro + b.juridico);
-  document.getElementById('k-recebido-hint').textContent = `Financeiro ${brl(b.financeiro)} · Jurídico ${brl(b.juridico)} · hoje ${brl(bh.financeiro + bh.juridico)}`;
+  document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox de segunda até agora · Financeiro ${brlCurto(b.financeiro)} · Advogado/Débito ${brlCurto(b.juridico)} · só hoje ${brlCurto(bh.financeiro + bh.juridico)}`;
 
   const maxF = Math.max(1, ...FAIXAS.map(([k]) => r ? r.faixas[k].valor : 0));
   document.getElementById('faixas').innerHTML = FAIXAS.map(([k, rot, cor]) => {
@@ -315,9 +345,9 @@ function renderPainel() {
 
   const av = r ? r.aVencer : vazio;
   document.getElementById('a-vencer').innerHTML = `
-    <div><span>Financeiro${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
-    <div><span>Jurídico (todos os semestres)</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
-    <div style="grid-column:1/-1"><span>Total a vencer</span><b>${brl((r ? r.financeiro.aVencer.valor : 0) + (rj ? rj.juridico.aVencer.valor : 0))}</b></div>`;
+    <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
+    <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
+    <div style="grid-column:1/-1"><span>Total que ainda vai vencer</span><b>${brl((r ? r.financeiro.aVencer.valor : 0) + (rj ? rj.juridico.aVencer.valor : 0))}</b></div>`;
 
   // por plano jurídico (acumulado) + recebido na semana
   const planos = rj ? Object.entries(rj.planosJuridico || {}) : [];
@@ -334,7 +364,194 @@ function renderPainel() {
   const tb = document.getElementById('tb-cursos');
   if (!cursos.length) { tb.innerHTML = '<tr><td colspan="5" class="tabela-msg">Nada vencido neste recorte.</td></tr>'; return; }
   tb.innerHTML = cursos.map(([c, x]) => `<tr><td>${esc(nomeCurso(c))}</td><td class="num">${x.vencido.alunos}</td><td class="num">${brl(x.financeiroVencido.valor)}</td><td class="num">${brl(x.juridicoVencido.valor)}</td><td class="num"><b>${brl(x.vencido.valor)}</b></td></tr>`).join('') +
-    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${v.alunos}</b></td><td class="num"><b>${brl(fin.valor)}</b></td><td class="num"><b>${brl(jur.valor)}</b></td><td class="num"><b>${brl(v.valor)}</b></td></tr>`;
+    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${v.alunos}</b></td><td class="num"><b>${brl(fin.valor)}</b></td><td class="num"><b>${brl(r.juridico.vencido.valor)}</b></td><td class="num"><b>${brl(v.valor)}</b></td></tr>`;
+}
+
+// "Todos os semestres": quanto tem em cada semestre, pra conta ficar clara.
+function renderSemestres() {
+  const card = document.getElementById('card-semestres');
+  card.classList.toggle('hidden', semestre !== 'todos');
+  if (semestre !== 'todos') return;
+  const linhas = Object.entries(painel.resumo || {})
+    .filter(([s, gr]) => s !== 'todos' && gr[grupo] && gr[grupo].vencido.valor > 0)
+    .map(([s, gr]) => ({ s, g: gr[grupo], l: ladosJuridico(gr[grupo]) }))
+    // mais novo primeiro; "sem semestre" (parcela sem semestre no Edubox) por último
+    .sort((a, b) => (/^\d/.test(b.s) - /^\d/.test(a.s)) || b.s.localeCompare(a.s));
+  const tot = painel.resumo.todos[grupo];
+  const lt = ladosJuridico(tot);
+  document.getElementById('tb-semestres').innerHTML = linhas.map(({ s, g, l }) => `
+    <tr data-sem="${esc(s)}"><td><b>${esc(s)}</b></td><td class="num">${g.vencido.alunos}</td><td class="num">${brl(g.financeiro.vencido.valor)}</td>
+      <td class="num">${l.advogado.valor ? brl(l.advogado.valor) : '—'}</td><td class="num">${l.debito.valor ? brl(l.debito.valor) : '—'}</td>
+      <td class="num"><b>${brl(g.vencido.valor)}</b></td></tr>`).join('') +
+    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${tot.vencido.alunos}</b></td><td class="num"><b>${brl(tot.financeiro.vencido.valor)}</b></td>
+      <td class="num"><b>${brl(lt.advogado.valor)}</b></td><td class="num"><b>${brl(lt.debito.valor)}</b></td><td class="num"><b>${brl(tot.vencido.valor)}</b></td></tr>`;
+}
+
+// ---------- VISÃO DO DIRETOR ----------
+// Poucos números grandes pra quem não é do financeiro: % de inadimplência
+// (e se melhorou desde segunda), dinheiro que entrou, resultado das cobranças,
+// gráfico semana a semana, cursos com mais atraso e situação dos acordos.
+function brlCurto(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1e6) return `R$ ${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mi`;
+  if (Math.abs(n) >= 1e3) return `R$ ${Math.round(n / 1e3).toLocaleString('pt-BR')} mil`;
+  return brl(n);
+}
+const pct = (v, casas = 1) => `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`;
+
+async function renderDiretor() {
+  const r = recorte();
+  if (!r) return;
+  if (!semanasDados) {
+    try { semanasDados = (await apiFetch('/cobranca/edubox/semanas')).semanas || {}; } catch (e) { semanasDados = {}; }
+  }
+  const seg = iso(segunda());
+  const w = semanasDados[seg]?.[grupo]?.[semestre] || {};
+  const rotSem = semestre === 'todos' ? 'todos os semestres' : `semestre ${semestre}`;
+
+  // 1) Inadimplência
+  const venc = r.financeiro.vencido.valor;
+  const devido = (r.devido && r.devido.financeiro) || 0;
+  const inad = devido ? venc / devido : null;
+  let seta = '';
+  if (inad !== null && w.ini && w.ini.fd) {
+    const antes = w.ini.f / w.ini.fd;
+    const dif = (inad - antes) * 100;
+    seta = `<span class="cb-dir-seta ${Math.abs(dif) < 0.05 ? 'igual' : dif > 0 ? 'sobe' : 'desce'}">Segunda: ${pct(antes)} → hoje: ${pct(inad)} ${Math.abs(dif) < 0.05 ? '=' : dif > 0 ? '▲ piorou' : '▼ melhorou'}</span>`;
+  }
+  document.getElementById('d-inad').innerHTML = `
+    <div class="cb-dir-rotulo">Inadimplência · ${esc(nomeGrupo())} · ${esc(rotSem)}</div>
+    <div class="cb-dir-numero ${inad === null ? '' : inad > 0.05 ? 'ruim' : 'bom'}">${inad === null ? '—' : `${pct(inad)} <small style="font-size:1rem;font-weight:700">em atraso</small>`}</div>
+    <div class="cb-dir-texto">${inad === null
+      ? 'Aguardando a próxima atualização do Edubox para calcular.'
+      : `<b>${brlCurto(venc).replace(/ mi$/, ' milhões')}</b> não pagos, de <b>${brlCurto(devido).replace(/ mi$/, ' milhões')}</b> que já venceram. Quanto menor, melhor. (Sem contar advogado e débito judicial.)`}</div>
+    ${seta}`;
+
+  // 2) Dinheiro que entrou na semana + taxa de recuperação
+  const rec = w.rec || null;
+  const b = rec ? { f: rec.f + rec.j, fa: rec.fa } : (() => { const t = somaBaixas(painel.semana.baixas); return { f: t.financeiro + t.juridico, fa: t.financeiroAtraso }; })();
+  const taxa = w.ini && w.ini.f ? b.fa / w.ini.f : null;
+  document.getElementById('d-receb').innerHTML = `
+    <div class="cb-dir-rotulo">🟢 Entrou nesta semana <small style="text-transform:none;font-weight:500">(de segunda até agora)</small></div>
+    <div class="cb-dir-numero bom">${brlCurto(b.f)}</div>
+    <div class="cb-dir-texto">${taxa !== null
+      ? `Disso, <b>${brlCurto(b.fa)}</b> foi pagamento de mensalidade atrasada: <b>${pct(taxa, 0)} do atraso de segunda (${brlCurto(w.ini.f)}) já foi recuperado</b>. O resto foi pago em dia.`
+      : `${brlCurto(b.fa)} vieram de parcelas atrasadas.`}</div>`;
+
+  // 3) Resultado das cobranças (funil)
+  const cobrEl = document.getElementById('d-cobr');
+  cobrEl.innerHTML = '<div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div><div class="cb-dir-texto">Carregando...</div>';
+  apiFetch(`/cobranca/edubox/retorno?inicio=${seg}&fim=${iso(somaDias(segunda(), 6))}`).then(rt => {
+    const lista = rt.alunos.filter(x => (x.grupo || 'graduacao') === grupo);
+    const prom = lista.filter(x => x.promessa).length;
+    const pagaram = lista.filter(x => x.pagouDepois > 0);
+    const valor = pagaram.reduce((s, x) => s + x.pagouDepois, 0);
+    cobrEl.innerHTML = `
+      <div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div>
+      <div class="cb-funil">
+        <div><b>${lista.length}</b><small>alunos cobrados</small></div><span>›</span>
+        <div><b>${prom}</b><small>prometeram</small></div><span>›</span>
+        <div><b>${pagaram.length}</b><small>pagaram</small></div>
+      </div>
+      <div class="cb-dir-texto" style="margin-top:0.5rem">${lista.length ? `${pct(pagaram.length / lista.length, 0)} dos cobrados já pagaram · <b>${brlCurto(valor)}</b> recebidos deles.` : 'Nenhuma cobrança registrada no Órbita nesta semana ainda.'}</div>`;
+  }).catch(() => { cobrEl.innerHTML = '<div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div><div class="cb-dir-texto">Não foi possível carregar.</div>'; });
+
+  // 4) Gráfico semana a semana (últimas 8 semanas com dado)
+  const semanas = Object.keys(semanasDados).sort().slice(-12)
+    .map(k => ({ k, x: semanasDados[k]?.[grupo]?.[semestre] || {} }))
+    .filter(s => s.x.rec || s.x.ini);
+  document.getElementById('d-grafico').innerHTML = semanas.length ? graficoSemanas(semanas) : '<div class="tabela-msg">Ainda sem semanas registradas.</div>';
+
+  // Inadimplência ao longo do ano: % de cada segunda + o valor de agora
+  const ano = String(new Date().getFullYear());
+  const pontos = Object.keys(semanasDados).sort()
+    .filter(k => k.startsWith(ano))
+    .map(k => ({ k, x: semanasDados[k]?.[grupo]?.[semestre] }))
+    .filter(p => p.x && p.x.ini && p.x.ini.fd > 0)
+    .map(p => ({ rot: fmtData(p.k).slice(0, 5), v: p.x.ini.f / p.x.ini.fd }));
+  if (inad !== null) pontos.push({ rot: 'agora', v: inad });
+  document.getElementById('d-inad-ano').innerHTML = pontos.length > 1
+    ? graficoInadimplencia(pontos)
+    : '<div class="tabela-msg">O histórico do ano ainda está sendo montado — volta a aparecer aqui em instantes.</div>';
+
+  // 5) Cursos com mais atraso (%)
+  const cursos = Object.entries(r.porCurso)
+    .filter(([, c]) => c.devidoFinanceiro > 0 && c.financeiroVencido.valor > 0)
+    .map(([nome, c]) => ({ nome, p: c.financeiroVencido.valor / c.devidoFinanceiro, v: c.financeiroVencido.valor }))
+    .sort((a, b2) => b2.p - a.p).slice(0, 10);
+  const maxP = Math.max(0.0001, ...cursos.map(c => c.p));
+  document.getElementById('d-cursos').innerHTML = cursos.length
+    ? cursos.map(c => `<div class="cb-rank"><span>${esc(nomeCurso(c.nome))}</span><div class="cb-rank-barra"><span style="width:${(c.p / maxP) * 100}%"></span></div><b>${pct(c.p)}<small>${brlCurto(c.v)} atrasado de ${brlCurto(c.v / c.p)}</small></b></div>`).join('')
+    : '<div class="tabela-msg">Nada atrasado neste recorte.</div>';
+
+  // 6) Advogado e débito judicial — sempre o TOTAL (o acordo é com o aluno e
+  // as dívidas são de semestres antigos; "atrasado no 2026.2" dava R$ 0 e confundia)
+  const sit = (painel.situacaoAdvogado && painel.situacaoAdvogado[grupo]) || {};
+  const lados = ladosJuridico(painel.resumo.todos[grupo]);
+  const linha = (titulo, s, l, dica) => {
+    const tot = (s && s.alunos) || 0;
+    const pg = (s && s.pagando) || 0;
+    return `<div class="cb-adv-linha"><b>${titulo}</b> <small class="cb-sub">${dica}</small>
+      <div class="cb-faixa-barra"><span style="width:${tot ? (pg / tot) * 100 : 0}%"></span></div>
+      <div class="cb-dir-texto">🔴 <b>${brlCurto(l.valor)} atrasado</b> (dívidas de semestres anteriores) · <b>${pg} de ${tot}</b> alunos pagaram algo nos últimos 90 dias (${brlCurto((s && s.pago90) || 0)} entrou)</div></div>`;
+  };
+  document.getElementById('d-adv').innerHTML =
+    linha('⚖️ Acordos com advogado', sit.advogado, lados.advogado, 'acordo feito — paga direto') +
+    linha('🏛 Débito judicial', sit.debito, lados.debito, 'com a advogada, ainda sem acordo');
+}
+
+function graficoInadimplencia(pontos) {
+  const W = 820, H = 230, M = { t: 26, r: 24, b: 30, l: 44 };
+  const max = Math.max(0.01, ...pontos.map(p => p.v)) * 1.15;
+  const x = (i) => M.l + (pontos.length === 1 ? 0 : i * (W - M.l - M.r) / (pontos.length - 1));
+  const y = (v) => H - M.b - (v / max) * (H - M.t - M.b);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Inadimplência por semana">`;
+  for (let k = 0; k <= 4; k++) {
+    const v = (max / 4) * k;
+    svg += `<line x1="${M.l}" x2="${W - M.r}" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8f0"/><text x="${M.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#94a3b8">${pct(v, 0)}</text>`;
+  }
+  const area = `${x(0)},${y(0)} ` + pontos.map((p, i) => `${x(i)},${y(p.v)}`).join(' ') + ` ${x(pontos.length - 1)},${y(0)}`;
+  svg += `<polygon points="${area}" fill="#ef4444" opacity="0.08"/>`;
+  svg += `<polyline points="${pontos.map((p, i) => `${x(i)},${y(p.v)}`).join(' ')}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linejoin="round"/>`;
+  const passo = Math.max(1, Math.ceil(pontos.length / 12)); // não amontoar rótulos
+  pontos.forEach((p, i) => {
+    const ultimo = i === pontos.length - 1;
+    svg += `<circle cx="${x(i)}" cy="${y(p.v)}" r="${ultimo ? 6 : 3.5}" fill="${ultimo ? '#b91c1c' : '#ef4444'}"><title>${p.rot}: ${pct(p.v)}</title></circle>`;
+    if (i % passo === 0 || ultimo) {
+      svg += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#64748b">${p.rot}</text>`;
+      svg += `<text x="${x(i)}" y="${y(p.v) - 9}" text-anchor="middle" font-size="11" font-weight="700" fill="#b91c1c">${pct(p.v)}</text>`;
+    }
+  });
+  return svg + '</svg>';
+}
+
+function graficoSemanas(semanas) {
+  const W = 820, H = 260, M = { t: 24, r: 16, b: 34, l: 16 };
+  const n = semanas.length;
+  const larg = (W - M.l - M.r) / n;
+  const recs = semanas.map(s => s.x.rec ? s.x.rec.f + s.x.rec.j : 0);
+  const vencs = semanas.map(s => s.x.ini ? s.x.ini.f : null);
+  const maxRec = Math.max(1, ...recs);
+  const maxVenc = Math.max(1, ...vencs.filter(v => v !== null));
+  const yRec = (v) => H - M.b - (v / maxRec) * (H - M.t - M.b) * 0.85;
+  const yVenc = (v) => H - M.b - (v / maxVenc) * (H - M.t - M.b) * 0.92;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Recebido e atrasado por semana">`;
+  semanas.forEach((s, i) => {
+    const x = M.l + i * larg;
+    const y = yRec(recs[i]);
+    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="#10b981" opacity="0.85"><title>${brl(recs[i])}</title></rect>`;
+    svg += `<text x="${x + larg / 2}" y="${y - 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">${brlCurto(recs[i])}</text>`;
+    svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${fmtData(s.k).slice(0, 5)}</text>`;
+  });
+  const pts = vencs.map((v, i) => v === null ? null : [M.l + i * larg + larg / 2, yVenc(v), v]).filter(Boolean);
+  if (pts.length) {
+    if (pts.length > 1) svg += `<polyline points="${pts.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="#ef4444" stroke-width="3"/>`;
+    pts.forEach(p => {
+      svg += `<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="#ef4444"><title>Atrasado: ${brl(p[2])}</title></circle>`;
+      svg += `<text x="${p[0]}" y="${p[1] - 10}" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">${brlCurto(p[2])}</text>`;
+    });
+  }
+  return svg + '</svg>';
 }
 
 // ---------- LISTA DE COBRANÇA ----------
@@ -348,6 +565,7 @@ async function abrirLista() {
       return;
     }
   }
+  document.getElementById('l-planos').innerHTML = (listas[grupo].planos || []).slice().sort().map(p => `<option value="${esc(p)}">`).join('');
   const cursos = [...new Set(listas[grupo].alunos.flatMap(a => a.cursos))].sort();
   const selC = document.getElementById('l-curso');
   const atualC = selC.value;
@@ -359,19 +577,31 @@ async function abrirLista() {
 
 function faixaDe(dias) { return dias <= 30 ? '1-30' : dias <= 60 ? '31-60' : dias <= 90 ? '61-90' : '90+'; }
 
-// Aluno com só as parcelas do semestre / lado escolhidos.
-// modo 'cobrar': só quem NÃO está com advogado (o Financeiro não pode cobrar
-// quem está), parcelas do semestre escolhido. modo 'advogado': só quem está,
-// todas as parcelas vencidas (o acordo fica no semestre da dívida original).
-function recortarAluno(a, modo) {
+// Aluno com só as parcelas que interessam ao filtro. Quem manda é o PLANO da
+// parcela (decisão do usuário, 01/10/2026):
+//  - 'cobrar': parcelas normais (não jurídicas) do semestre escolhido — de
+//    qualquer aluno, mesmo quem também tem acordo com advogado;
+//  - 'advogado' / 'debito': alunos com acordo feito / débito judicial, só as
+//    parcelas jurídicas (semestre = o da dívida original, como no Edubox).
+// Vencimento de/até e plano valem nos três.
+function recortarAluno(a, modo, f) {
   const hoje = Date.now();
-  if ((modo === 'advogado') !== !!a.comAdvogado) return null;
-  const parcelas = modo === 'advogado' ? a.parcelas : a.parcelas.filter(p => semestre === 'todos' || p.s === semestre);
+  const adv = ehModoAdvogado(modo);
+  if (adv && a.tipoAdvogado !== modo) return null;
+  const nomes = listas[grupo].planos || [];
+  const parcelas = a.parcelas.filter(p => {
+    if (adv ? !p.j : p.j) return false;
+    if (semestre !== 'todos' && p.s !== semestre) return false;
+    if (f.de && p.v < f.de) return false;
+    if (f.ate && p.v > f.ate) return false;
+    if (f.plano && !(nomes[p.pl] || '').toLowerCase().includes(f.plano)) return false;
+    return true;
+  });
   if (!parcelas.length) return null;
   const total = parcelas.reduce((s, p) => s + p.valor, 0);
   const maisAntigo = parcelas[0].v;
   const dias = Math.round((hoje - dataLocal(maisAntigo).getTime()) / 86400000);
-  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, temJuridico: parcelas.some(p => p.j) };
+  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: adv };
 }
 
 function situacaoCobranca(a) {
@@ -389,16 +619,30 @@ function filtrarLista() {
   const lado = document.getElementById('l-lado').value;
   const faixa = document.getElementById('l-faixa').value;
   const curso = document.getElementById('l-curso').value;
+  const pagando = document.getElementById('l-pagando').value;
+  const f = {
+    de: document.getElementById('l-venc-de').value,
+    ate: document.getElementById('l-venc-ate').value,
+    plano: document.getElementById('l-plano').value.trim().toLowerCase()
+  };
+  const adv = ehModoAdvogado(lado);
+  document.getElementById('l-pagando').classList.toggle('hidden', !adv);
+  document.getElementById('l-controle').classList.toggle('hidden', adv);
   const agoraISO = new Date().toISOString();
 
   filtrados = [];
   for (const bruto of L.alunos) {
-    const a = recortarAluno(bruto, lado);
+    const a = recortarAluno(bruto, lado, f);
     if (!a) continue;
+    if (adv && pagando) {
+      const pg = a.pagamento && a.pagamento.pago90 > 0;
+      if ((pagando === 'sim') !== !!pg) continue;
+    }
     if (curso && !a.cursos.includes(curso)) continue;
     if (faixa && faixaDe(a.diasVis) !== faixa) continue;
     if (busca && !a.nome.toLowerCase().includes(busca) && !(buscaDig.length >= 3 && a.cpf.includes(buscaDig))) continue;
     const { c, semana } = situacaoCobranca(a);
+    if (adv) { filtrados.push(a); continue; }
     if (ctl === 'nao-semana' && semana) continue;
     if (ctl === 'sim-semana' && !semana) continue;
     if (ctl === 'nunca' && c) continue;
@@ -411,24 +655,35 @@ function filtrarLista() {
 
   const total = filtrados.reduce((s, a) => s + a.totalVis, 0);
   const cobradosSemana = filtrados.filter(a => situacaoCobranca(a).semana).length;
-  if (lado === 'advogado') {
+  if (adv) {
+    const pagandoN = filtrados.filter(a => a.pagamento && a.pagamento.pago90 > 0).length;
     document.getElementById('l-contadores').innerHTML = `
-      <span>⚖️ <b>${filtrados.length}</b> alunos com o advogado · <b>${brl(total)}</b> vencido</span>
-      <span>O Financeiro <b>não cobra</b> esses alunos — só consulta e registra observações</span>
+      <span>${lado === 'advogado' ? '⚖️' : '🏛'} <b>${filtrados.length}</b> alunos · <b>${brl(total)}</b> atrasado</span>
+      <span>✅ Pagando (90 dias): <b>${pagandoN}</b> · ⚠️ Parados: <b>${filtrados.length - pagandoN}</b></span>
+      <span>O Financeiro <b>não cobra</b> essas parcelas — só consulta e registra observações</span>
       <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
     renderLista();
     return;
   }
   document.getElementById('l-contadores').innerHTML = `
-    <span><b>${filtrados.length}</b> alunos · <b>${brl(total)}</b></span>
+    <span><b>${filtrados.length}</b> alunos com atraso · 🔴 <b>${brl(total)}</b> a receber</span>
     <span>✅ Cobrados nesta semana: <b>${cobradosSemana}</b></span>
     <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana}</b></span>
     <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
   renderLista(agoraISO);
 }
 
+// Situação de pagamento do aluno com acordo/débito (último pagamento no Edubox).
+function badgePagamento(a) {
+  const pg = a.pagamento || {};
+  if (pg.pago90 > 0) {
+    return `<span class="cb-pagto sim">✅ Pagando</span><div class="cb-sub">último pagamento ${fmtData(pg.ultimo)} · ${brl(pg.pago90)} em 90 dias</div>`;
+  }
+  return `<span class="cb-pagto nao">⚠️ Parado</span><div class="cb-sub">${pg.ultimo ? `sem pagamento há ${diasDesde(pg.ultimo + 'T12:00:00')} dias (último ${fmtData(pg.ultimo)})` : 'nenhum pagamento registrado'}</div>`;
+}
+
 function badgeCobranca(a) {
-  if (a.comAdvogado) return `<span class="cb-cobrado antigo">⚖️ Com o advogado</span><div class="cb-sub">${esc((a.planosAdvogado || []).join(', ').toLowerCase())}</div>`;
+  if (a.modoAdv) return badgePagamento(a);
   const { c } = situacaoCobranca(a);
   let html;
   if (!c) html = '<span class="cb-cobrado nunca">Não cobrado</span>';
@@ -445,6 +700,12 @@ function badgeCobranca(a) {
   return html;
 }
 
+function planosDoAluno(a) {
+  const nomes = listas[grupo].planos || [];
+  const u = [...new Set(a.parcelasVis.map(p => nomes[p.pl]).filter(Boolean))];
+  return u.length > 2 ? `${u.slice(0, 2).join(' · ')} +${u.length - 2}` : u.join(' · ');
+}
+
 function renderLista() {
   const tb = document.getElementById('tb-alunos');
   if (!filtrados.length) {
@@ -455,14 +716,15 @@ function renderLista() {
   const classeF = { '1-30': 'f1', '31-60': 'f2', '61-90': 'f3', '90+': 'f4' };
   tb.innerHTML = filtrados.slice(0, mostrando).map((a, i) => `
     <tr class="${a.celular ? '' : 'cb-sem-cel'}">
-      <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.comAdvogado ? `<span class="cb-tag-jur" title="${esc((a.planosAdvogado || []).join(', '))}">COM ADVOGADO — NÃO COBRAR</span>` : ''}
+      <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.modoAdv ? `<span class="cb-tag-jur">${a.tipoAdvogado === 'advogado' ? 'ACORDO COM ADVOGADO' : 'DÉBITO JUDICIAL'} — NÃO COBRAR</span>` : a.comAdvogado ? `<span class="cb-tag-acordo" title="${esc((a.planosAdvogado || []).join(', '))} — essas parcelas são do advogado; as da lista são normais">também tem acordo c/ advogado</span>` : ''}
         <div class="cb-sub">${esc(a.cursos.map(nomeCurso).join(' / '))} · ${esc(a.fone || 'sem telefone')}</div></td>
-      <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}">${a.diasVis} dias</span>
-        <div class="cb-sub">desde ${fmtData(a.maisAntigoVis)}</div></td>
+      <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}" title="dias desde a parcela mais antiga">${a.diasVis} dias de atraso</span>
+        <div class="cb-sub">desde ${fmtData(a.maisAntigoVis)}</div>
+        <span class="cb-plano">${esc(planosDoAluno(a))}</span></td>
       <td class="num"><b>${brl(a.totalVis)}</b></td>
       <td>${badgeCobranca(a)}</td>
       <td class="acoes-col">
-        ${podeEditar && !a.comAdvogado ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="${a.celular ? 'Enviar cobrança pelo WhatsApp' : 'Sem celular no Edubox'}">💬 WhatsApp</button>` : ''}
+        ${podeEditar && !a.modoAdv ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="${a.celular ? 'Enviar cobrança pelo WhatsApp' : 'Sem celular no Edubox'}">💬 WhatsApp</button>` : ''}
         <button type="button" class="btn-acao" data-abrir="${i}" title="Parcelas, histórico e registrar ligação/negociação/promessa">📋 Detalhes</button>
       </td>
     </tr>`).join('');
@@ -493,7 +755,7 @@ function modeloSugerido(a) {
 
 async function abrirZap(i) {
   const a = filtrados[i];
-  if (!a || a.comAdvogado) return;
+  if (!a || a.modoAdv) return;
   try { await garantirModelos(); } catch (e) { showToast(e.message, 'error'); return; }
   alunoAberto = { ...a, idx: i };
   document.getElementById('zap-sub').innerHTML = `<b>${esc(a.nome)}</b> · ${plural(a.parcelasVis.length, 'parcela', 'parcelas')} · ${brl(a.totalVis)} · ${a.diasVis} dias de atraso`;
@@ -542,7 +804,7 @@ async function enviarZap() {
 
 function proximoNaoCobrado(depoisDe) {
   for (let i = depoisDe + 1; i < filtrados.length; i++) {
-    if (filtrados[i].celular && !filtrados[i].comAdvogado && !situacaoCobranca(filtrados[i]).semana) return i;
+    if (filtrados[i].celular && !filtrados[i].modoAdv && !situacaoCobranca(filtrados[i]).semana) return i;
   }
   return -1;
 }
@@ -569,8 +831,11 @@ async function abrirAluno(i) {
   alunoAberto = { ...a, idx: i };
   document.getElementById('al-nome').textContent = a.nome;
   document.getElementById('al-sub').innerHTML = `CPF ${esc(a.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'))} · ${esc(a.fone || 'sem telefone')} · ${esc(a.cursos.map(nomeCurso).join(' / '))}`;
+  const nomesPl = listas[grupo].planos || [];
+  const pg = a.pagamento || {};
+  document.getElementById('al-sub').innerHTML += ` · ${pg.ultimo ? `último pagamento ${fmtData(pg.ultimo)}` : 'sem pagamento registrado'}${pg.pago90 > 0 ? ` (${brl(pg.pago90)} em 90 dias)` : ''}`;
   document.getElementById('al-parcelas').innerHTML = a.parcelasVis.map(p =>
-    `<div><span>${fmtData(p.v)} <small class="cb-sub">(${esc(p.s)})</small>${p.j ? '<span class="cb-tag-jur">JUR</span>' : ''}</span><b>${brl(p.valor)}</b></div>`).join('') +
+    `<div><span>${fmtData(p.v)} <small class="cb-sub">(${esc(p.s)})</small>${p.j ? '<span class="cb-tag-jur">JUR</span>' : ''}<small class="cb-plano">${esc(nomesPl[p.pl] || '')}</small></span><b>${brl(p.valor)}</b></div>`).join('') +
     `<div class="total"><span>Total</span><span>${brl(a.totalVis)}</span></div>`;
   document.getElementById('form-acao').classList.toggle('hidden', !podeEditar);
   document.getElementById('ac-tipo').value = 'ligacao';
@@ -703,17 +968,17 @@ async function renderSemana() {
   // o começo do controle), a conta usa só o recebido a partir dela.
   const fotoAtrasada = sem.fotoInicio && sem.fotoInicio.data > sem.inicio;
   const bConta = fotoAtrasada ? somaBaixas(sem.baixas.filter(d => d.data >= sem.fotoInicio.data)) : b;
-  const valorFoto = (foto, lado) => foto?.vencido?.[lado === 'juridico' ? 'todos' : semestre]?.[grupo]?.[lado];
+  const valorFoto = (foto, lado) => foto?.vencido?.[semestre]?.[grupo]?.[lado];
   const fimFonte = atual ? null : sem.fotoFim;
   const avisos = [];
   if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou o PC de atualização estava desligado). Os recebimentos estão completos.');
   else if (fotoAtrasada) avisos.push(`O primeiro registro do vencido nesta semana é de ${fmtDataHora(sem.fotoInicio.geradoEm)} (o PC de atualização não rodou antes disso). A conta abaixo parte desse momento; o "Recebido total na semana" e as tabelas mostram a semana inteira.`);
   document.getElementById('s-aviso').innerHTML = avisos.map(t => `<div class="cb-aviso">${esc(t)}</div>`).join('');
 
-  const lados = [['financeiro', '💼 Financeiro'], ['juridico', `⚖️ Jurídico / advogado${semestre !== 'todos' ? ' <small class="cb-sub">(todos os semestres)</small>' : ''}`]];
+  const lados = [['financeiro', '💼 Financeiro'], ['juridico', '⚖️ Advogado + Débito judicial']];
   document.getElementById('s-lados').innerHTML = lados.map(([lado, titulo]) => {
     const inicio = valorFoto(sem.fotoInicio, lado);
-    const fim = atual ? ((lado === 'juridico' ? recorteJuridico() : recorte())?.[lado]?.vencido?.valor ?? 0) : valorFoto(fimFonte, lado);
+    const fim = atual ? (recorte()?.[lado]?.vencido?.valor ?? 0) : valorFoto(fimFonte, lado);
     const recAtraso = bConta[`${lado}Atraso`];
     const recTotal = b[lado];
     const temConta = inicio !== undefined && fim !== undefined;
@@ -722,13 +987,15 @@ async function renderSemana() {
     const quandoFim = atual ? fmtDataHora(painel.geradoEm) : (fimFonte ? fmtDataHora(fimFonte.geradoEm) : '');
     return `<div class="card cb-lado">
       <h3>${titulo}</h3>
-      <div class="cb-conta"><span>${fotoAtrasada ? 'Vencido no 1º registro da semana' : 'Começou a semana com'}<small>vencido em ${quandoIni || '—'}</small></span><b>${inicio !== undefined ? brl(inicio) : '—'}</b></div>
-      <div class="cb-conta menos"><span>− Recebido de parcelas vencidas<small>pagou depois do vencimento</small></span><b>${brl(recAtraso)}</b></div>
-      <div class="cb-conta mais"><span>+ Entrou em atraso / ajustes<small>novos vencimentos, renegociações, cancelamentos</small></span><b>${novos !== null ? brl(novos) : '—'}</b></div>
-      <div class="cb-conta resultado"><span>${atual ? 'Vencido agora' : 'Terminou a semana com'}<small>${quandoFim}</small></span><b>${fim !== undefined ? brl(fim) : '—'}</b></div>
-      <div class="cb-conta"><span>Recebido total na semana<small>inclui parcelas pagas em dia</small></span><b>${brl(recTotal)}</b></div>
+      <div class="cb-conta"><span>🔴 ${fotoAtrasada ? 'Atrasado no 1º registro da semana' : 'Atrasado na segunda-feira'}<small>o que faltava receber em ${quandoIni || '—'}</small></span><b>${inicio !== undefined ? brl(inicio) : '—'}</b></div>
+      <div class="cb-conta menos"><span>− Pagaram mensalidades atrasadas<small>dinheiro que entrou de parcela já vencida (diminui o atraso)</small></span><b>${brl(recAtraso)}</b></div>
+      <div class="cb-conta mais"><span>+ Novas mensalidades que venceram sem pagar<small>e ajustes: renegociações, cancelamentos (aumenta o atraso)</small></span><b>${novos !== null ? brl(novos) : '—'}</b></div>
+      <div class="cb-conta resultado"><span>= 🔴 ${atual ? 'Atrasado agora' : 'Atrasado no fim da semana'}<small>${quandoFim}</small></span><b>${fim !== undefined ? brl(fim) : '—'}</b></div>
+      <div class="cb-conta"><span>🟢 Todo o dinheiro que entrou na semana<small>atrasadas + mensalidades pagas em dia</small></span><b>${brl(recTotal)}</b></div>
     </div>`;
   }).join('');
+
+  carregarRetorno(iso(seg), iso(dom));
 
   // por dia
   const dias = [];
@@ -765,9 +1032,52 @@ async function renderSemana() {
     : '<tr><td colspan="4" class="tabela-msg">Nenhum recebimento.</td></tr>');
 }
 
+// Retorno das cobranças da semana (pro Fábio): quantos alunos o Financeiro
+// cobrou, por quem, por qual canal, promessas, e quem pagou depois.
+async function carregarRetorno(ini, fim) {
+  const kpis = document.getElementById('s-retorno-kpis');
+  const tb = document.getElementById('s-retorno');
+  tb.innerHTML = '<tr><td colspan="5" class="tabela-msg">Carregando...</td></tr>';
+  kpis.innerHTML = '';
+  let r;
+  try { r = await apiFetch(`/cobranca/edubox/retorno?inicio=${ini}&fim=${fim}`); } catch (err) {
+    tb.innerHTML = `<tr><td colspan="5" class="tabela-msg">Erro: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+  const lista = r.alunos.filter(x => (x.grupo || 'graduacao') === grupo).sort((a, b) => b.pagouDepois - a.pagouDepois || a.nome.localeCompare(b.nome));
+  const pagaram = lista.filter(x => x.pagouDepois > 0);
+  const totalPago = pagaram.reduce((s, x) => s + x.pagouDepois, 0);
+  const canais = {};
+  const pessoas = {};
+  lista.forEach(x => x.acoes.forEach(ac => {
+    canais[ac.tipo] = (canais[ac.tipo] || 0) + 1;
+    const p = (ac.por || '—').split(' ')[0];
+    pessoas[p] = (pessoas[p] || 0) + 1;
+  }));
+  const promessas = lista.filter(x => x.promessa).length;
+  kpis.innerHTML = `
+    <div><span>Alunos cobrados</span><b>${lista.length}</b></div>
+    <div><span>Pagaram depois da cobrança</span><b>${pagaram.length}</b> <small class="cb-sub">${lista.length ? Math.round(pagaram.length / lista.length * 100) : 0}%</small></div>
+    <div><span>🟢 Quanto eles pagaram</span><b>${brl(totalPago)}</b></div>
+    <div><span>Promessas</span><b>${promessas}</b></div>
+    <div><span>Por canal</span><small>${Object.entries(canais).map(([k, n]) => `${(TIPOS[k] || ['•'])[0]} ${n}`).join(' · ') || '—'}</small></div>
+    <div><span>Por pessoa</span><small>${Object.entries(pessoas).map(([k, n]) => `${esc(k)} ${n}`).join(' · ') || '—'}</small></div>`;
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="5" class="tabela-msg">Nenhuma cobrança registrada nesta semana (${nomeGrupo()}).</td></tr>`;
+    return;
+  }
+  tb.innerHTML = lista.map(x => `<tr>
+    <td>${esc(x.nome)}</td>
+    <td>${x.acoes.map(ac => `${(TIPOS[ac.tipo] || ['•'])[0]} ${fmtDataHora(ac.em)}`).join('<br>')}</td>
+    <td>${esc([...new Set(x.acoes.map(ac => (ac.por || '').split(' ')[0]))].join(', '))}</td>
+    <td>${x.promessa ? `${fmtData(x.promessa.data)}${x.promessa.valor ? ` · ${brl(x.promessa.valor)}` : ''}` : '—'}</td>
+    <td class="num">${x.pagouDepois > 0 ? `<b style="color:#047857">${brl(x.pagouDepois)}</b>` : '—'}</td>
+  </tr>`).join('');
+}
+
 // ---------- IMPRESSÃO ----------
 function imprimir() {
-  const titulos = { painel: 'Cobrança — Painel', lista: 'Cobrança — Lista de alunos', semana: 'Cobrança — Fechamento semanal' };
+  const titulos = { diretor: 'Cobrança — Visão do diretor', painel: 'Cobrança — Painel', lista: 'Cobrança — Lista de alunos', semana: 'Cobrança — Fechamento semanal' };
   document.getElementById('print-titulo').textContent = titulos[visao];
   const partes = [nomeGrupo(), nomeSemestre()];
   if (visao === 'semana') partes.push(document.getElementById('s-rotulo').textContent);
@@ -776,6 +1086,10 @@ function imprimir() {
       const s = document.getElementById(id);
       if (s.value) partes.push(s.selectedOptions[0].textContent);
     }
+    const de = document.getElementById('l-venc-de').value, ate = document.getElementById('l-venc-ate').value;
+    if (de || ate) partes.push(`vencimento ${de ? fmtData(de) : '...'} a ${ate ? fmtData(ate) : '...'}`);
+    const pl = document.getElementById('l-plano').value.trim();
+    if (pl) partes.push(`plano: ${pl}`);
     mostrando = filtrados.length;
     renderLista();
   }
@@ -790,7 +1104,7 @@ function imprimir() {
 function trocarVisao(v) {
   visao = v;
   document.querySelectorAll('#visoes button').forEach(b => b.classList.toggle('ativa', b.dataset.visao === v));
-  for (const x of ['painel', 'lista', 'semana']) document.getElementById(`visao-${x}`).classList.toggle('hidden', x !== v);
+  for (const x of ['diretor', 'painel', 'lista', 'semana']) document.getElementById(`visao-${x}`).classList.toggle('hidden', x !== v);
   if (painel && !painel.vazio) renderTudo();
 }
 
@@ -813,15 +1127,25 @@ function wireEventos() {
     renderTudo();
   });
   document.getElementById('btn-atualizar').addEventListener('click', atualizarAgora);
+  document.getElementById('tb-semestres').addEventListener('click', (e) => {
+    const tr = e.target.closest('[data-sem]');
+    if (!tr) return;
+    semestre = tr.dataset.sem;
+    document.getElementById('sel-semestre').value = semestre;
+    mostrando = POR_PAGINA;
+    renderTudo();
+  });
   document.getElementById('btn-imprimir').addEventListener('click', imprimir);
   document.getElementById('btn-modelos').addEventListener('click', abrirModelos);
 
   // lista
   let t;
   document.getElementById('l-busca').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { mostrando = POR_PAGINA; filtrarLista(); }, 250); });
-  for (const id of ['l-controle', 'l-lado', 'l-faixa', 'l-curso']) {
+  for (const id of ['l-controle', 'l-lado', 'l-faixa', 'l-curso', 'l-pagando', 'l-venc-de', 'l-venc-ate']) {
     document.getElementById(id).addEventListener('change', () => { mostrando = POR_PAGINA; filtrarLista(); });
   }
+  let tp;
+  document.getElementById('l-plano').addEventListener('input', () => { clearTimeout(tp); tp = setTimeout(() => { mostrando = POR_PAGINA; filtrarLista(); }, 300); });
   document.getElementById('l-mais').addEventListener('click', () => { mostrando += POR_PAGINA; renderLista(); });
   document.getElementById('tb-alunos').addEventListener('click', (e) => {
     const z = e.target.closest('[data-zap]');

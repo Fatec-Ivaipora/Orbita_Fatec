@@ -146,6 +146,7 @@ router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
         res.json({
             geradoEm: lista.exists ? lista.data().geradoEm : null,
             alunos: lista.exists ? lista.data().alunos : [],
+            planos: lista.exists ? (lista.data().planos || []) : [],
             controle
         });
     } catch (err) {
@@ -246,6 +247,59 @@ router.delete('/acoes/:id', verifyToken, checkPermission, async (req, res) => {
         res.json({ message: 'Ação removida.' });
     } catch (err) {
         console.error('[cobranca-edubox] excluir ação:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ---------- VISÃO DO DIRETOR: resumo por semana (gráfico) ----------
+router.get('/semanas', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const d = await db.collection('cobranca_edubox').doc('semanas').get();
+        res.json(d.exists ? d.data() : { semanas: {} });
+    } catch (err) {
+        console.error('[cobranca-edubox] semanas:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ---------- RETORNO DA SEMANA (relatório pro Fábio) ----------
+// Ações de cobrança registradas entre ?inicio e ?fim (AAAA-MM-DD) e quem,
+// dos cobrados, pagou alguma coisa no Edubox DEPOIS da 1ª cobrança da semana
+// (pagamentos dos últimos 60 dias, gravados pelo agente).
+router.get('/retorno', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+        if (!ok(req.query.inicio) || !ok(req.query.fim)) return res.status(400).json({ error: 'Informe o período.' });
+        const de = new Date(`${req.query.inicio}T00:00:00-03:00`);
+        const ate = new Date(`${req.query.fim}T23:59:59-03:00`);
+        const [acoesSnap, pagSnap] = await Promise.all([
+            db.collection(COL_ACOES).where('criadoEm', '>=', de).where('criadoEm', '<=', ate).get(),
+            db.collection('cobranca_edubox_pagamentos').doc('recentes').get()
+        ]);
+        const pagamentos = pagSnap.exists ? (pagSnap.data().porAluno || {}) : {};
+        const alunos = {};
+        acoesSnap.docs.forEach(d => {
+            const a = d.data();
+            if (!TIPOS_COBRANCA.includes(a.tipo)) return;
+            const chave = a.chave || a.cpf;
+            if (!chave) return;
+            const em = a.criadoEm && a.criadoEm.toDate ? a.criadoEm.toDate().toISOString() : a.criadoEm;
+            const x = (alunos[chave] = alunos[chave] || { chave, nome: a.nomeAluno || '', grupo: a.grupo || 'graduacao', acoes: [], primeiraEm: em, promessa: null });
+            x.acoes.push({ tipo: a.tipo, em, por: a.criadoPorNome || '' });
+            if (em < x.primeiraEm) x.primeiraEm = em;
+            if (a.tipo === 'promessa_pagamento') x.promessa = { data: a.promessaData, valor: a.promessaValor };
+        });
+        // pagou depois da 1ª cobrança (dia da cobrança em diante, horário de Brasília)
+        const diaBR = (iso) => new Date(new Date(iso).getTime() - 3 * 3600000).toISOString().slice(0, 10);
+        for (const x of Object.values(alunos)) {
+            const desde = diaBR(x.primeiraEm);
+            const dias = pagamentos[x.chave] || {};
+            x.pagouDepois = Math.round(Object.entries(dias).filter(([d]) => d >= desde).reduce((s2, [, v]) => s2 + v, 0) * 100) / 100;
+            x.acoes.sort((a, b) => a.em.localeCompare(b.em));
+        }
+        res.json({ alunos: Object.values(alunos), pagamentosAte: pagSnap.exists ? pagSnap.data().geradoEm : null });
+    } catch (err) {
+        console.error('[cobranca-edubox] retorno:', err);
         res.status(500).json({ error: err.message });
     }
 });

@@ -12,6 +12,11 @@
 //   cobranca_edubox_alunos/{graduacao|medicina}
 //                                      alunos com parcela vencida (lista de
 //                                      cobrança: contato, parcelas, atraso)
+//   cobranca_edubox_pagamentos/recentes pagamentos por aluno nos últimos 60
+//                                      dias (retorno das cobranças da semana)
+//   cobranca_edubox/semanas            resumo por semana (segunda-feira):
+//                                      vencido no início/agora, devido e
+//                                      recebido — gráfico da Visão do diretor
 //   cobranca_edubox_baixas/{AAAA-MM-DD} recebido por dia (últimos 45 dias)
 //   cobranca_edubox_historico/{id}      "foto" dos totais vencidos a cada
 //                                      rodada (base do "comecei a semana com X")
@@ -24,10 +29,12 @@
 //  - Jurídico = parcelas de plano da categoria "RENEGOCIAÇÃO JUDICIAL"
 //    (planos Advogado Fatec, Advogado Medicina, Débito Judicial). Todo o
 //    dinheiro é da Fatec; só precisa sair no relatório certo.
-//  - Aluno com QUALQUER parcela em aberto de plano jurídico (vencida ou não)
-//    está "com o advogado": o Financeiro NÃO pode cobrá-lo, nem as parcelas
-//    normais. Ele sai da lista de cobrança e o painel mostra quanto do vencido
-//    do Financeiro é desses alunos.
+//  - Quem manda é o PLANO DA PARCELA (decisão do usuário, 01/10/2026): parcela
+//    de plano jurídico é do advogado; qualquer outra é do Financeiro, mesmo
+//    que o aluno também tenha acordo. "Advogado" (Advogado Fatec/Medicina) =
+//    acordo feito; "Débito judicial" = está com a advogada, sem acordo ainda.
+//  - Aluno com acordo ganha a situação de pagamento (último pagamento, pago
+//    em 90 dias) — mostra se o acordo está andando.
 //  - Recebido = baixas do tipo "baixa"/"baixa_parcial", sem estorno, com data
 //    até hoje (existe baixa digitada com data futura no Edubox — ignorada).
 //
@@ -110,6 +117,108 @@ const SQL_BAIXAS = `
       AND b.estibc IS NULL
       AND b.datibc BETWEEN CURRENT_DATE - $2::int AND CURRENT_DATE`;
 
+// "Devido até hoje": tudo que já venceu, pago ou não — base do % de
+// inadimplência (vencido em aberto ÷ devido). Fora: parcela cancelada e
+// parcela substituída por renegociação/cancelamento (senão a dívida entra
+// duas vezes: a original e a renegociada).
+const SQL_DEVIDO = `
+    WITH curso_cli AS (
+        SELECT DISTINCT ON (m.climat) m.climat, cu.descur
+        FROM tac_matricula m
+        JOIN tac_turma t ON t.codtur = m.turmat
+        JOIN tac_curso cu ON cu.codcur = t.curtur
+        ORDER BY m.climat, m.datmat DESC NULLS LAST, m.codmat DESC
+    )
+    SELECT c.semctr, coalesce(p.catpla = $1, false) AS juridico,
+           trim(coalesce(cu.descur, cc.descur, '')) AS curso, sum(c.valctr) AS devido
+    FROM tfi_ctreceber c
+    LEFT JOIN tfi_plano p ON p.codpla = c.plactr
+    LEFT JOIN tac_matricula m ON m.codmat = c.matctr
+    LEFT JOIN tac_turma t ON t.codtur = m.turmat
+    LEFT JOIN tac_curso cu ON cu.codcur = t.curtur
+    LEFT JOIN curso_cli cc ON cc.climat = c.clictr
+    WHERE c.venctr < CURRENT_DATE AND c.stactr <> 'Cancel'
+      AND coalesce(p.despla, '') !~* '^teste$'
+      AND NOT EXISTS (SELECT 1 FROM tfi_itembaixactr b WHERE b.ctribc = c.codctr
+                      AND b.tipibc IN ('renegociacao', 'reneg_parcial', 'cancelamento') AND b.estibc IS NULL)
+    GROUP BY 1, 2, 3`;
+
+// Último pagamento de cada cliente (qualquer parcela e só as de acordo).
+const SQL_ULTIMO_PAGAMENTO = `
+    SELECT c.clictr, max(b.datibc)::date AS ultimo,
+           (max(b.datibc) FILTER (WHERE p.catpla = $1))::date AS ultimo_acordo
+    FROM tfi_itembaixactr b
+    JOIN tfi_ctreceber c ON c.codctr = b.ctribc
+    LEFT JOIN tfi_plano p ON p.codpla = c.plactr
+    WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL AND b.datibc <= CURRENT_DATE
+    GROUP BY c.clictr`;
+
+// Pagamentos por cliente e dia nos últimos 90 dias.
+const SQL_PAGAMENTOS_RECENTES = `
+    SELECT c.clictr, trim(coalesce(cl.cpfcli, '')) AS cpf, b.datibc::date AS dia,
+           coalesce(p.catpla = $1, false) AS juridico, sum(b.totibc) AS valor
+    FROM tfi_itembaixactr b
+    JOIN tfi_ctreceber c ON c.codctr = b.ctribc
+    LEFT JOIN tfi_plano p ON p.codpla = c.plactr
+    LEFT JOIN tfi_cliente cl ON cl.codcli = c.clictr
+    WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL
+      AND b.datibc BETWEEN CURRENT_DATE - 90 AND CURRENT_DATE
+    GROUP BY 1, 2, 3, 4`;
+
+const chaveDe = (cpfcli, clictr) => {
+    const cpf = (cpfcli || '').replace(/\D/g, '');
+    return cpf.length === 11 ? cpf : `cli${clictr}`;
+};
+
+async function montarPagamentos(hoje) {
+    const [ult, rec] = await Promise.all([
+        q(SQL_ULTIMO_PAGAMENTO, [CATEGORIA_JURIDICO]),
+        q(SQL_PAGAMENTOS_RECENTES, [CATEGORIA_JURIDICO])
+    ]);
+    const porCliente = {};
+    for (const r of ult) {
+        porCliente[r.clictr] = { ultimo: r.ultimo ? isoData(r.ultimo) : null, ultimoAcordo: r.ultimo_acordo ? isoData(r.ultimo_acordo) : null, pago90: 0, pago90Acordo: 0 };
+    }
+    const recentes = {}; // chave -> { 'AAAA-MM-DD': valor } últimos 60 dias (retorno das cobranças)
+    const limite60 = isoData(new Date(Date.now() - 60 * 86400000));
+    for (const r of rec) {
+        const dia = isoData(r.dia);
+        if (dia > hoje) continue;
+        const v = Number(r.valor) || 0;
+        const pc = (porCliente[r.clictr] = porCliente[r.clictr] || { ultimo: null, ultimoAcordo: null, pago90: 0, pago90Acordo: 0 });
+        pc.pago90 += v;
+        if (r.juridico) pc.pago90Acordo += v;
+        if (dia >= limite60) {
+            const k = chaveDe(r.cpf, r.clictr);
+            const dias = (recentes[k] = recentes[k] || {});
+            dias[dia] = r2((dias[dia] || 0) + v);
+        }
+    }
+    for (const pc of Object.values(porCliente)) { pc.pago90 = r2(pc.pago90); pc.pago90Acordo = r2(pc.pago90Acordo); }
+    return { porCliente, recentes };
+}
+
+// Situação dos alunos com acordo/débito: quantos pagaram algo em 90 dias.
+function montarSituacaoAdvogado(linhas, pagamentos) {
+    const porCli = {};
+    for (const l of linhas) {
+        if (!l.juridico || Number(l.valctr) - Number(l.valpag) <= 0) continue;
+        const c = (porCli[l.clictr] = porCli[l.clictr] || { grupo: grupoDe(l.semctr), planos: new Set() });
+        c.planos.add((l.despla || '').trim());
+    }
+    const novo = () => ({ alunos: 0, pagando: 0, pago90: 0 });
+    const saida = { graduacao: { advogado: novo(), debito: novo() }, medicina: { advogado: novo(), debito: novo() } };
+    for (const [cli, c] of Object.entries(porCli)) {
+        const tipo = [...c.planos].some(pl => /ADVOGADO/i.test(pl)) ? 'advogado' : 'debito';
+        const pg = pagamentos.porCliente[cli];
+        const x = saida[c.grupo][tipo];
+        x.alunos += 1;
+        if (pg && pg.pago90 > 0) { x.pagando += 1; x.pago90 += pg.pago90; }
+    }
+    for (const g of Object.values(saida)) for (const x of Object.values(g)) x.pago90 = r2(x.pago90);
+    return saida;
+}
+
 function novoBloco() {
     return { valor: 0, parcelas: 0, alunos: new Set() };
 }
@@ -148,7 +257,7 @@ function fecharGrupo(g) {
     };
 }
 
-async function montarResumo(hoje) {
+async function montarResumo(hoje, pagamentos) {
     const linhas = await q(SQL_ABERTO, [CATEGORIA_JURIDICO]);
     const recortes = {}; // { semestre|'todos': { graduacao: G, medicina: G } }
     const garantir = (sem) => (recortes[sem] = recortes[sem] || { graduacao: novoGrupo(), medicina: novoGrupo() });
@@ -187,11 +296,29 @@ async function montarResumo(hoje) {
         }
     }
     const resumo = {};
-    const alunos = montarAlunos(linhas, hoje, hojeMs, comAdvogado);
+    const devidoLinhas = await q(SQL_DEVIDO, [CATEGORIA_JURIDICO]);
+    const alunos = montarAlunos(linhas, hoje, hojeMs, comAdvogado, pagamentos);
+    const situacaoAdvogado = montarSituacaoAdvogado(linhas, pagamentos);
     for (const [sem, gr] of Object.entries(recortes)) {
         resumo[sem] = { graduacao: fecharGrupo(gr.graduacao), medicina: fecharGrupo(gr.medicina) };
     }
-    return { resumo, alunos, parcelasLidas: linhas.length };
+    for (const d of devidoLinhas) {
+        const grupo = grupoDe(d.semctr);
+        const valor = Number(d.devido) || 0;
+        const curso = d.curso || SEM_CURSO;
+        for (const sem of [normalizarSemestre(d.semctr), 'todos']) {
+            const g = resumo[sem] && resumo[sem][grupo];
+            if (!g) continue; // semestre sem nada em aberto: não aparece no painel
+            g.devido = g.devido || { financeiro: 0, juridico: 0 };
+            g.devido[d.juridico ? 'juridico' : 'financeiro'] += valor;
+            if (!d.juridico && g.porCurso[curso]) g.porCurso[curso].devidoFinanceiro = (g.porCurso[curso].devidoFinanceiro || 0) + valor;
+        }
+    }
+    for (const gr of Object.values(resumo)) for (const g of Object.values(gr)) {
+        if (g.devido) { g.devido.financeiro = r2(g.devido.financeiro); g.devido.juridico = r2(g.devido.juridico); }
+        for (const c of Object.values(g.porCurso)) if (c.devidoFinanceiro) c.devidoFinanceiro = r2(c.devidoFinanceiro);
+    }
+    return { resumo, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
 }
 
 function telefone(v) {
@@ -210,7 +337,7 @@ function clientesComAdvogado(linhas) {
     return set;
 }
 
-function montarAlunos(linhas, hoje, hojeMs, comAdvogado) {
+function montarAlunos(linhas, hoje, hojeMs, comAdvogado, pagamentos) {
     const planosDe = {};
     for (const l of linhas) {
         if (!l.juridico || !comAdvogado.has(l.clictr)) continue;
@@ -229,25 +356,36 @@ function montarAlunos(linhas, hoje, hojeMs, comAdvogado) {
             chave, cpf: cpf.length === 11 ? cpf : '', codcli: l.clictr, nome: l.nome || '(sem nome)',
             celular: telefone(l.celcli) || telefone(l.foncli), fone: (l.foncli || l.celcli || '').trim(),
             cursos: [], total: 0, financeiro: 0, juridico: 0, maisAntigo: venc, parcelas: [],
-            comAdvogado: comAdvogado.has(l.clictr), planosAdvogado: [...(planosDe[l.clictr] || [])]
+            comAdvogado: comAdvogado.has(l.clictr), planosAdvogado: [...(planosDe[l.clictr] || [])],
+            tipoAdvogado: !comAdvogado.has(l.clictr) ? null
+                : [...(planosDe[l.clictr] || [])].some(pl => /ADVOGADO/i.test(pl)) ? 'advogado' : 'debito',
+            pagamento: (pagamentos && pagamentos.porCliente[l.clictr]) || null
         });
         const curso = l.curso || SEM_CURSO;
         if (!a.cursos.includes(curso)) a.cursos.push(curso);
         a.total += valor;
         a[l.juridico ? 'juridico' : 'financeiro'] += valor;
         if (venc < a.maisAntigo) a.maisAntigo = venc;
-        a.parcelas.push({ v: venc, s: normalizarSemestre(l.semctr), valor: r2(valor), j: !!l.juridico });
+        a.parcelas.push({ v: venc, s: normalizarSemestre(l.semctr), valor: r2(valor), j: !!l.juridico, pl: (l.despla || '').trim() });
     }
+    // Nome do plano vai uma vez só em `planos` do grupo; a parcela guarda o
+    // índice (`pl`) — o nome repetido em cada parcela quase estourava o limite
+    // de 1 MB do documento.
     const saida = {};
     for (const g of ['graduacao', 'medicina']) {
+        const planos = [];
+        const idx = {};
+        const indice = (nome) => (nome in idx ? idx[nome] : (idx[nome] = planos.push(nome) - 1));
         saida[g] = Object.values(mapa[g]).map(a => {
             a.parcelas.sort((x, y) => x.v.localeCompare(y.v));
+            a.parcelas.forEach(pc => { pc.pl = indice(pc.pl); });
             return {
                 ...a, total: r2(a.total), financeiro: r2(a.financeiro), juridico: r2(a.juridico),
                 diasAtraso: Math.round((hojeMs - new Date(a.maisAntigo + 'T12:00:00').getTime()) / 86400000),
                 semestres: [...new Set(a.parcelas.map(p => p.s))].sort().reverse()
             };
         }).sort((x, y) => y.total - x.total);
+        saida[g + 'Planos'] = planos;
     }
     return saida;
 }
@@ -292,20 +430,73 @@ async function montarBaixas(hoje) {
     return { porDia, baixasLidas: linhas.length };
 }
 
+// Segunda-feira (AAAA-MM-DD) da semana de uma data AAAA-MM-DD.
+function segundaDe(diaIso) {
+    const [a, m, d] = diaIso.split('-').map(Number);
+    const x = new Date(a, m - 1, d, 12);
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return isoData(x);
+}
+
+// Resumo por semana (doc único, últimas 60 semanas): por grupo e semestre,
+// vencido no início da semana (1ª rodada da semana) e agora, devido, e o
+// recebido (das baixas diárias). Uma leitura só pra montar o gráfico.
+async function atualizarSemanas(hoje, resumo, porDia, agora) {
+    const ref = db.collection('cobranca_edubox').doc('semanas');
+    const snap = await ref.get();
+    const semanas = (snap.exists && snap.data().semanas) || {};
+    const fotoAgora = (g) => ({ f: g.financeiro.vencido.valor, j: g.juridico.vencido.valor, fd: (g.devido && g.devido.financeiro) || 0 });
+
+    const seg = segundaDe(hoje);
+    const atual = (semanas[seg] = semanas[seg] || {});
+    for (const [sem, gr] of Object.entries(resumo)) {
+        for (const grupo of ['graduacao', 'medicina']) {
+            const x = ((atual[grupo] = atual[grupo] || {})[sem] = atual[grupo][sem] || {});
+            if (!x.ini) x.ini = fotoAgora(gr[grupo]);
+            x.atual = fotoAgora(gr[grupo]);
+        }
+    }
+    // recebido: recalcula as semanas cobertas pelas baixas diárias
+    const rec = {};
+    for (const d of Object.values(porDia)) {
+        const sg = segundaDe(d.data);
+        for (const grupo of ['graduacao', 'medicina']) {
+            const somar = (sem, f, j, fa, ja) => {
+                const r = (((rec[sg] = rec[sg] || {})[grupo] = rec[sg][grupo] || {})[sem] = rec[sg][grupo][sem] || { f: 0, j: 0, fa: 0, ja: 0 });
+                r.f += f; r.j += j; r.fa += fa; r.ja += ja;
+            };
+            somar('todos', d[grupo].financeiro.valor, d[grupo].juridico.valor, d[grupo].financeiro.emAtraso, d[grupo].juridico.emAtraso);
+            for (const [sem, ps] of Object.entries(d.porSemestre)) {
+                const v = ps[grupo];
+                if (v.financeiro || v.juridico) somar(sem, v.financeiro, v.juridico, v.financeiroAtraso, v.juridicoAtraso);
+            }
+        }
+    }
+    for (const [sg, gr] of Object.entries(rec)) for (const [grupo, sems] of Object.entries(gr)) for (const [sem, r] of Object.entries(sems)) {
+        const x = (((semanas[sg] = semanas[sg] || {})[grupo] = semanas[sg][grupo] || {})[sem] = semanas[sg][grupo][sem] || {});
+        x.rec = { f: r2(r.f), j: r2(r.j), fa: r2(r.fa), ja: r2(r.ja) };
+    }
+    const chaves = Object.keys(semanas).sort();
+    for (const k of chaves.slice(0, Math.max(0, chaves.length - 60))) delete semanas[k];
+    await ref.set({ atualizadoEm: agora, semanas });
+}
+
 async function sincronizar(origem = 'manual') {
     const inicio = Date.now();
     const cfg = db.collection('config').doc('cobranca_sync');
     await cfg.set({ status: 'rodando', rodandoDesde: new Date().toISOString(), origemRodando: origem }, { merge: true });
     try {
         const hoje = isoData(new Date());
-        const { resumo, alunos, parcelasLidas } = await montarResumo(hoje);
+        const pagamentos = await montarPagamentos(hoje);
+        const { resumo, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
         const { porDia, baixasLidas } = await montarBaixas(hoje);
         const agora = new Date().toISOString();
         const semestres = Object.keys(resumo).filter(s => s !== 'todos').sort((a, b) => b.localeCompare(a));
 
-        await db.collection('cobranca_edubox').doc('atual').set({ geradoEm: agora, origem, semestres, resumo });
+        await db.collection('cobranca_edubox').doc('atual').set({ geradoEm: agora, origem, semestres, resumo, situacaoAdvogado });
+        await db.collection('cobranca_edubox_pagamentos').doc('recentes').set({ geradoEm: agora, porAluno: pagamentos.recentes });
         for (const g of ['graduacao', 'medicina']) {
-            await db.collection('cobranca_edubox_alunos').doc(g).set({ geradoEm: agora, alunos: alunos[g] });
+            await db.collection('cobranca_edubox_alunos').doc(g).set({ geradoEm: agora, alunos: alunos[g], planos: alunos[g + 'Planos'] });
         }
 
         // "Foto" compacta dos totais vencidos (base do fechamento semanal)
@@ -318,6 +509,8 @@ async function sincronizar(origem = 'manual') {
         }
         const idFoto = agora.slice(0, 16).replace(/[-:T]/g, '');
         await db.collection('cobranca_edubox_historico').doc(idFoto).set({ geradoEm: agora, data: hoje, origem, vencido: foto });
+
+        await atualizarSemanas(hoje, resumo, porDia, agora);
 
         const batch = db.batch();
         for (const [dia, dados] of Object.entries(porDia)) {
