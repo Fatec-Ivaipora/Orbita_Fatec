@@ -24,15 +24,15 @@ const TIPOS_VALIDOS = [...TIPOS_COBRANCA, 'enviado_advocacia', 'acordo_judicial'
 const MODELOS_PADRAO = [
     {
         id: 'lembrete', nome: 'Lembrete (até 30 dias)',
-        texto: 'Olá, {primeiro_nome}! Tudo bem? 😊\n\nAqui é do Financeiro da Fatec Ivaiporã. Consta em nosso sistema {qtd_parcelas} em aberto, no valor original de {valor_total}:\n{lista_parcelas}\n\nSe já realizou o pagamento, por favor desconsidere esta mensagem. Precisando da 2ª via do boleto ou de alguma condição, é só responder por aqui!'
+        texto: 'Olá, {primeiro_nome}! Tudo bem? 😊\n\nAqui é do Financeiro da Fatec Ivaiporã. Consta em nosso sistema {qtd_parcelas} em aberto. Com multa e juros, o valor para pagamento hoje é de {valor_a_pagar}:\n{lista_parcelas}\n\nSe já realizou o pagamento, por favor desconsidere esta mensagem. Precisando da 2ª via do boleto ou de alguma condição, é só responder por aqui!'
     },
     {
         id: 'cobranca', nome: 'Cobrança (mais de 30 dias)',
-        texto: 'Olá, {primeiro_nome}! Aqui é do Financeiro da Fatec Ivaiporã.\n\nIdentificamos {qtd_parcelas} em atraso desde {vencimento_mais_antigo}, no valor original de {valor_total} (sem juros e multa):\n{lista_parcelas}\n\nPrecisamos regularizar essa pendência. Podemos conversar sobre uma forma de pagamento que caiba no seu orçamento? Responda esta mensagem ou venha até o Financeiro.'
+        texto: 'Olá, {primeiro_nome}! Aqui é do Financeiro da Fatec Ivaiporã.\n\nIdentificamos {qtd_parcelas} em atraso desde {vencimento_mais_antigo}. Com multa e juros, o valor para pagamento hoje é de {valor_a_pagar}:\n{lista_parcelas}\n\nPrecisamos regularizar essa pendência. Podemos conversar sobre uma forma de pagamento que caiba no seu orçamento? Responda esta mensagem ou venha até o Financeiro.'
     },
     {
         id: 'negociacao', nome: 'Proposta de negociação',
-        texto: 'Olá, {primeiro_nome}! Tudo bem?\n\nO Financeiro da Fatec Ivaiporã está com condições especiais para negociação de débitos. Hoje o seu débito é de {valor_total} ({qtd_parcelas}).\n\nQuer que eu faça uma simulação de parcelamento pra você? É só responder por aqui.'
+        texto: 'Olá, {primeiro_nome}! Tudo bem?\n\nO Financeiro da Fatec Ivaiporã está com condições especiais para negociação de débitos. Hoje o seu débito é de {valor_a_pagar} com multa e juros ({qtd_parcelas}).\n\nQuer que eu faça uma simulação de parcelamento pra você? É só responder por aqui.'
     }
 ];
 

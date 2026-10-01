@@ -82,6 +82,18 @@ function esc(str) {
 }
 
 const brl = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+// Valor com juros e multa, igual ao Edubox (conferido com o relatório de contas
+// a receber): multa 2% + juros de 1% ao mês composto por mês completo (30 dias).
+function aPagarParcela(valor, vencIso) {
+  const dias = Math.round((Date.now() - new Date(vencIso + 'T12:00:00').getTime()) / 86400000);
+  if (dias <= 0) return valor;
+  const multa = Math.round(valor * 0.02 * 100) / 100;
+  const juros = Math.round(valor * (Math.pow(1.01, Math.floor(dias / 30)) - 1) * 100) / 100;
+  return valor + multa + juros;
+}
+// Bloco do resumo -> "A pagar" em destaque + valor original embaixo
+const apDe = (b) => (b && b.aPagar !== undefined ? b.aPagar : (b ? b.valor : 0));
+const celAP = (b, forte = false) => `${forte ? '<b>' : ''}${brl(apDe(b))}${forte ? '</b>' : ''}<small class="cb-orig">original ${brl(b ? b.valor : 0)}</small>`;
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function fmtData(s) { if (!s) return ''; const [a, m, d] = s.slice(0, 10).split('-'); return `${d}/${m}/${a}`; }
 function fmtDataHora(isoStr) {
@@ -292,11 +304,11 @@ function somaBaixas(dias) {
 // Advogado (Advogado Fatec / Advogado Medicina = acordo feito) x Débito
 // judicial (com a advogada, sem acordo), a partir dos planos jurídicos.
 function ladosJuridico(rj) {
-  const novo = () => ({ valor: 0, alunos: 0, aVencer: 0 });
+  const novo = () => ({ valor: 0, aPagar: 0, alunos: 0, aVencer: 0 });
   const saida = { advogado: novo(), debito: novo() };
   for (const [plano, x] of Object.entries((rj && rj.planosJuridico) || {})) {
     const lado = /ADVOGADO/i.test(plano) ? saida.advogado : saida.debito;
-    lado.valor += x.vencido.valor; lado.alunos += x.vencido.alunos; lado.aVencer += x.aVencer.valor;
+    lado.valor += x.vencido.valor; lado.aPagar += apDe(x.vencido); lado.alunos += x.vencido.alunos; lado.aVencer += x.aVencer.valor;
   }
   return saida;
 }
@@ -315,7 +327,7 @@ function renderPainel() {
   // Quem manda é o plano da parcela: parcela normal é do Financeiro mesmo
   // que o aluno tenha acordo; Advogado (acordo feito) e Débito judicial (sem
   // acordo) não são cobrados pelo Financeiro.
-  document.getElementById('k-vencido').textContent = brl(fin.valor);
+  document.getElementById('k-vencido').innerHTML = `${brl(apDe(fin))}<small class="cb-orig">valor original ${brl(fin.valor)} + juros e multa</small>`;
   const devFin = (r && r.devido && r.devido.financeiro) || 0;
   document.getElementById('k-vencido-hint').textContent = `Falta receber de ${plural(fin.alunos, 'aluno', 'alunos')} (${plural(fin.parcelas, 'parcela', 'parcelas')})` +
     (devFin ? ` · ${pct(fin.valor / devFin)} do que já venceu (${brlCurto(devFin)})` : '') +
@@ -326,9 +338,9 @@ function renderPainel() {
   const sit = semestre === 'todos' ? ((painel.situacaoAdvogado && painel.situacaoAdvogado[grupo]) || {}) : {};
   const dicaJur = (x, s) => `Atrasado de ${plural(x.alunos, 'aluno', 'alunos')} · mais ${brlCurto(x.aVencer)} ainda vai vencer` +
     (s && s.alunos ? ` · ${s.pagando} de ${s.alunos} alunos pagaram algo nos últimos 90 dias (${brlCurto(s.pago90)})` : '') + ' · o Financeiro não cobra';
-  document.getElementById('k-jur').textContent = brl(lados.advogado.valor);
+  document.getElementById('k-jur').innerHTML = `${brl(lados.advogado.aPagar)}<small class="cb-orig">valor original ${brl(lados.advogado.valor)}</small>`;
   document.getElementById('k-jur-hint').textContent = dicaJur(lados.advogado, sit.advogado);
-  document.getElementById('k-fin').textContent = brl(lados.debito.valor);
+  document.getElementById('k-fin').innerHTML = `${brl(lados.debito.aPagar)}<small class="cb-orig">valor original ${brl(lados.debito.valor)}</small>`;
   document.getElementById('k-fin-hint').textContent = dicaJur(lados.debito, sit.debito);
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
@@ -344,7 +356,7 @@ function renderPainel() {
   const maxF = Math.max(1, ...FAIXAS.map(([k]) => r ? r.faixas[k].valor : 0));
   document.getElementById('faixas').innerHTML = FAIXAS.map(([k, rot, cor]) => {
     const f = r ? r.faixas[k] : vazio;
-    return `<div class="cb-faixa"><span>${rot}</span><div class="cb-faixa-barra"><span style="width:${(f.valor / maxF) * 100}%;background:${cor}"></span></div><b>${brl(f.valor)}<small>${plural(f.alunos, 'aluno', 'alunos')}</small></b></div>`;
+    return `<div class="cb-faixa"><span>${rot}</span><div class="cb-faixa-barra"><span style="width:${(f.valor / maxF) * 100}%;background:${cor}"></span></div><b>${brl(apDe(f))}<small>${plural(f.alunos, 'aluno', 'alunos')} · original ${brl(f.valor)}</small></b></div>`;
   }).join('');
 
   const av = r ? r.aVencer : vazio;
@@ -360,15 +372,15 @@ function renderPainel() {
   const tp = document.getElementById('tb-planos');
   tp.innerHTML = planos.length
     ? planos.sort((a, b2) => b2[1].vencido.valor - a[1].vencido.valor).map(([k, x]) =>
-        `<tr><td>${esc(k)}</td><td class="num">${x.vencido.alunos}</td><td class="num"><b>${brl(x.vencido.valor)}</b></td><td class="num">${brl(x.aVencer.valor)}</td><td class="num">${brl(recPlano[k] || 0)}</td></tr>`).join('') +
+        `<tr><td>${esc(k)}</td><td class="num">${x.vencido.alunos}</td><td class="num">${celAP(x.vencido, true)}</td><td class="num">${brl(x.aVencer.valor)}</td><td class="num">${brl(recPlano[k] || 0)}</td></tr>`).join('') +
       `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${jur.alunos}</b></td><td class="num"><b>${brl(jur.valor)}</b></td><td class="num"><b>${brl(rj.juridico.aVencer.valor)}</b></td><td class="num"><b>${brl(Object.values(recPlano).reduce((s2, x) => s2 + x, 0))}</b></td></tr>`
     : '<tr><td colspan="5" class="tabela-msg">Nenhum aluno com advogado neste grupo.</td></tr>';
 
   const cursos = r ? Object.entries(r.porCurso).sort((a, b2) => b2[1].vencido.valor - a[1].vencido.valor) : [];
   const tb = document.getElementById('tb-cursos');
   if (!cursos.length) { tb.innerHTML = '<tr><td colspan="5" class="tabela-msg">Nada vencido neste recorte.</td></tr>'; return; }
-  tb.innerHTML = cursos.map(([c, x]) => `<tr><td>${esc(nomeCurso(c))}</td><td class="num">${x.vencido.alunos}</td><td class="num">${brl(x.financeiroVencido.valor)}</td><td class="num">${brl(x.juridicoVencido.valor)}</td><td class="num"><b>${brl(x.vencido.valor)}</b></td></tr>`).join('') +
-    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${v.alunos}</b></td><td class="num"><b>${brl(fin.valor)}</b></td><td class="num"><b>${brl(r.juridico.vencido.valor)}</b></td><td class="num"><b>${brl(v.valor)}</b></td></tr>`;
+  tb.innerHTML = cursos.map(([c, x]) => `<tr><td>${esc(nomeCurso(c))}</td><td class="num">${x.vencido.alunos}</td><td class="num">${celAP(x.financeiroVencido)}</td><td class="num">${celAP(x.juridicoVencido)}</td><td class="num">${celAP(x.vencido, true)}</td></tr>`).join('') +
+    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${v.alunos}</b></td><td class="num">${celAP(fin, true)}</td><td class="num">${celAP(r.juridico.vencido, true)}</td><td class="num">${celAP(v, true)}</td></tr>`;
 }
 
 // "Todos os semestres": quanto tem em cada semestre, pra conta ficar clara.
@@ -384,11 +396,11 @@ function renderSemestres() {
   const tot = painel.resumo.todos[grupo];
   const lt = ladosJuridico(tot);
   document.getElementById('tb-semestres').innerHTML = linhas.map(({ s, g, l }) => `
-    <tr data-sem="${esc(s)}"><td><b>${esc(s)}</b></td><td class="num">${g.vencido.alunos}</td><td class="num">${brl(g.financeiro.vencido.valor)}</td>
-      <td class="num">${l.advogado.valor ? brl(l.advogado.valor) : '—'}</td><td class="num">${l.debito.valor ? brl(l.debito.valor) : '—'}</td>
-      <td class="num"><b>${brl(g.vencido.valor)}</b></td></tr>`).join('') +
-    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${tot.vencido.alunos}</b></td><td class="num"><b>${brl(tot.financeiro.vencido.valor)}</b></td>
-      <td class="num"><b>${brl(lt.advogado.valor)}</b></td><td class="num"><b>${brl(lt.debito.valor)}</b></td><td class="num"><b>${brl(tot.vencido.valor)}</b></td></tr>`;
+    <tr data-sem="${esc(s)}"><td><b>${esc(s)}</b></td><td class="num">${g.vencido.alunos}</td><td class="num">${celAP(g.financeiro.vencido)}</td>
+      <td class="num">${l.advogado.valor ? celAP(l.advogado) : '—'}</td><td class="num">${l.debito.valor ? celAP(l.debito) : '—'}</td>
+      <td class="num">${celAP(g.vencido, true)}</td></tr>`).join('') +
+    `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${tot.vencido.alunos}</b></td><td class="num">${celAP(tot.financeiro.vencido, true)}</td>
+      <td class="num">${celAP(lt.advogado, true)}</td><td class="num">${celAP(lt.debito, true)}</td><td class="num">${celAP(tot.vencido, true)}</td></tr>`;
 }
 
 // ---------- VISÃO DO DIRETOR ----------
@@ -428,7 +440,7 @@ async function renderDiretor() {
     <div class="cb-dir-numero ${inad === null ? '' : inad > 0.05 ? 'ruim' : 'bom'}">${inad === null ? '—' : `${pct(inad)} <small style="font-size:1rem;font-weight:700">em atraso</small>`}</div>
     <div class="cb-dir-texto">${inad === null
       ? 'Aguardando a próxima atualização do Edubox para calcular.'
-      : `<b>${brlCurto(venc).replace(/ mi$/, ' milhões')}</b> não pagos, de <b>${brlCurto(devido).replace(/ mi$/, ' milhões')}</b> que já venceram. Quanto menor, melhor. (Sem contar advogado e débito judicial.)`}</div>
+      : `<b>${brlCurto(venc).replace(/ mi$/, ' milhões')}</b> não pagos (<b>${brlCurto(apDe(r.financeiro.vencido)).replace(/ mi$/, ' milhões')}</b> com juros e multa), de <b>${brlCurto(devido).replace(/ mi$/, ' milhões')}</b> que já venceram. Quanto menor, melhor. (Sem contar advogado e débito judicial.)`}</div>
     ${seta}`;
 
   // 2) Dinheiro que entrou na semana + taxa de recuperação
@@ -497,7 +509,7 @@ async function renderDiretor() {
     const pg = (s && s.pagando) || 0;
     return `<div class="cb-adv-linha"><b>${titulo}</b> <small class="cb-sub">${dica}</small>
       <div class="cb-faixa-barra"><span style="width:${tot ? (pg / tot) * 100 : 0}%"></span></div>
-      <div class="cb-dir-texto">🔴 <b>${brlCurto(l.valor)} atrasado</b> (todos os semestres) · <b>${pg} de ${tot}</b> alunos pagaram algo nos últimos 90 dias (${brlCurto((s && s.pago90) || 0)} entrou)</div></div>`;
+      <div class="cb-dir-texto">💰 <b>${brlCurto(l.aPagar)} a pagar</b> (original ${brlCurto(l.valor)}, todos os semestres) · <b>${pg} de ${tot}</b> alunos pagaram algo nos últimos 90 dias (${brlCurto((s && s.pago90) || 0)} entrou)</div></div>`;
   };
   const env = painel.resumo.todos[grupo].enviar || { vencido: { valor: 0, alunos: 0 } };
   const envSem = r.enviar || { vencido: { valor: 0, alunos: 0 } };
@@ -505,7 +517,7 @@ async function renderDiretor() {
     linha('⚖️ Acordos com advogado', sit.advogado, lados.advogado, 'acordo feito — paga direto') +
     linha('🏛 Débito judicial', sit.debito, lados.debito, 'com a advogada, ainda sem acordo') +
     `<div class="cb-adv-linha"><b>📤 Para enviar ao advogado</b> <small class="cb-sub">desistentes, trancados, cancelados — o Financeiro não cobra</small>
-      <div class="cb-dir-texto">🔴 <b>${brlCurto(env.vencido.valor)} atrasado</b> de ${plural(env.vencido.alunos, 'aluno', 'alunos')}${semestre !== 'todos' ? ` · no ${esc(semestre)}: ${brlCurto(envSem.vencido.valor)} de ${plural(envSem.vencido.alunos, 'aluno', 'alunos')}` : ''}</div></div>`;
+      <div class="cb-dir-texto">💰 <b>${brlCurto(apDe(env.vencido))} a pagar</b> (original ${brlCurto(env.vencido.valor)}) de ${plural(env.vencido.alunos, 'aluno', 'alunos')}${semestre !== 'todos' ? ` · no ${esc(semestre)}: ${brlCurto(apDe(envSem.vencido))} de ${plural(envSem.vencido.alunos, 'aluno', 'alunos')}` : ''}</div></div>`;
 }
 
 function graficoInadimplencia(pontos) {
@@ -611,7 +623,8 @@ function recortarAluno(a, modo, f) {
   const total = parcelas.reduce((s, p) => s + p.valor, 0);
   const maisAntigo = parcelas[0].v;
   const dias = Math.round((hoje - dataLocal(maisAntigo).getTime()) / 86400000);
-  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: ehModoSemCobranca(modo), modoEnviar: modo === 'enviar' };
+  const totalAP = parcelas.reduce((s, p) => s + aPagarParcela(p.valor, p.v), 0);
+  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, apVis: Math.round(totalAP * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: ehModoSemCobranca(modo), modoEnviar: modo === 'enviar' };
 }
 
 function situacaoCobranca(a) {
@@ -661,13 +674,14 @@ function filtrarLista() {
     if (ctl === 'promessa' && !(c && c.promessa)) continue;
     filtrados.push(a);
   }
-  filtrados.sort((x, y) => y.totalVis - x.totalVis);
+  filtrados.sort((x, y) => y.apVis - x.apVis);
 
-  const total = filtrados.reduce((s, a) => s + a.totalVis, 0);
+  const total = filtrados.reduce((s, a) => s + a.apVis, 0);
+  const totalOrig = filtrados.reduce((s, a) => s + a.totalVis, 0);
   const cobradosSemana = filtrados.filter(a => situacaoCobranca(a).semana).length;
   if (lado === 'enviar') {
     document.getElementById('l-contadores').innerHTML = `
-      <span>📤 <b>${filtrados.length}</b> alunos desistentes/trancados/cancelados · <b>${brl(total)}</b> atrasado</span>
+      <span>📤 <b>${filtrados.length}</b> alunos desistentes/trancados/cancelados · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)})</small></span>
       <span>O Financeiro <b>não cobra</b> — lista pra encaminhar ao advogado</span>
       <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
     renderLista();
@@ -676,7 +690,7 @@ function filtrarLista() {
   if (adv) {
     const pagandoN = filtrados.filter(a => a.pagamento && a.pagamento.pago90 > 0).length;
     document.getElementById('l-contadores').innerHTML = `
-      <span>${lado === 'advogado' ? '⚖️' : '🏛'} <b>${filtrados.length}</b> alunos · <b>${brl(total)}</b> atrasado</span>
+      <span>${lado === 'advogado' ? '⚖️' : '🏛'} <b>${filtrados.length}</b> alunos · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)})</small></span>
       <span>✅ Pagando (90 dias): <b>${pagandoN}</b> · ⚠️ Parados: <b>${filtrados.length - pagandoN}</b></span>
       <span>O Financeiro <b>não cobra</b> essas parcelas — só consulta e registra observações</span>
       <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
@@ -684,7 +698,7 @@ function filtrarLista() {
     return;
   }
   document.getElementById('l-contadores').innerHTML = `
-    <span><b>${filtrados.length}</b> alunos com atraso · 🔴 <b>${brl(total)}</b> a receber</span>
+    <span><b>${filtrados.length}</b> alunos com atraso · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)} + juros e multa)</small></span>
     <span>✅ Cobrados nesta semana: <b>${cobradosSemana}</b></span>
     <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana}</b></span>
     <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
@@ -740,7 +754,7 @@ function renderLista() {
       <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}" title="dias desde a parcela mais antiga">${a.diasVis} dias de atraso</span>
         <div class="cb-sub">desde ${fmtData(a.maisAntigoVis)}</div>
         <span class="cb-plano">${esc(planosDoAluno(a))}</span></td>
-      <td class="num"><b>${brl(a.totalVis)}</b></td>
+      <td class="num"><b>${brl(a.apVis)}</b><small class="cb-orig">original ${brl(a.totalVis)}</small></td>
       <td>${badgeCobranca(a)}</td>
       <td class="acoes-col">
         ${podeEditar && !a.modoAdv ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="${a.celular ? 'Enviar cobrança pelo WhatsApp' : 'Sem celular no Edubox'}">💬 WhatsApp</button>` : ''}
@@ -758,9 +772,9 @@ async function garantirModelos() {
 
 function preencher(texto, a) {
   const nomeT = a.nome.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase());
-  const lista = a.parcelasVis.map(p => `• Venc. ${fmtData(p.v)} — ${brl(p.valor)}`).join('\n');
+  const lista = a.parcelasVis.map(p => `• Venc. ${fmtData(p.v)} — ${brl(p.valor)} (hoje ${brl(aPagarParcela(p.valor, p.v))} com juros e multa)`).join('\n');
   const vars = {
-    nome: nomeT, primeiro_nome: nomeT.split(' ')[0], valor_total: brl(a.totalVis),
+    nome: nomeT, primeiro_nome: nomeT.split(' ')[0], valor_total: brl(a.totalVis), valor_a_pagar: brl(a.apVis),
     qtd_parcelas: plural(a.parcelasVis.length, 'parcela', 'parcelas'), lista_parcelas: lista,
     vencimento_mais_antigo: fmtData(a.maisAntigoVis), dias_atraso: String(a.diasVis), curso: a.cursos.map(nomeCurso).join(' / ')
   };
@@ -777,7 +791,7 @@ async function abrirZap(i) {
   if (!a || a.modoAdv) return;
   try { await garantirModelos(); } catch (e) { showToast(e.message, 'error'); return; }
   alunoAberto = { ...a, idx: i };
-  document.getElementById('zap-sub').innerHTML = `<b>${esc(a.nome)}</b> · ${plural(a.parcelasVis.length, 'parcela', 'parcelas')} · ${brl(a.totalVis)} · ${a.diasVis} dias de atraso`;
+  document.getElementById('zap-sub').innerHTML = `<b>${esc(a.nome)}</b> · ${plural(a.parcelasVis.length, 'parcela', 'parcelas')} · a pagar ${brl(a.apVis)} (original ${brl(a.totalVis)}) · ${a.diasVis} dias de atraso`;
   const sel = document.getElementById('zap-modelo');
   sel.innerHTML = modelos.map(m => `<option value="${esc(m.id)}">${esc(m.nome)}</option>`).join('');
   sel.value = modeloSugerido(a);
@@ -854,8 +868,8 @@ async function abrirAluno(i) {
   const pg = a.pagamento || {};
   document.getElementById('al-sub').innerHTML += ` · ${pg.ultimo ? `último pagamento ${fmtData(pg.ultimo)}` : 'sem pagamento registrado'}${pg.pago90 > 0 ? ` (${brl(pg.pago90)} em 90 dias)` : ''}`;
   document.getElementById('al-parcelas').innerHTML = a.parcelasVis.map(p =>
-    `<div><span>${fmtData(p.v)} <small class="cb-sub">(${esc(p.s)})</small>${p.j ? '<span class="cb-tag-jur">JUR</span>' : ''}<small class="cb-plano">${esc(nomesPl[p.pl] || '')}</small></span><b>${brl(p.valor)}</b></div>`).join('') +
-    `<div class="total"><span>Total</span><span>${brl(a.totalVis)}</span></div>`;
+    `<div><span>${fmtData(p.v)} <small class="cb-sub">(${esc(p.s)})</small>${p.j ? '<span class="cb-tag-jur">JUR</span>' : ''}<small class="cb-plano">${esc(nomesPl[p.pl] || '')}</small></span><b>${brl(aPagarParcela(p.valor, p.v))}<small class="cb-orig">original ${brl(p.valor)}</small></b></div>`).join('') +
+    `<div class="total"><span>Total a pagar</span><span>${brl(a.apVis)}<small class="cb-orig">original ${brl(a.totalVis)}</small></span></div>`;
   document.getElementById('form-acao').classList.toggle('hidden', !podeEditar);
   document.getElementById('ac-tipo').value = 'ligacao';
   document.getElementById('ac-promessa').classList.add('hidden');

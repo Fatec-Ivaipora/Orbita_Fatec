@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=7">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=8">
 </head>
 <body>
     <div id="auth-guard" class="layout-auth-guard">
@@ -59,6 +59,7 @@
                         <p><b>🔴 Atrasado</b> — a mensalidade já venceu e <b>não foi paga</b>. É o que falta receber.</p>
                         <p><b>📅 Já venceu</b> — soma de tudo que já venceu, <b>pago ou não</b>. Serve de base pro %.</p>
                         <p><b>% de inadimplência</b> — atrasado ÷ já venceu. Ex.: 6% = de cada R$ 100 que venceram, R$ 6 não foram pagos. <b>Quanto menor, melhor.</b></p>
+                        <p><b>💰 A pagar</b> — o que o aluno deve hoje, <b>com multa e juros</b>, igual ao Edubox: valor + multa de 2% + juros de 1% ao mês por mês completo de atraso. Embaixo, em cinza, vem o <b>valor original</b> (sem juros). O % de inadimplência usa o valor original.</p>
                         <p><b>⏳ Ainda vai vencer</b> — mensalidade futura. Não é atraso.</p>
                         <p><b>🟢 Entrou / pago</b> — dinheiro que já caiu (baixa feita no Edubox: PIX, boleto, caixa...).</p>
                         <p><b>Semestre</b> — pela <b>data de vencimento</b>, igual ao relatório do Edubox: 2026.1 = vence de janeiro a junho; 2026.2 = de julho a dezembro.</p>
@@ -204,7 +205,7 @@
                     <div class="card">
                         <div class="tabela-wrap">
                             <table class="data-table cb-lista">
-                                <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">🔴 Valor atrasado</th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
+                                <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">💰 A pagar <small>(com juros e multa)</small></th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
                                 <tbody id="tb-alunos"><tr><td colspan="5" class="tabela-msg">Carregando...</td></tr></tbody>
                             </table>
                         </div>
@@ -324,7 +325,7 @@
     <div id="modal-modelos" class="modal-overlay hidden">
         <div class="modal-content modal-content-lg">
             <h2>Modelos de mensagem</h2>
-            <p class="modal-subtitle">Campos que se preenchem sozinhos: <code>{primeiro_nome}</code> <code>{nome}</code> <code>{valor_total}</code> <code>{qtd_parcelas}</code> <code>{lista_parcelas}</code> <code>{vencimento_mais_antigo}</code> <code>{dias_atraso}</code> <code>{curso}</code></p>
+            <p class="modal-subtitle">Campos que se preenchem sozinhos: <code>{primeiro_nome}</code> <code>{nome}</code> <code>{valor_a_pagar}</code> <code>{valor_total}</code> <small>(original)</small> <code>{qtd_parcelas}</code> <code>{lista_parcelas}</code> <code>{vencimento_mais_antigo}</code> <code>{dias_atraso}</code> <code>{curso}</code></p>
             <div id="modelos-lista"></div>
             <button type="button" class="btn-secondary" id="modelos-novo">+ Novo modelo</button>
             <div class="modal-actions">
@@ -336,6 +337,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=15"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=17"></script>
 </body>
 </html>

@@ -160,6 +160,9 @@
 .cb-glossario summary { cursor: pointer; font-weight: 700; color: var(--cm-azul); }
 .cb-glossario p { margin: 0.4rem 0; color: var(--text-main); }
 
+.cb-orig { display: block; font-size: 0.7rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+.kpi-value .cb-orig { font-size: 0.72rem; margin-top: 0.15rem; }
+
 @media print {
   .cb-status, .cb-barra, .cb-semana-nav, .cb-mais, .cb-contadores, .cb-glossario { display: none !important; }
   .cb-duas { grid-template-columns: 1fr 1fr; gap: 10px; }

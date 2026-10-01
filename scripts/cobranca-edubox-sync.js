@@ -56,6 +56,18 @@ const edubox = require(path.join(RAIZ, 'src', 'db-edubox'));
 
 const CATEGORIA_JURIDICO = 9; // tfi_categoria "RENEGOCIAÇÃO JUDICIAL"
 const SITUACOES_COBRAR = ['Ativo', 'Concluído', 'Pendente'];
+
+// "A pagar" igual ao Edubox (conferido nas 358 parcelas do relatório de contas
+// a receber de 01/10/2026, total R$ 209.205,01 exato): multa de 2% + juros de
+// 1% ao mês COMPOSTO por mês completo de atraso (a cada 30 dias), sobre o
+// valor da parcela. Só pra parcela vencida.
+function aPagarDe(valor, vencIso, hojeIso) {
+    const dias = Math.round((new Date(hojeIso + 'T12:00:00') - new Date(vencIso + 'T12:00:00')) / 86400000);
+    if (dias <= 0) return valor;
+    const multa = Math.round(valor * 0.02 * 100) / 100;
+    const juros = Math.round(valor * (Math.pow(1.01, Math.floor(dias / 30)) - 1) * 100) / 100;
+    return valor + multa + juros;
+}
 const DIAS_BAIXAS = 45;
 const FAIXAS = [[1, 30, '1-30'], [31, 60, '31-60'], [61, 90, '61-90'], [91, Infinity, '90+']];
 const SEM_CURSO = 'Sem curso vinculado';
@@ -240,10 +252,10 @@ function montarSituacaoAdvogado(linhas, pagamentos) {
 }
 
 function novoBloco() {
-    return { valor: 0, parcelas: 0, alunos: new Set() };
+    return { valor: 0, aPagar: 0, parcelas: 0, alunos: new Set() };
 }
 function fecharBloco(b) {
-    return { valor: r2(b.valor), parcelas: b.parcelas, alunos: b.alunos.size };
+    return { valor: r2(b.valor), aPagar: r2(b.aPagar), parcelas: b.parcelas, alunos: b.alunos.size };
 }
 
 // Estrutura do resumo de um grupo (graduação ou medicina) num recorte de semestre.
@@ -259,8 +271,9 @@ function novoGrupo() {
         planosJuridico: {} // plano -> { vencido, aVencer }
     };
 }
-function somar(bloco, valor, cliente) {
+function somar(bloco, valor, cliente, aPagar) {
     bloco.valor += valor;
+    bloco.aPagar += aPagar === undefined ? valor : aPagar;
     bloco.parcelas += 1;
     bloco.alunos.add(cliente);
 }
@@ -285,6 +298,10 @@ async function montarResumo(hoje, pagamentos) {
     const garantir = (sem) => (recortes[sem] = recortes[sem] || { graduacao: novoGrupo(), medicina: novoGrupo() });
     const hojeMs = new Date(hoje + 'T12:00:00').getTime();
     const comAdvogado = clientesComAdvogado(linhas);
+    // Recorte por semestre só até o semestre atual: acordos longos vencem até
+    // 2069 e um bloco por semestre futuro estourava o limite de índices do
+    // documento no Firestore. O futuro entra só no "todos" (a vencer).
+    const semLimite = semestreVenc(hoje);
 
     for (const l of linhas) {
         const valor = Number(l.valctr) - Number(l.valpag);
@@ -294,28 +311,29 @@ async function montarResumo(hoje, pagamentos) {
         const sem = semestreVenc(venc);
         const ladoNome = ladoDe(l);
         const vencido = venc < hoje;
+        const ap = vencido ? aPagarDe(valor, venc, hoje) : valor;
         const dias = vencido ? Math.round((hojeMs - new Date(venc + 'T12:00:00').getTime()) / 86400000) : 0;
         const curso = l.curso || SEM_CURSO;
-        for (const recorte of [sem, 'todos']) {
+        for (const recorte of (sem <= semLimite ? [sem, 'todos'] : ['todos'])) {
             const g = garantir(recorte)[grupo];
             const lado = g[ladoNome];
             if (ladoNome === 'enviar') { // fora da cobrança: só o bloco próprio
-                somar(vencido ? lado.vencido : lado.aVencer, valor, l.clictr);
+                somar(vencido ? lado.vencido : lado.aVencer, valor, l.clictr, ap);
                 continue;
             }
             if (l.juridico) {
                 const pl = (g.planosJuridico[(l.despla || '').trim()] = g.planosJuridico[(l.despla || '').trim()] || { vencido: novoBloco(), aVencer: novoBloco() });
-                somar(vencido ? pl.vencido : pl.aVencer, valor, l.clictr);
+                somar(vencido ? pl.vencido : pl.aVencer, valor, l.clictr, ap);
             }
             if (vencido) {
-                somar(g.vencido, valor, l.clictr);
-                somar(lado.vencido, valor, l.clictr);
-                if (!l.juridico && comAdvogado.has(l.clictr)) somar(g.financeiroComAdvogado, valor, l.clictr);
+                somar(g.vencido, valor, l.clictr, ap);
+                somar(lado.vencido, valor, l.clictr, ap);
+                if (!l.juridico && comAdvogado.has(l.clictr)) somar(g.financeiroComAdvogado, valor, l.clictr, ap);
                 const f = faixaDe(dias);
-                if (f) somar(g.faixas[f], valor, l.clictr);
+                if (f) somar(g.faixas[f], valor, l.clictr, ap);
                 const c = (g.porCurso[curso] = g.porCurso[curso] || { vencido: novoBloco(), financeiroVencido: novoBloco(), juridicoVencido: novoBloco() });
-                somar(c.vencido, valor, l.clictr);
-                somar(l.juridico ? c.juridicoVencido : c.financeiroVencido, valor, l.clictr);
+                somar(c.vencido, valor, l.clictr, ap);
+                somar(l.juridico ? c.juridicoVencido : c.financeiroVencido, valor, l.clictr, ap);
             } else {
                 somar(g.aVencer, valor, l.clictr);
                 somar(lado.aVencer, valor, l.clictr);
