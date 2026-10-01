@@ -61,6 +61,8 @@
                         <p><b>% de inadimplência</b> — atrasado ÷ já venceu. Ex.: 6% = de cada R$ 100 que venceram, R$ 6 não foram pagos. <b>Quanto menor, melhor.</b></p>
                         <p><b>⏳ Ainda vai vencer</b> — mensalidade futura. Não é atraso.</p>
                         <p><b>🟢 Entrou / pago</b> — dinheiro que já caiu (baixa feita no Edubox: PIX, boleto, caixa...).</p>
+                        <p><b>Semestre</b> — pela <b>data de vencimento</b>, igual ao relatório do Edubox: 2026.1 = vence de janeiro a junho; 2026.2 = de julho a dezembro.</p>
+                        <p><b>Quem o Financeiro cobra</b> — só alunos com matrícula <b>Ativo, Concluído ou Pendente</b>. Desistência, trancamento, cancelamento e transferência ficam em <b>📤 Para enviar ao advogado</b>.</p>
                         <p><b>💼 Financeiro</b> — parcelas que o Financeiro cobra. <b>⚖️ Advogado</b> — acordo feito com a advogada. <b>🏛 Débito judicial</b> — está com a advogada, ainda sem acordo. Advogado e débito o Financeiro <b>não cobra</b>.</p>
                     </div>
                 </details>
@@ -177,6 +179,7 @@
                             <option value="cobrar">💼 Cobrança do Financeiro</option>
                             <option value="advogado">⚖️ Advogado — acordo feito (não cobrar)</option>
                             <option value="debito">🏛 Débito judicial — sem acordo (não cobrar)</option>
+                            <option value="enviar">📤 Para enviar ao advogado — desistentes, trancados, cancelados</option>
                         </select>
                         <select class="select-filter hidden" id="l-pagando" title="Pagamentos no Edubox nos últimos 90 dias">
                             <option value="">Qualquer situação de pagamento</option>
@@ -333,6 +336,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=13"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=15"></script>
 </body>
 </html>

@@ -33,6 +33,14 @@
 //    de plano jurídico é do advogado; qualquer outra é do Financeiro, mesmo
 //    que o aluno também tenha acordo. "Advogado" (Advogado Fatec/Medicina) =
 //    acordo feito; "Débito judicial" = está com a advogada, sem acordo ainda.
+//  - Situação da MATRÍCULA da parcela (decisão do usuário, 01/10/2026, igual
+//    ao relatório de cobrança do Edubox que o Financeiro tira): o Financeiro
+//    só cobra Ativo, Concluído e Pendente. Desistência, Trancamento,
+//    Cancelado, Transferência e parcela sem matrícula saem da cobrança — vão
+//    pro advogado (lado "enviar").
+//  - Semestre = pela DATA DE VENCIMENTO (jan–jun = .1, jul–dez = .2), como o
+//    Financeiro filtra no Edubox. Graduação x Medicina continua pelo formato
+//    do semestre da parcela.
 //  - Aluno com acordo ganha a situação de pagamento (último pagamento, pago
 //    em 90 dias) — mostra se o acordo está andando.
 //  - Recebido = baixas do tipo "baixa"/"baixa_parcial", sem estorno, com data
@@ -47,6 +55,7 @@ const { db } = require(path.join(RAIZ, 'src', 'firebase'));
 const edubox = require(path.join(RAIZ, 'src', 'db-edubox'));
 
 const CATEGORIA_JURIDICO = 9; // tfi_categoria "RENEGOCIAÇÃO JUDICIAL"
+const SITUACOES_COBRAR = ['Ativo', 'Concluído', 'Pendente'];
 const DIAS_BAIXAS = 45;
 const FAIXAS = [[1, 30, '1-30'], [31, 60, '31-60'], [61, 90, '61-90'], [91, Infinity, '90+']];
 const SEM_CURSO = 'Sem curso vinculado';
@@ -56,6 +65,16 @@ const q = async (sql, params) => (await edubox.query(sql, params)).rows;
 function normalizarSemestre(s) {
     const m = (s || '').trim().match(/^(\d{4})\s*[-/.]\s*(\d)$/);
     return m ? `${m[1]}.${m[2]}` : ((s || '').trim() || 'sem semestre');
+}
+// Semestre pela data de vencimento: 'AAAA-MM-DD' -> 'AAAA.1' (jan–jun) / 'AAAA.2'.
+function semestreVenc(vencIso) {
+    return `${vencIso.slice(0, 4)}.${Number(vencIso.slice(5, 7)) <= 6 ? 1 : 2}`;
+}
+// De que lado a parcela fica: jurídico (plano), Financeiro (matrícula Ativo/
+// Concluído/Pendente) ou "enviar" (desistente/trancado/cancelado/sem matrícula).
+function ladoDe(l) {
+    if (l.juridico) return 'juridico';
+    return SITUACOES_COBRAR.includes((l.stamat || '').trim()) ? 'financeiro' : 'enviar';
 }
 function grupoDe(semctr) {
     return /-/.test(semctr || '') ? 'medicina' : 'graduacao';
@@ -83,7 +102,7 @@ const SQL_ABERTO = `
     SELECT c.codctr, c.clictr, c.semctr, c.venctr, c.valctr, coalesce(c.valpagctr, 0) AS valpag,
            c.stactr, (p.catpla = $1) AS juridico, p.despla,
            trim(coalesce(cu.descur, cc.descur, '')) AS curso,
-           trim(cl.nomcli) AS nome, cl.cpfcli, cl.celcli, cl.foncli
+           trim(cl.nomcli) AS nome, cl.cpfcli, cl.celcli, cl.foncli, trim(m.stamat) AS stamat
     FROM tfi_ctreceber c
     LEFT JOIN tfi_plano p ON p.codpla = c.plactr
     LEFT JOIN tac_matricula m ON m.codmat = c.matctr
@@ -129,7 +148,8 @@ const SQL_DEVIDO = `
         JOIN tac_curso cu ON cu.codcur = t.curtur
         ORDER BY m.climat, m.datmat DESC NULLS LAST, m.codmat DESC
     )
-    SELECT c.semctr, coalesce(p.catpla = $1, false) AS juridico,
+    SELECT c.semctr, coalesce(p.catpla = $1, false) AS juridico, trim(m.stamat) AS stamat,
+           to_char(c.venctr, 'YYYY') || '.' || CASE WHEN extract(month FROM c.venctr) <= 6 THEN '1' ELSE '2' END AS semv,
            trim(coalesce(cu.descur, cc.descur, '')) AS curso, sum(c.valctr) AS devido
     FROM tfi_ctreceber c
     LEFT JOIN tfi_plano p ON p.codpla = c.plactr
@@ -141,7 +161,7 @@ const SQL_DEVIDO = `
       AND coalesce(p.despla, '') !~* '^teste$'
       AND NOT EXISTS (SELECT 1 FROM tfi_itembaixactr b WHERE b.ctribc = c.codctr
                       AND b.tipibc IN ('renegociacao', 'reneg_parcial', 'cancelamento') AND b.estibc IS NULL)
-    GROUP BY 1, 2, 3`;
+    GROUP BY 1, 2, 3, 4, 5`;
 
 // Último pagamento de cada cliente (qualquer parcela e só as de acordo).
 const SQL_ULTIMO_PAGAMENTO = `
@@ -232,6 +252,7 @@ function novoGrupo() {
         vencido: novoBloco(), aVencer: novoBloco(),
         financeiro: { vencido: novoBloco(), aVencer: novoBloco() },
         juridico: { vencido: novoBloco(), aVencer: novoBloco() },
+        enviar: { vencido: novoBloco(), aVencer: novoBloco() }, // desistente/trancado/cancelado: fora da cobrança
         faixas: Object.fromEntries(FAIXAS.map(f => [f[2], novoBloco()])),
         porCurso: {},
         financeiroComAdvogado: novoBloco(), // vencido do Financeiro de quem está com advogado (não cobrar)
@@ -248,6 +269,7 @@ function fecharGrupo(g) {
         vencido: fecharBloco(g.vencido), aVencer: fecharBloco(g.aVencer),
         financeiro: { vencido: fecharBloco(g.financeiro.vencido), aVencer: fecharBloco(g.financeiro.aVencer) },
         juridico: { vencido: fecharBloco(g.juridico.vencido), aVencer: fecharBloco(g.juridico.aVencer) },
+        enviar: { vencido: fecharBloco(g.enviar.vencido), aVencer: fecharBloco(g.enviar.aVencer) },
         faixas: Object.fromEntries(Object.entries(g.faixas).map(([k, b]) => [k, fecharBloco(b)])),
         porCurso: Object.fromEntries(Object.entries(g.porCurso).map(([k, c]) => [k, {
             vencido: fecharBloco(c.vencido), financeiroVencido: fecharBloco(c.financeiroVencido), juridicoVencido: fecharBloco(c.juridicoVencido)
@@ -268,14 +290,19 @@ async function montarResumo(hoje, pagamentos) {
         const valor = Number(l.valctr) - Number(l.valpag);
         if (valor <= 0) continue;
         const grupo = grupoDe(l.semctr);
-        const sem = normalizarSemestre(l.semctr);
         const venc = isoData(l.venctr);
+        const sem = semestreVenc(venc);
+        const ladoNome = ladoDe(l);
         const vencido = venc < hoje;
         const dias = vencido ? Math.round((hojeMs - new Date(venc + 'T12:00:00').getTime()) / 86400000) : 0;
         const curso = l.curso || SEM_CURSO;
         for (const recorte of [sem, 'todos']) {
             const g = garantir(recorte)[grupo];
-            const lado = l.juridico ? g.juridico : g.financeiro;
+            const lado = g[ladoNome];
+            if (ladoNome === 'enviar') { // fora da cobrança: só o bloco próprio
+                somar(vencido ? lado.vencido : lado.aVencer, valor, l.clictr);
+                continue;
+            }
             if (l.juridico) {
                 const pl = (g.planosJuridico[(l.despla || '').trim()] = g.planosJuridico[(l.despla || '').trim()] || { vencido: novoBloco(), aVencer: novoBloco() });
                 somar(vencido ? pl.vencido : pl.aVencer, valor, l.clictr);
@@ -303,10 +330,11 @@ async function montarResumo(hoje, pagamentos) {
         resumo[sem] = { graduacao: fecharGrupo(gr.graduacao), medicina: fecharGrupo(gr.medicina) };
     }
     for (const d of devidoLinhas) {
+        if (!d.juridico && !SITUACOES_COBRAR.includes((d.stamat || '').trim())) continue; // fora da cobrança
         const grupo = grupoDe(d.semctr);
         const valor = Number(d.devido) || 0;
         const curso = d.curso || SEM_CURSO;
-        for (const sem of [normalizarSemestre(d.semctr), 'todos']) {
+        for (const sem of [d.semv, 'todos']) {
             const g = resumo[sem] && resumo[sem][grupo];
             if (!g) continue; // semestre sem nada em aberto: não aparece no painel
             g.devido = g.devido || { financeiro: 0, juridico: 0 };
@@ -359,14 +387,20 @@ function montarAlunos(linhas, hoje, hojeMs, comAdvogado, pagamentos) {
             comAdvogado: comAdvogado.has(l.clictr), planosAdvogado: [...(planosDe[l.clictr] || [])],
             tipoAdvogado: !comAdvogado.has(l.clictr) ? null
                 : [...(planosDe[l.clictr] || [])].some(pl => /ADVOGADO/i.test(pl)) ? 'advogado' : 'debito',
-            pagamento: (pagamentos && pagamentos.porCliente[l.clictr]) || null
+            pagamento: (pagamentos && pagamentos.porCliente[l.clictr]) || null,
+            situacoes: []
         });
+        const st = (l.stamat || 'sem matrícula').trim();
+        if (!a.situacoes.includes(st)) a.situacoes.push(st);
         const curso = l.curso || SEM_CURSO;
         if (!a.cursos.includes(curso)) a.cursos.push(curso);
         a.total += valor;
         a[l.juridico ? 'juridico' : 'financeiro'] += valor;
         if (venc < a.maisAntigo) a.maisAntigo = venc;
-        a.parcelas.push({ v: venc, s: normalizarSemestre(l.semctr), valor: r2(valor), j: !!l.juridico, pl: (l.despla || '').trim() });
+        const fora = ladoDe(l) === 'enviar';
+        if (fora) { a.enviar = (a.enviar || 0) + valor; a.financeiro -= valor; }
+        // `e` (fora da cobrança) só vai quando true — economiza espaço no doc (limite 1 MB)
+        a.parcelas.push({ v: venc, s: semestreVenc(venc), valor: r2(valor), j: !!l.juridico, ...(fora ? { e: true } : {}), pl: (l.despla || '').trim() });
     }
     // Nome do plano vai uma vez só em `planos` do grupo; a parcela guarda o
     // índice (`pl`) — o nome repetido em cada parcela quase estourava o limite
@@ -380,7 +414,7 @@ function montarAlunos(linhas, hoje, hojeMs, comAdvogado, pagamentos) {
             a.parcelas.sort((x, y) => x.v.localeCompare(y.v));
             a.parcelas.forEach(pc => { pc.pl = indice(pc.pl); });
             return {
-                ...a, total: r2(a.total), financeiro: r2(a.financeiro), juridico: r2(a.juridico),
+                ...a, total: r2(a.total), financeiro: r2(a.financeiro), juridico: r2(a.juridico), enviar: r2(a.enviar || 0),
                 diasAtraso: Math.round((hojeMs - new Date(a.maisAntigo + 'T12:00:00').getTime()) / 86400000),
                 semestres: [...new Set(a.parcelas.map(p => p.s))].sort().reverse()
             };
@@ -398,7 +432,7 @@ async function montarBaixas(hoje) {
         const dia = isoData(l.datibc);
         if (dia > hoje) continue;
         const grupo = grupoDe(l.semctr);
-        const sem = normalizarSemestre(l.semctr);
+        const sem = semestreVenc(isoData(l.venctr));
         const valor = Number(l.totibc) || 0;
         const atrasada = isoData(l.venctr) < dia; // pagou depois do vencimento = recuperado pela cobrança
         const d = (porDia[dia] = porDia[dia] || { data: dia, graduacao: { financeiro: novoLado(), juridico: novoLado() }, medicina: { financeiro: novoLado(), juridico: novoLado() }, porSemestre: {} });

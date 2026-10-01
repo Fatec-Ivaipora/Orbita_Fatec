@@ -63,6 +63,10 @@ const SQL_FOTO = `
         GROUP BY ctribc
     )
     SELECT c.semctr, coalesce(p.catpla = $1, false) AS juridico,
+           -- mesmas regras do agente: semestre pelo vencimento; Financeiro só
+           -- matrícula Ativo/Concluído/Pendente (situação de hoje)
+           to_char(c.venctr, 'YYYY') || '.' || CASE WHEN extract(month FROM c.venctr) <= 6 THEN '1' ELSE '2' END AS semv,
+           coalesce(trim(m.stamat) IN ('Ativo', 'Concluído', 'Pendente'), false) AS cobrar,
            sum(c.valctr) AS devido,
            sum(greatest(c.valctr - greatest(coalesce(b.pago, 0),
                -- parcela baixada sem registro de baixa: vale a data de pagamento da própria parcela
@@ -70,14 +74,16 @@ const SQL_FOTO = `
     FROM tfi_ctreceber c
     LEFT JOIN tfi_plano p ON p.codpla = c.plactr
     LEFT JOIN b ON b.ctribc = c.codctr
+    LEFT JOIN tac_matricula m ON m.codmat = c.matctr
     WHERE c.venctr < $2::date
       AND NOT coalesce(b.saiu, false)
       AND NOT (c.stactr = 'Cancel' AND NOT EXISTS (SELECT 1 FROM tfi_itembaixactr x WHERE x.ctribc = c.codctr))
       AND coalesce(p.despla, '') !~* '^teste$'
-    GROUP BY 1, 2`;
+    GROUP BY 1, 2, 3, 4`;
 
 const SQL_RECEBIDO = `
     SELECT date_trunc('week', b.datibc)::date AS segunda, c.semctr,
+           to_char(c.venctr, 'YYYY') || '.' || CASE WHEN extract(month FROM c.venctr) <= 6 THEN '1' ELSE '2' END AS semv,
            coalesce(p.catpla = $1, false) AS juridico,
            sum(b.totibc) AS valor,
            sum(b.totibc) FILTER (WHERE c.venctr::date < b.datibc::date) AS atraso
@@ -86,14 +92,15 @@ const SQL_RECEBIDO = `
     LEFT JOIN tfi_plano p ON p.codpla = c.plactr
     WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL
       AND b.datibc >= $2::date AND b.datibc <= CURRENT_DATE
-    GROUP BY 1, 2, 3`;
+    GROUP BY 1, 2, 3, 4`;
 
 // { grupo: { sem|'todos': {f, j, fd} } } a partir das linhas por semestre
 function agrupar(linhas, campo) {
     const out = { graduacao: {}, medicina: {} };
     for (const l of linhas) {
         const g = grupoDe(l.semctr);
-        for (const sem of [normalizarSemestre(l.semctr), 'todos']) {
+        if (!l.juridico && !l.cobrar) continue; // desistente/trancado/cancelado: fora da cobrança
+        for (const sem of [l.semv, 'todos']) {
             const x = (out[g][sem] = out[g][sem] || { f: 0, j: 0, fd: 0 });
             x[l.juridico ? 'j' : 'f'] += Number(l[campo]) || 0;
             if (!l.juridico) x.fd += Number(l.devido) || 0;
@@ -141,7 +148,7 @@ async function main() {
         const seg = isoData(new Date(l.segunda));
         if (!semanas[seg]) continue;
         const g = grupoDe(l.semctr);
-        for (const sem of [normalizarSemestre(l.semctr), 'todos']) {
+        for (const sem of [l.semv, 'todos']) {
             const x = (((semanas[seg][g] = semanas[seg][g] || {})[sem] = semanas[seg][g][sem] || {}).rec = semanas[seg][g][sem].rec || { f: 0, j: 0, fa: 0, ja: 0 });
             x[l.juridico ? 'j' : 'f'] += Number(l.valor) || 0;
             x[l.juridico ? 'ja' : 'fa'] += Number(l.atraso) || 0;
