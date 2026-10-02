@@ -18,6 +18,10 @@
 //                                      vencido no início/agora, devido e
 //                                      recebido — gráfico da Visão do diretor
 //   cobranca_edubox_baixas/{AAAA-MM-DD} recebido por dia (últimos 45 dias)
+//   cobranca_edubox_meses/{AAAA-MM}     o mesmo resumo do "atual", mas só das
+//                                      parcelas que vencem naquele mês (últimos
+//                                      24 meses) + o que entrou no mês — visão
+//                                      mensal do diretor (02/10/2026)
 //   cobranca_edubox_historico/{id}      "foto" dos totais vencidos a cada
 //                                      rodada (base do "comecei a semana com X")
 //   config/cobranca_sync               status/última atualização
@@ -69,6 +73,7 @@ function aPagarDe(valor, vencIso, hojeIso) {
     return valor + multa + juros;
 }
 const DIAS_BAIXAS = 45;
+const MESES_HISTORICO = 24; // visão mensal: do mês atual até 23 meses atrás
 const FAIXAS = [[1, 30, '1-30'], [31, 60, '31-60'], [61, 90, '61-90'], [91, Infinity, '90+']];
 const SEM_CURSO = 'Sem curso vinculado';
 
@@ -94,6 +99,11 @@ function grupoDe(semctr) {
 function faixaDe(dias) {
     const f = FAIXAS.find(([de, ate]) => dias >= de && dias <= ate);
     return f ? f[2] : null;
+}
+// 'AAAA-MM' de n meses antes do mês de uma data AAAA-MM-DD.
+function mesesAtras(hojeIso, n) {
+    const x = new Date(Number(hojeIso.slice(0, 4)), Number(hojeIso.slice(5, 7)) - 1 - n, 1);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`;
 }
 function isoData(d) {
     const x = new Date(d);
@@ -162,6 +172,7 @@ const SQL_DEVIDO = `
     )
     SELECT c.semctr, coalesce(p.catpla = $1, false) AS juridico, trim(m.stamat) AS stamat,
            to_char(c.venctr, 'YYYY') || '.' || CASE WHEN extract(month FROM c.venctr) <= 6 THEN '1' ELSE '2' END AS semv,
+           to_char(c.venctr, 'YYYY-MM') AS mesv,
            trim(coalesce(cu.descur, cc.descur, '')) AS curso, sum(c.valctr) AS devido
     FROM tfi_ctreceber c
     LEFT JOIN tfi_plano p ON p.codpla = c.plactr
@@ -173,7 +184,22 @@ const SQL_DEVIDO = `
       AND coalesce(p.despla, '') !~* '^teste$'
       AND NOT EXISTS (SELECT 1 FROM tfi_itembaixactr b WHERE b.ctribc = c.codctr
                       AND b.tipibc IN ('renegociacao', 'reneg_parcial', 'cancelamento') AND b.estibc IS NULL)
-    GROUP BY 1, 2, 3, 4, 5`;
+    GROUP BY 1, 2, 3, 4, 5, 6`;
+
+// Recebido por mês (data da baixa), últimos MESES_HISTORICO meses — uma
+// consulta agregada só (poucas linhas). Mesmo critério de "recebido" das
+// baixas diárias; "atraso" = pagou depois do vencimento.
+const SQL_RECEBIDO_MES = `
+    SELECT to_char(b.datibc, 'YYYY-MM') AS mes, (coalesce(c.semctr, '') ~ '-') AS med,
+           coalesce(p.catpla = $1, false) AS juridico, (c.venctr < b.datibc::date) AS atraso,
+           sum(b.totibc) AS valor
+    FROM tfi_itembaixactr b
+    JOIN tfi_ctreceber c ON c.codctr = b.ctribc
+    LEFT JOIN tfi_plano p ON p.codpla = c.plactr
+    WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL
+      AND b.datibc >= (date_trunc('month', CURRENT_DATE) - ($2::int - 1) * interval '1 month')
+      AND b.datibc <= CURRENT_DATE
+    GROUP BY 1, 2, 3, 4`;
 
 // Último pagamento de cada cliente (qualquer parcela e só as de acordo).
 const SQL_ULTIMO_PAGAMENTO = `
@@ -302,6 +328,11 @@ async function montarResumo(hoje, pagamentos) {
     // 2069 e um bloco por semestre futuro estourava o limite de índices do
     // documento no Firestore. O futuro entra só no "todos" (a vencer).
     const semLimite = semestreVenc(hoje);
+    // Recorte por MÊS de vencimento ('m:AAAA-MM'), do mês atual até
+    // MESES_HISTORICO-1 meses atrás — vai pra cobranca_edubox_meses.
+    const mesAte = hoje.slice(0, 7), mesDe = mesesAtras(hoje, MESES_HISTORICO - 1);
+    // todo mês do período existe, mesmo sem nada em aberto (aí a inadimplência é 0%)
+    for (let i = 0; i < MESES_HISTORICO; i++) garantir('m:' + mesesAtras(hoje, i));
 
     for (const l of linhas) {
         const valor = Number(l.valctr) - Number(l.valpag);
@@ -314,7 +345,10 @@ async function montarResumo(hoje, pagamentos) {
         const ap = vencido ? aPagarDe(valor, venc, hoje) : valor;
         const dias = vencido ? Math.round((hojeMs - new Date(venc + 'T12:00:00').getTime()) / 86400000) : 0;
         const curso = l.curso || SEM_CURSO;
-        for (const recorte of (sem <= semLimite ? [sem, 'todos'] : ['todos'])) {
+        const mes = venc.slice(0, 7);
+        const chaves = sem <= semLimite ? [sem, 'todos'] : ['todos'];
+        if (mes >= mesDe && mes <= mesAte) chaves.push('m:' + mes);
+        for (const recorte of chaves) {
             const g = garantir(recorte)[grupo];
             const lado = g[ladoNome];
             if (ladoNome === 'enviar') { // fora da cobrança: só o bloco próprio
@@ -352,7 +386,7 @@ async function montarResumo(hoje, pagamentos) {
         const grupo = grupoDe(d.semctr);
         const valor = Number(d.devido) || 0;
         const curso = d.curso || SEM_CURSO;
-        for (const sem of [d.semv, 'todos']) {
+        for (const sem of [d.semv, 'todos', 'm:' + d.mesv]) {
             const g = resumo[sem] && resumo[sem][grupo];
             if (!g) continue; // semestre sem nada em aberto: não aparece no painel
             g.devido = g.devido || { financeiro: 0, juridico: 0 };
@@ -364,7 +398,10 @@ async function montarResumo(hoje, pagamentos) {
         if (g.devido) { g.devido.financeiro = r2(g.devido.financeiro); g.devido.juridico = r2(g.devido.juridico); }
         for (const c of Object.values(g.porCurso)) if (c.devidoFinanceiro) c.devidoFinanceiro = r2(c.devidoFinanceiro);
     }
-    return { resumo, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
+    // separa os recortes por mês (não entram no doc "atual")
+    const meses = {};
+    for (const k of Object.keys(resumo)) if (k.startsWith('m:')) { meses[k.slice(2)] = resumo[k]; delete resumo[k]; }
+    return { resumo, meses, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
 }
 
 function telefone(v) {
@@ -492,6 +529,23 @@ async function montarBaixas(hoje) {
     return { porDia, baixasLidas: linhas.length };
 }
 
+// O que entrou em cada mês: { 'AAAA-MM': { graduacao: {f, j, fa, ja}, medicina: {...} } }
+// (f/j = Financeiro/Advogado+Débito; fa/ja = a parte que era parcela atrasada).
+async function montarRecebidoMes() {
+    const linhas = await q(SQL_RECEBIDO_MES, [CATEGORIA_JURIDICO, MESES_HISTORICO]);
+    const novo = () => ({ f: 0, j: 0, fa: 0, ja: 0 });
+    const porMes = {};
+    for (const l of linhas) {
+        const m = (porMes[l.mes] = porMes[l.mes] || { graduacao: novo(), medicina: novo() });
+        const x = m[l.med ? 'medicina' : 'graduacao'];
+        const v = Number(l.valor) || 0;
+        x[l.juridico ? 'j' : 'f'] += v;
+        if (l.atraso) x[l.juridico ? 'ja' : 'fa'] += v;
+    }
+    for (const m of Object.values(porMes)) for (const x of Object.values(m)) for (const k in x) x[k] = r2(x[k]);
+    return porMes;
+}
+
 // Segunda-feira (AAAA-MM-DD) da semana de uma data AAAA-MM-DD.
 function segundaDe(diaIso) {
     const [a, m, d] = diaIso.split('-').map(Number);
@@ -550,8 +604,9 @@ async function sincronizar(origem = 'manual') {
     try {
         const hoje = isoData(new Date());
         const pagamentos = await montarPagamentos(hoje);
-        const { resumo, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
+        const { resumo, meses, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
         const { porDia, baixasLidas } = await montarBaixas(hoje);
+        const recebidoMes = await montarRecebidoMes();
         const agora = new Date().toISOString();
         const semestres = Object.keys(resumo).filter(s => s !== 'todos').sort((a, b) => b.localeCompare(a));
 
@@ -579,6 +634,20 @@ async function sincronizar(origem = 'manual') {
             batch.set(db.collection('cobranca_edubox_baixas').doc(dia), { ...dados, atualizadoEm: agora });
         }
         await batch.commit();
+
+        // Visão mensal: um doc por mês (lido só quando escolhem o mês na tela)
+        const vazioRec = { f: 0, j: 0, fa: 0, ja: 0 };
+        const batchMes = db.batch();
+        for (const mes of new Set([...Object.keys(meses), ...Object.keys(recebidoMes)])) {
+            const gr = meses[mes] || {};
+            const rec = recebidoMes[mes] || {};
+            batchMes.set(db.collection('cobranca_edubox_meses').doc(mes), {
+                mes, geradoEm: agora,
+                graduacao: gr.graduacao || null, medicina: gr.medicina || null,
+                recebido: { graduacao: rec.graduacao || vazioRec, medicina: rec.medicina || vazioRec }
+            });
+        }
+        await batchMes.commit();
 
         const duracaoMs = Date.now() - inicio;
         await cfg.set({ status: 'ok', ultimaAtualizacao: agora, ultimaOrigem: origem, duracaoMs, erro: null, parcelasLidas, baixasLidas }, { merge: true });

@@ -79,13 +79,64 @@
                     <h3 class="card-secao-titulo">Resumo do semestre</h3>
                 <div>
                 <div class="kpi-grid">
+                    <!-- Ordem pedida pela direção (02/10/2026): total -> perdas dos
+                         veteranos e % sobre o total -> veteranos -> calouros captados,
+                         perdas de calouro, calouros que ficaram e % sobre a captação
+                         -> ativos -> formandos -> vão para o próximo semestre. -->
+                    <!-- 1) Total de alunos -->
                     <div class="kpi-card kpi-destaque kpi-azul">
                         <div class="kpi-label">Total de alunos</div>
                         <div class="kpi-value" id="kpi-total">—</div>
                         <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="total" title="Ver o que está somando aqui">🔍 ver a conta</button>
                     </div>
 
-                    <!-- Perdas — quem saiu da faculdade, de qualquer jeito -->
+                    <!-- 2) Perdas dos veteranos -->
+                    <div class="kpi-card kpi-perda">
+                        <div class="kpi-label">Trancou — Veterano</div>
+                        <div class="kpi-value" id="kpi-trancou-veterano">—</div>
+                    </div>
+                    <div class="kpi-card kpi-perda hidden" id="kpi-desistente-veterano-card">
+                        <div class="kpi-label">Desistente — Veterano</div>
+                        <div class="kpi-value" id="kpi-desistente-veterano">—</div>
+                    </div>
+                    <div class="kpi-card kpi-perda hidden" id="kpi-transferencia-card">
+                        <div class="kpi-label">Transferência</div>
+                        <div class="kpi-value" id="kpi-transferencia">—</div>
+                        <div class="kpi-hint">Situação = Transferência — saiu para outra instituição</div>
+                    </div>
+                    <div class="kpi-card kpi-perda">
+                        <div class="kpi-label">Cancelou — Veterano</div>
+                        <div class="kpi-value" id="kpi-cancelou-veterano">—</div>
+                        <div class="kpi-hint">Situação = Cancelou, período 2º ou mais</div>
+                    </div>
+                    <div class="kpi-card kpi-perda kpi-pct">
+                        <div class="kpi-label">% Perda sobre Total</div>
+                        <div class="kpi-value" id="kpi-perda-total">—</div>
+                        <div class="kpi-hint">Total de perdas (todos que saíram da faculdade, de qualquer forma — mudança de curso não conta) ÷ Total de alunos</div>
+                    </div>
+
+                    <!-- 3) Veteranos (rematrícula) -->
+                    <div class="kpi-card">
+                        <div class="kpi-label">Veteranos (Rematrícula)</div>
+                        <div class="kpi-value" id="kpi-veteranos">—</div>
+                        <div class="kpi-hint">Rematrícula Assinada + Não Assinou + Formando + Reprovado (Pendência Financeira não entra até resolver)</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Pendência Financeira</div>
+                        <div class="kpi-value" id="kpi-pendencia">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Não Assinou</div>
+                        <div class="kpi-value" id="kpi-nao-assinou">—</div>
+                    </div>
+
+                    <!-- 4) Calouros: captados, o que perdeu e o que sobrou -->
+                    <div class="kpi-card kpi-destaque kpi-roxo">
+                        <div class="kpi-label">Total de Calouros Captados</div>
+                        <div class="kpi-value" id="kpi-total-calouros">—</div>
+                        <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="totalCalouros" title="Ver o que está somando aqui">🔍 ver a conta</button>
+                        <div class="kpi-hint">Matrícula Nova + Assinada + Retorno + Transferência de entrada + 1ª/2ª Evasão + Cancelou Calouro + Desistente Calouro</div>
+                    </div>
                     <div class="kpi-card kpi-perda">
                         <div class="kpi-label">1ª Evasão</div>
                         <div class="kpi-value" id="kpi-1-evasao">—</div>
@@ -101,76 +152,30 @@
                         <div class="kpi-hint">Situação = Cancelou, período 1º</div>
                     </div>
                     <div class="kpi-card kpi-perda">
-                        <div class="kpi-label">Cancelou — Veterano</div>
-                        <div class="kpi-value" id="kpi-cancelou-veterano">—</div>
-                        <div class="kpi-hint">Situação = Cancelou, período 2º ou mais</div>
-                    </div>
-                    <div class="kpi-card kpi-perda">
                         <div class="kpi-label">Trancou — Calouro</div>
                         <div class="kpi-value" id="kpi-trancou-calouro">—</div>
-                    </div>
-                    <div class="kpi-card kpi-perda">
-                        <div class="kpi-label">Trancou — Veterano</div>
-                        <div class="kpi-value" id="kpi-trancou-veterano">—</div>
                     </div>
                     <div class="kpi-card kpi-perda hidden" id="kpi-desistente-calouro-card">
                         <div class="kpi-label">Desistente — Calouro</div>
                         <div class="kpi-value" id="kpi-desistente-calouro">—</div>
                     </div>
-                    <div class="kpi-card kpi-perda hidden" id="kpi-desistente-veterano-card">
-                        <div class="kpi-label">Desistente — Veterano</div>
-                        <div class="kpi-value" id="kpi-desistente-veterano">—</div>
-                    </div>
-                    <div class="kpi-card kpi-perda hidden" id="kpi-transferencia-card">
-                        <div class="kpi-label">Transferência</div>
-                        <div class="kpi-value" id="kpi-transferencia">—</div>
-                        <div class="kpi-hint">Situação = Transferência — saiu para outra instituição</div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Calouros que ficaram (Matrícula Nova)</div>
+                        <div class="kpi-value" id="kpi-calouros">—</div>
+                        <div class="kpi-hint">Matrícula Nova + Assinada + Retorno + Transferência de entrada</div>
                     </div>
                     <div class="kpi-card kpi-perda kpi-pct">
                         <div class="kpi-label">% Perda sobre Captação</div>
                         <div class="kpi-value" id="kpi-perda-captacao">—</div>
-                        <div class="kpi-hint">(Cancelou Calouro + Desistente Calouro) ÷ Total de Calouros captados — evasões e Desistente Veterano não entram</div>
-                    </div>
-                    <div class="kpi-card kpi-perda kpi-pct">
-                        <div class="kpi-label">% Perda sobre Total</div>
-                        <div class="kpi-value" id="kpi-perda-total">—</div>
-                        <div class="kpi-hint">Total de perdas (todos que saíram da faculdade, de qualquer forma — mudança de curso não conta) ÷ Total de alunos</div>
+                        <div class="kpi-hint">Calouros que saíram (1ª/2ª Evasão + Cancelou + Desistente) ÷ Total de Calouros captados</div>
                     </div>
 
-                    <!-- Veteranos (rematrícula) -->
-                    <div class="kpi-card">
-                        <div class="kpi-label">Veteranos (Rematrícula)</div>
-                        <div class="kpi-value" id="kpi-veteranos">—</div>
-                        <div class="kpi-hint">Rematrícula Assinada + Não Assinou + Formando + Reprovado (Pendência Financeira não entra até resolver)</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Pendência Financeira</div>
-                        <div class="kpi-value" id="kpi-pendencia">—</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Não Assinou</div>
-                        <div class="kpi-value" id="kpi-nao-assinou">—</div>
-                    </div>
-
-                    <!-- Calouros (matrícula nova) -->
-                    <div class="kpi-card">
-                        <div class="kpi-label">Calouros (Matrícula Nova)</div>
-                        <div class="kpi-value" id="kpi-calouros">—</div>
-                        <div class="kpi-hint">Matrícula Nova + Assinada + Retorno + Transferência de entrada</div>
-                    </div>
-                    <div class="kpi-card kpi-destaque kpi-roxo">
-                        <div class="kpi-label">Total de Calouros Captados</div>
-                        <div class="kpi-value" id="kpi-total-calouros">—</div>
-                        <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="totalCalouros" title="Ver o que está somando aqui">🔍 ver a conta</button>
-                        <div class="kpi-hint">Matrícula Nova + Assinada + Retorno + Transferência de entrada + 1ª/2ª Evasão + Cancelou Calouro + Desistente Calouro</div>
-                    </div>
-
-                    <!-- Ativos — fecha a conta do semestre -->
+                    <!-- 5) Ativos — fecha a conta do semestre -->
                     <div class="kpi-card kpi-destaque kpi-verde">
                         <div class="kpi-label">Ativos</div>
                         <div class="kpi-value" id="kpi-ativos">—</div>
                         <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="ativos" title="Ver o que está somando aqui">🔍 ver a conta</button>
-                        <div class="kpi-hint">Veteranos + Calouros</div>
+                        <div class="kpi-hint">Veteranos + Pendência Financeira + Calouros</div>
                     </div>
 
                     <!-- Formandos — campo próprio (checkbox no cadastro), marca o
@@ -377,6 +382,6 @@
     .ranking-primeiro .ranking-num-total { font-size: 1.8rem !important; }
     .ranking-primeiro .ranking-num { font-size: 1.35rem; }
     </style>
-    <script type="module" src="/financeiro/matriculas/app.js?v=114"></script>
+    <script type="module" src="/financeiro/matriculas/app.js?v=115"></script>
 </body>
 </html>

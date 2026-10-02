@@ -605,12 +605,12 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
                 'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
                 '1ª Evasão', '2ª Evasão') + cancelouCalouro + desistenteCalouro;
-            // Perda de captação = (Cancelou de calouro + Desistente de calouro)
-            // ÷ TOTAL de calouros captados (quem entrou pela porta de calouro,
-            // ficando ou não). Regra confirmada pela coordenação (25/09):
-            // Evasões ficam de fora (saída antes de começar — não é culpa de captação)
-            // e Desistente Veterano fica de fora (conta na perda sobre o total, não aqui).
-            const perdasCalouros = cancelouCalouro + desistenteCalouro;
+            // Perda de captação = todo calouro que saiu (1ª/2ª Evasão + Cancelou
+            // de calouro + Desistente de calouro) ÷ TOTAL de calouros captados.
+            // Pedido da direção (02/10/2026): a perda é só sobre os captados —
+            // antes (25/09) as evasões ficavam de fora. Desistente/Cancelou de
+            // veterano continuam fora (contam na perda sobre o total).
+            const perdasCalouros = soma('1ª Evasão', '2ª Evasão') + cancelouCalouro + desistenteCalouro;
 
             linhas.push({
                 semestre,
