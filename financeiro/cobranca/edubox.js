@@ -360,6 +360,11 @@ function renderPainel() {
   }).join('');
 
   const av = r ? r.aVencer : vazio;
+  // período do "ainda vai vencer": de hoje até o fim do semestre escolhido (pelo vencimento)
+  const fimSem = semestre === 'todos' ? null : (semestre.endsWith('.1') ? `30/06/${semestre.slice(0, 4)}` : `31/12/${semestre.slice(0, 4)}`);
+  document.getElementById('a-vencer-periodo').textContent = fimSem
+    ? `— vence de hoje até ${fimSem} · valor sem juros (não é atraso)`
+    : '— tudo que ainda vai vencer, de qualquer semestre · valor sem juros (não é atraso)';
   document.getElementById('a-vencer').innerHTML = `
     <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>

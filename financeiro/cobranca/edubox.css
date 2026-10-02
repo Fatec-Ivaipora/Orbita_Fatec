@@ -38,10 +38,14 @@
 .cb-faixa-barra span { display: block; height: 100%; border-radius: 6px; }
 .cb-faixa b { text-align: right; }
 .cb-faixa small { display: block; text-align: right; color: var(--text-secondary); font-weight: 500; }
-.cb-avencer { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.cb-avencer div { background: #f7f9fc; border-radius: 12px; padding: 0.75rem; }
+.cb-avencer { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
+.cb-avencer div { background: #f7f9fc; border-radius: 12px; padding: 0.75rem; min-width: 0; }
 .cb-avencer span { display: block; font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; }
-.cb-avencer b { font-size: 1.15rem; }
+.cb-avencer b { font-size: 1.15rem; overflow-wrap: anywhere; }
+/* nenhum quadro empurra a tela pra fora (textos/valores longos quebram linha) */
+.cb-duas > *, .kpi-grid > *, .cb-dir-topo > * { min-width: 0; }
+.kpi-card .kpi-label, .kpi-card .kpi-hint, .cb-avencer span { overflow-wrap: anywhere; }
+.kpi-value .cb-orig { white-space: normal; }
 
 .data-table th.num, .data-table td.num { text-align: right; white-space: nowrap; }
 .data-table tfoot td { font-weight: 800; border-top: 2px solid #e2e8f0; }

@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=8">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=9">
 </head>
 <body>
     <div id="auth-guard" class="layout-auth-guard">
@@ -134,13 +134,13 @@
                             <div id="faixas"></div>
                         </div>
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">⏳ Ainda vai vencer <small class="cb-sub">— mensalidades futuras, não é atraso</small></div>
+                            <div class="card-secao-titulo">⏳ Ainda vai vencer <small class="cb-sub" id="a-vencer-periodo">— mensalidades futuras, valor sem juros (não é atraso)</small></div>
                             <div class="cb-avencer" id="a-vencer"></div>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Advogado e Débito judicial por plano <small class="cb-sub">— pelo semestre da dívida original (é como o Edubox registra o acordo)</small></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Advogado e Débito judicial por plano <small class="cb-sub">— semestre pelo vencimento da parcela, como no Edubox</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
                                 <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">🔴 Atrasado</th><th class="num">⏳ Ainda vai vencer</th><th class="num">🟢 Entrou na semana</th></tr></thead>
@@ -337,6 +337,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=17"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=18"></script>
 </body>
 </html>
