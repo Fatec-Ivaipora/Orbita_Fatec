@@ -744,12 +744,26 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
             snaps.push(...lote);
         }
 
+        // Quem já foi copiado pra esse destino antes (virada feita de novo) não
+        // é copiado outra vez — senão o aluno aparece duplicado no semestre novo.
+        const jaNoDestino = new Set();
+        const destinoSnap = await db.collection(COL_ALUNOS).where('semestre', '==', semestreDestino).select('origemAlunoId').get();
+        destinoSnap.forEach(d => { if (d.data().origemAlunoId) jaNoDestino.add(d.data().origemAlunoId); });
+
         const avisosPeriodo = [];
+        const formandosPulados = [];
+        let jaCopiados = 0;
         const docsParaGravar = [];
         for (const snap of snaps) {
             if (!snap.exists) continue; // pode ter sido excluído entre carregar a tela e confirmar
             const origem = snap.data();
             if (origem.semestre !== semestreOrigem) continue; // proteção: só copia quem é realmente do semestre de origem informado
+            // Formando (último período) não vai pro próximo semestre. Na virada
+            // 2026.2 -> 2027.1 (29/09) a marcação ainda não existia e 65 formandos
+            // foram copiados (removidos em 02/10). Formando que reprovou: desmarcar
+            // "formando" no cadastro antes de virar.
+            if (origem.formando) { formandosPulados.push(origem.nome); continue; }
+            if (jaNoDestino.has(snap.id)) { jaCopiados++; continue; }
 
             const override = overrides[snap.id] || {};
             const periodoSugerido = avancarPeriodo(origem.periodo);
@@ -778,7 +792,12 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
             });
         }
 
-        if (!docsParaGravar.length) return res.status(400).json({ error: 'Nenhum dos alunos selecionados pertence ao semestre de origem informado (recarregue a tela e tente de novo).' });
+        if (!docsParaGravar.length) {
+            if (formandosPulados.length || jaCopiados) {
+                return res.status(400).json({ error: `Nenhum aluno copiado: ${formandosPulados.length} formando(s) não vão pro próximo semestre e ${jaCopiados} já estavam em ${semestreDestino}.` });
+            }
+            return res.status(400).json({ error: 'Nenhum dos alunos selecionados pertence ao semestre de origem informado (recarregue a tela e tente de novo).' });
+        }
 
         for (let i = 0; i < docsParaGravar.length; i += 400) {
             const chunk = docsParaGravar.slice(i, i + 400);
@@ -791,7 +810,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
             lista: admin.firestore.FieldValue.arrayUnion(semestreOrigem, semestreDestino)
         }, { merge: true });
 
-        res.json({ copiados: docsParaGravar.length, avisosPeriodo });
+        res.json({ copiados: docsParaGravar.length, avisosPeriodo, formandosPulados: formandosPulados.length, jaCopiados });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
