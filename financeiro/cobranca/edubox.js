@@ -1002,27 +1002,41 @@ async function renderSemana() {
   }
   const sem = dados.semana;
   const b = somaBaixas(sem.baixas);
+  // Início/fim da semana pelo RESUMO SEMANAL (cobranca_edubox/semanas): o
+  // atrasado de segunda 00h, na mesma regra do resto da tela (semestre pelo
+  // vencimento, só matrícula ativa). As "fotos" antigas (cobranca_edubox_
+  // historico) são só reserva — as de antes de 01/10/2026 estão na regra
+  // velha e misturavam as duas contas (02/10).
+  if (!semanasDados) {
+    try { semanasDados = (await apiFetch('/cobranca/edubox/semanas')).semanas || {}; } catch (e) { semanasDados = {}; }
+  }
+  const iniSemana = semanasDados[iso(seg)]?.[grupo]?.[semestre]?.ini || null;
+  const fimSemana = atual ? null : (semanasDados[iso(somaDias(seg, 7))]?.[grupo]?.[semestre]?.ini || null);
+  const chaveLado = (lado) => (lado === 'financeiro' ? 'f' : 'j');
   // Se a 1ª "foto" do vencido é do meio da semana (PC desligado na segunda, ou
   // o começo do controle), a conta usa só o recebido a partir dela.
-  const fotoAtrasada = sem.fotoInicio && sem.fotoInicio.data > sem.inicio;
+  const fotoAtrasada = !iniSemana && sem.fotoInicio && sem.fotoInicio.data > sem.inicio;
   const bConta = fotoAtrasada ? somaBaixas(sem.baixas.filter(d => d.data >= sem.fotoInicio.data)) : b;
   const valorFoto = (foto, lado) => foto?.vencido?.[semestre]?.[grupo]?.[lado];
   const fimFonte = atual ? null : sem.fotoFim;
   const avisos = [];
-  if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou o PC de atualização estava desligado). Os recebimentos estão completos.');
+  if (iniSemana) { /* conta completa pelo resumo semanal: sem aviso */ }
+  else if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou o PC de atualização estava desligado). Os recebimentos estão completos.');
   else if (fotoAtrasada) avisos.push(`O primeiro registro do vencido nesta semana é de ${fmtDataHora(sem.fotoInicio.geradoEm)} (o PC de atualização não rodou antes disso). A conta abaixo parte desse momento; o "Recebido total na semana" e as tabelas mostram a semana inteira.`);
   document.getElementById('s-aviso').innerHTML = avisos.map(t => `<div class="cb-aviso">${esc(t)}</div>`).join('');
 
   const lados = [['financeiro', '💼 Financeiro'], ['juridico', '⚖️ Advogado + Débito judicial']];
   document.getElementById('s-lados').innerHTML = lados.map(([lado, titulo]) => {
-    const inicio = valorFoto(sem.fotoInicio, lado);
-    const fim = atual ? (recorte()?.[lado]?.vencido?.valor ?? 0) : valorFoto(fimFonte, lado);
+    const inicio = iniSemana ? iniSemana[chaveLado(lado)] : valorFoto(sem.fotoInicio, lado);
+    const fim = atual ? (recorte()?.[lado]?.vencido?.valor ?? 0)
+      : (fimSemana ? fimSemana[chaveLado(lado)] : valorFoto(fimFonte, lado));
     const recAtraso = bConta[`${lado}Atraso`];
     const recTotal = b[lado];
     const temConta = inicio !== undefined && fim !== undefined;
     const novos = temConta ? fim - inicio + recAtraso : null;
-    const quandoIni = sem.fotoInicio ? fmtDataHora(sem.fotoInicio.geradoEm) : '';
-    const quandoFim = atual ? fmtDataHora(painel.geradoEm) : (fimFonte ? fmtDataHora(fimFonte.geradoEm) : '');
+    const quandoIni = iniSemana ? `${fmtData(iso(seg))} às 00h` : (sem.fotoInicio ? fmtDataHora(sem.fotoInicio.geradoEm) : '');
+    const quandoFim = atual ? fmtDataHora(painel.geradoEm)
+      : (fimSemana ? `${fmtData(iso(somaDias(seg, 7)))} às 00h` : (fimFonte ? fmtDataHora(fimFonte.geradoEm) : ''));
     return `<div class="card cb-lado">
       <h3>${titulo}</h3>
       <div class="cb-conta"><span>🔴 ${fotoAtrasada ? 'Atrasado no 1º registro da semana' : 'Atrasado na segunda-feira'}<small>o que faltava receber em ${quandoIni || '—'}</small></span><b>${inicio !== undefined ? brl(inicio) : '—'}</b></div>
