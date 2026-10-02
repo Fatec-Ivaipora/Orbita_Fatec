@@ -551,33 +551,27 @@ function graficoInadimplencia(pontos) {
 }
 
 function graficoSemanas(semanas) {
-  const W = 820, H = 260, M = { t: 24, r: 16, b: 34, l: 16 };
+  // Só o dinheiro que entrou (barras). A linha do atraso, no mesmo desenho e
+  // com outra escala, confundia quem não é do financeiro (02/10) — o atraso
+  // fica no gráfico "Inadimplência ao longo do ano", em %.
+  const W = 820, H = 240, M = { t: 28, r: 16, b: 34, l: 16 };
   const n = semanas.length;
   const larg = (W - M.l - M.r) / n;
   const recs = semanas.map(s => s.x.rec ? s.x.rec.f + s.x.rec.j : 0);
-  const vencs = semanas.map(s => s.x.ini ? s.x.ini.f : null);
   const maxRec = Math.max(1, ...recs);
-  const maxVenc = Math.max(1, ...vencs.filter(v => v !== null));
-  const yRec = (v) => H - M.b - (v / maxRec) * (H - M.t - M.b) * 0.85;
-  const yVenc = (v) => H - M.b - (v / maxVenc) * (H - M.t - M.b) * 0.92;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Recebido e atrasado por semana">`;
+  const yRec = (v) => H - M.b - (v / maxRec) * (H - M.t - M.b);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Dinheiro que entrou por semana">`;
   semanas.forEach((s, i) => {
     const x = M.l + i * larg;
     const y = yRec(recs[i]);
-    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="#10b981" opacity="0.85"><title>${brl(recs[i])}</title></rect>`;
-    svg += `<text x="${x + larg / 2}" y="${y - 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">${brlCurto(recs[i])}</text>`;
-    svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${fmtData(s.k).slice(0, 5)}</text>`;
+    const atual = i === n - 1;
+    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="${atual ? '#059669' : '#10b981'}" opacity="${atual ? 1 : 0.8}"><title>${brl(recs[i])}</title></rect>`;
+    svg += `<text x="${x + larg / 2}" y="${y - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="#047857">${brlCurto(recs[i])}</text>`;
+    svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${atual ? 'esta semana' : 'semana ' + fmtData(s.k).slice(0, 5)}</text>`;
   });
-  const pts = vencs.map((v, i) => v === null ? null : [M.l + i * larg + larg / 2, yVenc(v), v]).filter(Boolean);
-  if (pts.length) {
-    if (pts.length > 1) svg += `<polyline points="${pts.map(p => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="#ef4444" stroke-width="3"/>`;
-    pts.forEach(p => {
-      svg += `<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="#ef4444"><title>Atrasado: ${brl(p[2])}</title></circle>`;
-      svg += `<text x="${p[0]}" y="${p[1] - 10}" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">${brlCurto(p[2])}</text>`;
-    });
-  }
   return svg + '</svg>';
 }
+
 
 // ---------- LISTA DE COBRANÇA ----------
 async function abrirLista() {
@@ -1062,24 +1056,31 @@ async function renderSemana() {
     `<tr><td>${DS[i]} ${fmtData(d).slice(0, 5)}</td><td class="num">${brl(t.financeiro)}</td><td class="num">${brl(t.juridico)}</td><td class="num"><b>${brl(t.financeiro + t.juridico)}</b></td></tr>`).join('') +
     `<tr class="mes-linha"><td><b>Total</b></td><td class="num"><b>${brl(b.financeiro)}</b></td><td class="num"><b>${brl(b.juridico)}</b></td><td class="num"><b>${brl(b.financeiro + b.juridico)}</b></td></tr>`;
 
-  // por tipo e por curso: só no acumulado (o Edubox não separa isso por semestre aqui)
+  // por tipo de baixa e por curso — no semestre escolhido (o agente grava em
+  // porSemestre desde 02/10/2026) ou no total ("Todos os semestres")
+  let semDadoSemestre = false;
   const somaMapa = (campo) => {
     const m = {};
-    for (const d of sem.baixas) for (const lado of ['financeiro', 'juridico']) {
-      for (const [k, v] of Object.entries(d[grupo][lado][campo] || {})) {
-        m[k] = m[k] || { financeiro: 0, juridico: 0 };
-        m[k][lado] += v;
+    const add = (k, lado, v) => { m[k] = m[k] || { financeiro: 0, juridico: 0 }; m[k][lado] += v; };
+    for (const d of sem.baixas) {
+      if (semestre === 'todos') {
+        for (const lado of ['financeiro', 'juridico']) for (const [k, v] of Object.entries(d[grupo][lado][campo] || {})) add(k, lado, v);
+        continue;
       }
+      const ps = d.porSemestre?.[semestre]?.[grupo];
+      if (!ps) continue;
+      if (!ps[campo]) { if (ps.financeiro || ps.juridico) semDadoSemestre = true; continue; }
+      for (const [k, v] of Object.entries(ps[campo])) { add(k, 'financeiro', v.financeiro); add(k, 'juridico', v.juridico); }
     }
     return Object.entries(m).sort((x, y) => (y[1].financeiro + y[1].juridico) - (x[1].financeiro + x[1].juridico));
   };
-  const soAcumulado = '<tr><td colspan="4" class="tabela-msg">Disponível em "Todos os semestres".</td></tr>';
   const tipos = somaMapa('porTipo');
-  document.getElementById('s-tipos').innerHTML = semestre !== 'todos' ? soAcumulado : (tipos.length
+  const aguardando = (cols) => `<tr><td colspan="${cols}" class="tabela-msg">Separação por semestre disponível a partir da próxima atualização do Edubox.</td></tr>`;
+  document.getElementById('s-tipos').innerHTML = semDadoSemestre && !tipos.length ? aguardando(3) : (tipos.length
     ? tipos.map(([k, v]) => `<tr><td>${esc(k.charAt(0) + k.slice(1).toLowerCase())}</td><td class="num">${brl(v.financeiro)}</td><td class="num">${brl(v.juridico)}</td></tr>`).join('')
     : '<tr><td colspan="3" class="tabela-msg">Nenhum recebimento.</td></tr>');
   const cursos = somaMapa('porCurso');
-  document.getElementById('s-cursos').innerHTML = semestre !== 'todos' ? soAcumulado : (cursos.length
+  document.getElementById('s-cursos').innerHTML = semDadoSemestre && !cursos.length ? aguardando(4) : (cursos.length
     ? cursos.map(([k, v]) => `<tr><td>${esc(nomeCurso(k))}</td><td class="num">${brl(v.financeiro)}</td><td class="num">${brl(v.juridico)}</td><td class="num"><b>${brl(v.financeiro + v.juridico)}</b></td></tr>`).join('')
     : '<tr><td colspan="4" class="tabela-msg">Nenhum recebimento.</td></tr>');
 }
