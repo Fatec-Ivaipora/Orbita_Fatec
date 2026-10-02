@@ -75,7 +75,67 @@ async function rodar(origem) {
 function agendarProximo() {
     const prox = proximoHorario();
     log(`Próxima atualização automática: ${prox.toLocaleString('pt-BR')}`);
-    setTimeout(async () => { await rodar('automatica'); agendarProximo(); }, prox - new Date());
+    setTimeout(async () => {
+        await rodar('automatica');
+        if (prox.getHours() === 22) preencherHistoricoDeNoite(); // não espera: roda madrugada adentro
+        agendarProximo();
+    }, prox - new Date());
+}
+
+// ---------------------------------------------------------------------------
+// Histórico do ano (gráfico "Inadimplência ao longo do ano"): depois da rodada
+// das 22h, calcula semanas que ainda faltam em cobranca_edubox/semanas — uma
+// por vez, com 10 min de intervalo e no máximo 6 por noite. Cada semana é uma
+// consulta pesada (~1 min) e em 01/10/2026 uma sequência delas fez o Edubox
+// bloquear o IP da Fatec por ~20 min; por isso o ritmo lento e só de noite.
+// ---------------------------------------------------------------------------
+const HIST_INICIO = '2026-01-05';
+const HIST_POR_NOITE = 6;
+const HIST_INTERVALO_MS = 10 * 60 * 1000;
+let historicoRodando = false;
+
+function segundasAte(hoje) {
+    const lista = [];
+    const x = new Date(`${HIST_INICIO}T12:00:00`);
+    while (x <= hoje) {
+        lista.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`);
+        x.setDate(x.getDate() + 7);
+    }
+    return lista;
+}
+
+function rodarSemana(seg) {
+    return new Promise((resolve) => {
+        const { execFile } = require('child_process');
+        execFile(process.execPath, [path.join(__dirname, 'cobranca-edubox-historico.js'), seg, `--ate=${seg}`, '--gravar'],
+            { cwd: path.join(__dirname, '..'), timeout: 6 * 60 * 1000, windowsHide: true },
+            (err, stdout) => resolve(!err && /Gravado/.test(stdout || '')));
+    });
+}
+
+async function preencherHistoricoDeNoite() {
+    if (historicoRodando) return;
+    historicoRodando = true;
+    try {
+        const snap = await db.collection('cobranca_edubox').doc('semanas').get();
+        const semanas = (snap.exists && snap.data().semanas) || {};
+        const faltam = segundasAte(new Date()).reverse() // mais recentes primeiro
+            .filter(seg => !(semanas[seg] && semanas[seg].graduacao && semanas[seg].graduacao.todos && semanas[seg].graduacao.todos.ini));
+        if (!faltam.length) return;
+        log(`Histórico: faltam ${faltam.length} semana(s); calculando até ${HIST_POR_NOITE} esta noite.`);
+        for (const seg of faltam.slice(0, HIST_POR_NOITE)) {
+            const h = new Date().getHours();
+            if (h >= 6 && h < 22) { log('Histórico: já é dia, para e continua amanhã à noite.'); break; }
+            const ok = await rodarSemana(seg);
+            log(`Histórico ${seg}: ${ok ? 'ok' : 'falhou (tenta de novo na próxima noite)'}`);
+            if (!ok) break; // Edubox recusou: não insiste
+            await new Promise(r => setTimeout(r, HIST_INTERVALO_MS));
+        }
+    } catch (e) {
+        log(`Histórico: erro ${e.message}`);
+    } finally {
+        historicoRodando = false;
+    }
 }
 
 async function pulso() {
