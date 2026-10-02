@@ -467,6 +467,11 @@ async function montarBaixas(hoje) {
         const k = l.juridico ? 'juridico' : 'financeiro';
         ps[grupo][k] += valor;
         if (atrasada) ps[grupo][k + 'Atraso'] += valor;
+        // tipo de baixa e curso também por semestre (a tela filtrava só no total — 02/10)
+        const pt = ((ps[grupo].porTipo = ps[grupo].porTipo || {})[l.tipo] = ps[grupo].porTipo[l.tipo] || { financeiro: 0, juridico: 0 });
+        pt[k] += valor;
+        const pc = ((ps[grupo].porCurso = ps[grupo].porCurso || {})[curso] = ps[grupo].porCurso[curso] || { financeiro: 0, juridico: 0 });
+        pc[k] += valor;
     }
     // arredonda
     for (const d of Object.values(porDia)) {
@@ -477,7 +482,10 @@ async function montarBaixas(hoje) {
             for (const c in x.porCurso) x.porCurso[c] = r2(x.porCurso[c]);
             for (const c in x.porPlano) x.porPlano[c] = r2(x.porPlano[c]);
         }
-        for (const s of Object.values(d.porSemestre)) for (const g of ['graduacao', 'medicina']) for (const k in s[g]) s[g][k] = r2(s[g][k]);
+        for (const s of Object.values(d.porSemestre)) for (const g of ['graduacao', 'medicina']) for (const k in s[g]) {
+            if (typeof s[g][k] === 'number') s[g][k] = r2(s[g][k]);
+            else for (const x of Object.values(s[g][k])) { x.financeiro = r2(x.financeiro); x.juridico = r2(x.juridico); }
+        }
     }
     return { porDia, baixasLidas: linhas.length };
 }
