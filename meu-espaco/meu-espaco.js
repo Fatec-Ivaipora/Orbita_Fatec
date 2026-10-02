@@ -1151,6 +1151,10 @@ let editandoId = null;
 
 async function abrirModalAtividade({ diaPreset = null, editar = null } = {}) {
   document.getElementById('form-atividade').reset();
+  // O salvar desativa o botão e troca pra "Salvando..."; sem isso, depois de
+  // salvar uma atividade a próxima abria com o botão travado (Amanda, 01/10).
+  const btnSalvarModal = document.getElementById('btn-salvar-atividade');
+  if (btnSalvarModal) { btnSalvarModal.disabled = false; btnSalvarModal.textContent = 'Salvar Atividade'; }
   editandoId = editar ? editar.id : null;
 
   document.getElementById('atividade-modal-title').textContent = editar ? 'Editar Atividade' : 'Nova Atividade';
@@ -1352,6 +1356,7 @@ async function salvarAtividade(e) {
       }
     });
     fecharModal('modal-atividade');
+    if (btnSalvar) { btnSalvar.disabled = false; btnSalvar.textContent = 'Salvar Atividade'; }
     recarregarNotificacoes();
     if (boardAtual !== '__self__') {
       // Editando/arrastando/movendo enquanto o quadro aberto é de um
