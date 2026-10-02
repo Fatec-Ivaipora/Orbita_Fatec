@@ -21,18 +21,21 @@ const DOC_MODELOS = db.collection('config').doc('cobranca_mensagens');
 const TIPOS_COBRANCA = ['whatsapp', 'ligacao', 'email', 'contato', 'negociacao', 'promessa_pagamento'];
 const TIPOS_VALIDOS = [...TIPOS_COBRANCA, 'enviado_advocacia', 'acordo_judicial', 'outro'];
 
+// Textos do próprio Financeiro (02/10/2026). Sem valores nem lista de
+// parcelas — o Financeiro não manda valor por mensagem. {saudacao} vira
+// Bom dia / Boa tarde / Boa noite conforme a hora do envio.
 const MODELOS_PADRAO = [
     {
-        id: 'lembrete', nome: 'Lembrete (até 30 dias)',
-        texto: 'Olá, {primeiro_nome}! Tudo bem? 😊\n\nAqui é do Financeiro da Fatec Ivaiporã. Consta em nosso sistema {qtd_parcelas} em aberto. Com multa e juros, o valor para pagamento hoje é de {valor_a_pagar}:\n{lista_parcelas}\n\nSe já realizou o pagamento, por favor desconsidere esta mensagem. Precisando da 2ª via do boleto ou de alguma condição, é só responder por aqui!'
+        id: 'uma_parcela', nome: '1 mensalidade vencida',
+        texto: 'Olá, {saudacao}!\nAqui é do FINANCEIRO DA FATEC.\nConsta em nosso sistema que você está com pendência financeira.\nPara pagar com o valor atualizado temos uma opção bem bacana.\nMe chama aqui que posso te ajudar!'
     },
     {
-        id: 'cobranca', nome: 'Cobrança (mais de 30 dias)',
-        texto: 'Olá, {primeiro_nome}! Aqui é do Financeiro da Fatec Ivaiporã.\n\nIdentificamos {qtd_parcelas} em atraso desde {vencimento_mais_antigo}. Com multa e juros, o valor para pagamento hoje é de {valor_a_pagar}:\n{lista_parcelas}\n\nPrecisamos regularizar essa pendência. Podemos conversar sobre uma forma de pagamento que caiba no seu orçamento? Responda esta mensagem ou venha até o Financeiro.'
+        id: 'semestre', nome: 'Mensalidades do semestre vencidas',
+        texto: 'Olá, {saudacao}!\nVerificamos em nosso sistema que constam pendências financeiras em aberto.\nPodemos negociar o pagamento aqui mesmo, pelo WhatsApp. Para isso basta responder esta mensagem para que possamos chegar a um acordo ou procure o setor financeiro para possível regularização.\nAtenciosamente,\nDepartamento Financeiro Fatec Ivaiporã'
     },
     {
-        id: 'negociacao', nome: 'Proposta de negociação',
-        texto: 'Olá, {primeiro_nome}! Tudo bem?\n\nO Financeiro da Fatec Ivaiporã está com condições especiais para negociação de débitos. Hoje o seu débito é de {valor_a_pagar} com multa e juros ({qtd_parcelas}).\n\nQuer que eu faça uma simulação de parcelamento pra você? É só responder por aqui.'
+        id: 'acumulo', nome: 'Renegociação e semestres anteriores vencidos',
+        texto: 'Olá, {saudacao}!\nAqui é do Departamento Financeiro da Fatec\nConsta em nosso sistema que você está com acúmulo de parcelas vencidas.\nAguardamos sua resposta ainda hoje, com o pagamento ou possível acordo para evitar medidas de cobranças cabíveis.\nMe chama aqui que posso te ajudar!'
     }
 ];
 

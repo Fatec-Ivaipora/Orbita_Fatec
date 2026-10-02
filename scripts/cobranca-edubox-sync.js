@@ -400,7 +400,9 @@ function montarAlunos(linhas, hoje, hojeMs, comAdvogado, pagamentos) {
         const chave = cpf.length === 11 ? cpf : `cli${l.clictr}`;
         const a = (mapa[grupo][chave] = mapa[grupo][chave] || {
             chave, cpf: cpf.length === 11 ? cpf : '', codcli: l.clictr, nome: l.nome || '(sem nome)',
-            celular: telefone(l.celcli) || telefone(l.foncli), fone: (l.foncli || l.celcli || '').trim(),
+            // SÓ o campo celular do aluno no Edubox — nunca o fone fixo, que pode ser da
+            // família/responsável (decisão do Financeiro, 02/10/2026). Sem celular = sem WhatsApp.
+            celular: telefone(l.celcli), fone: (l.celcli || '').trim(),
             cursos: [], total: 0, financeiro: 0, juridico: 0, maisAntigo: venc, parcelas: [],
             comAdvogado: comAdvogado.has(l.clictr), planosAdvogado: [...(planosDe[l.clictr] || [])],
             tipoAdvogado: !comAdvogado.has(l.clictr) ? null
