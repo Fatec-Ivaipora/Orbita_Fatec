@@ -26,13 +26,17 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 // Antes cada lugar tinha a própria cópia da lista: "Retorno" ficava fora de
 // Ativos e de Perdas, e o ranking chamava de veterano quem tinha trancado.
 // ==========================================
-const VETERANOS_SITS = ['Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Formando', 'Reprovado'];
+// Pendência Financeira NÃO é veterano/rematrícula: só vira rematrícula depois
+// que resolve a pendência e a situação muda (pedido 02/10/2026). Continua em
+// Ativos (não é perda), numa linha própria.
+const VETERANOS_SITS = ['Rematrícula Assinada', 'Não Assinou', 'Formando', 'Reprovado'];
+const PENDENCIA_SITS = ['Pendência Financeira'];
 const CALOUROS_SITS = [
   'Matrícula Nova', 'Matrícula Nova - Assinada',
   'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
   'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada'
 ];
-const ATIVOS_SITS = [...VETERANOS_SITS, ...CALOUROS_SITS];
+const ATIVOS_SITS = [...VETERANOS_SITS, ...PENDENCIA_SITS, ...CALOUROS_SITS];
 // "Desistente" puro só existe no histórico; no sistema é Calouro/Veterano (25/09).
 const PERDAS_SITS = ['Cancelou', 'Trancou', '1ª Evasão', '2ª Evasão', 'Transferência',
   'Desistente — Calouro', 'Desistente — Veterano', 'Desistente'];
@@ -1033,7 +1037,7 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
 const LINHAS_COMPARATIVO = [
   { secao: 'O que somou (captação)' },
   { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)',
-    formula: 'Rematrícula Assinada + Pendência Financeira + Não Assinou + Formando + Reprovado (o "Total de Rematrícula" da planilha)' },
+    formula: 'Rematrícula Assinada + Não Assinou + Formando + Reprovado. Pendência Financeira NÃO entra — só vira rematrícula quando resolver a pendência e a situação mudar.' },
   { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
     formula: 'Matrícula Nova + Matrícula Nova - Assinada + Retorno + Matrícula Nova - Transferência (calouros ainda ativos)' },
   { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true, detalhavel: true,
@@ -1074,13 +1078,13 @@ const LINHAS_COMPARATIVO = [
 
   { secao: 'Total geral' },
   { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira',
-    formula: 'Situação = Pendência Financeira — continua Ativo, só falta resolver o pagamento. Não é perda.' },
+    formula: 'Situação = Pendência Financeira — ainda não conta como veterano/rematrícula; continua Ativo (não é perda). Quando resolver, a situação muda e passa a contar em Veteranos.' },
   { chave: 'naoAssinou', rotulo: 'Não assinou',
     formula: 'Situação = Não Assinou — continua Ativo, só falta assinar. Não é perda.' },
   { chave: 'mudancaDeCurso', rotulo: 'Mudança de curso', ocultarSeZerado: true,
     formula: 'Situação = Mudança de Curso — trocou de curso dentro da faculdade. Não é perda (continua estudando) e não conta como ativo no curso antigo. Ativos + Perdas + Mudança de curso = Total de alunos.' },
   { chave: 'ativos', rotulo: 'Ativos', destaque: true, detalhavel: true,
-    formula: 'Veteranos + Calouros (Rematrícula Assinada + Pendência + Não Assinou + Formando + Reprovado + Matrícula Nova + Assinada + Retorno + Transferência de entrada). Ativos + Total de perdas + Mudança de curso = Total de alunos.' },
+    formula: 'Veteranos + Pendência financeira + Calouros (Rematrícula Assinada + Não Assinou + Formando + Reprovado + Pendência Financeira + Matrícula Nova + Assinada + Retorno + Transferência de entrada). Ativos + Total de perdas + Mudança de curso = Total de alunos.' },
   { chave: 'total', rotulo: 'Total de alunos', destaque: true, detalhavel: true,
     formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
   { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
@@ -1231,9 +1235,10 @@ function montarDetalhe(chave, ps, linha) {
 
   if (chave === 'ativos' || chave === 'total') {
     const vet = grupo('Veteranos', VETERANOS_SITS, 'verde', 'Subtotal veteranos');
+    const pend = grupo('Pendência financeira — ainda não rematriculou', PENDENCIA_SITS, 'verde', 'Subtotal pendência');
     const cal = grupo('Calouros', CALOUROS_SITS, 'verde', 'Subtotal calouros');
     if (chave === 'ativos') return itens;
-    itens.push({ nome: `= Ativos (${vet} veteranos + ${cal} calouros)`, qtd: vet + cal, tipo: 'verde', subtotal: true });
+    itens.push({ nome: `= Ativos (${vet} veteranos + ${pend} pendência + ${cal} calouros)`, qtd: vet + pend + cal, tipo: 'verde', subtotal: true });
     grupo('Perdas — saíram da faculdade', PERDAS_SITS, 'vermelho', 'Subtotal perdas');
     if (MUDANCA_CURSO_SITS.some(s => ps[s])) grupo('Mudou de curso — continua na faculdade', MUDANCA_CURSO_SITS, 'neutro', 'Subtotal mudança de curso');
     const conhecidas = new Set([...ATIVOS_SITS, ...PERDAS_SITS, ...MUDANCA_CURSO_SITS]);
@@ -1585,7 +1590,8 @@ function renderRelatorio(dados) {
       const calourosCapCurso = somaCurso(sitMap, ...CALOUROS_CAPTADOS_SITS) + cancelouCalouroC + desistenteCalouroC;
       const veteranosCurso = somaCurso(sitMap, ...VETERANOS_SITS);
       const calourosCurso = somaCurso(sitMap, ...CALOUROS_SITS);
-      const ativosCurso = veteranosCurso + calourosCurso;
+      const pendenciaCurso = somaCurso(sitMap, ...PENDENCIA_SITS);
+      const ativosCurso = veteranosCurso + pendenciaCurso + calourosCurso;
       const perdasCurso = somaCurso(sitMap, ...PERDAS_SITS);
       const mudancaCurso = somaCurso(sitMap, ...MUDANCA_CURSO_SITS);
       const outrosCurso = totalCurso - ativosCurso - perdasCurso - mudancaCurso; // situação fora dos grupos — deveria ser 0

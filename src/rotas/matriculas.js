@@ -24,9 +24,11 @@ const SEMESTRES_PADRAO = ['2026.1', '2026.2'];
 // alunos, todos de fatec/2026.1) não foram migrados — ficam como histórico,
 // só não aparecem mais como opção pra escolher num cadastro novo.
 // Grupos de situação — mesma definição de financeiro/matriculas/app.js
-// (topo do arquivo). Ativos = Veteranos + Calouros; Total = Ativos + Perdas +
+// (topo do arquivo). Ativos = Veteranos + Pendência + Calouros; Total = Ativos + Perdas +
 // Mudança de Curso — mudar de curso não é perda, o aluno continua na faculdade (25/09).
-const VETERANOS_SITS = ['Rematrícula Assinada', 'Pendência Financeira', 'Não Assinou', 'Formando', 'Reprovado'];
+// Pendência Financeira não é veterano/rematrícula até resolver (02/10/2026);
+// continua em Ativos, numa linha própria.
+const VETERANOS_SITS = ['Rematrícula Assinada', 'Não Assinou', 'Formando', 'Reprovado'];
 const CALOUROS_SITS = [
     'Matrícula Nova', 'Matrícula Nova - Assinada',
     'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
@@ -617,7 +619,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
                 veteranos,
                 calouros,
                 totalCalouros,
-                ativos: veteranos + calouros,
+                ativos: veteranos + calouros + (porSituacaoTotal['Pendência Financeira'] || 0),
                 pendenciaFinanceira: porSituacaoTotal['Pendência Financeira'] || 0,
                 naoAssinou: porSituacaoTotal['Não Assinou'] || 0,
                 primeiraEvasao: porSituacaoTotal['1ª Evasão'] || 0,
