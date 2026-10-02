@@ -671,6 +671,7 @@ function filtrarLista() {
     if (ctl === 'nao-15' && c && diasDesde(c.em) < 15) continue;
     if (ctl === 'nao-30' && c && diasDesde(c.em) < 30) continue;
     if (ctl === 'promessa' && !(c && c.promessa)) continue;
+    if (ctl === 'sem-celular' && a.celular) continue;
     filtrados.push(a);
   }
   filtrados.sort((x, y) => y.apVis - x.apVis);
@@ -700,6 +701,7 @@ function filtrarLista() {
     <span><b>${filtrados.length}</b> alunos com atraso · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)} + juros e multa)</small></span>
     <span>✅ Cobrados nesta semana: <b>${cobradosSemana}</b></span>
     <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana}</b></span>
+    ${filtrados.some(a => !a.celular) ? `<span class="cb-sem-cel-aviso" title="Só cobramos no celular do próprio aluno — atualize o cadastro no Edubox">📵 ${filtrados.filter(a => !a.celular).length} sem celular no Edubox</span>` : ''}
     <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
   renderLista(agoraISO);
 }
@@ -749,14 +751,16 @@ function renderLista() {
   tb.innerHTML = filtrados.slice(0, mostrando).map((a, i) => `
     <tr class="${a.celular ? '' : 'cb-sem-cel'}">
       <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.modoEnviar ? '<span class="cb-tag-jur">PARA O ADVOGADO — NÃO COBRAR</span>' : a.modoAdv ? `<span class="cb-tag-jur">${a.tipoAdvogado === 'advogado' ? 'ACORDO COM ADVOGADO' : 'DÉBITO JUDICIAL'} — NÃO COBRAR</span>` : a.comAdvogado ? `<span class="cb-tag-acordo" title="${esc((a.planosAdvogado || []).join(', '))} — essas parcelas são do advogado; as da lista são normais">também tem acordo c/ advogado</span>` : ''}
-        <div class="cb-sub">${esc(a.cursos.map(nomeCurso).join(' / '))} · ${esc(a.fone || 'sem telefone')}</div></td>
+        <div class="cb-sub">${esc(a.cursos.map(nomeCurso).join(' / '))} · ${esc(a.fone || 'sem celular no Edubox')}</div></td>
       <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}" title="dias desde a parcela mais antiga">${a.diasVis} dias de atraso</span>
         <div class="cb-sub">desde ${fmtData(a.maisAntigoVis)}</div>
         <span class="cb-plano">${esc(planosDoAluno(a))}</span></td>
       <td class="num"><b>${brl(a.apVis)}</b><small class="cb-orig">original ${brl(a.totalVis)}</small></td>
       <td>${badgeCobranca(a)}</td>
       <td class="acoes-col">
-        ${podeEditar && !a.modoAdv ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="${a.celular ? 'Enviar cobrança pelo WhatsApp' : 'Sem celular no Edubox'}">💬 WhatsApp</button>` : ''}
+        ${podeEditar && !a.modoAdv ? (a.celular
+          ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="Enviar pelo WhatsApp pro celular do aluno (cadastro do Edubox)">💬 WhatsApp</button>`
+          : '<span class="cb-sem-cel-aviso" title="Só usamos o celular do próprio aluno no Edubox — nunca de pais/responsáveis">📵 Sem celular no Edubox — atualizar o cadastro</span>') : ''}
         <button type="button" class="btn-acao" data-abrir="${i}" title="Parcelas, histórico e registrar ligação/negociação/promessa">📋 Detalhes</button>
       </td>
     </tr>`).join('');
@@ -773,6 +777,7 @@ function preencher(texto, a) {
   const nomeT = a.nome.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase());
   const lista = a.parcelasVis.map(p => `• Venc. ${fmtData(p.v)} — ${brl(p.valor)} (hoje ${brl(aPagarParcela(p.valor, p.v))} com juros e multa)`).join('\n');
   const vars = {
+    saudacao: (() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })(),
     nome: nomeT, primeiro_nome: nomeT.split(' ')[0], valor_total: brl(a.totalVis), valor_a_pagar: brl(a.apVis),
     qtd_parcelas: plural(a.parcelasVis.length, 'parcela', 'parcelas'), lista_parcelas: lista,
     vencimento_mais_antigo: fmtData(a.maisAntigoVis), dias_atraso: String(a.diasVis), curso: a.cursos.map(nomeCurso).join(' / ')
@@ -780,14 +785,23 @@ function preencher(texto, a) {
   return texto.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
 }
 
+// Qual mensagem do Financeiro serve pra esse aluno (02/10/2026):
+//  - 1 parcela atrasada -> "1 mensalidade vencida"
+//  - tem renegociação ou parcela de semestre anterior -> "Renegociação e semestres anteriores"
+//  - senão (várias, todas do semestre atual) -> "Mensalidades do semestre vencidas"
 function modeloSugerido(a) {
-  const id = a.diasVis > 30 ? 'cobranca' : 'lembrete';
+  const nomes = (listas[grupo] && listas[grupo].planos) || [];
+  const atual = semestreAtual();
+  let id;
+  if (a.parcelasVis.length === 1) id = 'uma_parcela';
+  else if (a.parcelasVis.some(p => p.s < atual || /RENEGOCIA/i.test(nomes[p.pl] || ''))) id = 'acumulo';
+  else id = 'semestre';
   return modelos.find(m => m.id === id) ? id : modelos[0].id;
 }
 
 async function abrirZap(i) {
   const a = filtrados[i];
-  if (!a || a.modoAdv) return;
+  if (!a || a.modoAdv || !a.celular) return; // só o celular do próprio aluno (Edubox)
   try { await garantirModelos(); } catch (e) { showToast(e.message, 'error'); return; }
   alunoAberto = { ...a, idx: i };
   document.getElementById('zap-sub').innerHTML = `<b>${esc(a.nome)}</b> · ${plural(a.parcelasVis.length, 'parcela', 'parcelas')} · a pagar ${brl(a.apVis)} (original ${brl(a.totalVis)}) · ${a.diasVis} dias de atraso`;
@@ -862,7 +876,7 @@ async function abrirAluno(i) {
   if (!a) return;
   alunoAberto = { ...a, idx: i };
   document.getElementById('al-nome').textContent = a.nome;
-  document.getElementById('al-sub').innerHTML = `CPF ${esc(a.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'))} · ${esc(a.fone || 'sem telefone')} · ${esc(a.cursos.map(nomeCurso).join(' / '))}`;
+  document.getElementById('al-sub').innerHTML = `CPF ${esc(a.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'))} · ${a.fone ? esc(a.fone) : '<span class="cb-sem-cel-aviso">📵 Sem celular no Edubox — atualizar o cadastro antes de cobrar (nunca usar contato de pais/responsáveis)</span>'} · ${esc(a.cursos.map(nomeCurso).join(' / '))}`;
   const nomesPl = listas[grupo].planos || [];
   const pg = a.pagamento || {};
   document.getElementById('al-sub').innerHTML += ` · ${pg.ultimo ? `último pagamento ${fmtData(pg.ultimo)}` : 'sem pagamento registrado'}${pg.pago90 > 0 ? ` (${brl(pg.pago90)} em 90 dias)` : ''}`;

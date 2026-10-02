@@ -167,6 +167,8 @@
 .cb-orig { display: block; font-size: 0.7rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .kpi-value .cb-orig { font-size: 0.72rem; margin-top: 0.15rem; }
 
+.cb-sem-cel-aviso { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 8px; padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 700; white-space: normal; max-width: 210px; }
+
 @media print {
   .cb-status, .cb-barra, .cb-semana-nav, .cb-mais, .cb-contadores, .cb-glossario { display: none !important; }
   .cb-duas { grid-template-columns: 1fr 1fr; gap: 10px; }
