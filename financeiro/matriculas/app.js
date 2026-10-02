@@ -1901,7 +1901,7 @@ function vsRenderTabela() {
     tbody.innerHTML = filtrados.map(a => `
       <tr>
         <td><input type="checkbox" data-vs-check="${a.id}" ${a._selecionado ? 'checked' : ''}></td>
-        <td>${esc(a.nome)}</td>
+        <td>${esc(a.nome)}${a.formando ? '<span class="revisar-badge" title="Formando — não vai pro próximo semestre (o servidor pula mesmo se marcado). Se reprovou, desmarque formando no cadastro.">🎓 formando</span>' : ''}</td>
         <td>${esc(a.curso)}</td>
         <td>${esc(a.periodo)}</td>
         <td><input type="text" data-vs-periodo="${a.id}" value="${esc(a._periodoNovo)}" style="width: 4.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;"></td>
@@ -1928,7 +1928,8 @@ function vsRenderTabela() {
 }
 
 function vsMarcarFiltrados(valor) {
-  vsAlunosFiltrados().forEach(a => { a._selecionado = valor; });
+  // "marcar todos" não marca formando (último período não vai pro próximo semestre)
+  vsAlunosFiltrados().forEach(a => { a._selecionado = valor && !a.formando; });
   vsRenderTabela();
 }
 
@@ -1967,7 +1968,9 @@ async function vsConfirmar() {
       })
     });
 
-    showToast(`${resp.copiados} aluno(s) copiado(s) para ${semestreDestino}.`);
+    showToast(`${resp.copiados} aluno(s) copiado(s) para ${semestreDestino}.` +
+      (resp.formandosPulados ? ` ${resp.formandosPulados} formando(s) ficaram de fora.` : '') +
+      (resp.jaCopiados ? ` ${resp.jaCopiados} já estavam em ${semestreDestino}.` : ''));
     if (resp.avisosPeriodo?.length) {
       showToast(`${resp.avisosPeriodo.length} aluno(s) com período fora do padrão "Nº" — confira manualmente.`, 'error');
     }
