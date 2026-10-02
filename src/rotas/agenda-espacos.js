@@ -258,13 +258,23 @@ async function criar(req, res, status) {
     const datas = [...new Set((Array.isArray(req.body.datas) ? req.body.datas : [req.body.data]).map(dataOk).filter(Boolean))].sort();
     const erro = validar(campos, datas, espacos);
     if (erro) return res.status(400).json({ error: erro });
+    // Vários turnos no mesmo dia (02/10/2026): manhã e noite, tarde e noite...
+    // Cada dia x horário vira uma reserva, todas no mesmo grupo.
+    let horarios = [{ inicio: campos.inicio, fim: campos.fim }];
+    if (Array.isArray(req.body.horarios) && req.body.horarios.length) {
+        horarios = req.body.horarios.slice(0, 6).map(h => ({ inicio: horaOk(h && h.inicio), fim: horaOk(h && h.fim) }));
+        if (horarios.some(h => !h.inicio || !h.fim || h.fim <= h.inicio)) return res.status(400).json({ error: 'Horário inválido: o fim precisa ser depois do início.' });
+        const unicos = new Map(horarios.map(h => [`${h.inicio}-${h.fim}`, h]));
+        horarios = [...unicos.values()].sort((a, b) => a.inicio.localeCompare(b.inicio));
+    }
+    if (datas.length * horarios.length > 120) return res.status(400).json({ error: 'No máximo 120 reservas de uma vez (dias x turnos).' });
 
     // Pedido: bloqueia se já tem reserva CONFIRMADA. Secretaria criando
     // direto: bloqueia se cruza com confirmada; pendente cruzando só avisa.
     const bloqueios = [];
     const avisos = [];
-    for (const d of datas) {
-        const c = await conflitos(campos.espaco, d, campos.inicio, campos.fim);
+    for (const d of datas) for (const h of horarios) {
+        const c = await conflitos(campos.espaco, d, h.inicio, h.fim);
         c.forEach(r => (r.status === 'confirmada' ? bloqueios : avisos).push(r));
     }
     if (bloqueios.length) {
@@ -272,13 +282,13 @@ async function criar(req, res, status) {
     }
 
     const agora = new Date().toISOString();
-    const grupo = datas.length > 1 ? db.collection(COL).doc().id : null;
+    const grupo = datas.length * horarios.length > 1 ? db.collection(COL).doc().id : null;
     const batch = db.batch();
     const criadas = [];
-    datas.forEach(d => {
+    datas.forEach(d => horarios.forEach(h => {
         const ref = db.collection(COL).doc();
         const doc = {
-            ...campos, data: d, status, grupoId: grupo,
+            ...campos, inicio: h.inicio, fim: h.fim, data: d, status, grupoId: grupo,
             // e-mail de quem pediu: a resposta de aceite/recusa já sai com destinatário no Gmail
             pedidoPor: status === 'pendente' ? { uid: req.user.uid, nome: quemFez(req), email: req.user.email || '' } : null,
             motivoRecusa: '',
@@ -286,7 +296,7 @@ async function criar(req, res, status) {
         };
         batch.set(ref, doc);
         criadas.push({ id: ref.id, ...doc });
-    });
+    }));
     await batch.commit();
 
     const coordenadores = await listaCoordenadores();

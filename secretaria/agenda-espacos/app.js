@@ -53,6 +53,9 @@ let visao = 'semana';
 let referencia = new Date();       // semana/mês exibidos
 let semestreSel = '';
 let emEdicao = null;               // reserva aberta no formulário
+let diasSel = [];                  // nova reserva: dias escolhidos (vários dias de uma vez)
+// Turnos (02/10/2026): "dia todo" = 08:00–22:20, como a Secretaria já marca
+const TURNOS = { manha: ['08:00', '12:00'], tarde: ['13:30', '17:30'], noite: ['19:00', '22:20'], dia: ['08:00', '22:20'] };
 let coordenadores = null;          // [{uid, nome}] — sugestão no "Responsável" (só quem edita)
 const cacheDia = {};               // disponibilidade por data (formulário)
 
@@ -301,7 +304,36 @@ function wireEventos() {
   document.getElementById('btn-novo').addEventListener('click', () => abrirNova(null));
   document.getElementById('btn-cancelar-modal').addEventListener('click', () => fechar('modal-reserva'));
   document.getElementById('form-reserva').addEventListener('submit', salvar);
-  ['f-espaco', 'f-data', 'f-inicio', 'f-fim'].forEach(id => document.getElementById(id).addEventListener('change', mostrarDisponibilidade));
+  ['f-espaco', 'f-inicio', 'f-fim'].forEach(id => document.getElementById(id).addEventListener('change', mostrarDisponibilidade));
+  // Data: na nova reserva, escolher no calendário ADICIONA o dia à lista
+  document.getElementById('f-data').addEventListener('change', () => {
+    const d = document.getElementById('f-data').value;
+    if (!emEdicao && d && !diasSel.includes(d)) { diasSel.push(d); diasSel.sort(); renderDias(); }
+    mostrarDisponibilidade();
+  });
+  document.getElementById('btn-add-dia').addEventListener('click', () => {
+    const base = diasSel.length ? diasSel[diasSel.length - 1] : (document.getElementById('f-data').value || hoje());
+    const prox = iso(somaDias(dataLocal(base), diasSel.length ? 1 : 0));
+    if (!diasSel.includes(prox)) diasSel.push(prox);
+    diasSel.sort();
+    document.getElementById('f-data').value = prox;
+    renderDias();
+    mostrarDisponibilidade();
+  });
+  document.getElementById('datas-chips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tirar]');
+    if (!b) return;
+    diasSel = diasSel.filter(d => d !== b.dataset.tirar);
+    renderDias();
+    mostrarDisponibilidade();
+  });
+  document.getElementById('turnos').addEventListener('change', (e) => {
+    const cb = e.target;
+    if (cb.value === 'dia' && cb.checked) document.querySelectorAll('#turnos input').forEach(x => { if (x.value !== 'dia') x.checked = false; });
+    else if (cb.checked) document.querySelector('#turnos input[value="dia"]').checked = false;
+    document.getElementById('grupo-horario-manual').classList.toggle('hidden', !document.querySelector('#turnos input[value="outro"]').checked);
+    mostrarDisponibilidade();
+  });
   document.getElementById('f-repetir').addEventListener('change', () => {
     const r = document.getElementById('f-repetir').value;
     document.getElementById('grupo-ate').classList.toggle('hidden', !r);
@@ -565,6 +597,15 @@ function preencher(r) {
   set('f-oficio', r?.oficio); set('f-contato-externo', r?.contatoExterno);
   atualizarGrupoExterno();
   set('f-repetir', ''); set('f-ate', '');
+  // nova reserva: vários dias + turnos; edição: um dia e o horário dela
+  diasSel = [];
+  document.querySelectorAll('#turnos input').forEach(x => { x.checked = false; });
+  document.getElementById('grupo-turnos').classList.toggle('hidden', !!r);
+  document.getElementById('grupo-horario-manual').classList.toggle('hidden', !r);
+  document.getElementById('btn-add-dia').classList.toggle('hidden', !!r);
+  document.getElementById('f-data-label').textContent = r ? 'Data *' : 'Dias * (escolha um ou mais)';
+  document.getElementById('f-horario-label').textContent = r ? 'Horário *' : 'Outro horário *';
+  renderDias();
   document.getElementById('grupo-ate').classList.add('hidden');
   document.getElementById('grupo-fds').classList.add('hidden');
   document.getElementById('erro-reserva').classList.add('hidden');
@@ -774,7 +815,7 @@ let pedidosCache = [];
 function abrirNova(dia) {
   emEdicao = null;
   preencher(null);
-  if (dia) document.getElementById('f-data').value = dia;
+  if (dia) { document.getElementById('f-data').value = dia; diasSel = [dia]; renderDias(); }
   const espacoFiltro = document.getElementById('filtro-espaco').value;
   if (espacoFiltro) document.getElementById('f-espaco').value = espacoFiltro;
   document.getElementById('modal-titulo').textContent = podeEditar ? 'Nova reserva' : 'Solicitar reserva';
@@ -836,39 +877,65 @@ function abrirReserva(r) {
   mostrarDisponibilidade();
 }
 
+function renderDias() {
+  const box = document.getElementById('datas-chips');
+  if (emEdicao) { box.innerHTML = ''; return; }
+  box.innerHTML = diasSel.map(d => `<span>${DIAS_CURTOS[dataLocal(d).getDay()]} ${fmtData(d).slice(0, 5)}<button type="button" data-tirar="${d}" title="Tirar este dia">×</button></span>`).join('');
+}
+
+// Datas da nova reserva: os dias escolhidos + (se pediu) repetição a partir do primeiro
 function gerarDatas() {
-  const data = document.getElementById('f-data').value;
+  if (emEdicao) { const d = document.getElementById('f-data').value; return d ? [d] : []; }
+  const base = [...diasSel];
   const rep = document.getElementById('f-repetir').value;
   const ate = document.getElementById('f-ate').value;
-  if (!data) return [];
-  if (!rep || !ate || ate <= data) return [data];
+  if (!base.length) return [];
+  if (!rep || !ate || ate <= base[0]) return base;
   const fds = document.getElementById('f-fds').checked;
-  const datas = [];
-  for (let d = dataLocal(data); iso(d) <= ate && datas.length < 120; d = somaDias(d, rep === 'semana' ? 7 : 1)) {
+  const datas = new Set(base);
+  for (let d = dataLocal(base[0]); iso(d) <= ate && datas.size < 120; d = somaDias(d, rep === 'semana' ? 7 : 1)) {
     if (rep === 'dia' && !fds && d.getDay() % 6 === 0) continue;
-    datas.push(iso(d));
+    datas.add(iso(d));
   }
-  return datas;
+  return [...datas].sort();
+}
+
+// Horários da nova reserva: turnos marcados (manhã, tarde, noite, dia todo) e/ou outro horário
+function horariosSelecionados() {
+  const ini = document.getElementById('f-inicio').value, fim = document.getElementById('f-fim').value;
+  if (emEdicao) return ini && fim ? [{ inicio: ini, fim }] : [];
+  const marcados = [...document.querySelectorAll('#turnos input:checked')].map(x => x.value);
+  const lista = marcados.filter(t => TURNOS[t]).map(t => ({ inicio: TURNOS[t][0], fim: TURNOS[t][1] }));
+  if (marcados.includes('outro') && ini && fim) lista.push({ inicio: ini, fim });
+  return lista;
 }
 
 async function mostrarDisponibilidade() {
   const box = document.getElementById('disponibilidade');
   const espaco = document.getElementById('f-espaco').value;
-  const data = document.getElementById('f-data').value;
-  const ini = document.getElementById('f-inicio').value;
-  const fim = document.getElementById('f-fim').value;
-  if (!espaco || !data) { box.innerHTML = ''; return; }
-  if (!cacheDia[data]) {
-    try { cacheDia[data] = await apiFetch(`/agenda-espacos/dia/${data}`); } catch (e) { box.innerHTML = ''; return; }
+  const datas = gerarDatas().slice(0, 15);
+  const horarios = horariosSelecionados();
+  if (!espaco || !datas.length) { box.innerHTML = ''; return; }
+  try {
+    await Promise.all(datas.filter(d => !cacheDia[d]).map(async d => { cacheDia[d] = await apiFetch(`/agenda-espacos/dia/${d}`); }));
+  } catch (e) { box.innerHTML = ''; return; }
+  const linhas = datas.map(data => {
+    const doEspaco = cacheDia[data].filter(r => (r.espaco === espaco || r.espaco === TODAS || espaco === TODAS) && (!emEdicao || r.id !== emEdicao.id))
+      .sort((a, b) => a.inicio.localeCompare(b.inicio));
+    const choca = doEspaco.filter(r => r.status === 'confirmada' && horarios.some(h => r.inicio < h.fim && h.inicio < r.fim));
+    return { data, doEspaco, choca };
+  });
+  const algumChoque = linhas.some(l => l.choca.length);
+  const ocupados = linhas.filter(l => l.doEspaco.length);
+  if (!ocupados.length) {
+    box.innerHTML = `<div class="ae-disp-box livre">✓ ${esc(espaco)} está livre ${datas.length > 1 ? `nos ${datas.length} dias escolhidos` : `o dia todo (${DIAS_LONGOS[dataLocal(datas[0]).getDay()]}, ${fmtData(datas[0])})`}.</div>`;
+    return;
   }
-  const doEspaco = cacheDia[data].filter(r => (r.espaco === espaco || r.espaco === TODAS || espaco === TODAS) && (!emEdicao || r.id !== emEdicao.id))
-    .sort((a, b) => a.inicio.localeCompare(b.inicio));
-  const dia = `${DIAS_LONGOS[dataLocal(data).getDay()]}, ${fmtData(data)}`;
-  if (!doEspaco.length) { box.innerHTML = `<div class="ae-disp-box livre">✓ ${esc(espaco)} está livre o dia todo (${dia}).</div>`; return; }
-  const choca = ini && fim && doEspaco.some(r => r.status === 'confirmada' && r.inicio < fim && ini < r.fim);
-  box.innerHTML = `<div class="ae-disp-box ${choca ? 'ocupado' : ''}">
-    ${choca ? '⚠️ Esse horário já está ocupado.' : 'Já marcado nesse espaço'} (${dia}):
-    <ul>${doEspaco.map(r => `<li><strong>${r.inicio}–${r.fim}</strong> · ${esc(r.evento)}${r.espaco !== espaco ? ` (${esc(r.espaco)})` : ''}${r.status === 'pendente' ? ' — <em>pedido pendente</em>' : ''}</li>`).join('')}</ul>
+  box.innerHTML = `<div class="ae-disp-box ${algumChoque ? 'ocupado' : ''}">
+    ${algumChoque ? '⚠️ Algum horário escolhido já está ocupado — veja abaixo.' : 'Já marcado nesse espaço:'}
+    ${ocupados.map(l => `<div class="ae-disp-dia"><strong>${DIAS_LONGOS[dataLocal(l.data).getDay()]}, ${fmtData(l.data)}</strong>${l.choca.length ? ' — <strong>choca</strong>' : ''}
+      <ul>${l.doEspaco.map(r => `<li><strong>${r.inicio}–${r.fim}</strong> · ${esc(r.evento)}${r.espaco !== espaco ? ` (${esc(r.espaco)})` : ''}${r.status === 'pendente' ? ' — <em>pedido pendente</em>' : ''}</li>`).join('')}</ul></div>`).join('')}
+    ${datas.length > ocupados.length ? `<div class="ae-disp-dia">✓ Os outros ${datas.length - ocupados.length} dia(s) estão livres.</div>` : ''}
   </div>`;
 }
 
@@ -883,6 +950,13 @@ async function salvar(e) {
   };
   const erroBox = document.getElementById('erro-reserva');
   erroBox.classList.add('hidden');
+  const horarios = horariosSelecionados();
+  if (!emEdicao) {
+    const falta = !gerarDatas().length ? 'Escolha pelo menos um dia.' : !horarios.length ? 'Marque pelo menos um turno (ou preencha o outro horário).' : '';
+    if (falta) { erroBox.textContent = falta; erroBox.classList.remove('hidden'); return; }
+    body.inicio = horarios[0].inicio; body.fim = horarios[0].fim;
+    body.horarios = horarios;
+  }
   const btn = document.getElementById('btn-salvar');
   btn.disabled = true;
   try {
@@ -893,7 +967,7 @@ async function salvar(e) {
       const datas = gerarDatas();
       const r = await apiFetch(podeEditar ? '/agenda-espacos' : '/agenda-espacos/pedidos', { method: 'POST', body: JSON.stringify({ ...body, datas }) });
       showToast((podeEditar
-        ? `Reserva salva${r.criadas.length > 1 ? ` (${r.criadas.length} datas)` : ''}.`
+        ? `Reserva salva${r.criadas.length > 1 ? ` (${r.criadas.length} dias/turnos)` : ''}.`
         : 'Pedido enviado! A Secretaria vai aprovar ou recusar.') + (r.coordenador ? ` Já está na agenda de ${r.coordenador}.` : ''));
       if (r.avisos && r.avisos.length) showToast(`Atenção: há pedido pendente no mesmo horário (${r.avisos.length}).`, 'error');
     }

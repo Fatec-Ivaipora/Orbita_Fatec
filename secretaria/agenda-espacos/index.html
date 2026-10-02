@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/secretaria/agenda-espacos/agenda-espacos.css?v=5">
+    <link rel="stylesheet" href="/secretaria/agenda-espacos/agenda-espacos.css?v=6">
 </head>
 <body>
     <div id="auth-guard" class="layout-auth-guard">
@@ -121,12 +121,26 @@
                         <select id="f-espaco" required></select>
                     </div>
                     <div class="form-group">
-                        <label for="f-data">Data *</label>
-                        <input type="date" id="f-data" required>
+                        <label for="f-data" id="f-data-label">Data *</label>
+                        <div class="ae-datas-add">
+                            <input type="date" id="f-data">
+                            <button type="button" class="btn-secondary" id="btn-add-dia" title="Adiciona o dia seguinte ao último escolhido — pra eventos de vários dias">+ dia seguinte</button>
+                        </div>
+                        <div class="ae-datas-chips" id="datas-chips"></div>
                     </div>
-                    <div class="form-group">
-                        <label>Horário *</label>
-                        <div class="ae-horario"><input type="time" id="f-inicio" required><span>às</span><input type="time" id="f-fim" required></div>
+                    <div class="form-group hidden" id="grupo-horario-manual">
+                        <label id="f-horario-label">Horário *</label>
+                        <div class="ae-horario"><input type="time" id="f-inicio"><span>às</span><input type="time" id="f-fim"></div>
+                    </div>
+                </div>
+                <div class="form-group" id="grupo-turnos">
+                    <label>Turnos * <small>— marque um ou mais (ex.: manhã e noite)</small></label>
+                    <div class="ae-turnos" id="turnos">
+                        <label><input type="checkbox" value="manha"> Manhã <small>08:00–12:00</small></label>
+                        <label><input type="checkbox" value="tarde"> Tarde <small>13:30–17:30</small></label>
+                        <label><input type="checkbox" value="noite"> Noite <small>19:00–22:20</small></label>
+                        <label><input type="checkbox" value="dia"> Dia todo <small>08:00–22:20</small></label>
+                        <label><input type="checkbox" value="outro"> Outro horário</label>
                     </div>
                 </div>
                 <div class="ae-disponibilidade" id="disponibilidade"></div>
@@ -289,6 +303,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/secretaria/agenda-espacos/app.js?v=6"></script>
+    <script type="module" src="/secretaria/agenda-espacos/app.js?v=7"></script>
 </body>
 </html>
