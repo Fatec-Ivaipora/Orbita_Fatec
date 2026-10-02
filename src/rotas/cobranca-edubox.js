@@ -255,6 +255,19 @@ router.delete('/acoes/:id', verifyToken, checkPermission, async (req, res) => {
 });
 
 // ---------- VISÃO DO DIRETOR: resumo por semana (gráfico) ----------
+// Visão mensal (Painel e Visão do diretor): resumo das parcelas que vencem
+// no mês + o que entrou no mês. Um doc por mês, lido só quando escolhem o mês.
+router.get('/mes/:mes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!/^\d{4}-\d{2}$/.test(req.params.mes)) return res.status(400).json({ error: 'Mês inválido (AAAA-MM).' });
+        const d = await db.collection('cobranca_edubox_meses').doc(req.params.mes).get();
+        res.json(d.exists ? d.data() : { vazio: true });
+    } catch (err) {
+        console.error('[cobranca-edubox] mes:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/semanas', verifyToken, checkPermission, async (req, res) => {
     try {
         const d = await db.collection('cobranca_edubox').doc('semanas').get();

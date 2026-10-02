@@ -79,6 +79,7 @@
                         <button type="button" data-visao="semana">Fechamento semanal</button>
                     </div>
                     <select id="sel-semestre" class="select-filter" title="Semestre das parcelas"></select>
+                    <select id="sel-mes" class="select-filter hidden" title="Ver só um mês do semestre (Painel e Visão do diretor)"></select>
                 </div>
 
                 <!-- ============ VISÃO DO DIRETOR ============ -->
@@ -114,7 +115,7 @@
                         <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">🔴 Atrasado — Financeiro cobra</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
                         <div class="kpi-card kpi-menor"><div class="kpi-label">⚖️ Atrasado — Advogado (acordo feito)</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
                         <div class="kpi-card kpi-ass"><div class="kpi-label">🏛 Atrasado — Débito judicial (sem acordo)</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
-                        <div class="kpi-card kpi-sem"><div class="kpi-label">🟢 Entrou nesta semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label" id="k-recebido-rot">🟢 Entrou nesta semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
                     </div>
 
                     <div class="card hidden" id="card-semestres">
@@ -337,6 +338,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=22"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=23"></script>
 </body>
 </html>

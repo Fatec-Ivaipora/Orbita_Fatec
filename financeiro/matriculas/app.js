@@ -1088,7 +1088,7 @@ const LINHAS_COMPARATIVO = [
   { chave: 'total', rotulo: 'Total de alunos', destaque: true, detalhavel: true,
     formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
   { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
-    formula: '(Cancelou Calouro + Desistente Calouro) ÷ Total de Calouros captados. Evasões, Desistente Veterano, Cancelou Veterano e Trancou ficam de fora.' },
+    formula: '(1ª/2ª Evasão + Cancelou Calouro + Desistente Calouro) ÷ Total de Calouros captados — dos calouros que entraram, quantos % saíram. Perdas de veterano ficam de fora (entram na perda sobre o total).' },
   { chave: 'perdaTotal', rotulo: '% de perda sobre o total', percentual: true,
     formula: 'Total de perdas ÷ Total de alunos — todo mundo que saiu da faculdade, não importa a forma (Cancelou + Trancou + 1ª/2ª Evasão + Transferência + Desistente), calouro ou veterano. Mudança de Curso não entra: continua estudando.' }
 ];
@@ -1460,13 +1460,14 @@ function renderRelatorio(dados) {
     cardTransferencia.classList.add('hidden');
   }
 
-  // "Perda de captação" = (Cancelou de calouro + Desistente de calouro) ÷
-  // Total de Calouros captados. Evasões, Trancou e Desistente de veterano NÃO
-  // entram no numerador — regra confirmada pela coordenação (25/09). O
-  // denominador é todo mundo que entrou como calouro, ficando ou não.
+  // "Perda de captação" = todo calouro que saiu (1ª/2ª Evasão + Cancelou de
+  // calouro + Desistente de calouro) ÷ Total de Calouros captados — a perda
+  // é só sobre os captados (pedido da direção 02/10/2026; antes, regra de
+  // 25/09, as evasões ficavam de fora). Fecha com o card: captados − calouros
+  // que ficaram = perdas de calouro.
   // "Perda total" continua olhando todo mundo que saiu, de qualquer jeito,
   // sobre o total do semestre — inclui veterano de propósito.
-  const perdasCalouros = cancelouCalouro + (dados.desistenteCalouro || 0);
+  const perdasCalouros = somaSituacoes(porSituacaoTotal, '1ª Evasão', '2ª Evasão') + cancelouCalouro + (dados.desistenteCalouro || 0);
   const totalPerdas = somaSituacoes(porSituacaoTotal, ...PERDAS_SITS);
   const formatarPercentual = (numerador, denominador) =>
     denominador > 0 ? `${((numerador / denominador) * 100).toFixed(1)}%` : '—';
@@ -1496,8 +1497,8 @@ function renderRelatorio(dados) {
       'Matrícula Nova - Retorno', 'Matrícula Nova - Retorno Assinada', 'Retorno',
       'Matrícula Nova - Transferência', 'Matrícula Nova - Transferência Assinada',
       '1ª Evasão', '2ª Evasão') + cancelouCalouroDados + (dados.desistenteCalouro || 0);
-    // % Perda Captação: Cancelou Calouro + Desistente Calouro — evasões e Desistente Veterano NÃO entram
-    const perdasCalouros2 = cancelouCalouroDados + (dados.desistenteCalouro || 0);
+    // % Perda Captação: 1ª/2ª Evasão + Cancelou Calouro + Desistente Calouro ÷ captados (02/10/2026)
+    const perdasCalouros2 = somaSituacoes(porSituacaoTotal, '1ª Evasão', '2ª Evasão') + cancelouCalouroDados + (dados.desistenteCalouro || 0);
     const linhaRes = {
       semestre: document.getElementById('rel-semestre-select')?.value || '',
       veteranos: somaSituacoes(porSituacaoTotal, ...VETERANOS_SITS),

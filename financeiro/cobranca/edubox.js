@@ -47,6 +47,8 @@ let filtrados = [];
 let mostrando = POR_PAGINA;
 let modelos = null;
 let semanasDados = null;    // resumo por semana (Visão do diretor)
+let mes = '';               // 'AAAA-MM' = visão mensal (só Painel e Visão do diretor); '' = semestre inteiro
+const mesesDados = {};      // 'AAAA-MM' -> resposta de /mes (carregado ao escolher)
 let alunoAberto = null;     // aluno do modal WhatsApp / detalhe
 let aguardando = null;      // timer do "Atualizar agora"
 
@@ -108,7 +110,40 @@ function diasDesde(isoStr) { return Math.floor((Date.now() - new Date(isoStr).ge
 function semestreAtual() { const d = new Date(); return `${d.getFullYear()}.${d.getMonth() < 6 ? 1 : 2}`; }
 function plural(n, s, p) { return `${n} ${n === 1 ? s : p}`; }
 function nomeGrupo() { return grupo === 'medicina' ? 'Medicina' : 'Graduação (16 cursos)'; }
-function nomeSemestre() { return semestre === 'todos' ? 'Todos os semestres' : `Semestre ${semestre}`; }
+function nomeSemestre() { return usaMes() ? `Mês de ${nomeMes(mes)}` : semestre === 'todos' ? 'Todos os semestres' : `Semestre ${semestre}`; }
+// ---- Visão mensal (pedido do diretor, 02/10/2026): no Painel e na Visão do
+// diretor dá pra escolher um mês do semestre. A Lista de cobrança e o
+// Fechamento semanal continuam por semestre (é como o Financeiro trabalha).
+const NOMES_MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function nomeMes(m) { return `${NOMES_MES[Number(m.slice(5, 7)) - 1]}/${m.slice(0, 4)}`; }
+function usaMes() { return !!mes && (visao === 'painel' || visao === 'diretor'); }
+// Meses do semestre escolhido até o mês atual, dentro dos 24 meses que o agente guarda.
+function mesesDoSemestre(s) {
+  if (!/^\d{4}\.[12]$/.test(s)) return [];
+  const [a, n] = s.split('.');
+  const hoje = new Date();
+  const atual = iso(hoje).slice(0, 7);
+  const minimo = iso(new Date(hoje.getFullYear(), hoje.getMonth() - 23, 1)).slice(0, 7);
+  return [0, 1, 2, 3, 4, 5].map(i => `${a}-${String((n === '1' ? 1 : 7) + i).padStart(2, '0')}`).filter(m => m <= atual && m >= minimo);
+}
+function montarMeses() {
+  const sel = document.getElementById('sel-mes');
+  const lista = (visao === 'painel' || visao === 'diretor') ? mesesDoSemestre(semestre) : [];
+  sel.classList.toggle('hidden', !lista.length);
+  if (!lista.length) return;
+  if (mes && !lista.includes(mes)) mes = '';
+  sel.innerHTML = '<option value="">Semestre inteiro</option>' + lista.map(m => `<option value="${m}">${nomeMes(m)}</option>`).join('');
+  sel.value = mes;
+}
+async function carregarMes() {
+  try {
+    mesesDados[mes] = await apiFetch(`/cobranca/edubox/mes/${mes}`);
+  } catch (err) {
+    showToast(`Não foi possível carregar o mês: ${err.message}`, 'error');
+    mes = '';
+  }
+}
+function fimDoMes(m) { return iso(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)); }
 function nomeCurso(c) {
   return (c || '').replace(/^BACHARELADO EM /, '').replace(/^LICENCIATURA EM /, 'Lic. ').replace(/^SUPERIOR DE TECNOLOGIA EM /, 'Tec. ')
     .replace(/ - FORMAÇÃO DE PSICÓLOGO \(A\)/, '').toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(Em|De|Da|Do|E)\b/g, x => x.toLowerCase());
@@ -205,11 +240,14 @@ function montarSemestres() {
 }
 
 function renderTudo() {
+  montarMeses();
+  if (usaMes() && !mesesDados[mes]) { carregarMes().then(renderTudo); return; }
   // aviso do semestre vale pra todas as visões (antes só o Painel atualizava)
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
   const [anoS, nS] = semestre.split('.');
   aviso.textContent = `Semestre ${semestre}: parcelas que vencem de ${nS === '1' ? 'janeiro a junho' : 'julho a dezembro'} de ${anoS} (mesmo critério do relatório do Edubox). Escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  if (usaMes()) aviso.textContent = avisoMes();
   if (visao === 'diretor') renderDiretor();
   else if (visao === 'painel') renderPainel();
   else if (visao === 'lista') abrirLista();
@@ -275,7 +313,12 @@ async function atualizarAgora() {
 }
 
 // ---------- PAINEL ----------
+function avisoMes() {
+  if (mesesDados[mes]?.vazio) return `Os números de ${nomeMes(mes)} aparecem depois da próxima atualização do Edubox (o agente passou a guardar os meses em 02/10/2026).`;
+  return `Mês de ${nomeMes(mes)}: parcelas que vencem em ${nomeMes(mes)} — "atrasado" é o que delas ainda não foi pago. "Entrou" é tudo que foi pago dentro do mês, de qualquer parcela.`;
+}
 function recorte() {
+  if (usaMes()) return mesesDados[mes]?.[grupo] || null;
   const r = painel?.resumo?.[semestre]?.[grupo];
   return r || null;
 }
@@ -344,14 +387,22 @@ function renderPainel() {
   document.getElementById('k-fin-hint').textContent = dicaJur(lados.debito, sit.debito);
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
-  aviso.textContent = `Semestre ${semestre}: tudo neste painel é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  aviso.textContent = usaMes() ? avisoMes() : `Semestre ${semestre}: tudo neste painel é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
   renderSemestres();
 
+  const recMes = usaMes() ? mesesDados[mes]?.recebido?.[grupo] : null;
+  document.getElementById('k-recebido-rot').textContent = usaMes() ? `🟢 Entrou em ${nomeMes(mes)}` : '🟢 Entrou nesta semana';
   const b = somaBaixas(painel.semana.baixas);
   const hojeISO = iso(new Date());
   const bh = somaBaixas(painel.semana.baixas.filter(d => d.data === hojeISO));
-  document.getElementById('k-recebido').textContent = brl(b.financeiro + b.juridico);
-  document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox de segunda até agora · Financeiro ${brlCurto(b.financeiro)} · Advogado/Débito ${brlCurto(b.juridico)} · só hoje ${brlCurto(bh.financeiro + bh.juridico)}`;
+  if (usaMes()) {
+    const x = recMes || { f: 0, j: 0, fa: 0 };
+    document.getElementById('k-recebido').textContent = brl(x.f + x.j);
+    document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox dentro do mês · Financeiro ${brlCurto(x.f)} · Advogado/Débito ${brlCurto(x.j)} · ${brlCurto(x.fa)} eram mensalidades atrasadas`;
+  } else {
+    document.getElementById('k-recebido').textContent = brl(b.financeiro + b.juridico);
+    document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox de segunda até agora · Financeiro ${brlCurto(b.financeiro)} · Advogado/Débito ${brlCurto(b.juridico)} · só hoje ${brlCurto(bh.financeiro + bh.juridico)}`;
+  }
 
   const maxF = Math.max(1, ...FAIXAS.map(([k]) => r ? r.faixas[k].valor : 0));
   document.getElementById('faixas').innerHTML = FAIXAS.map(([k, rot, cor]) => {
@@ -361,13 +412,16 @@ function renderPainel() {
 
   const av = r ? r.aVencer : vazio;
   // período do "ainda vai vencer": de hoje até o fim do semestre escolhido (pelo vencimento)
-  const fimSem = semestre === 'todos' ? null : (semestre.endsWith('.1') ? `30/06/${semestre.slice(0, 4)}` : `31/12/${semestre.slice(0, 4)}`);
-  document.getElementById('a-vencer-periodo').textContent = fimSem
+  const fimSem = usaMes() ? fmtData(fimDoMes(mes)) : (semestre === 'todos' ? null : (semestre.endsWith('.1') ? `30/06/${semestre.slice(0, 4)}` : `31/12/${semestre.slice(0, 4)}`));
+  const rotRec = usaMes() ? nomeMes(mes) : semestre;
+  document.getElementById('a-vencer-periodo').textContent = usaMes() && fimDoMes(mes) < iso(new Date())
+    ? `— ${nomeMes(mes)} já terminou: nada mais a vencer neste mês`
+    : fimSem
     ? `— vence de hoje até ${fimSem} · valor sem juros (não é atraso)`
     : '— tudo que ainda vai vencer, de qualquer semestre · valor sem juros (não é atraso)';
   document.getElementById('a-vencer').innerHTML = `
-    <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
-    <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${semestre})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
+    <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
+    <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div style="grid-column:1/-1"><span>Total que ainda vai vencer</span><b>${brl((r ? r.financeiro.aVencer.valor : 0) + (rj ? rj.juridico.aVencer.valor : 0))}</b></div>`;
 
   // por plano jurídico (acumulado) + recebido na semana
@@ -427,8 +481,9 @@ async function renderDiretor() {
     try { semanasDados = (await apiFetch('/cobranca/edubox/semanas')).semanas || {}; } catch (e) { semanasDados = {}; }
   }
   const seg = iso(segunda());
-  const w = semanasDados[seg]?.[grupo]?.[semestre] || {};
-  const rotSem = semestre === 'todos' ? 'todos os semestres' : `semestre ${semestre}`;
+  // no mês não tem "como estava na segunda" — essa comparação é semanal
+  const w = usaMes() ? {} : (semanasDados[seg]?.[grupo]?.[semestre] || {});
+  const rotSem = usaMes() ? `mês de ${nomeMes(mes)}` : semestre === 'todos' ? 'todos os semestres' : `semestre ${semestre}`;
 
   // 1) Inadimplência
   const venc = r.financeiro.vencido.valor;
@@ -448,11 +503,18 @@ async function renderDiretor() {
       : `<b>${brlCurto(venc).replace(/ mi$/, ' milhões')}</b> não pagos (<b>${brlCurto(apDe(r.financeiro.vencido)).replace(/ mi$/, ' milhões')}</b> com juros e multa), de <b>${brlCurto(devido).replace(/ mi$/, ' milhões')}</b> que já venceram. Quanto menor, melhor. (Sem contar advogado e débito judicial.)`}</div>
     ${seta}`;
 
-  // 2) Dinheiro que entrou na semana + taxa de recuperação
+  // 2) Dinheiro que entrou na semana (ou no mês) + taxa de recuperação
+  if (usaMes()) {
+    const x = mesesDados[mes]?.recebido?.[grupo] || { f: 0, j: 0, fa: 0, ja: 0 };
+    document.getElementById('d-receb').innerHTML = `
+      <div class="cb-dir-rotulo">🟢 Entrou em ${esc(nomeMes(mes))}</div>
+      <div class="cb-dir-numero bom">${brlCurto(x.f + x.j)}</div>
+      <div class="cb-dir-texto">Tudo que foi pago dentro do mês. Disso, <b>${brlCurto(x.fa + x.ja)}</b> foi pagamento de parcela atrasada (Financeiro ${brlCurto(x.fa)} · advogado/débito ${brlCurto(x.ja)}); o resto foi pago em dia.</div>`;
+  }
   const rec = w.rec || null;
   const b = rec ? { f: rec.f + rec.j, fa: rec.fa } : (() => { const t = somaBaixas(painel.semana.baixas); return { f: t.financeiro + t.juridico, fa: t.financeiroAtraso }; })();
   const taxa = w.ini && w.ini.f ? b.fa / w.ini.f : null;
-  document.getElementById('d-receb').innerHTML = `
+  if (!usaMes()) document.getElementById('d-receb').innerHTML = `
     <div class="cb-dir-rotulo">🟢 Entrou nesta semana <small style="text-transform:none;font-weight:500">(de segunda até agora)</small></div>
     <div class="cb-dir-numero bom">${brlCurto(b.f)}</div>
     <div class="cb-dir-texto">${taxa !== null
@@ -461,21 +523,24 @@ async function renderDiretor() {
 
   // 3) Resultado das cobranças (funil)
   const cobrEl = document.getElementById('d-cobr');
-  cobrEl.innerHTML = '<div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div><div class="cb-dir-texto">Carregando...</div>';
-  apiFetch(`/cobranca/edubox/retorno?inicio=${seg}&fim=${iso(somaDias(segunda(), 6))}`).then(rt => {
+  const rotCobr = usaMes() ? `Cobranças do Financeiro em ${esc(nomeMes(mes))}` : 'Cobranças do Financeiro na semana';
+  const iniCobr = usaMes() ? `${mes}-01` : seg;
+  const fimCobr = usaMes() ? [fimDoMes(mes), iso(new Date())].sort()[0] : iso(somaDias(segunda(), 6));
+  cobrEl.innerHTML = `<div class="cb-dir-rotulo">${rotCobr}</div><div class="cb-dir-texto">Carregando...</div>`;
+  apiFetch(`/cobranca/edubox/retorno?inicio=${iniCobr}&fim=${fimCobr}`).then(rt => {
     const lista = rt.alunos.filter(x => (x.grupo || 'graduacao') === grupo);
     const prom = lista.filter(x => x.promessa).length;
     const pagaram = lista.filter(x => x.pagouDepois > 0);
     const valor = pagaram.reduce((s, x) => s + x.pagouDepois, 0);
     cobrEl.innerHTML = `
-      <div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div>
+      <div class="cb-dir-rotulo">${rotCobr}</div>
       <div class="cb-funil">
         <div><b>${lista.length}</b><small>alunos cobrados</small></div><span>›</span>
         <div><b>${prom}</b><small>prometeram</small></div><span>›</span>
         <div><b>${pagaram.length}</b><small>pagaram</small></div>
       </div>
-      <div class="cb-dir-texto" style="margin-top:0.5rem">${lista.length ? `${pct(pagaram.length / lista.length, 0)} dos cobrados já pagaram · <b>${brlCurto(valor)}</b> recebidos deles.` : 'Nenhuma cobrança registrada no Órbita nesta semana ainda.'}</div>`;
-  }).catch(() => { cobrEl.innerHTML = '<div class="cb-dir-rotulo">Cobranças do Financeiro na semana</div><div class="cb-dir-texto">Não foi possível carregar.</div>'; });
+      <div class="cb-dir-texto" style="margin-top:0.5rem">${lista.length ? `${pct(pagaram.length / lista.length, 0)} dos cobrados já pagaram · <b>${brlCurto(valor)}</b> recebidos deles.` : 'Nenhuma cobrança registrada no Órbita neste período ainda.'}</div>`;
+  }).catch(() => { cobrEl.innerHTML = `<div class="cb-dir-rotulo">${rotCobr}</div><div class="cb-dir-texto">Não foi possível carregar.</div>`; });
 
   // 4) Gráfico semana a semana (últimas 8 semanas com dado)
   const semanas = Object.keys(semanasDados).sort().slice(-12)
@@ -522,7 +587,7 @@ async function renderDiretor() {
     linha('⚖️ Acordos com advogado', sit.advogado, lados.advogado, 'acordo feito — paga direto') +
     linha('🏛 Débito judicial', sit.debito, lados.debito, 'com a advogada, ainda sem acordo') +
     `<div class="cb-adv-linha"><b>📤 Para enviar ao advogado</b> <small class="cb-sub">desistentes, trancados, cancelados — o Financeiro não cobra</small>
-      <div class="cb-dir-texto">💰 <b>${brlCurto(apDe(env.vencido))} a pagar</b> (original ${brlCurto(env.vencido.valor)}) de ${plural(env.vencido.alunos, 'aluno', 'alunos')}${semestre !== 'todos' ? ` · no ${esc(semestre)}: ${brlCurto(apDe(envSem.vencido))} de ${plural(envSem.vencido.alunos, 'aluno', 'alunos')}` : ''}</div></div>`;
+      <div class="cb-dir-texto">💰 <b>${brlCurto(apDe(env.vencido))} a pagar</b> (original ${brlCurto(env.vencido.valor)}) de ${plural(env.vencido.alunos, 'aluno', 'alunos')}${semestre !== 'todos' ? ` · no ${esc(usaMes() ? nomeMes(mes) : semestre)}: ${brlCurto(apDe(envSem.vencido))} de ${plural(envSem.vencido.alunos, 'aluno', 'alunos')}` : ''}</div></div>`;
 }
 
 function graficoInadimplencia(pontos) {
@@ -1188,8 +1253,13 @@ function wireEventos() {
     const b = e.target.closest('[data-visao]');
     if (b) trocarVisao(b.dataset.visao);
   });
+  document.getElementById('sel-mes').addEventListener('change', (e) => {
+    mes = e.target.value;
+    renderTudo();
+  });
   document.getElementById('sel-semestre').addEventListener('change', (e) => {
     semestre = e.target.value;
+    mes = '';
     mostrando = POR_PAGINA;
     renderTudo();
   });
