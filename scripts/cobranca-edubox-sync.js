@@ -190,7 +190,8 @@ const SQL_DEVIDO = `
 // consulta agregada só (poucas linhas). Mesmo critério de "recebido" das
 // baixas diárias; "atraso" = pagou depois do vencimento.
 const SQL_RECEBIDO_MES = `
-    SELECT to_char(b.datibc, 'YYYY-MM') AS mes, (coalesce(c.semctr, '') ~ '-') AS med,
+    SELECT to_char(b.datibc, 'YYYY-MM') AS mes, to_char(date_trunc('week', b.datibc), 'YYYY-MM-DD') AS semana,
+           (coalesce(c.semctr, '') ~ '-') AS med,
            coalesce(p.catpla = $1, false) AS juridico, (c.venctr < b.datibc::date) AS atraso,
            sum(b.totibc) AS valor
     FROM tfi_itembaixactr b
@@ -199,7 +200,7 @@ const SQL_RECEBIDO_MES = `
     WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL
       AND b.datibc >= (date_trunc('month', CURRENT_DATE) - ($2::int - 1) * interval '1 month')
       AND b.datibc <= CURRENT_DATE
-    GROUP BY 1, 2, 3, 4`;
+    GROUP BY 1, 2, 3, 4, 5`;
 
 // Último pagamento de cada cliente (qualquer parcela e só as de acordo).
 const SQL_ULTIMO_PAGAMENTO = `
@@ -333,6 +334,10 @@ async function montarResumo(hoje, pagamentos) {
     const mesAte = hoje.slice(0, 7), mesDe = mesesAtras(hoje, MESES_HISTORICO - 1);
     // todo mês do período existe, mesmo sem nada em aberto (aí a inadimplência é 0%)
     for (let i = 0; i < MESES_HISTORICO; i++) garantir('m:' + mesesAtras(hoje, i));
+    // Previsão (02/10/2026): o que ainda vai vencer em cada mês, do mês atual
+    // até o fim do semestre — vai no doc "atual" (poucos números).
+    const fimSemMes = `${hoje.slice(0, 4)}-${Number(hoje.slice(5, 7)) <= 6 ? '06' : '12'}`;
+    const previsao = {};
 
     for (const l of linhas) {
         const valor = Number(l.valctr) - Number(l.valpag);
@@ -346,6 +351,18 @@ async function montarResumo(hoje, pagamentos) {
         const dias = vencido ? Math.round((hojeMs - new Date(venc + 'T12:00:00').getTime()) / 86400000) : 0;
         const curso = l.curso || SEM_CURSO;
         const mes = venc.slice(0, 7);
+        if (!vencido && ladoNome !== 'enviar' && mes >= mesAte && mes <= fimSemMes) {
+            const pm = (previsao[mes] = previsao[mes] || {});
+            const pg = (pm[grupo] = pm[grupo] || { f: 0, j: 0, s: 0, af: new Set(), aj: new Set() });
+            // "Saldo devedor Nº semestre" (Medicina): saldo negociado que fica
+            // com vencimento 30/12 e vai sendo empurrado — não é dinheiro que
+            // entra no mês; vai separado pra não inflar a previsão.
+            if (/^SALDO DEVEDOR/i.test((l.despla || '').trim())) pg.s += valor;
+            else {
+                pg[l.juridico ? 'j' : 'f'] += valor;
+                pg[l.juridico ? 'aj' : 'af'].add(l.clictr);
+            }
+        }
         const chaves = sem <= semLimite ? [sem, 'todos'] : ['todos'];
         if (mes >= mesDe && mes <= mesAte) chaves.push('m:' + mes);
         for (const recorte of chaves) {
@@ -401,7 +418,10 @@ async function montarResumo(hoje, pagamentos) {
     // separa os recortes por mês (não entram no doc "atual")
     const meses = {};
     for (const k of Object.keys(resumo)) if (k.startsWith('m:')) { meses[k.slice(2)] = resumo[k]; delete resumo[k]; }
-    return { resumo, meses, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
+    for (const pm of Object.values(previsao)) for (const [g, x] of Object.entries(pm)) {
+        pm[g] = { f: r2(x.f), j: r2(x.j), s: r2(x.s), alunosF: x.af.size, alunosJ: x.aj.size };
+    }
+    return { resumo, meses, previsao, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
 }
 
 function telefone(v) {
@@ -535,15 +555,20 @@ async function montarRecebidoMes() {
     const linhas = await q(SQL_RECEBIDO_MES, [CATEGORIA_JURIDICO, MESES_HISTORICO]);
     const novo = () => ({ f: 0, j: 0, fa: 0, ja: 0 });
     const porMes = {};
+    const porSemana = {}; // mes -> segunda -> grupo -> {f, j}: só os dias da semana que caem no mês
     for (const l of linhas) {
+        const grupo = l.med ? 'medicina' : 'graduacao';
         const m = (porMes[l.mes] = porMes[l.mes] || { graduacao: novo(), medicina: novo() });
-        const x = m[l.med ? 'medicina' : 'graduacao'];
+        const x = m[grupo];
         const v = Number(l.valor) || 0;
         x[l.juridico ? 'j' : 'f'] += v;
         if (l.atraso) x[l.juridico ? 'ja' : 'fa'] += v;
+        const sm = ((porSemana[l.mes] = porSemana[l.mes] || {})[l.semana] = porSemana[l.mes][l.semana] || { graduacao: { f: 0, j: 0 }, medicina: { f: 0, j: 0 } });
+        sm[grupo][l.juridico ? 'j' : 'f'] += v;
     }
     for (const m of Object.values(porMes)) for (const x of Object.values(m)) for (const k in x) x[k] = r2(x[k]);
-    return porMes;
+    for (const m of Object.values(porSemana)) for (const s of Object.values(m)) for (const x of Object.values(s)) { x.f = r2(x.f); x.j = r2(x.j); }
+    return { porMes, porSemana };
 }
 
 // Segunda-feira (AAAA-MM-DD) da semana de uma data AAAA-MM-DD.
@@ -604,13 +629,13 @@ async function sincronizar(origem = 'manual') {
     try {
         const hoje = isoData(new Date());
         const pagamentos = await montarPagamentos(hoje);
-        const { resumo, meses, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
+        const { resumo, meses, previsao, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
         const { porDia, baixasLidas } = await montarBaixas(hoje);
-        const recebidoMes = await montarRecebidoMes();
+        const { porMes: recebidoMes, porSemana: recebidoSemana } = await montarRecebidoMes();
         const agora = new Date().toISOString();
         const semestres = Object.keys(resumo).filter(s => s !== 'todos').sort((a, b) => b.localeCompare(a));
 
-        await db.collection('cobranca_edubox').doc('atual').set({ geradoEm: agora, origem, semestres, resumo, situacaoAdvogado });
+        await db.collection('cobranca_edubox').doc('atual').set({ geradoEm: agora, origem, semestres, resumo, situacaoAdvogado, previsao });
         await db.collection('cobranca_edubox_pagamentos').doc('recentes').set({ geradoEm: agora, porAluno: pagamentos.recentes });
         for (const g of ['graduacao', 'medicina']) {
             await db.collection('cobranca_edubox_alunos').doc(g).set({ geradoEm: agora, alunos: alunos[g], planos: alunos[g + 'Planos'] });
@@ -648,6 +673,9 @@ async function sincronizar(origem = 'manual') {
             });
         }
         await batchMes.commit();
+        // Gráfico "dinheiro que entrou" da Visão do diretor: por mês e por
+        // semana dentro de cada mês (um doc só, lido ao abrir a visão).
+        await db.collection('cobranca_edubox').doc('recebido').set({ geradoEm: agora, meses: recebidoMes, semanas: recebidoSemana });
 
         const duracaoMs = Date.now() - inicio;
         await cfg.set({ status: 'ok', ultimaAtualizacao: agora, ultimaOrigem: origem, duracaoMs, erro: null, parcelasLidas, baixasLidas }, { merge: true });

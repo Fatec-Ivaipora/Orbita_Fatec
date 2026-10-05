@@ -268,6 +268,17 @@ router.get('/mes/:mes', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// Dinheiro que entrou por mês e por semana (gráfico da Visão do diretor).
+router.get('/recebido', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const d = await db.collection('cobranca_edubox').doc('recebido').get();
+        res.json(d.exists ? d.data() : {});
+    } catch (err) {
+        console.error('[cobranca-edubox] recebido:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/semanas', verifyToken, checkPermission, async (req, res) => {
     try {
         const d = await db.collection('cobranca_edubox').doc('semanas').get();
