@@ -178,3 +178,17 @@
 
 #visao-painel .kpi-value { font-size: 1.45rem; white-space: nowrap; }
 @media (max-width: 1300px) { #visao-painel .kpi-value { font-size: 1.25rem; } }
+
+/* Mês que já terminou (02/10/2026) */
+.cb-fechou { display: grid; gap: 0.35rem; max-width: 640px; }
+.cb-fechou-linha { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: baseline; padding: 0.55rem 0.75rem; border-radius: 10px; background: #f7f9fc; }
+.cb-fechou-linha b { font-size: 1.1rem; white-space: nowrap; }
+.cb-fechou-linha small { display: block; color: var(--text-secondary); font-size: 0.78rem; }
+.cb-fechou-linha.ok b { color: #047857; }
+.cb-fechou-linha.ruim b { color: #b91c1c; }
+/* Previsão mês a mês */
+.cb-prev { display: grid; gap: 0.35rem; }
+.cb-prev-linha { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: baseline; padding: 0.5rem 0.75rem; border-radius: 10px; background: #f7f9fc; font-size: 0.88rem; }
+.cb-prev-linha b { white-space: nowrap; }
+.cb-prev-linha small { display: block; color: var(--text-secondary); font-size: 0.75rem; }
+.cb-prev-linha.total { background: #eef6ff; font-weight: 700; }

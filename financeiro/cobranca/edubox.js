@@ -49,6 +49,7 @@ let modelos = null;
 let semanasDados = null;    // resumo por semana (Visão do diretor)
 let mes = '';               // 'AAAA-MM' = visão mensal (só Painel e Visão do diretor); '' = semestre inteiro
 const mesesDados = {};      // 'AAAA-MM' -> resposta de /mes (carregado ao escolher)
+let recebidoDados = null;   // /recebido: dinheiro que entrou por mês e por semana (gráfico do diretor)
 let alunoAberto = null;     // aluno do modal WhatsApp / detalhe
 let aguardando = null;      // timer do "Atualizar agora"
 
@@ -294,6 +295,7 @@ async function atualizarAgora() {
           Object.keys(listas).forEach(k => delete listas[k]);
           semanaDados = null;
           semanasDados = null;
+          recebidoDados = null;
           painel = null;
           await carregarPainel();
         } else if (st.status === 'erro' && st.erroEm > pedidoEm) {
@@ -313,6 +315,42 @@ async function atualizarAgora() {
 }
 
 // ---------- PAINEL ----------
+// "Previsão" mês a mês (doc atual.previsao): do mês atual até o fim do semestre.
+function previsaoMeses() {
+  const p = painel?.previsao || {};
+  const meses = Object.keys(p).filter(m => p[m][grupo]).sort();
+  if (!meses.length) return '';
+  const atual = iso(new Date()).slice(0, 7);
+  let tf = 0, tj = 0, ts = 0;
+  const linhas = meses.map(m => {
+    const x = p[m][grupo];
+    tf += x.f; tj += x.j; ts += x.s || 0;
+    const rot = m === atual ? `${nomeMes(m).split('/')[0]} <small>de hoje até ${fmtData(fimDoMes(m))}</small>` : nomeMes(m).split('/')[0];
+    return `<div class="cb-prev-linha"><span>${rot}</span><b>${brl(x.f + x.j)}<small>Financeiro ${brlCurto(x.f)} (${plural(x.alunosF, 'aluno', 'alunos')}) · advogado/débito ${brlCurto(x.j)}${x.s ? ` · fora: saldo devedor ${brlCurto(x.s)}` : ''}</small></b></div>`;
+  });
+  return `<div class="cb-prev" style="grid-column:1/-1">${linhas.join('')}
+    <div class="cb-prev-linha total"><span>Total até ${fmtData(fimDoMes(meses[meses.length - 1]))}</span><b>${brl(tf + tj)}<small>Financeiro ${brlCurto(tf)} · advogado/débito ${brlCurto(tj)}</small></b></div>
+    ${ts ? `<div class="cb-prev-linha"><span>Saldo devedor <small>plano "Saldo devedor Nº semestre": negociação com vencimento em 30/12 que costuma ser empurrada para o ano seguinte — não entra na previsão</small></span><b>${brl(ts)}</b></div>` : ''}</div>`;
+}
+
+// Mês que já terminou: venceu, já foi pago, ainda em aberto e o que entrou.
+function renderMesFechou(r, fin) {
+  const devido = (r && r.devido && r.devido.financeiro) || 0;
+  const aberto = fin.valor || 0;
+  const pago = Math.max(0, devido - aberto);
+  const rec = mesesDados[mes]?.recebido?.[grupo] || { f: 0, j: 0, fa: 0, ja: 0 };
+  const jur = (r && r.juridico && r.juridico.vencido) || { valor: 0, alunos: 0 };
+  document.getElementById('mes-fechou-sub').textContent = `— mensalidades do Financeiro que venceram em ${nomeMes(mes)}, situação de hoje`;
+  const linha = (rot, sub, val, cls = '') => `<div class="cb-fechou-linha ${cls}"><span>${rot}${sub ? `<small>${sub}</small>` : ''}</span><b>${val}</b></div>`;
+  document.getElementById('mes-fechou').innerHTML = devido
+    ? linha('Venceu no mês', 'mensalidades com vencimento no mês (sem advogado/débito)', brl(devido)) +
+      linha('Já foi pago', 'em dia ou depois, até hoje', `${brl(pago)} (${pct(pago / devido)})`, 'ok') +
+      linha('Ainda em aberto', `${plural(fin.alunos || 0, 'aluno', 'alunos')} · com juros e multa ${brl(apDe(fin))}`, `${brl(aberto)} (${pct(aberto / devido)})`, aberto ? 'ruim' : 'ok') +
+      linha('Entrou dentro do mês', `tudo que foi pago no mês, de qualquer parcela · ${brlCurto(rec.fa + rec.ja)} eram atrasados`, brl(rec.f + rec.j)) +
+      (jur.valor ? linha('Advogado / débito judicial', `parcelas de acordo que venceram no mês e não foram pagas · ${plural(jur.alunos, 'aluno', 'alunos')} · o Financeiro não cobra`, brl(jur.valor)) : '')
+    : '<div class="tabela-msg">Sem mensalidades com vencimento neste mês.</div>';
+}
+
 function avisoMes() {
   if (mesesDados[mes]?.vazio) return `Os números de ${nomeMes(mes)} aparecem depois da próxima atualização do Edubox (o agente passou a guardar os meses em 02/10/2026).`;
   return `Mês de ${nomeMes(mes)}: parcelas que vencem em ${nomeMes(mes)} — "atrasado" é o que delas ainda não foi pago. "Entrou" é tudo que foi pago dentro do mês, de qualquer parcela.`;
@@ -410,6 +448,13 @@ function renderPainel() {
     return `<div class="cb-faixa"><span>${rot}</span><div class="cb-faixa-barra"><span style="width:${(f.valor / maxF) * 100}%;background:${cor}"></span></div><b>${brl(apDe(f))}<small>${plural(f.alunos, 'aluno', 'alunos')} · original ${brl(f.valor)}</small></b></div>`;
   }).join('');
 
+  // Mês que já terminou: faixas de atraso (contadas a partir de hoje) e "a
+  // vencer" não dizem nada sobre o mês — mostra como o mês fechou (02/10/2026).
+  const mesFechado = usaMes() && fimDoMes(mes) < iso(new Date());
+  document.getElementById('card-mes-fechou').classList.toggle('hidden', !mesFechado);
+  document.getElementById('bloco-faixas-avencer').classList.toggle('hidden', mesFechado);
+  if (mesFechado) renderMesFechou(r, fin);
+
   const av = r ? r.aVencer : vazio;
   // período do "ainda vai vencer": de hoje até o fim do semestre escolhido (pelo vencimento)
   const fimSem = usaMes() ? fmtData(fimDoMes(mes)) : (semestre === 'todos' ? null : (semestre.endsWith('.1') ? `30/06/${semestre.slice(0, 4)}` : `31/12/${semestre.slice(0, 4)}`));
@@ -419,12 +464,18 @@ function renderPainel() {
     : fimSem
     ? `— vence de hoje até ${fimSem} · valor sem juros (não é atraso)`
     : '— tudo que ainda vai vencer, de qualquer semestre · valor sem juros (não é atraso)';
-  document.getElementById('a-vencer').innerHTML = `
+  // Previsão mês a mês até o fim do semestre: no semestre atual e no mês atual
+  const prev = previsaoMeses();
+  if (prev && (usaMes() ? mes === iso(new Date()).slice(0, 7) : semestre === semestreAtual())) {
+    document.getElementById('a-vencer-periodo').textContent = '— previsão do que vence até o fim do semestre · valor sem juros (não é atraso)';
+    document.getElementById('a-vencer').innerHTML = prev;
+  } else document.getElementById('a-vencer').innerHTML = `
     <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div style="grid-column:1/-1"><span>Total que ainda vai vencer</span><b>${brl((r ? r.financeiro.aVencer.valor : 0) + (rj ? rj.juridico.aVencer.valor : 0))}</b></div>`;
 
   // por plano jurídico (acumulado) + recebido na semana
+  document.getElementById('th-planos-entrou').textContent = usaMes() || semestre !== 'todos' ? '🟢 Entrou nesta semana (de qualquer mês)' : '🟢 Entrou nesta semana';
   const planos = rj ? Object.entries(rj.planosJuridico || {}) : [];
   const recPlano = {};
   for (const d of painel.semana.baixas) for (const [k, val] of Object.entries(d[grupo].juridico.porPlano || {})) recPlano[k] = (recPlano[k] || 0) + val;
@@ -542,11 +593,13 @@ async function renderDiretor() {
       <div class="cb-dir-texto" style="margin-top:0.5rem">${lista.length ? `${pct(pagaram.length / lista.length, 0)} dos cobrados já pagaram · <b>${brlCurto(valor)}</b> recebidos deles.` : 'Nenhuma cobrança registrada no Órbita neste período ainda.'}</div>`;
   }).catch(() => { cobrEl.innerHTML = `<div class="cb-dir-rotulo">${rotCobr}</div><div class="cb-dir-texto">Não foi possível carregar.</div>`; });
 
-  // 4) Gráfico semana a semana (últimas 8 semanas com dado)
-  const semanas = Object.keys(semanasDados).sort().slice(-12)
-    .map(k => ({ k, x: semanasDados[k]?.[grupo]?.[semestre] || {} }))
-    .filter(s => s.x.rec || s.x.ini);
-  document.getElementById('d-grafico').innerHTML = semanas.length ? graficoSemanas(semanas) : '<div class="tabela-msg">Ainda sem semanas registradas.</div>';
+  // 4) Dinheiro que entrou — segue o semestre/mês escolhido (02/10/2026):
+  //    mês -> as semanas daquele mês; semestre -> mês a mês; todos -> últimas 12 semanas.
+  //    Sempre pela DATA DO PAGAMENTO, de qualquer parcela.
+  if (!recebidoDados) {
+    try { recebidoDados = await apiFetch('/cobranca/edubox/recebido'); } catch (e) { recebidoDados = {}; }
+  }
+  renderGraficoRecebido();
 
   // Inadimplência ao longo do ano: % de cada segunda + o valor de agora
   const ano = String(new Date().getFullYear());
@@ -561,6 +614,7 @@ async function renderDiretor() {
     : '<div class="tabela-msg">O histórico do ano ainda está sendo montado — volta a aparecer aqui em instantes.</div>';
 
   // 5) Cursos com mais atraso (%)
+  document.getElementById('d-cursos-sub').textContent = `— ${rotSem}: % de cada curso = atrasado ÷ o que já venceu, só mensalidades do Financeiro`;
   const cursos = Object.entries(r.porCurso)
     .filter(([, c]) => c.devidoFinanceiro > 0 && c.financeiroVencido.valor > 0)
     .map(([nome, c]) => ({ nome, p: c.financeiroVencido.valor / c.devidoFinanceiro, v: c.financeiroVencido.valor }))
@@ -615,24 +669,56 @@ function graficoInadimplencia(pontos) {
   return svg + '</svg>';
 }
 
-function graficoSemanas(semanas) {
+function renderGraficoRecebido() {
+  const titulo = document.getElementById('d-grafico-titulo');
+  const sub = document.getElementById('d-grafico-sub');
+  const el = document.getElementById('d-grafico');
+  const hojeIso = iso(new Date());
+  const soma = (x) => x ? (x.f || 0) + (x.j || 0) : 0;
+  const dica = (x) => x ? `Financeiro ${brl(x.f || 0)} · advogado/débito ${brl(x.j || 0)}` : '';
+  let itens = [];
+  if (usaMes()) {
+    const ws = (recebidoDados.semanas || {})[mes] || {};
+    const ini = `${mes}-01`, fim = fimDoMes(mes);
+    itens = Object.keys(ws).sort().map(seg => {
+      const de = seg < ini ? ini : seg;
+      const ate = [iso(somaDias(dataLocal(seg), 6)), fim].sort()[0];
+      return { rot: `${fmtData(de).slice(0, 5)} a ${fmtData(ate).slice(0, 5)}`, v: soma(ws[seg][grupo]), dica: dica(ws[seg][grupo]), destaque: hojeIso >= de && hojeIso <= ate };
+    });
+    titulo.textContent = `💰 Dinheiro que entrou em ${nomeMes(mes)}, semana a semana`;
+    sub.textContent = `— pagamentos baixados no Edubox dentro do mês (de qualquer parcela); a soma das barras é o "Entrou em ${nomeMes(mes)}" lá de cima`;
+  } else if (semestre !== 'todos') {
+    const ms = recebidoDados.meses || {};
+    itens = mesesDoSemestre(semestre).map(m => ({ rot: NOMES_MES[Number(m.slice(5, 7)) - 1].slice(0, 3) + (m === hojeIso.slice(0, 7) ? ' (até hoje)' : ''), v: soma(ms[m]?.[grupo]), dica: dica(ms[m]?.[grupo]), destaque: m === hojeIso.slice(0, 7) }));
+    titulo.textContent = `💰 Dinheiro que entrou no semestre ${semestre}, mês a mês`;
+    sub.textContent = `— pagamentos baixados no Edubox em cada mês (de qualquer parcela, pela data do pagamento)`;
+  } else {
+    const semanas = Object.keys(semanasDados).sort().slice(-12)
+      .map(k => ({ k, x: semanasDados[k]?.[grupo]?.todos || {} }))
+      .filter(s => s.x.rec);
+    itens = semanas.map((s, i) => ({ rot: i === semanas.length - 1 ? 'esta semana' : 'semana ' + fmtData(s.k).slice(0, 5), v: soma(s.x.rec), dica: dica(s.x.rec), destaque: i === semanas.length - 1 }));
+    titulo.textContent = '💰 Dinheiro que entrou, semana a semana';
+    sub.textContent = '— tudo que foi pago e baixado no Edubox em cada semana, de qualquer semestre (o atraso está no gráfico de baixo)';
+  }
+  el.innerHTML = itens.length ? graficoBarras(itens) : '<div class="tabela-msg">Os pagamentos deste período aparecem depois da próxima atualização do Edubox.</div>';
+}
+
+function graficoBarras(itens) {
   // Só o dinheiro que entrou (barras). A linha do atraso, no mesmo desenho e
   // com outra escala, confundia quem não é do financeiro (02/10) — o atraso
   // fica no gráfico "Inadimplência ao longo do ano", em %.
   const W = 820, H = 240, M = { t: 28, r: 16, b: 34, l: 16 };
-  const n = semanas.length;
+  const n = itens.length;
   const larg = (W - M.l - M.r) / n;
-  const recs = semanas.map(s => s.x.rec ? s.x.rec.f + s.x.rec.j : 0);
-  const maxRec = Math.max(1, ...recs);
-  const yRec = (v) => H - M.b - (v / maxRec) * (H - M.t - M.b);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Dinheiro que entrou por semana">`;
-  semanas.forEach((s, i) => {
+  const maxV = Math.max(1, ...itens.map(it => it.v));
+  const yV = (v) => H - M.b - (v / maxV) * (H - M.t - M.b);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Dinheiro que entrou">`;
+  itens.forEach((it, i) => {
     const x = M.l + i * larg;
-    const y = yRec(recs[i]);
-    const atual = i === n - 1;
-    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="${atual ? '#059669' : '#10b981'}" opacity="${atual ? 1 : 0.8}"><title>${brl(recs[i])}</title></rect>`;
-    svg += `<text x="${x + larg / 2}" y="${y - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="#047857">${brlCurto(recs[i])}</text>`;
-    svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${atual ? 'esta semana' : 'semana ' + fmtData(s.k).slice(0, 5)}</text>`;
+    const y = yV(it.v);
+    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="${it.destaque ? '#059669' : '#10b981'}" opacity="${it.destaque ? 1 : 0.8}"><title>${it.rot}: ${brl(it.v)}${it.dica ? ` — ${it.dica}` : ''}</title></rect>`;
+    svg += `<text x="${x + larg / 2}" y="${y - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="#047857">${brlCurto(it.v)}</text>`;
+    svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${it.rot}</text>`;
   });
   return svg + '</svg>';
 }

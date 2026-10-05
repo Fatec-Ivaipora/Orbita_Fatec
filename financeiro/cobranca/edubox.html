@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=10">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=11">
 </head>
 <body>
     <div id="auth-guard" class="layout-auth-guard">
@@ -90,7 +90,7 @@
                         <div class="card cb-dir-big" id="d-cobr"></div>
                     </div>
                     <div class="card cb-bloco">
-                        <div class="card-secao-titulo">💰 Dinheiro que entrou, semana a semana <small class="cb-sub">— tudo que foi pago e baixado no Edubox em cada semana (o atraso está no gráfico de baixo)</small></div>
+                        <div class="card-secao-titulo"><span id="d-grafico-titulo">💰 Dinheiro que entrou, semana a semana</span> <small class="cb-sub" id="d-grafico-sub">— tudo que foi pago e baixado no Edubox em cada semana (o atraso está no gráfico de baixo)</small></div>
                         <div id="d-grafico"></div>
                     </div>
                     <div class="card cb-bloco">
@@ -99,7 +99,7 @@
                     </div>
                     <div class="cb-duas">
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">Cursos com mais atraso <small class="cb-sub">— % de inadimplência de cada curso (atrasado ÷ já venceu)</small></div>
+                            <div class="card-secao-titulo">Cursos com mais atraso <small class="cb-sub" id="d-cursos-sub">— % de inadimplência de cada curso (atrasado ÷ já venceu)</small></div>
                             <div id="d-cursos"></div>
                         </div>
                         <div class="card cb-bloco">
@@ -128,7 +128,13 @@
                         </div>
                     </div>
 
-                    <div class="cb-duas">
+                    <!-- Mês que já terminou: como o mês fechou (no lugar de faixas/a vencer) -->
+                    <div class="card hidden" id="card-mes-fechou">
+                        <div class="card-secao-titulo">📅 Como o mês fechou <small class="cb-sub" id="mes-fechou-sub"></small></div>
+                        <div class="cb-fechou" id="mes-fechou"></div>
+                    </div>
+
+                    <div class="cb-duas" id="bloco-faixas-avencer">
                         <div class="card cb-bloco">
                             <div class="card-secao-titulo">🔴 Atrasado — há quanto tempo</div>
                             <div id="faixas"></div>
@@ -143,7 +149,7 @@
                         <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Advogado e Débito judicial por plano <small class="cb-sub">— semestre pelo vencimento da parcela, como no Edubox</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">🔴 Atrasado</th><th class="num">⏳ Ainda vai vencer</th><th class="num">🟢 Entrou na semana</th></tr></thead>
+                                <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">🔴 Atrasado</th><th class="num">⏳ Ainda vai vencer</th><th class="num" id="th-planos-entrou">🟢 Entrou na semana</th></tr></thead>
                                 <tbody id="tb-planos"></tbody>
                             </table>
                         </div>
@@ -338,6 +344,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=23"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=25"></script>
 </body>
 </html>
