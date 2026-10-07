@@ -203,6 +203,8 @@ const requireModulePermission = (moduleName) => {
         // Fallback de segurança para permissões padrão
         const defaultPermissions = {
             adm_l2: {
+                cpa: 3,
+                matrizes: 3,
                 emprestimo: 3,
                 usuarios: 3,
                 'carga-horaria': 3,
@@ -251,6 +253,7 @@ const requireModulePermission = (moduleName) => {
                 'agenda-espacos': 2
             },
             rh: {
+                matrizes: 3,
                 emprestimo: 1,
                 usuarios: 1,
                 'carga-horaria': 3,
@@ -306,6 +309,8 @@ const requireModulePermission = (moduleName) => {
             // avaliações que ele mesmo criou — ver `apenasProprias` em
             // src/rotas/avaliacao-docente.js).
             coordenador: {
+                cpa: 2,
+                matrizes: 3,
                 emprestimo: 1,
                 usuarios: 1,
                 'carga-horaria': 1,
@@ -364,6 +369,7 @@ const requireModulePermission = (moduleName) => {
             // Coordenação da Medicina — só o Banco de Questões (nível 3, pode
             // criar/editar questões e provas); nenhum outro módulo.
             coord_medicina: {
+                cpa: 2,
                 emprestimo: 1,
                 usuarios: 1,
                 'carga-horaria': 1,

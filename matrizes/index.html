@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrizes e Horários - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/matrizes/matrizes.css?v=7">
+</head>
+<body>
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+            <div class="mz-wrap">
+
+                <header class="mz-topo mz-no-print">
+                    <div class="mz-topo-txt">
+                        <h1 class="mz-titulo">Matrizes e Horários</h1>
+                        <p class="mz-sub" id="subtitulo">Carregando…</p>
+                    </div>
+                    <div class="mz-topo-acoes">
+                        <label class="mz-campo">Semestre
+                            <select id="sel-semestre"></select>
+                        </label>
+                    </div>
+                </header>
+
+                <div class="mz-kpis mz-no-print" id="kpis"></div>
+
+                <div class="mz-cursos mz-no-print" id="cursos" role="tablist" aria-label="Cursos"></div>
+
+                <div id="conteudo-curso" class="hidden">
+                    <div class="mz-abas mz-no-print" role="tablist">
+                        <button type="button" class="mz-aba ativa" data-aba="semestre" role="tab">Semestre por turma</button>
+                        <button type="button" class="mz-aba" data-aba="matrizes" role="tab">Matrizes em uso</button>
+                        <button type="button" class="mz-aba" data-aba="horario" role="tab">Horário de aula (relatório)</button>
+                        <button type="button" class="mz-aba" data-aba="carga" role="tab">Carga horária por matriz</button>
+                    </div>
+
+                    <section id="painel-semestre" class="mz-painel ativo"></section>
+                    <section id="painel-matrizes" class="mz-painel"></section>
+                    <section id="painel-horario" class="mz-painel"></section>
+                    <section id="painel-carga" class="mz-painel"></section>
+                </div>
+
+                <div id="vazio" class="mz-vazio hidden"></div>
+            </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: horário de uma disciplina -->
+    <div id="modal-horario" class="mz-modal hidden mz-no-print" role="dialog" aria-modal="true" aria-labelledby="mh-titulo">
+        <div class="mz-modal-card">
+            <h2 id="mh-titulo">Horário da disciplina</h2>
+            <p class="mz-modal-sub" id="mh-sub"></p>
+            <form id="form-horario" autocomplete="off">
+                <div id="mh-linhas"></div>
+                <button type="button" class="mz-btn mz-btn-sec" id="mh-add">+ Adicionar horário</button>
+                <p class="mz-erro hidden" id="mh-erro"></p>
+                <div class="mz-modal-acoes">
+                    <button type="button" class="mz-btn mz-btn-sec" id="mh-cancelar">Cancelar</button>
+                    <button type="submit" class="mz-btn mz-btn-pri" id="mh-salvar">Salvar horário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <datalist id="lista-professores"></datalist>
+    <datalist id="lista-salas"></datalist>
+    <div id="toast" class="mz-toast hidden mz-no-print" role="status"></div>
+
+    <script type="module" src="/matrizes/app.js?v=6"></script>
+</body>
+</html>

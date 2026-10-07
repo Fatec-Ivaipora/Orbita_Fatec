@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório CPA - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/cpa/cpa.css?v=2">
+</head>
+<body>
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="cpa-wrap">
+
+                    <header class="cpa-topo cpa-no-print">
+                        <div>
+                            <h1 class="cpa-titulo">Relatório CPA</h1>
+                            <p class="cpa-sub" id="subtitulo">Resultado da avaliação aplicada no Edubox: por curso e por professor.</p>
+                        </div>
+                        <div class="cpa-topo-acoes">
+                            <div class="cpa-seg" id="seg-segmento" role="tablist" aria-label="Segmento">
+                                <button type="button" data-seg="GRA" class="ativo" role="tab">Graduação</button>
+                                <button type="button" data-seg="MED" role="tab">Medicina</button>
+                            </div>
+                            <label class="cpa-campo">Semestre
+                                <select id="sel-ciclo"></select>
+                            </label>
+                        </div>
+                    </header>
+
+                    <div id="aviso-segmento" class="cpa-info cpa-no-print hidden"></div>
+                    <div class="cpa-kpis cpa-no-print" id="kpis"></div>
+                    <div class="cpa-cursos cpa-no-print" id="cursos" role="tablist" aria-label="Cursos"></div>
+
+                    <div id="conteudo" class="hidden">
+                        <div class="cpa-abas cpa-no-print" role="tablist">
+                            <button type="button" class="cpa-aba ativa" data-aba="resultado" role="tab">Resultado</button>
+                            <button type="button" class="cpa-aba" data-aba="professores" role="tab">Professores</button>
+                        </div>
+                        <section id="painel-resultado" class="cpa-painel ativo"></section>
+                        <section id="painel-professores" class="cpa-painel"></section>
+                    </div>
+
+                    <div id="vazio" class="cpa-vazio hidden"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Detalhe de um professor (mesmo conteúdo do PDF) -->
+    <div id="modal-prof" class="cpa-modal hidden cpa-no-print" role="dialog" aria-modal="true">
+        <div class="cpa-modal-card">
+            <div class="cpa-modal-barra">
+                <strong id="mp-titulo"></strong>
+                <span>
+                    <button type="button" class="cpa-btn cpa-btn-pri" id="mp-pdf">Imprimir / salvar PDF</button>
+                    <button type="button" class="cpa-btn cpa-btn-sec" id="mp-fechar">Fechar</button>
+                </span>
+            </div>
+            <div id="mp-corpo"></div>
+        </div>
+    </div>
+
+    <!-- Dados da capa do relatório institucional (só direção) -->
+    <div id="modal-capa" class="cpa-modal hidden cpa-no-print" role="dialog" aria-modal="true">
+        <div class="cpa-modal-card cpa-modal-estreito">
+            <h2>Dados da capa do relatório</h2>
+            <p class="cpa-sub">Aparecem na capa do relatório institucional. Confira os atos legais e a composição da CPA com a portaria vigente antes de apresentar ao MEC.</p>
+            <form id="form-capa" autocomplete="off">
+                <label class="cpa-campo">Instituição<input id="c-ies" type="text"></label>
+                <label class="cpa-campo">Mantenedora<input id="c-mantenedora" type="text"></label>
+                <label class="cpa-campo">Endereço e contato<input id="c-endereco" type="text"></label>
+                <label class="cpa-campo">Atos legais (credenciamento / recredenciamento)<textarea id="c-atos" rows="3"></textarea></label>
+                <label class="cpa-campo">Presidente da CPA<input id="c-presidente" type="text"></label>
+                <label class="cpa-campo">Portaria de nomeação da CPA<input id="c-portaria" type="text"></label>
+                <label class="cpa-campo">Membros da CPA (um por linha: nome — segmento)<textarea id="c-membros" rows="5"></textarea></label>
+                <div class="cpa-modal-acoes">
+                    <button type="button" class="cpa-btn cpa-btn-sec" id="c-cancelar">Cancelar</button>
+                    <button type="submit" class="cpa-btn cpa-btn-pri">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Conteúdo que vai para o PDF (fica fora da tela; só aparece ao imprimir) -->
+    <div id="impressao" class="cpa-impressao"></div>
+    <div id="toast" class="cpa-toast hidden cpa-no-print" role="status"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script type="module" src="/cpa/app.js?v=4"></script>
+</body>
+</html>

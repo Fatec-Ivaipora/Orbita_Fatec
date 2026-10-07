@@ -1,0 +1,166 @@
+/* Relatório CPA — segue o padrão do Órbita (core/layout.css), como o módulo Matrizes e Horários. */
+.cpa-wrap { max-width: 1240px; margin: 0 auto; padding-bottom: 3rem; font-size: 0.92rem; color: var(--text-main); }
+
+/* ---------- Cabeçalho ---------- */
+.cpa-topo { display: flex; justify-content: space-between; align-items: center; gap: 1.25rem; flex-wrap: wrap; background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 1.1rem; }
+.cpa-titulo { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; }
+.cpa-sub { color: var(--text-secondary); font-size: 0.92rem; margin-top: 0.3rem; max-width: 74ch; line-height: 1.45; }
+.cpa-topo-acoes { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+.cpa-campo { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.cpa-campo select, .cpa-campo input, .cpa-campo textarea, .cpa-busca { font: inherit; font-size: 0.92rem; font-weight: 500; text-transform: none; letter-spacing: 0; padding: 0.55rem 0.75rem; border: 1px solid var(--border-color); border-radius: 10px; background: #fff; color: var(--text-main); min-width: 0; }
+.cpa-campo select { min-width: 150px; }
+.cpa-campo select:focus-visible, .cpa-campo input:focus-visible, .cpa-campo textarea:focus-visible, .cpa-busca:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 1px; }
+.cpa-seg { display: inline-flex; background: #eef2f7; border-radius: 10px; padding: 3px; }
+.cpa-seg button { font: inherit; font-size: 0.88rem; font-weight: 600; padding: 0.5rem 1.1rem; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.cpa-seg button.ativo { background: #fff; color: var(--primary-blue); box-shadow: 0 1px 3px rgba(0, 0, 0, .1); }
+
+/* ---------- Indicadores ---------- */
+.cpa-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.1rem; }
+.cpa-kpi { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 0.95rem 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.cpa-kpi b { font-size: 1.7rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.cpa-kpi span { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.35; }
+.cpa-barra { height: 6px; background: #e2e8f0; border-radius: 99px; margin-top: 0.5rem; overflow: hidden; }
+.cpa-barra i { display: block; height: 100%; background: var(--primary-blue); border-radius: 99px; }
+
+/* ---------- Seletor de curso ---------- */
+.cpa-cursos { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; }
+.cpa-curso { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.5rem 0.95rem; border-radius: 999px; border: 1px solid var(--border-color); background: #fff; color: var(--text-main); cursor: pointer; }
+.cpa-curso:hover { border-color: var(--primary-blue); }
+.cpa-curso.ativo { background: var(--primary-blue); border-color: var(--primary-blue); color: #fff; }
+.cpa-curso small { font-weight: 500; opacity: 0.75; margin-left: 0.4rem; font-size: 0.78rem; }
+
+/* ---------- Abas ---------- */
+.cpa-abas { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1.25rem; overflow-x: auto; }
+.cpa-aba { font: inherit; font-size: 0.92rem; font-weight: 600; padding: 0.7rem 1.1rem; background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.cpa-aba.ativa { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
+.cpa-painel { display: none; }
+.cpa-painel.ativo { display: block; }
+
+/* ---------- Botões / avisos ---------- */
+.cpa-btn { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.55rem 1rem; border-radius: 10px; border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s; }
+.cpa-btn-pri { background: var(--primary-blue); color: #fff; }
+.cpa-btn-pri:hover { background: var(--secondary-blue); }
+.cpa-btn-sec { background: #fff; color: var(--text-main); border-color: var(--border-color); }
+.cpa-btn-sec:hover { background: #f8fafc; border-color: #cbd5e1; }
+.cpa-btn-mini { padding: 0.3rem 0.75rem; font-size: 0.78rem; }
+.cpa-btn:focus-visible, .cpa-curso:focus-visible, .cpa-aba:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 2px; }
+.cpa-acoes { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.cpa-info { padding: 0.8rem 1rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; font-size: 0.88rem; color: #1e3a8a; margin-bottom: 1.1rem; line-height: 1.5; }
+.cpa-aviso { padding: 0.65rem 0.9rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; font-size: 0.85rem; color: #78350f; line-height: 1.45; margin: 0.75rem 0; }
+.cpa-vazio { padding: 2.5rem 1.25rem; text-align: center; color: var(--text-secondary); background: #fff; border: 1px dashed var(--border-color); border-radius: 14px; }
+
+/* ---------- Cartões e relatório ---------- */
+.cpa-folha { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.75rem 2rem; margin-bottom: 1.1rem; }
+.cpa-cab { display: flex; align-items: center; gap: 1.1rem; border-bottom: 2px solid var(--primary-blue); padding-bottom: 0.9rem; margin-bottom: 1.1rem; }
+.cpa-cab img { height: 54px; }
+.cpa-cab h2 { font-size: 1.2rem; font-weight: 800; line-height: 1.25; }
+.cpa-cab p { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.15rem; }
+.cpa-folha h3 { font-size: 1.02rem; font-weight: 700; margin: 1.5rem 0 0.5rem; color: var(--primary-blue); }
+.cpa-folha h4 { font-size: 0.92rem; font-weight: 700; margin: 1.1rem 0 0.4rem; }
+.cpa-folha p, .cpa-folha li { line-height: 1.5; }
+.cpa-meta { font-size: 0.8rem; color: var(--text-secondary); }
+.cpa-ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem 1.5rem; margin: 0.4rem 0 0.8rem; }
+.cpa-ficha div { display: flex; flex-direction: column; font-size: 0.85rem; }
+.cpa-ficha small { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+
+/* Tabelas */
+.cpa-tabela-wrap { overflow-x: auto; }
+.cpa-tabela { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.cpa-tabela th { text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border-color); background: #f8fafc; white-space: nowrap; }
+.cpa-tabela td { padding: 0.6rem 0.7rem; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+.cpa-tabela tr:last-child td { border-bottom: 0; }
+.cpa-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cpa-tabela tbody tr.clicavel { cursor: pointer; }
+.cpa-tabela tbody tr.clicavel:hover td { background: rgba(15, 78, 184, 0.04); }
+.cpa-tabela th.ord { cursor: pointer; }
+.cpa-tabela th.ord:hover { color: var(--text-main); }
+
+/* Gráfico de barras empilhadas: distribuição das respostas (Ótimo / Bom / Regular / Ruim) */
+.cpa-leg { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.78rem; color: var(--text-secondary); margin: 0.2rem 0 0.6rem; }
+.cpa-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 0.35rem; vertical-align: -1px; }
+.cpa-perg { padding: 0.7rem 0; border-bottom: 1px solid #eef2f7; break-inside: avoid; }
+.cpa-perg:last-child { border-bottom: 0; }
+.cpa-perg-txt { font-size: 0.88rem; font-weight: 600; line-height: 1.4; margin-bottom: 0.4rem; }
+.cpa-pilha { position: relative; display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: #e2e8f0; }
+.cpa-pilha span { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: #fff; min-width: 0; overflow: hidden; }
+.cpa-pilha .marca { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #0f172a; }
+.cpa-contagem { display: flex; flex-wrap: wrap; gap: 0.2rem 1.1rem; font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.3rem; font-variant-numeric: tabular-nums; }
+.cpa-contagem b { color: var(--text-main); font-weight: 700; }
+.cpa-sat { font-weight: 700; color: var(--text-main); }
+
+/* Barra simples de nota 0–10 */
+.cpa-nota { display: grid; grid-template-columns: minmax(160px, 1.2fr) 3fr 64px; gap: 0.75rem; align-items: center; padding: 0.4rem 0; font-size: 0.85rem; }
+.cpa-nota .trilho { position: relative; height: 12px; background: #e2e8f0; border-radius: 99px; }
+.cpa-nota .trilho i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--primary-blue); border-radius: 99px; }
+.cpa-nota .trilho em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #0f172a; }
+.cpa-nota .v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Comentários */
+.cpa-coment { margin: 0.2rem 0; padding: 0.45rem 0.75rem; border-left: 3px solid #cbd5e1; background: #f8fafc; border-radius: 0 8px 8px 0; font-size: 0.85rem; line-height: 1.45; break-inside: avoid; }
+.cpa-coment.bom { border-left-color: #16a34a; }
+.cpa-coment.atencao { border-left-color: #d97706; background: #fffbeb; }
+.cpa-com-grupo { margin: 0.7rem 0 0.2rem; font-size: 0.8rem; font-weight: 700; padding-left: 0.5rem; border-left: 4px solid #94a3b8; color: #334155; break-after: avoid; }
+.cpa-com-grupo.bom { border-left-color: #16a34a; color: #166534; }
+.cpa-com-grupo.atencao { border-left-color: #d97706; color: #92400e; }
+.cpa-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+.cpa-chip { font-size: 0.74rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 999px; background: #e2e8f0; color: #334155; }
+.cpa-chip.bom { background: #dcfce7; color: #166534; }
+.cpa-chip.atencao { background: #fef3c7; color: #92400e; }
+
+/* Destaques (pontos fortes / de atenção) */
+.cpa-destaques { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.cpa-destaques > div { border: 1px solid var(--border-color); border-radius: 12px; padding: 0.7rem 0.95rem; }
+.cpa-destaques h4 { margin-top: 0; }
+.cpa-destaques li { font-size: 0.84rem; margin: 0.35rem 0 0 1.1rem; }
+@media (max-width: 720px) { .cpa-destaques { grid-template-columns: 1fr; } }
+
+/* Professores */
+.cpa-barra-filtros { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+.cpa-busca { width: min(320px, 100%); }
+.cpa-tag { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
+
+/* Modal */
+.cpa-modal { position: fixed; inset: 0; background: rgba(3, 20, 38, 0.5); display: flex; align-items: flex-start; justify-content: center; padding: 1rem; z-index: 1000; overflow-y: auto; }
+.cpa-modal-card { background: #fff; border-radius: 16px; padding: 1.25rem 1.5rem 1.5rem; width: min(980px, 100%); margin: 1rem 0; box-shadow: 0 24px 60px -12px rgba(3, 20, 38, 0.35); }
+.cpa-modal-estreito { width: min(640px, 100%); }
+.cpa-modal-card h2 { font-size: 1.15rem; font-weight: 700; }
+.cpa-modal-card form { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.9rem; }
+.cpa-modal-barra { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding-bottom: 0.8rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: #fff; z-index: 2; }
+.cpa-modal-acoes { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.6rem; }
+.cpa-toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 0.8rem 1.2rem; border-radius: 12px; font-size: 0.9rem; z-index: 1100; max-width: min(560px, 92vw); }
+.cpa-toast.erro { background: #991b1b; }
+
+/* Conteúdo do PDF: escondido na tela */
+.cpa-impressao { display: none; }
+
+/* Capa do relatório institucional */
+.cpa-capa { text-align: center; padding: 3rem 1rem; min-height: 230mm; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.6rem; }
+.cpa-capa img { height: 90px; margin-bottom: 1.5rem; }
+.cpa-capa h1 { font-size: 1.9rem; font-weight: 800; line-height: 1.2; }
+.cpa-capa h2 { font-size: 1.25rem; font-weight: 600; color: var(--primary-blue); }
+.cpa-capa .peq { font-size: 0.85rem; color: var(--text-secondary); max-width: 60ch; line-height: 1.5; }
+.cpa-assina { display: flex; gap: 3rem; margin-top: 3rem; }
+.cpa-assina div { flex: 1; text-align: center; border-top: 1px solid #94a3b8; padding-top: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); }
+
+@media (max-width: 720px) {
+  .cpa-topo { padding: 1rem; }
+  .cpa-titulo { font-size: 1.35rem; }
+  .cpa-folha { padding: 1rem; }
+  .cpa-nota { grid-template-columns: 1fr; gap: 0.2rem; }
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+  body.cpa-imprimindo .layout-wrapper, body.cpa-imprimindo .cpa-modal, body.cpa-imprimindo .layout-auth-guard, body.cpa-imprimindo .cpa-toast { display: none !important; }
+  body.cpa-imprimindo .cpa-impressao { display: block !important; }
+  .cpa-impressao { font-size: 10.5pt; color: #0b1f33; }
+  .cpa-impressao .cpa-folha { border: 0; border-radius: 0; padding: 0; margin: 0; }
+  .cpa-pagina { break-after: page; }
+  .cpa-pagina:last-child { break-after: auto; }
+  .cpa-impressao h3 { break-after: avoid; }
+  .cpa-impressao .cpa-perg, .cpa-impressao .cpa-coment, .cpa-impressao .cpa-destaques > div { break-inside: avoid; }
+  .cpa-impressao .cpa-tabela tr { break-inside: avoid; }
+  .cpa-pilha span, .cpa-nota .trilho i, .cpa-leg i, .cpa-chip, .cpa-tag, .cpa-coment { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cpa-capa { min-height: 250mm; }
+}
