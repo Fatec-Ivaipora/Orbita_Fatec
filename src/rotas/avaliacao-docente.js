@@ -293,6 +293,17 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('avaliacao-doc
             }
         }
 
+        // Proteção contra envio duplicado (clique duplo): se esta mesma pessoa acabou de
+        // cadastrar exatamente a mesma avaliação (há poucos segundos), devolve a que já existe.
+        const semestreChave = semestres.join(',');
+        const recentes = await db.collection(COL).where('criadoPor', '==', req.user.uid).where('docente', '==', String(docente).trim()).get();
+        const repetida = recentes.docs.find(d => {
+            const x = d.data();
+            return x.cicloId === cicloId && (x.semestre || []).join(',') === semestreChave && (x.cursoId || null) === (cursoId || null)
+                && Date.now() - new Date(x.createdAt).getTime() < 30000;
+        });
+        if (repetida) return res.status(200).json({ message: 'Avaliação já cadastrada.', id: repetida.id });
+
         const newDoc = db.collection(COL).doc();
         await newDoc.set({
             docente: String(docente).trim(),
