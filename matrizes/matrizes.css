@@ -1,0 +1,194 @@
+/* Matrizes e Horários — segue o padrão do Órbita (core/layout.css): conteúdo centralizado,
+   cartões só com borda, cabeçalho de página em cartão branco, Inter. */
+
+.mz-wrap { max-width: 1240px; margin: 0 auto; padding-bottom: 3rem; font-size: 0.92rem; color: var(--text-main); }
+
+/* ---------- Cabeçalho da página ---------- */
+.mz-topo { display: flex; justify-content: space-between; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+  background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 1.1rem; }
+.mz-titulo { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; }
+.mz-sub { color: var(--text-secondary); font-size: 0.92rem; margin-top: 0.3rem; max-width: 72ch; line-height: 1.45; }
+.mz-campo { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.mz-campo select, .mz-modal select, .mz-modal input { font: inherit; font-size: 0.92rem; font-weight: 500; text-transform: none; letter-spacing: 0; padding: 0.55rem 0.75rem; border: 1px solid var(--border-color); border-radius: 10px; background: #fff; color: var(--text-main); min-width: 0; }
+.mz-campo select { min-width: 150px; }
+.mz-campo select:focus-visible, .mz-modal select:focus-visible, .mz-modal input:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 1px; }
+
+/* ---------- Indicadores ---------- */
+.mz-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.1rem; }
+.mz-kpi { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 0.95rem 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.mz-kpi b { font-size: 1.7rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.mz-kpi span { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.35; }
+.mz-kpi small { font-size: 0.74rem; opacity: 0.85; }
+.mz-kpi.alerta b { color: #b45309; }
+.mz-barra { height: 6px; background: #e2e8f0; border-radius: 99px; margin-top: 0.5rem; overflow: hidden; }
+.mz-barra i { display: block; height: 100%; background: var(--primary-blue); border-radius: 99px; }
+
+/* ---------- Seletor de curso ---------- */
+.mz-cursos { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; }
+.mz-curso { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.5rem 0.95rem; border-radius: 999px; border: 1px solid var(--border-color); background: #fff; color: var(--text-main); cursor: pointer; transition: border-color .15s, background .15s; }
+.mz-curso:hover { border-color: var(--primary-blue); }
+.mz-curso.ativo { background: var(--primary-blue); border-color: var(--primary-blue); color: #fff; }
+.mz-curso small { font-weight: 500; opacity: 0.7; margin-left: 0.4rem; font-size: 0.78rem; }
+
+/* ---------- Abas ---------- */
+.mz-abas { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1.25rem; overflow-x: auto; }
+.mz-aba { font: inherit; font-size: 0.92rem; font-weight: 600; padding: 0.7rem 1.1rem; background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.mz-aba:hover { color: var(--text-main); }
+.mz-aba.ativa { color: var(--primary-blue); border-bottom-color: var(--primary-blue); }
+.mz-painel { display: none; }
+.mz-painel.ativo { display: block; }
+
+/* ---------- Cartões ---------- */
+.mz-card { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; margin-bottom: 1.1rem; overflow: hidden; }
+.mz-card-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem 1.5rem; flex-wrap: wrap; padding: 1rem 1.25rem; background: #f8fafc; border-bottom: 1px solid var(--border-color); }
+.mz-card-topo h3 { font-size: 1.08rem; font-weight: 700; line-height: 1.3; }
+.mz-card-topo .mz-meta, .mz-meta { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem; line-height: 1.4; }
+.mz-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; max-width: 520px; }
+details.mz-card > summary { list-style: none; cursor: pointer; }
+details.mz-card > summary::-webkit-details-marker { display: none; }
+details.mz-card[open] > summary { border-bottom: 1px solid var(--border-color); }
+
+/* ---------- Tabelas (colunas fixas: alinham de um cartão para o outro) ---------- */
+.mz-tabela-wrap { overflow-x: auto; }
+.mz-tabela { width: 100%; min-width: 940px; border-collapse: collapse; table-layout: fixed; font-size: 0.9rem; }
+.mz-tabela col.c-tipo { width: 104px; }
+.mz-tabela col.c-ch { width: 56px; }
+.mz-tabela col.c-hor { width: 31%; }
+.mz-tabela col.c-acao { width: 96px; }
+.mz-tabela th { text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+.mz-tabela td { padding: 0.8rem 0.9rem; border-bottom: 1px solid #eef2f7; vertical-align: middle; line-height: 1.4; }
+.mz-tabela tbody tr:last-child td { border-bottom: 0; }
+.mz-tabela tbody tr:hover td { background: rgba(15, 78, 184, 0.03); }
+.mz-tabela th:first-child, .mz-tabela td:first-child { padding-left: 1.25rem; }
+.mz-tabela th:last-child, .mz-tabela td:last-child { padding-right: 1.25rem; text-align: right; }
+.mz-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mz-tabela td.disc { font-weight: 600; overflow-wrap: anywhere; }
+.mz-tabela tr.marcada td { background: #fffbeb; }
+
+/* ---------- Etiquetas ---------- */
+.mz-tag { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.18rem 0.6rem; border-radius: 999px; background: #e2e8f0; color: #334155; white-space: nowrap; line-height: 1.5; }
+.mz-tag.ead { background: #dbeafe; color: #1e40af; }
+.mz-tag.ok { background: #dcfce7; color: #166534; }
+.mz-tag.conferir { background: #fef3c7; color: #92400e; }
+.mz-tag.matriz { background: #ede9fe; color: #5b21b6; }
+
+/* Professor + horário */
+.mz-aulas { display: flex; flex-direction: column; gap: 0.35rem; }
+.mz-aula { display: flex; flex-direction: column; gap: 0.05rem; width: fit-content; max-width: 100%; padding: 0.35rem 0.7rem; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 3px solid var(--primary-blue); border-radius: 8px; line-height: 1.3; }
+.mz-aula b { font-size: 0.86rem; font-weight: 600; color: #1e3a8a; }
+.mz-aula span { font-size: 0.78rem; color: #475569; font-variant-numeric: tabular-nums; }
+.mz-sem { color: var(--text-secondary); font-size: 0.82rem; }
+
+/* Avisos */
+.mz-aviso { margin: 0.9rem 1.25rem; padding: 0.7rem 0.9rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; font-size: 0.85rem; color: #78350f; line-height: 1.45; }
+.mz-info { padding: 0.8rem 1rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; font-size: 0.88rem; color: #1e3a8a; margin-bottom: 1.1rem; line-height: 1.5; }
+
+/* ---------- Botões ---------- */
+.mz-btn { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.55rem 1rem; border-radius: 10px; border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s; }
+.mz-btn-pri { background: var(--primary-blue); color: #fff; }
+.mz-btn-pri:hover { background: var(--secondary-blue); }
+.mz-btn-pri:disabled { opacity: 0.5; cursor: not-allowed; }
+.mz-btn-sec { background: #fff; color: var(--text-main); border-color: var(--border-color); }
+.mz-btn-sec:hover { background: #f8fafc; border-color: #cbd5e1; }
+.mz-btn-mini { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+.mz-btn:focus-visible, .mz-curso:focus-visible, .mz-aba:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 2px; }
+
+/* ---------- Comparação de matrizes ---------- */
+.mz-comparar { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; padding: 1rem 1.25rem; }
+.mz-comparar .mz-campo select { min-width: 280px; }
+.mz-lista-matrizes { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.75rem; }
+.mz-matriz-per { margin: 0; padding: 0.7rem 1.25rem 0.35rem; font-size: 0.88rem; font-weight: 700; }
+.mz-matriz-per span { font-weight: 500; color: var(--text-secondary); font-size: 0.8rem; margin-left: 0.4rem; }
+.mz-dif ul { list-style: none; font-size: 0.88rem; margin: 0; padding: 0; }
+.mz-dif li { padding: 0.15rem 0; color: #92400e; }
+
+.mz-vazio { padding: 2.5rem 1.25rem; text-align: center; color: var(--text-secondary); background: #fff; border: 1px dashed var(--border-color); border-radius: 14px; }
+
+/* ---------- Modal ---------- */
+.mz-modal { position: fixed; inset: 0; background: rgba(3, 20, 38, 0.5); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1000; }
+.mz-modal-card { background: #fff; border-radius: 16px; padding: 1.5rem; width: min(680px, 100%); max-height: 90vh; overflow: auto; box-shadow: 0 24px 60px -12px rgba(3, 20, 38, 0.35); }
+.mz-modal-card h2 { font-size: 1.15rem; font-weight: 700; line-height: 1.3; }
+.mz-modal-sub { color: var(--text-secondary); font-size: 0.85rem; margin: 0.3rem 0 1.1rem; line-height: 1.45; }
+.mz-linha { display: grid; grid-template-columns: 1.5fr 1fr 0.75fr 0.75fr 1fr auto; gap: 0.5rem; margin-bottom: 0.35rem; align-items: center; }
+.mz-linha input, .mz-linha select { width: 100%; }
+.mz-linha .f-rem { background: none; border: 0; font-size: 1.4rem; line-height: 1; color: #b91c1c; cursor: pointer; padding: 0.25rem 0.5rem; }
+.mz-pre { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px dashed var(--border-color); }
+.mz-modal-acoes { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.1rem; }
+.mz-erro { color: #b91c1c; font-size: 0.85rem; margin-top: 0.6rem; }
+@media (max-width: 600px) { .mz-linha { grid-template-columns: 1fr 1fr; } }
+
+.mz-toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 0.8rem 1.2rem; border-radius: 12px; font-size: 0.9rem; z-index: 1100; max-width: min(560px, 92vw); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25); line-height: 1.4; }
+.mz-toast.erro { background: #991b1b; }
+.mz-toast.aviso { background: #92400e; }
+
+/* ---------- Relatório padronizado Fatec IVP (tela + impressão) ---------- */
+.mz-rel-acoes { display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
+.mz-rel { background: #fff; border: 1px solid var(--border-color); border-radius: 14px; padding: 1.75rem 2rem; }
+.mz-rel-cab { display: flex; align-items: center; gap: 1.1rem; border-bottom: 2px solid var(--primary-blue); padding-bottom: 0.9rem; margin-bottom: 1.1rem; }
+.mz-rel-cab img { height: 54px; }
+.mz-rel-cab h2 { font-size: 1.2rem; font-weight: 800; line-height: 1.25; }
+.mz-rel-cab p { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.15rem; }
+.mz-rel h3 { font-size: 0.98rem; font-weight: 700; margin: 1.4rem 0 0.5rem; color: var(--primary-blue); }
+.mz-rel-per { font-weight: 500; color: var(--text-secondary); font-size: 0.82rem; }
+.mz-rel .mz-tabela { min-width: 0; table-layout: fixed; border: 1px solid var(--border-color); border-radius: 8px; }
+.mz-rel .mz-tabela th { background: #f8fafc; padding: 0.5rem 0.7rem; }
+.mz-rel .mz-tabela td { padding: 0.5rem 0.7rem; }
+.mz-rel .mz-tabela th:first-child, .mz-rel .mz-tabela td:first-child { padding-left: 0.7rem; }
+.mz-rel .mz-tabela th:last-child, .mz-rel .mz-tabela td:last-child { padding-right: 0.7rem; text-align: right; }
+.mz-rel .mz-tabela th:nth-child(1) { width: 13%; }
+.mz-rel .mz-tabela th:nth-child(2) { width: 11%; }
+.mz-rel .mz-tabela th:nth-child(4) { width: 17%; }
+.mz-rel .mz-tabela th:nth-child(5) { width: 11%; }
+.mz-rel .mz-tabela th:nth-child(6) { width: 9%; }
+.mz-rel .mz-tabela th:nth-child(7) { width: 7%; }
+.mz-rel .mz-tabela td { overflow-wrap: anywhere; }
+.mz-rel-rodape { display: flex; justify-content: space-between; gap: 3rem; margin-top: 3rem; font-size: 0.8rem; color: var(--text-secondary); }
+.mz-rel-rodape div { flex: 1; text-align: center; border-top: 1px solid #94a3b8; padding-top: 0.4rem; }
+.mz-rel-emissao { margin-top: 1rem; font-size: 0.75rem; color: var(--text-secondary); }
+
+/* ---------- Telas estreitas ---------- */
+@media (max-width: 720px) {
+  .mz-topo { padding: 1rem; }
+  .mz-titulo { font-size: 1.35rem; }
+  .mz-tags { justify-content: flex-start; max-width: none; }
+  .mz-rel { padding: 1rem; }
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body { display: block; height: auto; overflow: visible; background: #fff; }
+  .layout-sidebar, .layout-header, .layout-sidebar-overlay, .mz-no-print, .layout-auth-guard { display: none !important; }
+  .layout-wrapper, .layout-main, .layout-content { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
+  .mz-wrap { max-width: none; padding: 0; }
+  .mz-painel { display: none !important; }
+  .mz-painel.imprimir { display: block !important; }
+  .mz-rel { border: 0; padding: 0; border-radius: 0; }
+  .mz-rel-acoes { display: none; }
+  .mz-rel h3 { break-after: avoid; }
+  .mz-rel table { break-inside: auto; }
+  .mz-rel tr { break-inside: avoid; }
+  .mz-rel .mz-tabela td, .mz-rel .mz-tabela th { font-size: 11px; }
+}
+
+/* Faixa do ensalamento por grupo (sala de cada dia) */
+.mz-ens { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.4rem; padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--border-color); background: #fcfdff; }
+.mz-ens-t { align-self: center; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-right: 0.5rem; }
+.mz-ens-dia { display: flex; flex-direction: column; min-width: 92px; padding: 0.3rem 0.65rem; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; line-height: 1.25; }
+.mz-ens-dia small { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.mz-ens-dia b { font-size: 0.84rem; font-weight: 600; color: #64748b; }
+.mz-ens-dia.pres { border-color: #bfdbfe; background: #eff6ff; }
+.mz-ens-dia.pres b { color: #1e3a8a; }
+
+/* Etiqueta de síncrona mediada */
+.mz-tag.sinc { background: #fae8ff; color: #86198f; }
+
+/* Aba Carga horária por matriz */
+.mz-carga-bloco { margin-bottom: 2rem; break-inside: avoid; }
+.mz-carga-bloco h3 { margin-top: 1.2rem; }
+.mz-rel .mz-tabela.mz-resumo-ch, .mz-rel .mz-tabela.mz-por-periodo { min-width: 0; table-layout: auto; margin-bottom: 0.9rem; }
+.mz-resumo-ch { max-width: 720px; }
+.mz-resumo-ch th:first-child, .mz-resumo-ch td:first-child, .mz-por-periodo th:first-child, .mz-por-periodo td:first-child { text-align: left; }
+.mz-rel .mz-resumo-ch th:last-child, .mz-rel .mz-resumo-ch td:last-child, .mz-rel .mz-por-periodo th:last-child, .mz-rel .mz-por-periodo td:last-child { text-align: right; }
+.mz-por-periodo th, .mz-por-periodo td, .mz-resumo-ch th, .mz-resumo-ch td { width: auto !important; }
+.mz-tabela tr.mz-total td { font-weight: 700; background: #f8fafc; border-top: 1px solid var(--border-color); }
+.mz-tabela tr.mz-geral td { background: #eff6ff; color: #1e3a8a; font-size: 0.95rem; }

@@ -152,6 +152,28 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>`,
     url: "/medicina/relatorio-desempenho/index.html"
   },
+  // Matrizes dos cursos (vêm do Edubox) + horário de aula por curso: o
+  // coordenador define professor/dia/hora das disciplinas do próprio curso;
+  // ADM (N1/N2) e RH veem e editam todos os cursos. Escopo imposto no backend
+  // (src/rotas/matrizes.js).
+  matrizes: {
+    id: "matrizes",
+    category: "docencia",
+    title: "Matrizes e Horários",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
+    url: "/matrizes/index.html"
+  },
+
+  // Relatório da CPA (Comissão Própria de Avaliação): resultado da avaliação dos alunos aplicada no Edubox,
+  // por curso e por professor, em Graduação e Medicina. Direção vê tudo; coordenador só o próprio curso.
+  // Dados vêm de scripts/cpa-edubox-sync.js (Firestore cpa_*) — ver regras/regra_do_app.md.
+  cpa: {
+    id: "cpa",
+    category: "docencia",
+    title: "Relatório CPA",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>`,
+    url: "/cpa/index.html"
+  },
   "banco-provas": {
     id: "banco-provas",
     category: "docencia",
@@ -222,11 +244,11 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa"]
   },
   ti: {
     label: "T.I.",
@@ -234,7 +256,7 @@ export const ROLE_PERMISSIONS = {
   },
   rh: {
     label: "RH",
-    modules: ["dashboard", "fidelidade", "carga-horaria", "funcionarios", "agenda-espacos"]
+    modules: ["dashboard", "fidelidade", "carga-horaria", "funcionarios", "agenda-espacos", "matrizes"]
   },
   financeiro: {
     label: "Financeiro",
@@ -245,7 +267,7 @@ export const ROLE_PERMISSIONS = {
   // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos"]
+    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos", "matrizes", "cpa"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da
@@ -264,7 +286,7 @@ export const ROLE_PERMISSIONS = {
   // (ver CARGOS_SEM_CARTAO em core/layout.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos"]
+    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos", "cpa"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (Meu Espaço +
   // Banco de Questões), cargo separado só pra aparecer com rótulo próprio na
