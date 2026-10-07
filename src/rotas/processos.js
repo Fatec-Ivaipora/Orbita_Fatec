@@ -570,6 +570,15 @@ router.get('/setor/atividades', verifyToken, requireGestor, async (req, res) => 
             .where('setorId', '==', setorId)
             .get();
 
+        // Atividade dividida entre várias pessoas (`atribuidos`, sem uid nem setorId)
+        // não vem da consulta por setor: busca pelos atribuídos que são deste setor.
+        const uidsSetor = funcionarios.map(f => f.uid);
+        const compartilhadas = new Map();
+        for (let i = 0; i < uidsSetor.length; i += 30) {
+            const lote = await db.collection('atividades').where('atribuidos', 'array-contains-any', uidsSetor.slice(i, i + 30)).get();
+            lote.forEach(doc => compartilhadas.set(doc.id, { id: doc.id, ...doc.data() }));
+        }
+
         const porUid = {};
         const fixos = [];
         snap.forEach(doc => {
@@ -577,6 +586,10 @@ router.get('/setor/atividades', verifyToken, requireGestor, async (req, res) => 
             if (a.fixo || a.doSetor) { fixos.push(a); return; }
             if (!porUid[a.uid]) porUid[a.uid] = [];
             porUid[a.uid].push(a);
+        });
+        compartilhadas.forEach(a => {
+            if (a.fixo || a.doSetor) return;
+            a.atribuidos.filter(u => uidsSetor.includes(u)).forEach(u => { (porUid[u] = porUid[u] || []).push(a); });
         });
         // Atividade do setor (e horário fixo) entra no quadro de cada funcionário
         funcionarios.forEach(f => {
@@ -597,9 +610,12 @@ router.get('/setor/progresso', verifyToken, requireGestor, async (req, res) => {
 
         const progresso = [];
         for (const f of funcionarios) {
-            const atuaisSnap = await db.collection('atividades')
-                .where('uid', '==', f.uid)
-                .get();
+            const [proprias, compartilhadas] = await Promise.all([
+                db.collection('atividades').where('uid', '==', f.uid).get(),
+                db.collection('atividades').where('atribuidos', 'array-contains', f.uid).get()   // dividida entre várias pessoas
+            ]);
+            // mesma atividade nas duas consultas conta uma vez só
+            const atuaisSnap = { docs: [...new Map([...proprias.docs, ...compartilhadas.docs].map(d => [d.id, d])).values()] };
             // Horário fixo e atividade do setor "de todo mundo" não são tarefa
             // individual — fora do progresso. Compromisso do setor em que a
             // pessoa é a responsável (palestra, coleta...) conta pra ela.

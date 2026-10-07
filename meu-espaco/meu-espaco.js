@@ -493,12 +493,32 @@ function renderAgendaSetor() {
       .forEach(a => doSetor.set(a.id, a));
     const itensSetor = [...doSetor.values()].sort(porHorario);
 
+    // Atividade dividida entre várias pessoas (documento compartilhado): aparece UMA vez,
+    // com os nomes juntos ("Junior / William"), não repetida embaixo de cada um.
+    const compartilhada = (a) => !a.doSetor && !a.fixo && Array.isArray(a.atribuidos) && a.atribuidos.length > 1;
+    const grupos = new Map();
+    funcionariosDoSetor.forEach(f => {
+      (atividadesPorUid[f.uid] || []).filter(a => compartilhada(a) && noDia(a, chave)).forEach(a => {
+        const g = grupos.get(a.id) || { a, nomes: [] };
+        g.nomes.push(formatarNome(f.name || f.email));
+        grupos.set(a.id, g);
+      });
+    });
+
     const porPessoa = funcionariosDoSetor.map(f => {
       const itens = (atividadesPorUid[f.uid] || [])
-        .filter(a => !ehItemDoSetorTodo(a) && (!a.doSetor || responsaveisDe(a).includes(f.uid)) && noDia(a, chave))
+        .filter(a => !compartilhada(a) && !ehItemDoSetorTodo(a) && (!a.doSetor || responsaveisDe(a).includes(f.uid)) && noDia(a, chave))
         .sort(porHorario);
       return { nome: formatarNome(f.name || f.email), itens };
     }).filter(p => p.itens.length);
+
+    const porNomes = new Map();
+    grupos.forEach(({ a, nomes }) => {
+      const k = nomes.join(' / ');
+      if (!porNomes.has(k)) porNomes.set(k, { nome: k, itens: [] });
+      porNomes.get(k).itens.push(a);
+    });
+    porNomes.forEach(p => { p.itens.sort(porHorario); porPessoa.push(p); });
 
     const blocoSetor = itensSetor.length ? `
       <div class="agenda-setor-pessoa agenda-setor-bloco-setor">
