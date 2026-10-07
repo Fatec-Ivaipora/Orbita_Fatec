@@ -671,8 +671,10 @@ window.deleteAvaliacao = async function (id) {
   }
 }
 
+let salvandoAvaliacao = false;   // trava duplo envio (clique duplo/Enter) — criava a mesma avaliação 2x, uma ficava "pendente"
 document.getElementById('form-avaliacao').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (salvandoAvaliacao) return;
   const semestresSelecionados = coletarSemestresSelecionados();
   if (!semestresSelecionados.length) {
     alert('Selecione ao menos um período.');
@@ -696,6 +698,9 @@ document.getElementById('form-avaliacao').addEventListener('submit', async (e) =
     ciclo: cicloObj ? cicloObj.nome : '',
   };
 
+  salvandoAvaliacao = true;
+  const botaoSalvar = e.target.querySelector('[type="submit"]');
+  if (botaoSalvar) botaoSalvar.disabled = true;
   try {
     let novoId = id;
     if (id) {
@@ -720,6 +725,9 @@ document.getElementById('form-avaliacao').addEventListener('submit', async (e) =
     }
   } catch (err) {
     alert("Erro ao salvar: " + err.message);
+  } finally {
+    salvandoAvaliacao = false;
+    if (botaoSalvar) botaoSalvar.disabled = false;
   }
 });
 
