@@ -23,7 +23,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 const MODULO = 'cobranca';
 const POR_PAGINA = 100;
 const AGENTE_OFF_MIN = 15; // sem sinal do PC há mais que isso = desligado
-const FAIXAS = [['1-30', 'Até 30 dias', '#facc15'], ['31-60', '31 a 60 dias', '#fb923c'], ['61-90', '61 a 90 dias', '#ef4444'], ['90+', 'Mais de 90 dias', '#7f1d1d']];
+const FAIXAS = [['1-30', 'Até 30 dias', '#edc24e'], ['31-60', '31 a 60 dias', '#e79a39'], ['61-90', '61 a 90 dias', '#d8542e'], ['90+', 'Mais de 90 dias', '#b12f28']];
 const TIPOS = {
   whatsapp: ['💬', 'WhatsApp'], ligacao: ['📞', 'Ligação'], email: ['✉️', 'E-mail'], contato: ['🙋', 'Contato / atendimento'],
   negociacao: ['🤝', 'Negociação'], promessa_pagamento: ['📅', 'Promessa de pagamento'], enviado_advocacia: ['⚖️', 'Enviado ao advogado'],
@@ -37,7 +37,7 @@ let initializedRole = null;
 let podeEditar = false;
 
 let grupo = 'graduacao';
-let visao = 'painel';
+let visao = 'panorama';   // tela principal (a Visão do diretor foi retirada em 07/10/2026)
 let semestre = '';
 let painel = null;          // resposta de /painel (semana atual)
 let semanaRef = null;       // 'AAAA-MM-DD' da semana do fechamento (null = atual)
@@ -49,7 +49,12 @@ let modelos = null;
 let semanasDados = null;    // resumo por semana (Visão do diretor)
 let mes = '';               // 'AAAA-MM' = visão mensal (só Painel e Visão do diretor); '' = semestre inteiro
 const mesesDados = {};      // 'AAAA-MM' -> resposta de /mes (carregado ao escolher)
-let recebidoDados = null;   // /recebido: dinheiro que entrou por mês e por semana (gráfico do diretor)
+let panMetric = 'valor';     // Panorama: curso por R$ atrasado ou por taxa
+let consultoria = null;     // /consultoria: ano inteiro na régua do painel Fiasini (carregado ao escolher)
+let consBase = 'aPagar';    // Visão consultoria: com juros (como o Fiasini mostra) ou valor original
+let carregandoRecebido = false;
+let recebidoDados = null;
+let cursoPedido = '';        // curso clicado no Panorama -> abre a Lista já filtrada   // /recebido: dinheiro que entrou por mês e por semana (gráfico do diretor)
 let alunoAberto = null;     // aluno do modal WhatsApp / detalhe
 let aguardando = null;      // timer do "Atualizar agora"
 
@@ -111,13 +116,26 @@ function diasDesde(isoStr) { return Math.floor((Date.now() - new Date(isoStr).ge
 function semestreAtual() { const d = new Date(); return `${d.getFullYear()}.${d.getMonth() < 6 ? 1 : 2}`; }
 function plural(n, s, p) { return `${n} ${n === 1 ? s : p}`; }
 function nomeGrupo() { return grupo === 'medicina' ? 'Medicina' : 'Graduação (16 cursos)'; }
-function nomeSemestre() { return usaMes() ? `Mês de ${nomeMes(mes)}` : semestre === 'todos' ? 'Todos os semestres' : `Semestre ${semestre}`; }
+function nomeSemestre() { return usaMes() ? `Mês de ${nomeMes(mes)}` : semestre === 'todos' ? 'Todos os anos (acumulado)' : semestre === 'consultoria' ? `${anoAtual()} (Visão consultoria)` : `Semestre ${semestre}`; }
+function anoAtual() { return String(new Date().getFullYear()); }
 // ---- Visão mensal (pedido do diretor, 02/10/2026): no Painel e na Visão do
 // diretor dá pra escolher um mês do semestre. A Lista de cobrança e o
 // Fechamento semanal continuam por semestre (é como o Financeiro trabalha).
 const NOMES_MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function mesesDoPeriodo() {
+  if (usaMes()) return [mes];
+  if (/^\d{4}\.[12]$/.test(semestre)) { const [a, n] = semestre.split('.'); return [0, 1, 2, 3, 4, 5].map(i => `${a}-${String((n === '1' ? 1 : 7) + i).padStart(2, '0')}`); }
+  return null;   // todos os anos
+}
+function nomePeriodo() {
+  if (usaMes()) return nomeMes(mes);
+  if (/^\d{4}\.[12]$/.test(semestre)) return `${semestre.endsWith('.1') ? '1º' : '2º'} semestre de ${semestre.slice(0, 4)}`;
+  return 'todos os anos';
+}
 function nomeMes(m) { return `${NOMES_MES[Number(m.slice(5, 7)) - 1]}/${m.slice(0, 4)}`; }
-function usaMes() { return !!mes && (visao === 'painel' || visao === 'diretor'); }
+// Tudo segue o filtro do topo (08/10/2026): o mês escolhido vale no Panorama, no Painel e na Lista.
+const VISOES_COM_MES = ['painel', 'diretor', 'panorama', 'lista'];
+function usaMes() { return !!mes && VISOES_COM_MES.includes(visao); }
 // Meses do semestre escolhido até o mês atual, dentro dos 24 meses que o agente guarda.
 function mesesDoSemestre(s) {
   if (!/^\d{4}\.[12]$/.test(s)) return [];
@@ -129,7 +147,7 @@ function mesesDoSemestre(s) {
 }
 function montarMeses() {
   const sel = document.getElementById('sel-mes');
-  const lista = (visao === 'painel' || visao === 'diretor') ? mesesDoSemestre(semestre) : [];
+  const lista = VISOES_COM_MES.includes(visao) ? mesesDoSemestre(semestre) : [];
   sel.classList.toggle('hidden', !lista.length);
   if (!lista.length) return;
   if (mes && !lista.includes(mes)) mes = '';
@@ -219,6 +237,7 @@ async function carregarPainel() {
     await auth.authStateReady();
     if (auth.currentUser) currentUser = auth.currentUser;
     painel = await apiFetch('/cobranca/edubox/painel');
+    consultoria = null;   // recarrega a visão consultoria junto (depois do "Atualizar agora")
     renderStatus(painel.status || {});
     if (painel.vazio) {
       document.getElementById('faixas').innerHTML = '<div class="tabela-msg">Ainda não houve atualização do Edubox. Clique em "Atualizar agora".</div>';
@@ -231,13 +250,62 @@ async function carregarPainel() {
   }
 }
 
+// ---- Seletor em 3 caixas (08/10/2026): Ano | Semestre (ou "Ano inteiro" =
+// Visão consultoria) | Mês. A variável interna continua sendo só `semestre`
+// ('todos' | 'consultoria' | 'AAAA.N') — as caixas só leem/escrevem nela, pra
+// não precisar tocar em renderTudo()/montarMeses()/trocarVisao() por dentro.
+function listaSemestresCob() {
+  return (painel.semestres || []).filter(s => /^\d{4}\.\d$/.test(s) && s <= semestreAtual());
+}
 function montarSemestres() {
-  const sel = document.getElementById('sel-semestre');
-  const lista = (painel.semestres || []).filter(s => /^\d{4}\.\d$/.test(s) && s <= semestreAtual());
+  const lista = listaSemestresCob();
   if (!semestre) semestre = lista.includes(semestreAtual()) ? semestreAtual() : 'todos';
-  sel.innerHTML = `<option value="todos">Todos os semestres (acumulado)</option>` +
-    lista.map(s => `<option value="${s}">Semestre ${s}</option>`).join('');
-  sel.value = semestre;
+  montarAno();
+  sincronizarCaixasPeriodo();
+}
+function montarAno() {
+  const sel = document.getElementById('sel-ano');
+  const anos = [...new Set(listaSemestresCob().map(s => s.split('.')[0]))].sort((a, b) => b.localeCompare(a));
+  sel.innerHTML = `<option value="todos-anos">Todos os anos (acumulado)</option>` + anos.map(a => `<option value="${a}">${a}</option>`).join('');
+}
+function montarPeriodo(anoSel) {
+  const sel = document.getElementById('sel-sem-periodo');
+  if (anoSel === 'todos-anos') { sel.classList.add('hidden'); return; }
+  sel.classList.remove('hidden');
+  const lista = listaSemestresCob();
+  const opts = [];
+  if (lista.includes(`${anoSel}.1`)) opts.push(['1', `1º semestre (${anoSel}.1)`]);
+  if (lista.includes(`${anoSel}.2`)) opts.push(['2', `2º semestre (${anoSel}.2)`]);
+  // "Ano inteiro" (Visão consultoria) só existe pro ano atual — o agente só
+  // grava resumo[anoAtual()] no doc de consultoria, nada de anos passados.
+  if (anoSel === anoAtual()) opts.push(['ano-inteiro', 'Ano inteiro (4 grupos — Visão consultoria)']);
+  sel.innerHTML = opts.map(([v, rot]) => `<option value="${v}">${rot}</option>`).join('');
+}
+// Lê `semestre` e ajusta as 3 caixas pra combinar — chamada sempre que
+// `semestre` muda por fora das próprias caixas (trocarVisao, tabela de
+// semestres, carga inicial).
+function sincronizarCaixasPeriodo() {
+  let ano, periodo;
+  if (semestre === 'todos') { ano = 'todos-anos'; periodo = null; }
+  else if (semestre === 'consultoria') { ano = anoAtual(); periodo = 'ano-inteiro'; }
+  else { const [a, n] = semestre.split('.'); ano = a; periodo = n; }
+  document.getElementById('sel-ano').value = ano;
+  montarPeriodo(ano);
+  if (periodo) document.getElementById('sel-sem-periodo').value = periodo;
+}
+// Lê as 3 caixas e grava em `semestre`/`mes` — mesma regra que o antigo
+// listener do #sel-semestre tinha (inclusive o desvio pro Panorama quando
+// escolhe "Ano inteiro").
+function aplicarCaixasPeriodo() {
+  const ano = document.getElementById('sel-ano').value;
+  semestre = ano === 'todos-anos' ? 'todos' : (() => {
+    const periodo = document.getElementById('sel-sem-periodo').value;
+    return periodo === 'ano-inteiro' ? 'consultoria' : `${ano}.${periodo}`;
+  })();
+  mes = '';
+  mostrando = POR_PAGINA;
+  if (semestre === 'consultoria' && visao !== 'panorama') { trocarVisao('panorama'); return; }
+  renderTudo();
 }
 
 function renderTudo() {
@@ -247,9 +315,11 @@ function renderTudo() {
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
   const [anoS, nS] = semestre.split('.');
-  aviso.textContent = `Semestre ${semestre}: parcelas que vencem de ${nS === '1' ? 'janeiro a junho' : 'julho a dezembro'} de ${anoS} (mesmo critério do relatório do Edubox). Escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  aviso.textContent = `Semestre ${semestre}: parcelas que vencem de ${nS === '1' ? 'janeiro a junho' : 'julho a dezembro'} de ${anoS} (mesmo critério do relatório do Edubox). Escolha "Todos os anos" para ver o total e a divisão por semestre.`;
   if (usaMes()) aviso.textContent = avisoMes();
+  if (semestre === 'consultoria') aviso.textContent = `Visão consultoria: inclui Advogado, Débito judicial e desistentes/trancados/cancelados; apenas parcelas de ${anoAtual()}; mesma régua de hoje do painel Fiasini.`;
   if (visao === 'diretor') renderDiretor();
+  else if (visao === 'panorama') renderPanorama();
   else if (visao === 'painel') renderPainel();
   else if (visao === 'lista') abrirLista();
   else renderSemana();
@@ -410,14 +480,16 @@ function renderPainel() {
   // acordo) não são cobrados pelo Financeiro.
   document.getElementById('k-vencido').innerHTML = `${brl(apDe(fin))}<small class="cb-orig">valor original ${brl(fin.valor)} + juros e multa</small>`;
   const devFin = (r && r.devido && r.devido.financeiro) || 0;
-  document.getElementById('k-vencido-hint').textContent = `Falta receber de ${plural(fin.alunos, 'aluno', 'alunos')} (${plural(fin.parcelas, 'parcela', 'parcelas')})` +
-    (devFin ? ` · ${pct(fin.valor / devFin)} do que já venceu (${brlCurto(devFin)})` : '') +
-    (finAdv.alunos ? ` · ${plural(finAdv.alunos, 'aluno também tem', 'alunos também têm')} acordo com advogado` : '') +
-    (r && r.enviar && r.enviar.vencido.valor ? ` · fora da cobrança: ${brlCurto(r.enviar.vencido.valor)} de ${plural(r.enviar.vencido.alunos, 'aluno', 'alunos')} desistentes/trancados/cancelados (📤 para o advogado)` : '');
+  document.getElementById('k-vencido-hint').innerHTML = [
+    `${plural(fin.alunos, 'aluno', 'alunos')}, ${plural(fin.parcelas, 'parcela', 'parcelas')}`,
+    devFin ? `<b>${pct(fin.valor / devFin)}</b> do que já venceu (${brlCurto(devFin)})` : '',
+    finAdv.alunos ? `${plural(finAdv.alunos, 'aluno também tem', 'alunos também têm')} acordo com advogado` : '',
+    r && r.enviar && r.enviar.vencido.valor ? `Fora da cobrança: ${brlCurto(r.enviar.vencido.valor)} de ${plural(r.enviar.vencido.alunos, 'desistente/trancado/cancelado', 'desistentes/trancados/cancelados')}` : ''
+  ].filter(Boolean).map(l => `<span class="cb-hint-linha">${l}</span>`).join('');
   const lados = ladosJuridico(rj);
   // "pagando" é por aluno (não por semestre): só faz sentido no total
   const sit = semestre === 'todos' ? ((painel.situacaoAdvogado && painel.situacaoAdvogado[grupo]) || {}) : {};
-  const dicaJur = (x, s) => `Atrasado de ${plural(x.alunos, 'aluno', 'alunos')} · mais ${brlCurto(x.aVencer)} ainda vai vencer` +
+  const dicaJur = (x, s) => `${plural(x.alunos, 'aluno', 'alunos')} · mais ${brlCurto(x.aVencer)} a vencer` +
     (s && s.alunos ? ` · ${s.pagando} de ${s.alunos} alunos pagaram algo nos últimos 90 dias (${brlCurto(s.pago90)})` : '') + ' · o Financeiro não cobra';
   document.getElementById('k-jur').innerHTML = `${brl(lados.advogado.aPagar)}<small class="cb-orig">valor original ${brl(lados.advogado.valor)}</small>`;
   document.getElementById('k-jur-hint').textContent = dicaJur(lados.advogado, sit.advogado);
@@ -425,15 +497,23 @@ function renderPainel() {
   document.getElementById('k-fin-hint').textContent = dicaJur(lados.debito, sit.debito);
   const aviso = document.getElementById('aviso-advogado');
   aviso.classList.toggle('hidden', semestre === 'todos');
-  aviso.textContent = usaMes() ? avisoMes() : `Semestre ${semestre}: tudo neste painel é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os semestres" para ver o total e a divisão por semestre.`;
+  aviso.textContent = usaMes() ? avisoMes() : `Semestre ${semestre}: tudo neste painel é deste semestre. Advogado e Débito judicial entram pelo semestre da dívida original (é como o Edubox registra o acordo) — escolha "Todos os anos" para ver o total e a divisão por semestre.`;
   renderSemestres();
 
   const recMes = usaMes() ? mesesDados[mes]?.recebido?.[grupo] : null;
-  document.getElementById('k-recebido-rot').textContent = usaMes() ? `🟢 Entrou em ${nomeMes(mes)}` : '🟢 Entrou nesta semana';
+  const periodo = mesesDoPeriodo();
+  const semestreFiltrado = !usaMes() && periodo;
+  document.getElementById('k-recebido-rot').textContent = usaMes() ? `Entrou em ${nomeMes(mes)}` : semestreFiltrado ? `Entrou no ${nomePeriodo()}` : 'Entrou nesta semana';
   const b = somaBaixas(painel.semana.baixas);
   const hojeISO = iso(new Date());
   const bh = somaBaixas(painel.semana.baixas.filter(d => d.data === hojeISO));
-  if (usaMes()) {
+  if (semestreFiltrado) {
+    if (!recebidoDados && !carregandoRecebido) { carregandoRecebido = true; apiFetch('/cobranca/edubox/recebido').then(d => { recebidoDados = d || {}; }).catch(() => { recebidoDados = {}; }).finally(() => { carregandoRecebido = false; if (visao === 'painel') renderPainel(); }); }
+    const x = { f: 0, j: 0, fa: 0 };
+    for (const m of periodo) { const y = recebidoDados?.meses?.[m]?.[grupo]; if (y) { x.f += y.f; x.j += y.j; x.fa += y.fa; } }
+    document.getElementById('k-recebido').textContent = recebidoDados ? brl(x.f + x.j) : '…';
+    document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox com data de pagamento no ${nomePeriodo()} · Financeiro ${brlCurto(x.f)} · Advogado/Débito ${brlCurto(x.j)} · ${brlCurto(x.fa)} eram mensalidades atrasadas`;
+  } else if (usaMes()) {
     const x = recMes || { f: 0, j: 0, fa: 0 };
     document.getElementById('k-recebido').textContent = brl(x.f + x.j);
     document.getElementById('k-recebido-hint').textContent = `Baixas no Edubox dentro do mês · Financeiro ${brlCurto(x.f)} · Advogado/Débito ${brlCurto(x.j)} · ${brlCurto(x.fa)} eram mensalidades atrasadas`;
@@ -445,7 +525,7 @@ function renderPainel() {
   const maxF = Math.max(1, ...FAIXAS.map(([k]) => r ? r.faixas[k].valor : 0));
   document.getElementById('faixas').innerHTML = FAIXAS.map(([k, rot, cor]) => {
     const f = r ? r.faixas[k] : vazio;
-    return `<div class="cb-faixa"><span>${rot}</span><div class="cb-faixa-barra"><span style="width:${(f.valor / maxF) * 100}%;background:${cor}"></span></div><b>${brl(apDe(f))}<small>${plural(f.alunos, 'aluno', 'alunos')} · original ${brl(f.valor)}</small></b></div>`;
+    return `<div class="cb-faixa" data-dica="${esc(`${rot}|${brl(apDe(f))} com juros e multa|valor original ${brl(f.valor)}|${plural(f.alunos, 'aluno', 'alunos')}`)}"><span>${rot}</span><div class="cb-faixa-barra"><span style="width:${(f.valor / maxF) * 100}%;background:${cor}"></span></div><b>${brlCurto(apDe(f))}<small>${plural(f.alunos, 'aluno', 'alunos')} · original ${brlCurto(f.valor)}</small></b></div>`;
   }).join('');
 
   // Mês que já terminou: faixas de atraso (contadas a partir de hoje) e "a
@@ -470,12 +550,14 @@ function renderPainel() {
     document.getElementById('a-vencer-periodo').textContent = '— previsão do que vence até o fim do semestre · valor sem juros (não é atraso)';
     document.getElementById('a-vencer').innerHTML = prev;
   } else document.getElementById('a-vencer').innerHTML = `
-    <div><span>💼 Financeiro${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
+    <div><span>Financeiro${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(r ? r.financeiro.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(r ? r.financeiro.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div><span>Advogado + Débito judicial${semestre !== 'todos' ? ` (${rotRec})` : ''}</span><b>${brl(rj ? rj.juridico.aVencer.valor : 0)}</b> <small class="cb-sub">${plural(rj ? rj.juridico.aVencer.alunos : 0, 'aluno', 'alunos')}</small></div>
     <div style="grid-column:1/-1"><span>Total que ainda vai vencer</span><b>${brl((r ? r.financeiro.aVencer.valor : 0) + (rj ? rj.juridico.aVencer.valor : 0))}</b></div>`;
 
   // por plano jurídico (acumulado) + recebido na semana
-  document.getElementById('th-planos-entrou').textContent = usaMes() || semestre !== 'todos' ? '🟢 Entrou nesta semana (de qualquer mês)' : '🟢 Entrou nesta semana';
+  const thEntrou = document.getElementById('th-planos-entrou');
+  thEntrou.textContent = 'Entrou nesta semana';
+  thEntrou.closest('table').classList.toggle('cb-sem-entrou', !!mesesDoPeriodo());   // com período escolhido, "esta semana" não faz parte do filtro
   const planos = rj ? Object.entries(rj.planosJuridico || {}) : [];
   const recPlano = {};
   for (const d of painel.semana.baixas) for (const [k, val] of Object.entries(d[grupo].juridico.porPlano || {})) recPlano[k] = (recPlano[k] || 0) + val;
@@ -703,7 +785,7 @@ function renderGraficoRecebido() {
   el.innerHTML = itens.length ? graficoBarras(itens) : '<div class="tabela-msg">Os pagamentos deste período aparecem depois da próxima atualização do Edubox.</div>';
 }
 
-function graficoBarras(itens) {
+function graficoBarras(itens, tema = { f: '#10b981', fd: '#059669', t: '#047857' }) {
   // Só o dinheiro que entrou (barras). A linha do atraso, no mesmo desenho e
   // com outra escala, confundia quem não é do financeiro (02/10) — o atraso
   // fica no gráfico "Inadimplência ao longo do ano", em %.
@@ -716,13 +798,552 @@ function graficoBarras(itens) {
   itens.forEach((it, i) => {
     const x = M.l + i * larg;
     const y = yV(it.v);
-    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="${it.destaque ? '#059669' : '#10b981'}" opacity="${it.destaque ? 1 : 0.8}"><title>${it.rot}: ${brl(it.v)}${it.dica ? ` — ${it.dica}` : ''}</title></rect>`;
-    svg += `<text x="${x + larg / 2}" y="${y - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="#047857">${brlCurto(it.v)}</text>`;
+    svg += `<rect x="${x + larg * 0.18}" y="${y}" width="${larg * 0.64}" height="${H - M.b - y}" rx="6" fill="${it.destaque ? tema.fd : tema.f}" opacity="${it.destaque ? 1 : 0.8}"><title>${it.rot}: ${brl(it.v)}${it.dica ? ` — ${it.dica}` : ''}</title></rect>`;
+    svg += `<text x="${x + larg / 2}" y="${y - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="${tema.t}">${brlCurto(it.v)}</text>`;
     svg += `<text x="${x + larg / 2}" y="${H - 12}" text-anchor="middle" font-size="12" fill="#64748b">${it.rot}</text>`;
   });
   return svg + '</svg>';
 }
 
+
+// ---------- PANORAMA DA CARTEIRA ----------
+// Resumo para a direção, no desenho do painel da consultoria Fiasini (07/10/2026), mas com os
+// números do Órbita: só o que o Financeiro cobra (parcela normal de matrícula Ativo/Concluído/Pendente,
+// sem advogado, débito judicial e "para enviar"), sem nome de aluno. Segue o semestre escolhido.
+const TAXA_CRITICA = 0.10;   // pílula vermelha a partir de 10% de inadimplência (08/10/2026)
+
+// Colunas verticais simples (linha do tempo): valor em cima, mês embaixo; dica no mouse/toque.
+function miniBarras(itens, cor) {
+  const max = Math.max(1, ...itens.map(i => i.v));
+  return `<div class="cb-mini">${itens.map(i => `<div class="cb-mini-col" data-dica="${esc(`${i.rot}|${brl(i.v)}`)}"><span class="cb-mini-v">${brlCurto(i.v).replace('R$ ', '')}</span><i style="height:${Math.max(2, (i.v / max) * 100)}%;background:${cor}"></i><span class="cb-mini-m">${esc(i.rot)}</span></div>`).join('')}</div>`;
+}
+
+// Rosca "Posição da carteira": recebido / a vencer / atrasado.
+function rosca(partes) {
+  const tot = partes.reduce((t, p) => t + p.v, 0) || 1;
+  const R = 52, C = 2 * Math.PI * R;
+  let ac = 0;
+  const arcos = partes.map(p => {
+    const l = (p.v / tot) * C;
+    const a = `<circle r="${R}" cx="70" cy="70" fill="none" stroke="${p.cor}" stroke-width="22" stroke-dasharray="${l} ${C - l}" stroke-dashoffset="${-ac}" transform="rotate(-90 70 70)" data-dica="${esc(`${p.rot}|${brl(p.v)} · ${pct(p.v / tot)} da carteira|${p.expl}`)}"/>`;
+    ac += l; return a;
+  }).join('');
+  return `<div class="cb-rosca"><svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="Posição da carteira">${arcos}
+      <text x="70" y="67" text-anchor="middle" font-family="Archivo, sans-serif" font-weight="800" font-size="15" fill="#0d1b33">${brlCurto(tot).replace('R$ ', '')}</text>
+      <text x="70" y="84" text-anchor="middle" font-size="10" fill="#8793a6">carteira</text></svg>
+    <div class="cb-rosca-leg">${partes.map(p => `<div data-dica="${esc(`${p.rot}|${brl(p.v)}|${p.expl}`)}"><i style="background:${p.cor}"></i>${p.rot}<b>${brlCurto(p.v)}</b><small>${pct(p.v / tot, 0)}</small></div>`).join('')}</div></div>`;
+}
+function pintarRosca(recebido, aVencer, atrasado, sub) {
+  document.getElementById('p-rosca-sub').textContent = sub;
+  document.getElementById('p-rosca').innerHTML = recebido + aVencer + atrasado > 0
+    ? rosca([
+        { rot: 'Recebido', v: Math.max(0, recebido), cor: '#12935a', expl: 'já venceu e foi pago' },
+        { rot: 'A vencer', v: aVencer, cor: '#1f6fb2', expl: 'mensalidade futura (não é atraso)' },
+        { rot: 'Atrasado', v: atrasado, cor: '#c8392f', expl: 'venceu e não foi paga (valor original)' }])
+    : '<div class="tabela-msg">Sem mensalidades neste recorte.</div>';
+}
+
+// Dica padronizada (igual ao painel do Luiz): título em negrito, valor em destaque e 1–2 linhas de
+// contexto, no mouse e no toque. Vale para qualquer gráfico da tela:
+//  - elemento com data-dica="Título|valor|linha|linha";
+//  - linhas de barra (faixas de atraso, cursos): título = nome da linha, valor e contexto = o que está à direita;
+//  - barras em SVG: usa o <title> da barra.
+const SELETOR_DICA = '[data-dica], .cb-pan-faixa, .cb-faixa, .cb-rank, svg rect, svg circle';
+function textoDica(alvo) {
+  if (alvo.dataset && alvo.dataset.dica) return alvo.dataset.dica.split('|');
+  if (alvo.matches('.cb-pan-faixa, .cb-faixa, .cb-rank')) {
+    const nome = (alvo.querySelector(':scope > span') || {}).textContent || '';
+    const b = alvo.querySelector(':scope > b');
+    if (!b) return null;
+    const small = b.querySelector('small');
+    const valor = [...b.childNodes].filter(n => n !== small && !(n.classList && n.classList.contains('kpi-lupa'))).map(n => n.textContent).join('').trim();
+    const ctx = small ? small.textContent.replace(/\s+/g, ' ').trim() : '';
+    return [nome.trim(), valor, ...ctx.split(' · ').filter(Boolean)];
+  }
+  const t = alvo.querySelector && alvo.querySelector('title');
+  if (t) { const [cab, ...resto] = t.textContent.split(/: | — /); return resto.length ? [cab, ...resto] : [t.textContent]; }
+  return null;
+}
+function ligarDicas() {
+  const d = document.createElement('div');
+  d.className = 'cb-dica'; document.body.appendChild(d);
+  const mostrar = (alvo, x, y) => {
+    const linhas = textoDica(alvo);
+    if (!linhas || !linhas[0]) { d.style.opacity = 0; return; }
+    const [t, valor, ...ctx] = linhas;
+    d.innerHTML = `<div class="t">${esc(t)}</div>${valor ? `<b>${esc(valor)}</b>` : ''}${ctx.map(l => `<div>${esc(l)}</div>`).join('')}`;
+    d.style.opacity = 1;
+    const p = 14, w = d.offsetWidth, h = d.offsetHeight;
+    let left = x + p, top = y + p;
+    if (left + w > window.innerWidth - 8) left = x - w - p;
+    if (top + h > window.innerHeight - 8) top = y - h - p;
+    d.style.left = `${left}px`; d.style.top = `${top}px`;
+  };
+  const achar = (el) => (el && el.closest ? el.closest(SELETOR_DICA) : null);
+  document.addEventListener('mousemove', (e) => { const a = achar(e.target); if (a) mostrar(a, e.clientX, e.clientY); else d.style.opacity = 0; });
+  document.addEventListener('touchstart', (e) => { const a = achar(e.target); if (a) { const t = e.touches[0]; mostrar(a, t.clientX, t.clientY); } else d.style.opacity = 0; }, { passive: true });
+}
+
+const FAIXAS_PAN = [['1 a 30 dias', 1, 30, '#edc24e'], ['31 a 60 dias', 31, 60, '#e79a39'], ['61 a 90 dias', 61, 90, '#e8791e'], ['91 a 180 dias', 91, 180, '#d8542e'], ['Mais de 180 dias', 181, 1e9, '#b12f28']];
+// Contexto pros números do Panorama (revisão com a skill kpi-dashboard-design, 08/10/2026):
+// todo indicador mostra com o que comparar. Inadimplência: como estava na segunda-feira.
+function tendenciaInad(hoje) {
+  if (hoje === null || usaMes() || semestre === 'consultoria') return '';
+  if (!semanasDados) { carregarContextoPanorama(); return ''; }
+  const w = semanasDados[iso(segunda())]?.[grupo]?.[semestre];
+  if (!w || !w.ini || !w.ini.fd) return '';
+  const antes = w.ini.f / w.ini.fd, dif = (hoje - antes) * 100;
+  if (Math.abs(dif) < 0.05) return '<span class="cb-tend igual">igual à segunda-feira</span>';
+  return `<span class="cb-tend ${dif > 0 ? 'sobe' : 'desce'}">${dif > 0 ? '▲ piorou' : '▼ melhorou'} desde segunda (${pct(antes)})</span>`;
+}
+// Recuperado dividido: atraso do próprio período x dívida de semestres anteriores (pelo
+// semestre de vencimento da parcela). Só pra mês/semestre; precisa do agente de 08/10/2026.
+function recuperadoDivisao() {
+  const periodo = mesesDoPeriodo();
+  if (!periodo) return '';
+  const fonte = usaMes() ? { [mes]: mesesDados[mes]?.recebido } : recebidoDados?.meses;
+  if (!fonte) return '';
+  const semDoPeriodo = usaMes() ? `${mes.slice(0, 4)}.${Number(mes.slice(5, 7)) <= 6 ? 1 : 2}` : semestre;
+  let proprio = 0, anterior = 0, tem = false;
+  for (const m of periodo) {
+    const aSem = fonte[m]?.[grupo]?.aSem;
+    if (!aSem) continue;
+    tem = true;
+    for (const [sv, v] of Object.entries(aSem)) { if (sv === semDoPeriodo) proprio += v; else anterior += v; }
+  }
+  if (!tem) return '';
+  return `<span class="cb-hint-linha">${brlCurto(proprio)} de parcelas do ${semDoPeriodo.endsWith('.1') ? '1º' : '2º'} semestre de ${semDoPeriodo.slice(0, 4)}</span><span class="cb-hint-linha">${brlCurto(anterior)} de semestres anteriores</span>`;
+}
+// Recuperado = pagamento de parcela atrasada, pela data do pagamento, no período do filtro.
+function recuperadoPeriodo() {
+  if (usaMes()) { const x = mesesDados[mes]?.recebido?.[grupo]; return x ? x.fa + x.ja : 0; }
+  const periodo = mesesDoPeriodo();
+  if (periodo) {
+    if (!recebidoDados) { carregarContextoPanorama(); return null; }
+    return periodo.reduce((t, m) => { const y = recebidoDados.meses?.[m]?.[grupo]; return t + (y ? y.fa + y.ja : 0); }, 0);
+  }
+  if (!semanasDados) { carregarContextoPanorama(); return null; }
+  const w = semanasDados[iso(segunda())]?.[grupo]?.todos?.rec;
+  return w ? w.fa + w.ja : 0;
+}
+let carregandoContexto = false;
+function carregarContextoPanorama() {
+  if (carregandoContexto) return;
+  carregandoContexto = true;
+  Promise.all([
+    semanasDados ? null : apiFetch('/cobranca/edubox/semanas').then(d => { semanasDados = d.semanas || {}; }).catch(() => { semanasDados = {}; }),
+    recebidoDados ? null : apiFetch('/cobranca/edubox/recebido').then(d => { recebidoDados = d || {}; }).catch(() => { recebidoDados = {}; })
+  ]).finally(() => { carregandoContexto = false; if (visao === 'panorama') renderTudo(); });
+}
+
+async function renderPanorama() {
+  const consult = semestre === 'consultoria';
+  document.getElementById('p-divisao').classList.toggle('hidden', !consult);
+  document.getElementById('p-aviso').innerHTML = consult
+    ? `<b>Visão consultoria:</b> inclui Advogado, Débito judicial e desistentes/trancados/cancelados; apenas parcelas de ${anoAtual()}; mesma régua de hoje do painel Fiasini. Só parcela com matrícula (protocolo e eventos ficam fora, como no Fiasini). Aluno que deve nos dois semestres conta uma vez só. Não mostra nome de aluno.`
+    : 'Resumo da carteira de atraso <b>do que o Financeiro cobra</b> (sem advogado, débito judicial e desistentes), organizado a partir do painel da consultoria Fiasini. Não mostra nome de aluno. Muda com o semestre escolhido acima.';
+  document.getElementById('p-tl-fut-tit').textContent = consult ? `A vencer até dezembro de ${anoAtual()} (todos os grupos, já com desconto)` : 'A vencer nos próximos meses (Financeiro)';
+  if (consult) return renderConsultoria();
+  const r = recorte();
+  if (!r) return;
+  if (!listas[grupo]) {
+    try { listas[grupo] = await apiFetch(`/cobranca/edubox/alunos?grupo=${grupo}`); }
+    catch (err) { document.getElementById('p-kpis').innerHTML = `<div class="tabela-msg">Não foi possível carregar: ${esc(err.message)}</div>`; return; }
+  }
+  const hoje = Date.now();
+  const porAluno = new Map();
+  const meses = {};
+  const aging = FAIXAS_PAN.map(() => ({ v: 0, n: new Set() }));
+  for (const a of listas[grupo].alunos) {
+    for (const p of a.parcelas) {
+      if (p.j || p.e) continue;
+      if (semestre !== 'todos' && p.s !== semestre) continue;
+      if (usaMes() && p.v.slice(0, 7) !== mes) continue;
+      const dias = Math.round((hoje - dataLocal(p.v).getTime()) / 86400000);
+      if (dias < 1) continue;
+      porAluno.set(a.chave, (porAluno.get(a.chave) || 0) + p.valor);
+      const f = FAIXAS_PAN.findIndex(([, de, ate]) => dias >= de && dias <= ate);
+      aging[f].v += p.valor; aging[f].n.add(a.chave);
+      meses[p.v.slice(0, 7)] = (meses[p.v.slice(0, 7)] || 0) + p.valor;
+    }
+  }
+  const V = [...porAluno.values()].reduce((s, x) => s + x, 0);
+  const N = porAluno.size;
+  const devido = (r.devido && r.devido.financeiro) || 0;
+  const taxaGeral = devido ? V / devido : null;
+  const critico = aging[3].v + aging[4].v;
+
+  // curva ABC pelo atrasado de cada aluno
+  const ordenados = [...porAluno.values()].sort((a, b) => b - a);
+  const ABC = { A: { n: 0, v: 0 }, B: { n: 0, v: 0 }, C: { n: 0, v: 0 } };
+  let antes = 0;
+  for (const v of ordenados) {
+    const k = antes < V * 0.8 ? 'A' : antes < V * 0.95 ? 'B' : 'C';
+    ABC[k].n++; ABC[k].v += v; antes += v;
+  }
+
+  // cursos (mensalidades do Financeiro)
+  const cursos = Object.entries(r.porCurso || {})
+    .filter(([, c]) => c.devidoFinanceiro > 0 && c.financeiroVencido.valor > 0)
+    .map(([nome, c]) => ({ nome, v: c.financeiroVencido.valor, alunos: c.financeiroVencido.alunos, taxa: c.financeiroVencido.valor / c.devidoFinanceiro }));
+  const piorTaxa = [...cursos].filter(c => c.alunos >= 5).sort((a, b) => b.taxa - a.taxa)[0];   // curso com poucos alunos distorce a taxa
+
+  // 1) números principais
+  const kpi = (cls, rot, val, dica) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div></div>`;
+  document.getElementById('p-kpis').innerHTML =
+    kpi('cb-kpi-vencido', 'Atrasado — Financeiro cobra', brlCurto(V), `${esc(nomeGrupo())} · ${esc(nomeSemestre())}`) +
+    kpi('', 'Inadimplência sobre o vencido', taxaGeral === null ? '—' : pct(taxaGeral), (devido ? `atrasado ÷ ${brlCurto(devido)} que já venceram` : 'sem base') + tendenciaInad(taxaGeral)) +
+    kpi('', 'Alunos em atraso', N.toLocaleString('pt-BR'), `média de ${N ? brlCurto(V / N) : '—'} por aluno, valor original`) +
+    kpi('kpi-ass', 'Recuperado no período', recuperadoPeriodo() === null ? '…' : brlCurto(recuperadoPeriodo()), `parcelas atrasadas que foram pagas ${usaMes() ? 'em ' + nomeMes(mes) : /^\d{4}\.[12]$/.test(semestre) ? 'no ' + nomePeriodo() : 'nesta semana'}` + recuperadoDivisao()) +
+    kpi('kpi-menor', 'Atraso crítico (+90 dias)', brlCurto(critico), V ? `${pct(critico / V, 0)} do atrasado` : '') +
+    kpi('kpi-sem', 'Classe A (alta prioridade)', `${ABC.A.n} alunos`, V ? `respondem por ${pct(ABC.A.v / V, 0)} do atrasado` : '');
+
+  pintarRosca(devido - r.financeiro.vencido.valor, r.financeiro.aVencer.valor, r.financeiro.vencido.valor, '— mensalidades do Financeiro, valor original');
+
+  // 2) o que chama atenção, em frase
+  const ins = [];
+  if (V) {
+    ins.push(`<div class="ruim"><small>Concentração de risco</small><b>${ABC.A.n} alunos</b> (${pct(ABC.A.n / N, 0)} dos devedores) respondem por <b>${pct(ABC.A.v / V, 0)}</b> do atrasado (${brlCurto(ABC.A.v)}). Priorizar a cobrança neles rende o maior retorno.</div>`);
+    if (piorTaxa) ins.push(`<div class="azul"><small>Curso com maior taxa</small><b>${esc(nomeCurso(piorTaxa.nome))}</b>: ${pct(piorTaxa.taxa)} de inadimplência (${brlCurto(piorTaxa.v)}, ${plural(piorTaxa.alunos, 'aluno', 'alunos')})${taxaGeral !== null ? `, contra ${pct(taxaGeral)} na média` : ''}.</div>`);
+    ins.push(`<div class="ruim"><small>Atraso crítico</small><b>${brlCurto(critico)}</b> (${pct(critico / V, 0)} do atrasado) já passou de 90 dias — candidato a renegociação formal ou provisão.</div>`);
+  }
+  document.getElementById('p-insights').innerHTML = ins.join('');
+
+  // 3) idade do atraso
+  const maxA = Math.max(1, ...aging.map(x => x.v));
+  document.getElementById('p-aging').innerHTML = V ? FAIXAS_PAN.map(([rot, , , cor], i) =>
+    `<div class="cb-pan-faixa"><span>${rot}</span><div class="trilho"><i style="width:${(aging[i].v / maxA) * 100}%;background:${cor}"></i></div><b>${brlCurto(aging[i].v)}<small>${plural(aging[i].n.size, 'aluno', 'alunos')} · ${pct(aging[i].v / V, 0)}</small></b></div>`).join('')
+    : '<div class="tabela-msg">Nada atrasado neste recorte.</div>';
+
+  // 4) cursos
+  const lista = [...cursos].sort((a, b) => (panMetric === 'taxa' ? b.taxa - a.taxa : b.v - a.v)).slice(0, 12);
+  const maxC = Math.max(0.0001, ...lista.map(c => (panMetric === 'taxa' ? c.taxa : c.v)));
+  document.getElementById('p-cursos').innerHTML = lista.length
+    ? lista.map(c => `<div class="cb-rank cb-rank-link" data-curso="${esc(c.nome)}" title="Clique para ver os alunos deste curso"><span>${esc(nomeCurso(c.nome))}</span><div class="cb-rank-barra"><span style="width:${((panMetric === 'taxa' ? c.taxa : c.v) / maxC) * 100}%"></span></div><b>${panMetric === 'taxa' ? pct(c.taxa) : brlCurto(c.v)}<small><span class="cb-taxa ${c.taxa >= TAXA_CRITICA ? 'crit' : ''}">${panMetric === 'taxa' ? brlCurto(c.v) : pct(c.taxa)}</span> · ${plural(c.alunos, 'aluno', 'alunos')}</small></b></div>`).join('')
+    : '<div class="tabela-msg">Nada atrasado neste recorte.</div>';
+
+  // 5) curva ABC
+  const cl = (k, rot, dica) => `<div class="${k}"><span class="cl">${rot}</span><span class="vl">${brlCurto(ABC[k].v)}</span><small>${plural(ABC[k].n, 'aluno', 'alunos')} · ${V ? pct(ABC[k].v / V, 0) : '0%'} do atrasado · ${dica}</small></div>`;
+  document.getElementById('p-abc').innerHTML = V
+    ? `<div class="cb-abc">${cl('A', 'Classe A · alta prioridade', 'cobrar primeiro')}${cl('B', 'Classe B · prioridade média', 'segunda rodada')}${cl('C', 'Classe C · cauda longa', 'muitos alunos, pouco valor')}</div>
+       <p class="cb-sub" style="margin:0.8rem 0 0">Os ${ABC.A.n} alunos da classe A (${pct(ABC.A.n / N, 0)} dos devedores) concentram ${pct(ABC.A.v / V, 0)} do atrasado deste recorte.</p>`
+    : '<div class="tabela-msg">Nada atrasado neste recorte.</div>';
+
+  // 6) linha do tempo: o que está atrasado, por mês de vencimento, e o que ainda vai vencer
+  const abrev = (m) => NOMES_MES[Number(m.slice(5, 7)) - 1].slice(0, 3) + (m.slice(2, 4) !== String(new Date().getFullYear()).slice(2) ? '/' + m.slice(2, 4) : '');
+  const mesesVenc = Object.keys(meses).sort().slice(-8);
+  document.getElementById('p-tl-venc').innerHTML = mesesVenc.length
+    ? miniBarras(mesesVenc.map(m => ({ rot: abrev(m), v: meses[m], destaque: false })), '#c8392f')
+    : '<div class="tabela-msg">Nada atrasado neste recorte.</div>';
+  const prev = painel.previsao || {};
+  const noPeriodo = mesesDoPeriodo();
+  const mesesFut = Object.keys(prev).filter(m => prev[m][grupo] && (!noPeriodo || noPeriodo.includes(m))).sort();
+  document.getElementById('p-tl-fut').innerHTML = mesesFut.length
+    ? miniBarras(mesesFut.map(m => ({ rot: abrev(m), v: prev[m][grupo].f, destaque: false })), '#1f6fb2')
+    : '<div class="tabela-msg">Sem previsão para os próximos meses.</div>';
+}
+
+// ---------- VISÃO CONSULTORIA ----------
+// O ano inteiro (1º + 2º semestre) na régua do painel da consultoria Fiasini, pra
+// conferir com ele (07/10/2026): os 4 grupos somados (Financeiro, Advogado, Débito
+// judicial e desistentes/trancados/cancelados), só parcela com matrícula, aluno
+// único no ano e curva ABC sobre o total. O "vencido" do Fiasini já vem com multa
+// e juros — por isso o padrão aqui é "com juros", com o valor original ao lado.
+// Os números vêm prontos do agente (cobranca_edubox/consultoria).
+const GRUPOS_CONS = [['financeiro', 'Financeiro', '#1B3A4B'], ['advogado', 'Advogado (acordo)', '#7c3aed'], ['debito', 'Débito judicial', '#b45309'], ['enviar', 'Desistentes/trancados/cancelados', '#94a3b8']];
+const FAIXAS_CONS = [['1-30', '1 a 30 dias', '#edc24e'], ['31-60', '31 a 60 dias', '#e79a39'], ['61-90', '61 a 90 dias', '#e8791e'], ['91-180', '91 a 180 dias', '#d8542e'], ['180+', 'Mais de 180 dias', '#b12f28']];
+// Tecnólogos somados num curso só, como na referência da consultoria (só nesta visão).
+const cursoCons = (c) => (/^SUPERIOR DE TECNOLOGIA/i.test(c) ? 'Gestão (Tecnólogo)' : nomeCurso(c));
+
+async function renderConsultoria() {
+  const ano = anoAtual();
+  if (!consultoria) {
+    document.getElementById('p-kpis').innerHTML = '<div class="tabela-msg">Carregando a visão consultoria...</div>';
+    try { consultoria = await apiFetch('/cobranca/edubox/consultoria'); }
+    catch (err) { document.getElementById('p-kpis').innerHTML = `<div class="tabela-msg">Não foi possível carregar: ${esc(err.message)}</div>`; return; }
+    if (semestre !== 'consultoria' || visao !== 'panorama') return;   // trocou de tela enquanto carregava
+  }
+  const r = consultoria.resumo && consultoria.resumo[ano] && consultoria.resumo[ano][grupo];
+  const vazios = ['p-insights', 'p-aging', 'p-cursos', 'p-abc', 'p-tl-venc', 'p-tl-fut', 'p-divisao'];
+  if (!r) {
+    document.getElementById('p-kpis').innerHTML = '<div class="tabela-msg">A visão consultoria aparece depois da próxima atualização do Edubox (o agente passou a calcular em 07/10/2026).</div>';
+    vazios.forEach(id => { document.getElementById(id).innerHTML = ''; });
+    return;
+  }
+  const B = consBase;
+  const vb = (b) => (b ? b[B] || 0 : 0);
+  const V = vb(r.vencido);
+  const N = r.vencido.alunos;
+  const orig = r.vencido.valor;
+  const taxa = r.carteira ? V / r.carteira : null;
+  const critico = vb(r.faixas['91-180']) + vb(r.faixas['180+']);
+  const ABC = r.abc[B];
+  const rotBase = B === 'aPagar' ? 'com multa e juros' : 'valor original, sem juros';
+
+  // 1) números principais (total consolidado dos 4 grupos)
+  const lupa = (chave, extra) => `<button type="button" class="btn-detalhe-total kpi-lupa" data-ver-conta="${esc(chave)}"${extra ? ` data-ver-extra="${esc(extra)}"` : ''} title="Ver de onde vem esse número">🔍 ver a conta</button>`;
+  const kpi = (cls, rot, val, dica, chave, extra) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div>${chave ? lupa(chave, extra) : ''}</div>`;
+  document.getElementById('p-kpis').innerHTML =
+    kpi('cb-kpi-vencido', 'Vencido total (4 grupos)', brlCurto(V), B === 'aPagar' ? `original ${brlCurto(orig)} · ${esc(nomeGrupo())} · ${ano}` : `com juros ${brlCurto(r.vencido.aPagar)} · ${esc(nomeGrupo())} · ${ano}`, 'cons-vencido') +
+    kpi('', 'Inadimplência sobre a carteira', taxa === null ? '—' : pct(taxa), `vencido ÷ ${brlCurto(r.carteira)} de carteira prevista ${ano} (valor − desconto) — régua da consultoria`, 'cons-pct') +
+    kpi('', 'Alunos devedores', N.toLocaleString('pt-BR'), 'cada aluno conta uma vez no ano', 'cons-devedores') +
+    kpi('', 'Vencido médio por aluno', N ? brlCurto(V / N) : '—', rotBase) +
+    kpi('kpi-menor', 'Atraso crítico (+90 dias)', brlCurto(critico), V ? `${pct(critico / V, 0)} do vencido` : '', 'cons-faixa', '91-180,180+') +
+    kpi('kpi-sem', 'Classe A (alta prioridade)', `${ABC.A.alunos} alunos`, V ? `respondem por ${pct(ABC.A.valor / V, 0)} do vencido` : '', 'cons-abc', 'A');
+
+  // 2) divisão do total entre os 4 grupos
+  document.getElementById('p-divisao').innerHTML = `
+    <div class="cab"><span>Como o total de ${brlCurto(V)} se divide <small class="cb-sub">· calculado em ${fmtDataHora(consultoria.geradoEm)}</small></span>
+      <span class="cb-pan-tog" id="p-cons-base"><button type="button" data-b="aPagar" class="${B === 'aPagar' ? 'ativa' : ''}">Com juros (como o Fiasini)</button><button type="button" data-b="valor" class="${B === 'valor' ? 'ativa' : ''}">Valor original</button></span></div>
+    <div class="barra">${GRUPOS_CONS.map(([k, , cor]) => `<i style="width:${V ? (vb(r.grupos[k]) / V) * 100 : 0}%;background:${cor}" title="${esc(GRUPOS_CONS.find(g => g[0] === k)[1])}: ${brl(vb(r.grupos[k]))}"></i>`).join('')}</div>
+    <div class="itens">${GRUPOS_CONS.map(([k, rot, cor]) => `<span><em style="background:${cor}"></em><b>${brlCurto(vb(r.grupos[k]))}</b> ${rot} <small>${plural(r.grupos[k].alunos, 'aluno', 'alunos')}${V ? ` · ${pct(vb(r.grupos[k]) / V, 0)}` : ''}</small> ${lupa('cons-grupo', k)}</span>`).join('')}</div>`;
+
+  {
+    const aVencerAno = Object.values(r.meses || {}).reduce((t, m) => t + (m.aVencer || 0), 0);
+    pintarRosca(r.carteira - r.vencido.valor - aVencerAno, aVencerAno, r.vencido.valor, `— carteira prevista ${ano} (valor − desconto), os 4 grupos`);
+  }
+
+  // 3) o que chama atenção
+  const cursosMap = {};
+  for (const [nome, c] of Object.entries(r.porCurso || {})) {
+    const k = cursoCons(nome);
+    const x = (cursosMap[k] = cursosMap[k] || { nome: k, v: 0, alunos: 0, carteira: 0 });
+    x.v += vb(c.vencido); x.alunos += c.vencido.alunos; x.carteira += c.carteira || 0;
+  }
+  const cursos = Object.values(cursosMap).filter(c => c.v > 0).map(c => ({ ...c, taxa: c.carteira ? c.v / c.carteira : 0 }));
+  const piorTaxa = [...cursos].filter(c => c.alunos >= 5).sort((a, b) => b.taxa - a.taxa)[0];
+  const ins = [];
+  if (V) {
+    ins.push(`<div class="ruim"><small>Concentração de risco</small><b>${ABC.A.alunos} alunos</b> (${pct(ABC.A.alunos / N, 0)} dos devedores) respondem por <b>${pct(ABC.A.valor / V, 0)}</b> do vencido (${brlCurto(ABC.A.valor)}).</div>`);
+    if (piorTaxa) ins.push(`<div class="azul"><small>Curso com maior taxa</small><b>${esc(piorTaxa.nome)}</b>: ${pct(piorTaxa.taxa)} de inadimplência (${brlCurto(piorTaxa.v)}, ${plural(piorTaxa.alunos, 'aluno', 'alunos')})${taxa !== null ? `, contra ${pct(taxa)} na média` : ''}.</div>`);
+    ins.push(`<div class="ruim"><small>Atraso crítico</small><b>${brlCurto(critico)}</b> (${pct(critico / V, 0)} do vencido) já passou de 90 dias.</div>`);
+  }
+  document.getElementById('p-insights').innerHTML = ins.join('');
+
+  // 4) idade do atraso
+  const maxA = Math.max(1, ...FAIXAS_CONS.map(([k]) => vb(r.faixas[k])));
+  document.getElementById('p-aging').innerHTML = V ? FAIXAS_CONS.map(([k, rot, cor]) =>
+    `<div class="cb-pan-faixa"><span>${rot}</span><div class="trilho"><i style="width:${(vb(r.faixas[k]) / maxA) * 100}%;background:${cor}"></i></div><b>${brlCurto(vb(r.faixas[k]))}<small>${plural(r.faixas[k].alunos, 'aluno', 'alunos')} · ${pct(vb(r.faixas[k]) / V, 0)}</small>${lupa('cons-faixa', k)}</b></div>`).join('')
+    : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
+
+  // 5) cursos
+  const lista = [...cursos].sort((a, b) => (panMetric === 'taxa' ? b.taxa - a.taxa : b.v - a.v));
+  const maxC = Math.max(0.0001, ...lista.map(c => (panMetric === 'taxa' ? c.taxa : c.v)));
+  document.getElementById('p-cursos').innerHTML = lista.length
+    ? lista.map(c => `<div class="cb-rank"><span>${esc(c.nome)}</span><div class="cb-rank-barra"><span style="width:${((panMetric === 'taxa' ? c.taxa : c.v) / maxC) * 100}%"></span></div><b>${panMetric === 'taxa' ? pct(c.taxa) : brlCurto(c.v)}<small><span class="cb-taxa ${c.taxa >= TAXA_CRITICA ? 'crit' : ''}">${panMetric === 'taxa' ? brlCurto(c.v) : pct(c.taxa)}</span> · ${plural(c.alunos, 'aluno', 'alunos')}</small>${lupa('cons-curso', c.nome)}</b></div>`).join('')
+    : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
+
+  // 6) curva ABC (sobre o total consolidado)
+  const cl = (k, rot, dica) => `<div class="${k}"><span class="cl">${rot}</span><span class="vl">${brlCurto(ABC[k].valor)}</span><small>${plural(ABC[k].alunos, 'aluno', 'alunos')} · ${V ? pct(ABC[k].valor / V, 0) : '0%'} do vencido · ${dica}</small>${lupa('cons-abc', k)}</div>`;
+  document.getElementById('p-abc').innerHTML = V
+    ? `<div class="cb-abc">${cl('A', 'Classe A · alta prioridade', 'cobrar primeiro')}${cl('B', 'Classe B · prioridade média', 'segunda rodada')}${cl('C', 'Classe C · cauda longa', 'muitos alunos, pouco valor')}</div>
+       <p class="cb-sub" style="margin:0.8rem 0 0">${plural(N, 'devedor', 'devedores')} no ano. Os ${ABC.A.alunos} da classe A (${pct(ABC.A.alunos / N, 0)}) concentram ${pct(ABC.A.valor / V, 0)} do vencido.</p>`
+    : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
+
+  // 7) linha do tempo do ano: vencido e a vencer por mês de vencimento
+  const abrev = (m) => NOMES_MES[Number(m.slice(5, 7)) - 1].slice(0, 3);
+  const meses = Object.keys(r.meses || {}).sort();
+  const mv = meses.filter(m => (B === 'aPagar' ? r.meses[m].vencidoAPagar : r.meses[m].vencido) > 0);
+  document.getElementById('p-tl-venc').innerHTML = mv.length
+    ? miniBarras(mv.map(m => ({ rot: abrev(m), v: B === 'aPagar' ? r.meses[m].vencidoAPagar : r.meses[m].vencido, destaque: false })), '#c8392f')
+      + `<div class="cb-tl-lupas">${mv.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`
+    : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
+  const mf = meses.filter(m => r.meses[m].aVencer > 0);
+  document.getElementById('p-tl-fut').innerHTML = mf.length
+    ? miniBarras(mf.map(m => ({ rot: abrev(m), v: r.meses[m].aVencer, destaque: false })), '#1f6fb2')
+      + `<div class="cb-tl-lupas">${mf.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes-avencer" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`
+    : '<div class="tabela-msg">Nada a vencer até o fim do ano.</div>';
+}
+
+// ========================================================================
+// "VER A CONTA" (08/10/2026) — mesmo componente do Relatório de Matrículas
+// (modal #modal-detalhe-total, CSS .modal-detalhe-total-content, botão
+// .btn-detalhe-total). Cada seção é recalculada a partir do MESMO `r` que
+// já alimenta os cards (nenhum número digitado à mão) e nunca mostra nome
+// de aluno — só agregado por grupo/curso/mês/faixa (LGPD).
+// Por enquanto cobre a Visão consultoria (totais "cons-*"); o Painel por
+// semestre/mês ainda não tem os botões.
+// ========================================================================
+const REGRA_VENCIDO_CONS = 'Vencido = parcela em aberto (situação Aberto ou Parcial no Edubox) com vencimento antes de hoje. Só entra parcela COM matrícula vinculada (protocolo e evento sem matrícula ficam fora) e que não foi cancelada nem substituída por renegociação — mesma carteira do painel da consultoria Fiasini. Separado em 4 grupos: Financeiro, Advogado, Débito judicial e Desistentes/trancados/cancelados.';
+const REGRA_GRUPO_CONS = {
+  financeiro: 'Situação da matrícula = Ativo, Concluído ou Pendente, e a parcela não é de plano de Renegociação Judicial — é o que o setor Financeiro cobra direto.',
+  advogado: 'Parcela de plano de categoria "Renegociação Judicial" com "ADVOGADO" no nome do plano — acordo já feito, em andamento com o escritório.',
+  debito: 'Parcela de plano de Renegociação Judicial que não é "Advogado" — está com a advogada, sem acordo ainda (Débito Judicial).',
+  enviar: 'Situação da matrícula é Desistência, Trancamento, Cancelado ou Transferência, ou a parcela não tem matrícula vinculada — fora da cobrança do Financeiro.'
+};
+const REGRA_FAIXA_CONS = 'Dias de atraso = hoje menos a data de vencimento, em dias corridos. Cada parcela vencida entra numa única faixa, pelos dias que já passaram do vencimento.';
+const REGRA_ABC_CONS = 'Curva ABC pelo valor em atraso de cada aluno (um por cliente, único no ano): ordena do maior pro menor e soma acumulada — Classe A = alunos que juntos chegam a 80% do vencido; Classe B = de 80% a 95%; Classe C = o restante até 100%.';
+const REGRA_PCT_CONS = '% de inadimplência = Vencido ÷ Carteira prevista do ano (toda parcela com matrícula vinculada, valor menos desconto de pontualidade, vencimento dentro do ano, não cancelada nem substituída) — mesmo numerador e denominador do painel Fiasini.';
+const REGRA_DEVEDORES_CONS = 'Conta cada cliente do Edubox uma vez só no ano inteiro, mesmo que tenha parcela vencida nos dois semestres — por isso não é igual a somar os devedores de cada semestre separado.';
+const REGRA_CURSO_CONS = 'Mesmo critério do Vencido total, filtrado pelo curso da matrícula vinculada à parcela (ou da matrícula mais recente do cliente, quando a parcela não tem matrícula própria). Cursos "Superior de Tecnologia" somados em "Gestão (Tecnólogo)", só nesta visão — como na referência da consultoria.';
+const REGRA_MES_CONS = 'Soma de toda parcela vencida (qualquer grupo) cujo vencimento cai nesse mês.';
+const REGRA_MES_AVENCER_CONS = 'Soma de toda parcela que ainda não venceu, cujo vencimento cai nesse mês.';
+
+function linhaDetCons(nome, orig, apagar, hint) {
+  return `<tr><td>${esc(nome)}${hint ? `<br><small class="cb-sub">${esc(hint)}</small>` : ''}</td><td>${brl(orig)} <small class="cb-sub">(${brl(apagar)} c/ juros)</small></td></tr>`;
+}
+function linhaSecaoCons(nome) { return `<tr class="linha-secao-header"><td colspan="2">${esc(nome)}</td></tr>`; }
+function linhaTotalCons(nome, orig, apagar) {
+  return `<tr class="linha-destaque linha-separador"><td>${esc(nome)}</td><td>${brl(orig)} <small class="cb-sub">(${brl(apagar)} c/ juros)</small></td></tr>`;
+}
+
+// Fiasini — diferença conferida parcela a parcela em 07-08/10/2026 (ver
+// C:/OrbitaWT/conferencia-fiasini/, só com código da parcela, sem nome de
+// aluno). Valor deles é uma referência fixa daquele arquivo, não dá pra
+// recalcular ao vivo; o "nosso" vem sempre do dado carregado agora.
+const FIASINI_REF = {
+  vencidoGraduacao: 777103.13,
+  decomposicao: [
+    ['Corte de data (pagamentos entre a geração do arquivo dele e nossa atualização)', 8895],
+    ['Regra da parcela "Parcial" (como ela entra na carteira dele)', -3198],
+    ['Parcela "Parcial" que só existe do nosso lado', -2950],
+    ['Parcelas não localizadas do lado dele (3 parcelas)', 2747]
+  ]
+};
+function fiasiniHtmlVencido(nosso) {
+  if (grupo !== 'graduacao') return null;
+  const fiasini = FIASINI_REF.vencidoGraduacao;
+  const dif = fiasini - nosso;
+  const linhas = FIASINI_REF.decomposicao.map(([nome, v]) => `${esc(nome)}: ${v >= 0 ? '+' : ''}${brl(v)}`).join('; ');
+  return `<b>Como bate com o Fiasini</b> <small class="cb-sub">(referência de 07/10/2026)</small><br>
+    Fiasini: <b>${brl(fiasini)}</b> · Nosso agora: <b>${brl(nosso)}</b> · Diferença: <b>${brl(dif)}</b> (Fiasini ${dif >= 0 ? 'maior' : 'menor'})<br>
+    <small>${linhas}. Detalhe por parcela (só código, sem nome) em <code>conferencia-fiasini/divergencias-fiasini-2026.csv</code>.</small>`;
+}
+
+// Rastreio por curso — só existe pra quem o doc guarda por curso (vencido
+// total e cada curso individual). Pra grupo/faixa/ABC/% o doc de hoje não
+// quebra por curso ainda; o quadro mostra a composição mesmo assim, só sem
+// a lista de cursos (nenhum número é inventado pra preencher a tabela).
+function rastreioPorCursoCons(ano) {
+  const porCurso = (consultoria.resumo[ano][grupo] || {}).porCurso || {};
+  const agrupado = {};
+  for (const [nomeCru, c] of Object.entries(porCurso)) {
+    if (!c.vencido || !c.vencido.valor) continue;
+    const nome = cursoCons(nomeCru);
+    const x = (agrupado[nome] = agrupado[nome] || { valor: 0, aPagar: 0, parcelas: 0 });
+    x.valor += c.vencido.valor; x.aPagar += c.vencido.aPagar; x.parcelas += c.vencido.parcelas;
+  }
+  return Object.entries(agrupado).sort((a, b) => b[1].aPagar - a[1].aPagar);
+}
+
+function montarDetalheConsultoria(tipo, extra) {
+  const ano = anoAtual();
+  const r = consultoria.resumo[ano] && consultoria.resumo[ano][grupo];
+  if (!r) return null;
+  let titulo = '', campo = '', regra = REGRA_VENCIDO_CONS, linhas = '', fiasini = null, rastreio = null;
+
+  if (tipo === 'cons-vencido') {
+    titulo = 'Vencido total (4 grupos)';
+    campo = `resumo['${ano}']['${grupo}'].vencido`;
+    linhas = linhaSecaoCons('Composição por grupo') +
+      GRUPOS_CONS.map(([k, rot]) => linhaDetCons(rot, r.grupos[k].valor, r.grupos[k].aPagar, `${plural(r.grupos[k].alunos, 'aluno', 'alunos')} · ${plural(r.grupos[k].parcelas, 'parcela', 'parcelas')}`)).join('') +
+      linhaTotalCons('= Vencido total', r.vencido.valor, r.vencido.aPagar);
+    fiasini = fiasiniHtmlVencido(r.vencido.aPagar);
+    rastreio = rastreioPorCursoCons(ano);
+  } else if (tipo === 'cons-grupo') {
+    const def = GRUPOS_CONS.find(g => g[0] === extra);
+    const b = r.grupos[extra];
+    titulo = def[1];
+    campo = `resumo['${ano}']['${grupo}'].grupos.${extra}`;
+    regra = REGRA_GRUPO_CONS[extra];
+    linhas = linhaDetCons(def[1], b.valor, b.aPagar, `${plural(b.alunos, 'aluno', 'alunos')} · ${plural(b.parcelas, 'parcela', 'parcelas')}`) +
+      linhaTotalCons('= ' + def[1], b.valor, b.aPagar);
+  } else if (tipo === 'cons-faixa') {
+    const chaves = extra.split(',');
+    const nomes = chaves.map(k => FAIXAS_CONS.find(f => f[0] === k)[1]);
+    titulo = nomes.length > 1 ? `Atraso crítico (${nomes.join(' + ')})` : nomes[0];
+    campo = `resumo['${ano}']['${grupo}'].faixas['${chaves.join("' + '")}']`;
+    regra = REGRA_FAIXA_CONS;
+    let tv = 0, ta = 0;
+    linhas = chaves.map(k => {
+      const b = r.faixas[k];
+      tv += b.valor; ta += b.aPagar;
+      return linhaDetCons(FAIXAS_CONS.find(f => f[0] === k)[1], b.valor, b.aPagar, `${plural(b.alunos, 'aluno', 'alunos')} · ${plural(b.parcelas, 'parcela', 'parcelas')}`);
+    }).join('') + (chaves.length > 1 ? linhaTotalCons('= Total', tv, ta) : '');
+  } else if (tipo === 'cons-curso') {
+    titulo = extra;
+    campo = `resumo['${ano}']['${grupo}'].porCurso (agrupado: "${extra}")`;
+    regra = REGRA_CURSO_CONS;
+    const todos = rastreioPorCursoCons(ano);
+    const achado = todos.find(([nome]) => nome === extra);
+    const [, b] = achado || [null, { valor: 0, aPagar: 0, parcelas: 0 }];
+    linhas = linhaTotalCons(extra, b.valor, b.aPagar) +
+      `<tr><td colspan="2"><small class="cb-sub">${plural(b.parcelas, 'parcela', 'parcelas')} vencidas neste curso.</small></td></tr>`;
+  } else if (tipo === 'cons-abc') {
+    const B = consBase;
+    const vb = (b) => (b ? b[B] || 0 : 0);
+    const ABC = r.abc[B];
+    const nomes = { A: 'Classe A · alta prioridade', B: 'Classe B · prioridade média', C: 'Classe C · cauda longa' };
+    titulo = nomes[extra];
+    campo = `resumo['${ano}']['${grupo}'].abc.${B}.${extra}`;
+    regra = REGRA_ABC_CONS;
+    const tot = vb(r.vencido);
+    linhas = `<tr><td>${esc(nomes[extra])}<br><small class="cb-sub">Curva calculada sobre o valor ${B === 'aPagar' ? 'com juros e multa' : 'original'} (botão "${B === 'aPagar' ? 'Com juros' : 'Valor original'}" ativo acima) — trocar a base pode mudar quem entra em cada classe.</small></td><td>${brl(ABC[extra].valor)}</td></tr>` +
+      `<tr><td>Alunos nesta classe</td><td>${ABC[extra].alunos}</td></tr>` +
+      `<tr class="linha-destaque linha-separador"><td>% do vencido total</td><td>${tot ? pct(ABC[extra].valor / tot) : '—'}</td></tr>`;
+  } else if (tipo === 'cons-pct') {
+    titulo = '% de inadimplência';
+    campo = `resumo['${ano}']['${grupo}'].vencido.aPagar ÷ resumo['${ano}']['${grupo}'].carteira`;
+    regra = REGRA_PCT_CONS;
+    linhas = linhaDetCons('Vencido (numerador)', r.vencido.valor, r.vencido.aPagar) +
+      `<tr><td>Carteira prevista do ano (denominador)</td><td>${brl(r.carteira)}</td></tr>` +
+      `<tr class="linha-destaque linha-separador"><td>= % de inadimplência (original / com juros)</td><td>${r.carteira ? pct(r.vencido.valor / r.carteira) : '—'} / ${r.carteira ? pct(r.vencido.aPagar / r.carteira) : '—'}</td></tr>`;
+  } else if (tipo === 'cons-devedores') {
+    titulo = 'Alunos devedores (únicos no ano)';
+    campo = `resumo['${ano}']['${grupo}'].vencido.alunos`;
+    regra = REGRA_DEVEDORES_CONS;
+    linhas = `<tr><td>Alunos devedores</td><td>${r.vencido.alunos.toLocaleString('pt-BR')}</td></tr>` +
+      `<tr><td>Parcelas vencidas</td><td>${r.vencido.parcelas.toLocaleString('pt-BR')}</td></tr>`;
+  } else if (tipo === 'cons-mes' || tipo === 'cons-mes-avencer') {
+    const avencer = tipo === 'cons-mes-avencer';
+    const m = r.meses[extra];
+    const [ay, am] = extra.split('-');
+    titulo = `${NOMES_MES[Number(am) - 1]}/${ay} — ${avencer ? 'a vencer' : 'vencido'}`;
+    campo = `resumo['${ano}']['${grupo}'].meses['${extra}'].${avencer ? 'aVencer' : 'vencido/vencidoAPagar'}`;
+    regra = avencer ? REGRA_MES_AVENCER_CONS : REGRA_MES_CONS;
+    linhas = avencer
+      ? linhaTotalCons('= A vencer no mês', m.aVencer, m.aVencer)
+      : linhaTotalCons('= Vencido no mês', m.vencido, m.vencidoAPagar);
+    // Medicina tem plano "SALDO DEVEDOR Nº semestre" (acordo negociado, com
+    // vencimento sempre 30/12, empurrado semestre a semestre) — não é
+    // mensalidade normal, mas hoje entra junto no "a vencer" de dezembro e
+    // infla o mês. O agente já separa isso em outro lugar (campo `s` da
+    // previsão do Painel); aqui só avisa, não filtra (achado pela outra
+    // sessão em 08/10/2026 — decisão de separar ou não é do usuário).
+    if (avencer && grupo === 'medicina' && am === '12') {
+      linhas += `<tr><td colspan="2"><small class="cb-sub">⚠ Dezembro de Medicina inclui o plano "Saldo Devedor" (acordo negociado, vencimento sempre 30/12, empurrado de semestre a semestre) — não é mensalidade normal. O agente ainda não separa esse valor aqui; se quiser ver o mês sem ele, é preciso pedir essa separação em <code>montarConsultoria</code>.</small></td></tr>`;
+    }
+  } else {
+    return null;
+  }
+
+  return { titulo, campo, regra, linhas, fiasini, rastreio };
+}
+
+function abrirDetalheCobranca(tipo, extra) {
+  if (!consultoria) return;
+  const det = montarDetalheConsultoria(tipo, extra);
+  if (!det) return;
+  document.getElementById('detalhe-total-titulo').textContent = det.titulo;
+  document.getElementById('detalhe-total-sub').textContent = `${nomeGrupo()} · Visão consultoria ${anoAtual()}`;
+  const dataAgente = consultoria && consultoria.geradoEm ? fmtDataHora(consultoria.geradoEm) : '—';
+  document.getElementById('detalhe-total-data').textContent = `Dados do Edubox de ${dataAgente} · calculado em ${dataAgente}`;
+  document.getElementById('detalhe-total-regra').innerHTML = `<b>Regra:</b> ${det.regra}`;
+  document.getElementById('detalhe-total-tbody').innerHTML = det.linhas;
+  const fiasiniEl = document.getElementById('detalhe-total-fiasini');
+  if (det.fiasini) { fiasiniEl.innerHTML = det.fiasini; fiasiniEl.classList.remove('hidden'); }
+  else { fiasiniEl.innerHTML = ''; fiasiniEl.classList.add('hidden'); }
+  const rastreioEl = document.getElementById('detalhe-total-rastreio');
+  if (det.rastreio && det.rastreio.length) {
+    document.getElementById('detalhe-total-rastreio-tbody').innerHTML =
+      `<tr><th>Curso</th><th>Vencido</th><th>Parcelas</th></tr>` +
+      det.rastreio.map(([nome, x]) => `<tr><td>${esc(nome)}</td><td>${brl(x.aPagar)}</td><td>${x.parcelas}</td></tr>`).join('');
+    rastreioEl.classList.remove('hidden');
+  } else {
+    rastreioEl.classList.add('hidden');
+  }
+  document.getElementById('modal-detalhe-total').classList.remove('hidden');
+}
 
 // ---------- LISTA DE COBRANÇA ----------
 async function abrirLista() {
@@ -740,7 +1361,8 @@ async function abrirLista() {
   const selC = document.getElementById('l-curso');
   const atualC = selC.value;
   selC.innerHTML = '<option value="">Todos os cursos</option>' + cursos.map(c => `<option value="${esc(c)}">${esc(nomeCurso(c))}</option>`).join('');
-  selC.value = cursos.includes(atualC) ? atualC : '';
+  const pedido = cursoPedido; cursoPedido = '';
+  selC.value = cursos.includes(pedido) ? pedido : cursos.includes(atualC) ? atualC : '';
   mostrando = POR_PAGINA;
   filtrarLista();
 }
@@ -764,6 +1386,7 @@ function recortarAluno(a, modo, f) {
     if (modo === 'enviar') { if (p.j || !p.e) return false; }
     else if (adv ? !p.j : (p.j || p.e)) return false;
     if (semestre !== 'todos' && p.s !== semestre) return false;
+    if (usaMes() && p.v.slice(0, 7) !== mes) return false;
     if (f.de && p.v < f.de) return false;
     if (f.ate && p.v > f.ate) return false;
     if (f.plano && !(nomes[p.pl] || '').toLowerCase().includes(f.plano)) return false;
@@ -1319,14 +1942,94 @@ function imprimir() {
 }
 
 // ---------- EVENTOS ----------
+// ---------- BAIXAR RELATÓRIO (08/10/2026) ----------
+// Gera um arquivo HTML que abre sozinho no navegador, no estilo do relatório da consultoria: o
+// Panorama do grupo e período escolhidos no topo, com os gráficos e a dica ao passar o mouse.
+// Só números agregados — o Panorama não tem nome de aluno (e, por garantia, qualquer coluna de
+// aluno é retirada). Usa o que a tela já carregou: nenhuma consulta nova ao Edubox.
+async function baixarRelatorio() {
+  const btn = document.getElementById('btn-baixar-relatorio');
+  btn.disabled = true;
+  try {
+    if (visao !== 'panorama') trocarVisao('panorama');
+    // espera o Panorama terminar de desenhar
+    for (let i = 0; i < 40 && !document.querySelector('#p-kpis .kpi-card'); i++) await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 400));
+    const secao = document.getElementById('visao-panorama').cloneNode(true);
+    secao.querySelectorAll('button, .cb-pan-tog, .kpi-lupa, .cb-aluno-nome, .acoes-col, .hidden').forEach(e => e.remove());
+    secao.removeAttribute('class');
+    const aviso = secao.querySelector('#p-aviso');
+    if (aviso) aviso.innerHTML = aviso.innerHTML.replace(/\s*Muda com o (semestre|período) escolhido acima\.?/i, '');
+
+    // estilos da página (mesmo servidor) embutidos no arquivo
+    let css = '';
+    for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
+      if (!link.href.startsWith(location.origin)) continue;
+      try { css += await (await fetch(link.href)).text() + '\n'; } catch (e) { /* segue sem esse arquivo */ }
+    }
+
+    const agora = new Date();
+    const periodo = semestre === 'consultoria' ? `${anoAtual()}, ano inteiro (Visão consultoria, 4 grupos)` : nomeSemestre();
+    const titulo = `Inadimplência — ${nomeGrupo()} — ${periodo}`;
+    const dadosDe = painel?.status?.ultimaAtualizacao ? fmtDataHora(painel.status.ultimaAtualizacao) : '';
+    const scriptDica = `(function(){var d=document.createElement('div');d.className='cb-dica';document.body.appendChild(d);
+var SEL='[data-dica], .cb-pan-faixa, .cb-faixa, .cb-rank';
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function linhas(a){if(a.dataset&&a.dataset.dica)return a.dataset.dica.split('|');var n=a.querySelector(':scope > span'),b=a.querySelector(':scope > b');if(!b)return null;var sm=b.querySelector('small');var v=[].slice.call(b.childNodes).filter(function(x){return x!==sm;}).map(function(x){return x.textContent;}).join('').trim();return [(n?n.textContent:'').trim(),v].concat(sm?sm.textContent.replace(/\\s+/g,' ').trim().split(' · '):[]);}
+function show(a,x,y){var l=linhas(a);if(!l||!l[0]){d.style.opacity=0;return;}d.innerHTML='<div class="t">'+esc(l[0])+'</div>'+(l[1]?'<b>'+esc(l[1])+'</b>':'')+l.slice(2).map(function(t){return '<div>'+esc(t)+'</div>';}).join('');d.style.opacity=1;var w=d.offsetWidth,h=d.offsetHeight,L=x+14,T=y+14;if(L+w>innerWidth-8)L=x-w-14;if(T+h>innerHeight-8)T=y-h-14;d.style.left=L+'px';d.style.top=T+'px';}
+document.addEventListener('mousemove',function(e){var a=e.target.closest&&e.target.closest(SEL);if(a)show(a,e.clientX,e.clientY);else d.style.opacity=0;});
+document.addEventListener('touchstart',function(e){var a=e.target.closest&&e.target.closest(SEL);if(a){var t=e.touches[0];show(a,t.clientX,t.clientY);}else d.style.opacity=0;},{passive:true});})();`;
+
+    const html = `<!DOCTYPE html><html lang="pt-br"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(titulo)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>${css}
+body{margin:0;background:#eceff4}.rel-pagina{max-width:1180px;margin:0 auto;padding:16px}
+.rel-topo{background:#12294d;color:#fff;border-radius:14px;padding:1.2rem 1.5rem;margin-bottom:1rem}
+.rel-topo small{color:#aebdd6;font-size:.75rem}.rel-topo h1{font-family:Archivo,sans-serif;font-weight:800;font-size:1.6rem;margin:.2rem 0}
+.rel-topo p{margin:0;color:#c3d0e4;font-size:.85rem}.rel-rodape{color:#8793a6;font-size:.75rem;line-height:1.6;margin:1.5rem 0 1rem;border-top:1px solid #e3e8f0;padding-top:.8rem}
+@media print{body{background:#fff}.rel-pagina{max-width:none}}
+</style></head>
+<body class="cb-rel"><div class="layout-content rel-pagina">
+<div class="rel-topo"><small>FATEC Ivaiporã · Contas a receber · Mensalidades</small><h1>${esc(titulo)}</h1>
+<p>Gerado em ${esc(agora.toLocaleString('pt-BR'))}${dadosDe ? ` · dados do Edubox de ${esc(dadosDe)}` : ''} · por ${esc(currentUserNome || '')}</p></div>
+${secao.outerHTML}
+<div class="rel-rodape"><b>Como ler.</b> Atrasado = mensalidade que venceu e não foi paga (valor original, sem juros, salvo indicação). % de inadimplência = atrasado ÷ o que já venceu no período. Curva ABC: A = alunos que somam até 80% do atrasado, B até 95%, C o restante. Semestre pela data de vencimento (jan–jun = 1º, jul–dez = 2º). Relatório sem identificação de alunos, gerado pelo Órbita a partir do Edubox.</div>
+</div><script>${scriptDica}<\/script></body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    const nomeArq = `relatorio-inadimplencia-${grupo}-${(semestre === 'consultoria' ? anoAtual() + '-ano' : (mes || semestre)).replace(/[^0-9a-z.-]/gi, '')}-${iso(agora)}.html`;
+    a.href = URL.createObjectURL(blob); a.download = nomeArq;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    showToast(`Relatório baixado: ${nomeArq}`);
+  } catch (err) {
+    showToast(`Não foi possível gerar o relatório: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function trocarVisao(v) {
   visao = v;
+  if (semestre === 'consultoria' && v !== 'panorama') {   // a visão consultoria só existe no Panorama
+    semestre = semestreAtual();
+    sincronizarCaixasPeriodo();
+  }
   document.querySelectorAll('#visoes button').forEach(b => b.classList.toggle('ativa', b.dataset.visao === v));
-  for (const x of ['diretor', 'painel', 'lista', 'semana']) document.getElementById(`visao-${x}`).classList.toggle('hidden', x !== v);
+  for (const x of ['diretor', 'panorama', 'painel', 'lista', 'semana']) document.getElementById(`visao-${x}`).classList.toggle('hidden', x !== v);
   if (painel && !painel.vazio) renderTudo();
 }
 
 function wireEventos() {
+  document.getElementById('p-cursos').addEventListener('click', (e) => {
+    const linha = e.target.closest('.cb-rank-link');
+    if (!linha) return;
+    cursoPedido = linha.dataset.curso;
+    trocarVisao('lista');
+  });
+  ligarDicas();
   document.getElementById('abas-grupo').addEventListener('click', (e) => {
     const b = e.target.closest('[data-grupo]');
     if (!b) return;
@@ -1343,22 +2046,48 @@ function wireEventos() {
     mes = e.target.value;
     renderTudo();
   });
-  document.getElementById('sel-semestre').addEventListener('change', (e) => {
-    semestre = e.target.value;
-    mes = '';
-    mostrando = POR_PAGINA;
-    renderTudo();
+  document.getElementById('sel-ano').addEventListener('change', (e) => {
+    const anoEscolhido = e.target.value;
+    montarPeriodo(anoEscolhido);
+    const sel = document.getElementById('sel-sem-periodo');
+    // No ano atual, parte pro semestre vigente (não pro 1º da lista) — é o
+    // que a tela já mostrava por padrão antes de ter essa caixa (08/10/2026).
+    const preferido = anoEscolhido === anoAtual() ? semestreAtual().split('.')[1] : null;
+    if (preferido && [...sel.options].some(o => o.value === preferido)) sel.value = preferido;
+    else if (sel.options.length) sel.value = sel.options[0].value;
+    aplicarCaixasPeriodo();
   });
+  document.getElementById('sel-sem-periodo').addEventListener('change', aplicarCaixasPeriodo);
+  document.getElementById('p-curso-metric').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-m]'); if (!b) return;
+    panMetric = b.dataset.m;
+    document.querySelectorAll('#p-curso-metric button').forEach(x => x.classList.toggle('ativa', x === b));
+    renderPanorama();
+  });
+  document.getElementById('p-divisao').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-b]'); if (!b) return;
+    consBase = b.dataset.b;
+    renderPanorama();
+  });
+  // "ver a conta" — delegado no container do Panorama/Visão consultoria,
+  // porque os botões 🔍 são recriados a cada render.
+  document.getElementById('visao-panorama').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ver-conta]');
+    if (!b) return;
+    abrirDetalheCobranca(b.dataset.verConta, b.dataset.verExtra);
+  });
+  document.getElementById('btn-fechar-detalhe-total').addEventListener('click', () => document.getElementById('modal-detalhe-total').classList.add('hidden'));
   document.getElementById('btn-atualizar').addEventListener('click', atualizarAgora);
   document.getElementById('tb-semestres').addEventListener('click', (e) => {
     const tr = e.target.closest('[data-sem]');
     if (!tr) return;
     semestre = tr.dataset.sem;
-    document.getElementById('sel-semestre').value = semestre;
+    sincronizarCaixasPeriodo();
     mostrando = POR_PAGINA;
     renderTudo();
   });
   document.getElementById('btn-imprimir').addEventListener('click', imprimir);
+  document.getElementById('btn-baixar-relatorio').addEventListener('click', baixarRelatorio);
   document.getElementById('btn-modelos').addEventListener('click', abrirModelos);
 
   // lista
@@ -1430,6 +2159,6 @@ function wireEventos() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    ['modal-zap', 'modal-aluno', 'modal-modelos'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['modal-zap', 'modal-aluno', 'modal-modelos', 'modal-detalhe-total'].forEach(id => document.getElementById(id).classList.add('hidden'));
   });
 }

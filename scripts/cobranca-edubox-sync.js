@@ -24,6 +24,9 @@
 //                                      mensal do diretor (02/10/2026)
 //   cobranca_edubox_historico/{id}      "foto" dos totais vencidos a cada
 //                                      rodada (base do "comecei a semana com X")
+//   cobranca_edubox/consultoria        resumo['AAAA'] do ano inteiro na régua do
+//                                      painel da consultoria Fiasini (4 grupos
+//                                      somados) — "Visão consultoria" (07/10/2026)
 //   config/cobranca_sync               status/última atualização
 //
 // Regras (definidas com o usuário, 30/09/2026):
@@ -122,7 +125,7 @@ const SQL_ABERTO = `
         ORDER BY m.climat, m.datmat DESC NULLS LAST, m.codmat DESC
     )
     SELECT c.codctr, c.clictr, c.semctr, c.venctr, c.valctr, coalesce(c.valpagctr, 0) AS valpag,
-           c.stactr, (p.catpla = $1) AS juridico, p.despla,
+           coalesce(c.desctr, 0) AS desctr, (c.matctr IS NOT NULL) AS temmat, c.stactr, (p.catpla = $1) AS juridico, p.despla,
            trim(coalesce(cu.descur, cc.descur, '')) AS curso,
            trim(cl.nomcli) AS nome, cl.cpfcli, cl.celcli, cl.foncli, trim(m.stamat) AS stamat
     FROM tfi_ctreceber c
@@ -186,6 +189,35 @@ const SQL_DEVIDO = `
                       AND b.tipibc IN ('renegociacao', 'reneg_parcial', 'cancelamento') AND b.estibc IS NULL)
     GROUP BY 1, 2, 3, 4, 5, 6`;
 
+// Carteira do ano por curso e mês de vencimento (Visão consultoria): valor
+// previsto líquido (valor − desconto) e o já pago, de toda parcela COM
+// matrícula, não cancelada e não substituída por renegociação — é a carteira
+// do painel Fiasini (conferida em 07/10/2026: mesmas 20.299 parcelas da
+// Graduação, R$ 22 de diferença). Consulta agregada, poucas linhas.
+const SQL_CARTEIRA_ANO = `
+    WITH curso_cli AS (
+        SELECT DISTINCT ON (m.climat) m.climat, cu.descur
+        FROM tac_matricula m
+        JOIN tac_turma t ON t.codtur = m.turmat
+        JOIN tac_curso cu ON cu.codcur = t.curtur
+        ORDER BY m.climat, m.datmat DESC NULLS LAST, m.codmat DESC
+    )
+    SELECT (coalesce(c.semctr, '') ~ '-') AS med, to_char(c.venctr, 'YYYY-MM') AS mes,
+           trim(coalesce(cu.descur, cc.descur, '')) AS curso,
+           sum(c.valctr - coalesce(c.desctr, 0)) AS carteira, sum(coalesce(c.valpagctr, 0)) AS recebido
+    FROM tfi_ctreceber c
+    LEFT JOIN tfi_plano p ON p.codpla = c.plactr
+    LEFT JOIN tac_matricula m ON m.codmat = c.matctr
+    LEFT JOIN tac_turma t ON t.codtur = m.turmat
+    LEFT JOIN tac_curso cu ON cu.codcur = t.curtur
+    LEFT JOIN curso_cli cc ON cc.climat = c.clictr
+    WHERE c.venctr >= $1::date AND c.venctr < $2::date
+      AND c.matctr IS NOT NULL AND c.stactr <> 'Cancel'
+      AND coalesce(p.despla, '') !~* '^teste$'
+      AND NOT EXISTS (SELECT 1 FROM tfi_itembaixactr b WHERE b.ctribc = c.codctr
+                      AND b.tipibc IN ('renegociacao', 'reneg_parcial', 'cancelamento') AND b.estibc IS NULL)
+    GROUP BY 1, 2, 3`;
+
 // Recebido por mês (data da baixa), últimos MESES_HISTORICO meses — uma
 // consulta agregada só (poucas linhas). Mesmo critério de "recebido" das
 // baixas diárias; "atraso" = pagou depois do vencimento.
@@ -193,6 +225,7 @@ const SQL_RECEBIDO_MES = `
     SELECT to_char(b.datibc, 'YYYY-MM') AS mes, to_char(date_trunc('week', b.datibc), 'YYYY-MM-DD') AS semana,
            (coalesce(c.semctr, '') ~ '-') AS med,
            coalesce(p.catpla = $1, false) AS juridico, (c.venctr < b.datibc::date) AS atraso,
+           to_char(c.venctr, 'YYYY') || '.' || CASE WHEN extract(month FROM c.venctr) <= 6 THEN '1' ELSE '2' END AS semv,
            sum(b.totibc) AS valor
     FROM tfi_itembaixactr b
     JOIN tfi_ctreceber c ON c.codctr = b.ctribc
@@ -200,7 +233,7 @@ const SQL_RECEBIDO_MES = `
     WHERE b.tipibc IN ('baixa', 'baixa_parcial') AND b.estibc IS NULL
       AND b.datibc >= (date_trunc('month', CURRENT_DATE) - ($2::int - 1) * interval '1 month')
       AND b.datibc <= CURRENT_DATE
-    GROUP BY 1, 2, 3, 4, 5`;
+    GROUP BY 1, 2, 3, 4, 5, 6`;
 
 // Último pagamento de cada cliente (qualquer parcela e só as de acordo).
 const SQL_ULTIMO_PAGAMENTO = `
@@ -421,7 +454,109 @@ async function montarResumo(hoje, pagamentos) {
     for (const pm of Object.values(previsao)) for (const [g, x] of Object.entries(pm)) {
         pm[g] = { f: r2(x.f), j: r2(x.j), s: r2(x.s), alunosF: x.af.size, alunosJ: x.aj.size };
     }
-    return { resumo, meses, previsao, alunos, situacaoAdvogado, parcelasLidas: linhas.length };
+    return { resumo, meses, previsao, alunos, situacaoAdvogado, linhas, parcelasLidas: linhas.length };
+}
+
+// ---------------------------------------------------------------------------
+// "Visão consultoria" (07/10/2026): o ano inteiro (1º + 2º semestre) na régua
+// do painel da consultoria Fiasini, pra os números baterem com os dela:
+//  - só parcela com vencimento no ano e COM matrícula (protocolo, eventos e
+//    acordo lançado sem matrícula ficam fora, como no Fiasini);
+//  - os 4 grupos somados: Financeiro, Advogado, Débito judicial e "enviar"
+//    (desistente/trancado/cancelado), com a divisão guardada;
+//  - vencido = em aberto com vencimento antes de hoje. O "vencido" do Fiasini
+//    é o valor COM multa e juros (o nosso aPagar); vai o original também;
+//  - a vencer = valor − desconto − pago (desconto de pontualidade ainda vale);
+//  - aluno conta uma vez só no ano (quem deve nos dois semestres não
+//    duplica) e a curva ABC é sobre o total consolidado.
+// Não mexe nos resumos por semestre: vai num doc separado, lido só quando
+// escolhem essa opção na tela.
+// ---------------------------------------------------------------------------
+const FAIXAS_CONSULTORIA = [[1, 30, '1-30'], [31, 60, '31-60'], [61, 90, '61-90'], [91, 180, '91-180'], [181, Infinity, '180+']];
+
+// Curva ABC pelo atrasado de cada aluno: A até 80% acumulado (contando o
+// próprio aluno), B até 95%, C o resto — mesmo corte do painel Fiasini.
+function curvaABC(valores) {
+    const ord = valores.filter(v => v > 0).sort((a, b) => b - a);
+    const tot = ord.reduce((s, v) => s + v, 0);
+    const abc = { A: { alunos: 0, valor: 0 }, B: { alunos: 0, valor: 0 }, C: { alunos: 0, valor: 0 } };
+    let acum = 0;
+    for (const v of ord) {
+        acum += v;
+        const p = acum / tot * 100;
+        const k = p <= 80 ? 'A' : p <= 95 ? 'B' : 'C';
+        abc[k].alunos += 1; abc[k].valor += v;
+    }
+    for (const x of Object.values(abc)) x.valor = r2(x.valor);
+    return abc;
+}
+
+async function montarConsultoria(linhas, hoje) {
+    const ano = hoje.slice(0, 4);
+    const hojeMs = new Date(hoje + 'T12:00:00').getTime();
+    const carteiraLinhas = await q(SQL_CARTEIRA_ANO, [`${ano}-01-01`, `${Number(ano) + 1}-01-01`]);
+    const novo = () => ({
+        vencido: novoBloco(), aVencer: novoBloco(),
+        grupos: { financeiro: novoBloco(), advogado: novoBloco(), debito: novoBloco(), enviar: novoBloco() },
+        faixas: Object.fromEntries(FAIXAS_CONSULTORIA.map(f => [f[2], novoBloco()])),
+        porCurso: {}, meses: {}, porAluno: {}, carteira: 0, recebido: 0
+    });
+    const G = { graduacao: novo(), medicina: novo() };
+    const cursoDe = (g, c) => (g.porCurso[c] = g.porCurso[c] || { vencido: novoBloco(), aVencer: 0, carteira: 0 });
+    const mesDe = (g, m) => (g.meses[m] = g.meses[m] || { vencido: 0, vencidoAPagar: 0, aVencer: 0, carteira: 0, recebido: 0 });
+
+    for (const l of linhas) {
+        if (!l.temmat) continue;
+        const venc = isoData(l.venctr);
+        if (venc.slice(0, 4) !== ano) continue;
+        const g = G[grupoDe(l.semctr)];
+        const curso = l.curso || SEM_CURSO;
+        const mes = venc.slice(0, 7);
+        if (venc >= hoje) { // a vencer
+            const v = Number(l.valctr) - Number(l.desctr) - Number(l.valpag);
+            if (v <= 0.004) continue;
+            somar(g.aVencer, v, l.clictr);
+            cursoDe(g, curso).aVencer += v;
+            mesDe(g, mes).aVencer += v;
+            continue;
+        }
+        const valor = Number(l.valctr) - Number(l.valpag);
+        if (valor <= 0) continue;
+        const ap = aPagarDe(valor, venc, hoje);
+        const dias = Math.round((hojeMs - new Date(venc + 'T12:00:00').getTime()) / 86400000);
+        const lado = l.juridico ? (/ADVOGADO/i.test(l.despla || '') ? 'advogado' : 'debito') : ladoDe(l);
+        somar(g.vencido, valor, l.clictr, ap);
+        somar(g.grupos[lado], valor, l.clictr, ap);
+        const f = FAIXAS_CONSULTORIA.find(([de, ate]) => dias >= de && dias <= ate);
+        if (f) somar(g.faixas[f[2]], valor, l.clictr, ap);
+        somar(cursoDe(g, curso).vencido, valor, l.clictr, ap);
+        const m = mesDe(g, mes);
+        m.vencido += valor; m.vencidoAPagar += ap;
+        const a = (g.porAluno[l.clictr] = g.porAluno[l.clictr] || { valor: 0, aPagar: 0 });
+        a.valor += valor; a.aPagar += ap;
+    }
+    for (const c of carteiraLinhas) {
+        const g = G[c.med ? 'medicina' : 'graduacao'];
+        const cart = Number(c.carteira) || 0, rec = Number(c.recebido) || 0;
+        g.carteira += cart; g.recebido += rec;
+        cursoDe(g, c.curso || SEM_CURSO).carteira += cart;
+        const m = mesDe(g, c.mes);
+        m.carteira += cart; m.recebido += rec;
+    }
+    const saida = {};
+    for (const [nome, g] of Object.entries(G)) {
+        const alunos = Object.values(g.porAluno);
+        saida[nome] = {
+            vencido: fecharBloco(g.vencido), aVencer: fecharBloco(g.aVencer),
+            grupos: Object.fromEntries(Object.entries(g.grupos).map(([k, b]) => [k, fecharBloco(b)])),
+            faixas: Object.fromEntries(Object.entries(g.faixas).map(([k, b]) => [k, fecharBloco(b)])),
+            porCurso: Object.fromEntries(Object.entries(g.porCurso).map(([k, c]) => [k, { vencido: fecharBloco(c.vencido), aVencer: r2(c.aVencer), carteira: r2(c.carteira) }])),
+            meses: Object.fromEntries(Object.entries(g.meses).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([x, v]) => [x, r2(v)]))])),
+            abc: { valor: curvaABC(alunos.map(a => a.valor)), aPagar: curvaABC(alunos.map(a => a.aPagar)) },
+            carteira: r2(g.carteira), recebido: r2(g.recebido)
+        };
+    }
+    return { ano, resumo: { [ano]: saida } };
 }
 
 function telefone(v) {
@@ -562,11 +697,19 @@ async function montarRecebidoMes() {
         const x = m[grupo];
         const v = Number(l.valor) || 0;
         x[l.juridico ? 'j' : 'f'] += v;
-        if (l.atraso) x[l.juridico ? 'ja' : 'fa'] += v;
+        if (l.atraso) {
+            x[l.juridico ? 'ja' : 'fa'] += v;
+            // recuperado separado pelo semestre de vencimento da parcela (08/10/2026): mostra quanto
+            // é atraso do próprio período e quanto é dívida de semestres anteriores
+            x.aSem = x.aSem || {};
+            x.aSem[l.semv] = (x.aSem[l.semv] || 0) + v;
+        }
         const sm = ((porSemana[l.mes] = porSemana[l.mes] || {})[l.semana] = porSemana[l.mes][l.semana] || { graduacao: { f: 0, j: 0 }, medicina: { f: 0, j: 0 } });
         sm[grupo][l.juridico ? 'j' : 'f'] += v;
     }
-    for (const m of Object.values(porMes)) for (const x of Object.values(m)) for (const k in x) x[k] = r2(x[k]);
+    for (const m of Object.values(porMes)) for (const x of Object.values(m)) for (const k in x) {
+        if (k === 'aSem') { for (const sv in x.aSem) x.aSem[sv] = r2(x.aSem[sv]); } else x[k] = r2(x[k]);
+    }
     for (const m of Object.values(porSemana)) for (const s of Object.values(m)) for (const x of Object.values(s)) { x.f = r2(x.f); x.j = r2(x.j); }
     return { porMes, porSemana };
 }
@@ -629,13 +772,15 @@ async function sincronizar(origem = 'manual') {
     try {
         const hoje = isoData(new Date());
         const pagamentos = await montarPagamentos(hoje);
-        const { resumo, meses, previsao, alunos, situacaoAdvogado, parcelasLidas } = await montarResumo(hoje, pagamentos);
+        const { resumo, meses, previsao, alunos, situacaoAdvogado, linhas, parcelasLidas } = await montarResumo(hoje, pagamentos);
+        const consultoria = await montarConsultoria(linhas, hoje);
         const { porDia, baixasLidas } = await montarBaixas(hoje);
         const { porMes: recebidoMes, porSemana: recebidoSemana } = await montarRecebidoMes();
         const agora = new Date().toISOString();
         const semestres = Object.keys(resumo).filter(s => s !== 'todos').sort((a, b) => b.localeCompare(a));
 
         await db.collection('cobranca_edubox').doc('atual').set({ geradoEm: agora, origem, semestres, resumo, situacaoAdvogado, previsao });
+        await db.collection('cobranca_edubox').doc('consultoria').set({ geradoEm: agora, hoje, ...consultoria });
         await db.collection('cobranca_edubox_pagamentos').doc('recentes').set({ geradoEm: agora, porAluno: pagamentos.recentes });
         for (const g of ['graduacao', 'medicina']) {
             await db.collection('cobranca_edubox_alunos').doc(g).set({ geradoEm: agora, alunos: alunos[g], planos: alunos[g + 'Planos'] });
@@ -686,7 +831,7 @@ async function sincronizar(origem = 'manual') {
     }
 }
 
-module.exports = { sincronizar };
+module.exports = { sincronizar, montarResumo, montarConsultoria };
 
 if (require.main === module) {
     sincronizar('manual')

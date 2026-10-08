@@ -118,6 +118,19 @@ router.get('/painel', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// ---------- VISÃO CONSULTORIA ----------
+// Ano inteiro na régua do painel da consultoria Fiasini (4 grupos somados).
+// Doc separado do "atual": só é lido quando escolhem essa opção na tela.
+router.get('/consultoria', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const d = await db.collection('cobranca_edubox').doc('consultoria').get();
+        res.json(d.exists ? d.data() : { vazio: true });
+    } catch (err) {
+        console.error('[cobranca-edubox] consultoria:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ---------- LISTA DE COBRANÇA ----------
 // Primeiro acesso: monta o controle a partir do histórico que já existia.
 async function lerControle() {

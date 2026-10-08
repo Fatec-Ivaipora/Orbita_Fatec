@@ -8,9 +8,11 @@
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=11">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=24">
 </head>
-<body>
+<body class="cb-rel">
     <div id="auth-guard" class="layout-auth-guard">
         <div class="layout-spinner"></div>
         <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
@@ -30,7 +32,7 @@
 
                 <div class="page-header">
                     <div>
-                        <span class="cm-selo">Financeiro</span>
+                        <span class="cm-selo">FATEC Ivaiporã · Contas a receber · Mensalidades</span>
                         <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></span>Cobrança</h1>
                         <p class="page-subtitle">Pendências do Edubox — atualiza sozinho às 7h, 12h, 17h e 22h</p>
                     </div>
@@ -38,6 +40,10 @@
                         <button class="btn-secondary" id="btn-imprimir" title="Imprime o que está na tela, com o logo">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                             Imprimir
+                        </button>
+                        <button class="btn-secondary" id="btn-baixar-relatorio" title="Baixa um arquivo com o Panorama do grupo e período escolhidos, sem nome de aluno, pra enviar à direção">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Baixar relatório
                         </button>
                         <button class="btn-secondary" id="btn-modelos" title="Textos das mensagens de WhatsApp">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -69,17 +75,18 @@
 
                 <div class="cb-barra">
                     <div class="abas" id="abas-grupo">
-                        <button type="button" class="aba ativa" data-grupo="graduacao">🎓 Graduação <small>(16 cursos)</small></button>
-                        <button type="button" class="aba" data-grupo="medicina">🩺 Medicina</button>
+                        <button type="button" class="aba ativa" data-grupo="graduacao">Graduação <small>(16 cursos)</small></button>
+                        <button type="button" class="aba" data-grupo="medicina">Medicina</button>
                     </div>
                     <div class="cb-visoes" id="visoes">
-                        <button type="button" data-visao="diretor">📊 Visão do diretor</button>
-                        <button type="button" data-visao="painel" class="ativa">Painel</button>
+                        <button type="button" data-visao="panorama" class="ativa">Panorama da carteira</button>
+                        <button type="button" data-visao="painel">Painel</button>
                         <button type="button" data-visao="lista">Lista de cobrança</button>
                         <button type="button" data-visao="semana">Fechamento semanal</button>
                     </div>
-                    <select id="sel-semestre" class="select-filter" title="Semestre das parcelas"></select>
-                    <select id="sel-mes" class="select-filter hidden" title="Ver só um mês do semestre (Painel e Visão do diretor)"></select>
+                    <select id="sel-ano" class="select-filter" title="Ano"></select>
+                    <select id="sel-sem-periodo" class="select-filter" title="Semestre ou ano inteiro"></select>
+                    <select id="sel-mes" class="select-filter hidden" title="Ver só um mês do semestre"></select>
                 </div>
 
                 <!-- ============ VISÃO DO DIRETOR ============ -->
@@ -90,7 +97,7 @@
                         <div class="card cb-dir-big" id="d-cobr"></div>
                     </div>
                     <div class="card cb-bloco">
-                        <div class="card-secao-titulo"><span id="d-grafico-titulo">💰 Dinheiro que entrou, semana a semana</span> <small class="cb-sub" id="d-grafico-sub">— tudo que foi pago e baixado no Edubox em cada semana (o atraso está no gráfico de baixo)</small></div>
+                        <div class="card-secao-titulo"><span id="d-grafico-titulo">Dinheiro que entrou, semana a semana</span> <small class="cb-sub" id="d-grafico-sub">— tudo que foi pago e baixado no Edubox em cada semana (o atraso está no gráfico de baixo)</small></div>
                         <div id="d-grafico"></div>
                     </div>
                     <div class="card cb-bloco">
@@ -109,20 +116,57 @@
                     </div>
                 </section>
 
+                <!-- ============ PANORAMA DA CARTEIRA (resumo para a direção, sem nomes de alunos) ============ -->
+                <section id="visao-panorama">
+                    <div class="aviso-info" id="p-aviso" style="margin-bottom:1rem">Resumo da carteira de atraso <b>do que o Financeiro cobra</b> (sem advogado, débito judicial e desistentes), organizado a partir do painel da consultoria Fiasini. Não mostra nome de aluno. Muda com o semestre escolhido acima.</div>
+                    <div class="kpi-grid" id="p-kpis"></div>
+                    <div class="cb-pan-div hidden" id="p-divisao"></div>
+                    <div class="cb-pan-ins" id="p-insights"></div>
+                    <div class="cb-duas">
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Posição da carteira <small class="cb-sub" id="p-rosca-sub">— valor original</small></div>
+                            <div id="p-rosca"></div>
+                        </div>
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Idade do atraso <small class="cb-sub">— quanto está atrasado em cada faixa de dias</small></div>
+                            <div id="p-aging"></div>
+                        </div>
+                    </div>
+                    <div class="card cb-bloco" style="margin-bottom:1.25rem">
+                        <div class="card-secao-titulo">Atraso por curso
+                            <span class="cb-pan-tog" id="p-curso-metric"><button type="button" data-m="valor" class="ativa">Atrasado (R$)</button><button type="button" data-m="taxa">Taxa %</button></span>
+                        </div>
+                        <div id="p-cursos"></div>
+                    </div>
+                    <div class="cb-duas">
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Concentração de devedores <small class="cb-sub">— curva ABC: A = até 80% do atrasado, B = até 95%, C = o resto</small></div>
+                            <div id="p-abc"></div>
+                        </div>
+                        <div class="card cb-bloco">
+                            <div class="card-secao-titulo">Linha do tempo <small class="cb-sub">— por mês de vencimento</small></div>
+                            <div class="cb-pan-sub venc">Atrasado hoje, por mês em que a parcela venceu</div>
+                            <div id="p-tl-venc"></div>
+                            <div class="cb-pan-sub fut" style="margin-top:0.8rem" id="p-tl-fut-tit">A vencer nos próximos meses (Financeiro)</div>
+                            <div id="p-tl-fut"></div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ============ PAINEL ============ -->
-                <section id="visao-painel">
+                <section id="visao-painel" class="hidden">
                     <div class="kpi-grid">
-                        <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">🔴 Atrasado — Financeiro cobra</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
-                        <div class="kpi-card kpi-menor"><div class="kpi-label">⚖️ Atrasado — Advogado (acordo feito)</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
-                        <div class="kpi-card kpi-ass"><div class="kpi-label">🏛 Atrasado — Débito judicial (sem acordo)</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
-                        <div class="kpi-card kpi-sem"><div class="kpi-label" id="k-recebido-rot">🟢 Entrou nesta semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
+                        <div class="kpi-card cb-kpi-vencido"><div class="kpi-label">Atrasado, Financeiro cobra</div><div class="kpi-value" id="k-vencido">—</div><div class="kpi-hint" id="k-vencido-hint"></div></div>
+                        <div class="kpi-card kpi-menor"><div class="kpi-label">Advogado, acordo feito</div><div class="kpi-value" id="k-jur">—</div><div class="kpi-hint" id="k-jur-hint"></div></div>
+                        <div class="kpi-card kpi-ass"><div class="kpi-label">Débito judicial, sem acordo</div><div class="kpi-value" id="k-fin">—</div><div class="kpi-hint" id="k-fin-hint"></div></div>
+                        <div class="kpi-card kpi-sem"><div class="kpi-label" id="k-recebido-rot">Entrou nesta semana</div><div class="kpi-value" id="k-recebido">—</div><div class="kpi-hint" id="k-recebido-hint"></div></div>
                     </div>
 
                     <div class="card hidden" id="card-semestres">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🔴 Atrasado por semestre <small class="cb-sub">— o que falta receber de cada semestre · clique num semestre pra ver só ele</small></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Atrasado por semestre <small class="cb-sub">— o que falta receber de cada semestre · clique num semestre pra ver só ele</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table cb-semestres">
-                                <thead><tr><th>Semestre</th><th class="num">Alunos</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado</th><th class="num">🏛 Débito judicial</th><th class="num">Total atrasado</th></tr></thead>
+                                <thead><tr><th>Semestre</th><th class="num">Alunos</th><th class="num">Financeiro</th><th class="num">Advogado</th><th class="num">Débito judicial</th><th class="num">Total atrasado</th></tr></thead>
                                 <tbody id="tb-semestres"></tbody>
                             </table>
                         </div>
@@ -130,17 +174,17 @@
 
                     <!-- Mês que já terminou: como o mês fechou (no lugar de faixas/a vencer) -->
                     <div class="card hidden" id="card-mes-fechou">
-                        <div class="card-secao-titulo">📅 Como o mês fechou <small class="cb-sub" id="mes-fechou-sub"></small></div>
+                        <div class="card-secao-titulo">Como o mês fechou <small class="cb-sub" id="mes-fechou-sub"></small></div>
                         <div class="cb-fechou" id="mes-fechou"></div>
                     </div>
 
                     <div class="cb-duas" id="bloco-faixas-avencer">
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">🔴 Atrasado — há quanto tempo</div>
+                            <div class="card-secao-titulo">Atrasado, há quanto tempo</div>
                             <div id="faixas"></div>
                         </div>
                         <div class="card cb-bloco">
-                            <div class="card-secao-titulo">⏳ Ainda vai vencer <small class="cb-sub" id="a-vencer-periodo">— mensalidades futuras, valor sem juros (não é atraso)</small></div>
+                            <div class="card-secao-titulo">Ainda vai vencer <small class="cb-sub" id="a-vencer-periodo">— mensalidades futuras, valor sem juros (não é atraso)</small></div>
                             <div class="cb-avencer" id="a-vencer"></div>
                         </div>
                     </div>
@@ -149,17 +193,17 @@
                         <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Advogado e Débito judicial por plano <small class="cb-sub">— semestre pelo vencimento da parcela, como no Edubox</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">🔴 Atrasado</th><th class="num">⏳ Ainda vai vencer</th><th class="num" id="th-planos-entrou">🟢 Entrou na semana</th></tr></thead>
+                                <thead><tr><th>Plano</th><th class="num">Alunos com atraso</th><th class="num">Atrasado</th><th class="num">Ainda vai vencer</th><th class="num" id="th-planos-entrou">Entrou na semana</th></tr></thead>
                                 <tbody id="tb-planos"></tbody>
                             </table>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🔴 Atrasado por curso <small class="cb-sub">— o que falta receber</small></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Atrasado por curso <small class="cb-sub">— o que falta receber</small></div>
                         <div class="tabela-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Curso</th><th class="num">Alunos com atraso</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total atrasado</th></tr></thead>
+                                <thead><tr><th>Curso</th><th class="num">Alunos com atraso</th><th class="num">Financeiro</th><th class="num">Advogado + Débito</th><th class="num">Total atrasado</th></tr></thead>
                                 <tbody id="tb-cursos"></tbody>
                             </table>
                         </div>
@@ -212,7 +256,7 @@
                     <div class="card">
                         <div class="tabela-wrap">
                             <table class="data-table cb-lista">
-                                <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">💰 A pagar <small>(com juros e multa)</small></th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
+                                <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">A pagar <small>(com juros e multa)</small></th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
                                 <tbody id="tb-alunos"><tr><td colspan="5" class="tabela-msg">Carregando...</td></tr></tbody>
                             </table>
                         </div>
@@ -232,23 +276,23 @@
                     <div class="cb-duas" id="s-lados"></div>
                     <div class="cb-duas">
                         <div class="card">
-                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Dinheiro que entrou, por dia</div>
-                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Dia</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total</th></tr></thead><tbody id="s-dias"></tbody></table></div>
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Dinheiro que entrou, por dia</div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Dia</th><th class="num">Financeiro</th><th class="num">Advogado + Débito</th><th class="num">Total</th></tr></thead><tbody id="s-dias"></tbody></table></div>
                         </div>
                         <div class="card">
-                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Como o dinheiro entrou <small class="cb-sub">— tipo de baixa no Edubox</small></div>
-                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Tipo de baixa</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th></tr></thead><tbody id="s-tipos"></tbody></table></div>
+                            <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Como o dinheiro entrou <small class="cb-sub">— tipo de baixa no Edubox</small></div>
+                            <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Tipo de baixa</th><th class="num">Financeiro</th><th class="num">Advogado + Débito</th></tr></thead><tbody id="s-tipos"></tbody></table></div>
                         </div>
                     </div>
                     <div class="card" id="s-retorno-card">
                         <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">📣 Retorno das cobranças da semana <small class="cb-sub">— quem o Financeiro cobrou e quem pagou depois</small></div>
                         <div class="cb-retorno-kpis" id="s-retorno-kpis"></div>
-                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Aluno</th><th>Cobrança</th><th>Por</th><th>Promessa</th><th class="num">🟢 Pagou depois da cobrança</th></tr></thead><tbody id="s-retorno"></tbody></table></div>
+                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Aluno</th><th>Cobrança</th><th>Por</th><th>Promessa</th><th class="num">Pagou depois da cobrança</th></tr></thead><tbody id="s-retorno"></tbody></table></div>
                     </div>
 
                     <div class="card">
-                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">🟢 Dinheiro que entrou, por curso</div>
-                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Curso</th><th class="num">💼 Financeiro</th><th class="num">⚖️ Advogado + 🏛 Débito</th><th class="num">Total</th></tr></thead><tbody id="s-cursos"></tbody></table></div>
+                        <div class="card-secao-titulo" style="padding:1rem 1.1rem 0;">Dinheiro que entrou, por curso</div>
+                        <div class="tabela-wrap"><table class="data-table"><thead><tr><th>Curso</th><th class="num">Financeiro</th><th class="num">Advogado + Débito</th><th class="num">Total</th></tr></thead><tbody id="s-cursos"></tbody></table></div>
                     </div>
                 </section>
             </div>
@@ -293,7 +337,7 @@
             <p class="modal-subtitle" id="al-sub"></p>
             <div class="cb-duas cb-duas-modal">
                 <div>
-                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">🔴 Parcelas atrasadas (não pagas)</div>
+                    <div class="card-secao-titulo" style="padding:0 0 0.4rem;">Parcelas atrasadas (não pagas)</div>
                     <div class="cb-parcelas" id="al-parcelas"></div>
                 </div>
                 <div>
@@ -342,8 +386,27 @@
         </div>
     </div>
 
+    <!-- "Ver a conta" — mesmo componente do Relatório de Matrículas -->
+    <div id="modal-detalhe-total" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg modal-detalhe-total-content">
+            <h2 id="detalhe-total-titulo">Detalhe</h2>
+            <p class="detalhe-total-sub" id="detalhe-total-sub"></p>
+            <p class="cb-detalhe-data" id="detalhe-total-data"></p>
+            <div class="cb-detalhe-regra" id="detalhe-total-regra"></div>
+            <table class="data-table" id="detalhe-total-tabela">
+                <tbody id="detalhe-total-tbody"></tbody>
+            </table>
+            <div class="cb-detalhe-fiasini hidden" id="detalhe-total-fiasini"></div>
+            <details class="cb-detalhe-rastreio hidden" id="detalhe-total-rastreio">
+                <summary>🔍 ver parcelas desse valor (agregado por curso)</summary>
+                <table><tbody id="detalhe-total-rastreio-tbody"></tbody></table>
+            </details>
+            <button type="button" class="btn-secondary" id="btn-fechar-detalhe-total" style="margin-top:1rem;">Fechar</button>
+        </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=25"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=41"></script>
 </body>
 </html>
