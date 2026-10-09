@@ -1,0 +1,138 @@
+/* ==========================================================================
+   Padrão visual do Órbita (v2) — 09/10/2026
+   Nasceu do "relatório" aprovado na Cobrança (padrão do painel da consultoria
+   Fiasini): azul-marinho de marca, Archivo nos títulos e números, IBM Plex Sans
+   no texto, cartões planos com borda fina, faixa de cor só nos indicadores.
+   Documentação: DESIGN.md (raiz do projeto).
+
+   Adoção é por página: <body class="orb-v2"> + este arquivo depois dos CSS do
+   módulo. Páginas que ainda não adotaram não mudam nada.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  /* superfícies */
+  --orb-plano: #eceff4;        /* fundo da página */
+  --orb-sup: #ffffff;          /* cartão, tabela, modal */
+  --orb-sup2: #f6f8fb;         /* trilho de barra, linha em destaque, hover */
+  --orb-linha: #e3e8f0;        /* borda de cartão e divisória */
+  --orb-linha2: #eef2f7;       /* divisória entre linhas de tabela */
+  /* texto (todos >= 4.5:1 sobre branco e sobre --orb-plano) */
+  --orb-tinta: #0d1b33;
+  --orb-tinta2: #44536b;
+  --orb-mudo: #5b6a80;
+  /* marca e acentos */
+  --orb-marca: #12294d;        /* cabeçalho, botão principal, seleção */
+  --orb-marca-hover: #1b3866;
+  --orb-marca-suave: #e7ecf5;
+  --orb-azul: #1f6fb2;         /* dado neutro (barras), links, foco */
+  --orb-laranja: #e8791e;      /* destaque pontual (faixa de indicador) — nunca fundo de texto */
+  /* semântica */
+  --orb-bom: #0f7a4b;  --orb-bom-suave: #e2f2ea;
+  --orb-alerta: #a8650b; --orb-alerta-suave: #fdf0dd;
+  --orb-crit: #c8392f; --orb-crit-suave: #fbe9e6;
+  /* aging (atraso): amarelo -> vinho */
+  --orb-age1: #edc24e; --orb-age2: #e79a39; --orb-age3: #e8791e; --orb-age4: #d8542e; --orb-age5: #b12f28;
+  /* forma */
+  --orb-raio-ctrl: 8px; --orb-raio-card: 12px; --orb-raio-pilula: 999px;
+  --orb-display: "Archivo", system-ui, sans-serif;
+  --orb-texto: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+}
+
+/* ---------- base ---------- */
+body.orb-v2, body.orb-v2 * { font-family: var(--orb-texto); }
+/* o logo ÓRBITA FATEC do menu não muda: continua com a fonte original (Outfit) — pedido 09/10/2026 */
+body.orb-v2 .layout-brand, body.orb-v2 .layout-brand * { font-family: 'Outfit', sans-serif; }
+body.orb-v2 .layout-brand { font-size: 1.38rem; }   /* um pouco maior, pra ler melhor (pedido 09/10/2026) */
+body.orb-v2 { background: var(--orb-plano); color: var(--orb-tinta); }
+body.orb-v2 .layout-main, body.orb-v2 .layout-content { background: var(--orb-plano); }
+body.orb-v2 .layout-content { font-size: 14px; line-height: 1.5; }
+body.orb-v2 .layout-content h1, body.orb-v2 .layout-content h2, body.orb-v2 .layout-content h3,
+body.orb-v2 .page-title, body.orb-v2 .kpi-value { font-family: var(--orb-display); letter-spacing: -0.015em; text-wrap: balance; }
+body.orb-v2 .num, body.orb-v2 .kpi-value, body.orb-v2 td { font-variant-numeric: tabular-nums; }
+body.orb-v2 ::selection { background: var(--orb-marca); color: #fff; }
+body.orb-v2 :focus-visible { outline: 2px solid var(--orb-azul); outline-offset: 2px; border-radius: 4px; }
+body.orb-v2 .layout-content a { color: var(--orb-azul); text-underline-offset: 2px; }   /* só links do conteúdo — o logo e o menu não mudam */
+body.orb-v2 .layout-content { scrollbar-color: #c3ccd9 transparent; }
+
+/* ---------- cabeçalho da página: faixa de marca, plana ---------- */
+body.orb-v2 .page-header { background: var(--orb-marca); border-radius: var(--orb-raio-card); padding: 1.25rem 1.5rem; box-shadow: none; color: #fff; }
+body.orb-v2 .page-header::before, body.orb-v2 .page-header::after { display: none; }
+body.orb-v2 .page-header .cm-selo { display: none; }               /* sem rótulo acima do título */
+body.orb-v2 .page-header .cm-titulo-icone { background: rgba(255,255,255,.1); box-shadow: none; color: #fff; width: 38px; height: 38px; border-radius: 10px; }
+body.orb-v2 .page-header .page-title { color: #fff; font-weight: 800; font-size: 1.6rem; gap: 0.6rem; }
+body.orb-v2 .page-header .page-subtitle { color: #c3d0e4; font-size: 0.88rem; margin-top: 0.2rem; }
+
+/* ---------- botões ---------- */
+body.orb-v2 .btn-primary { background: var(--orb-marca); color: #fff; border: 1px solid var(--orb-marca); border-radius: var(--orb-raio-ctrl); box-shadow: none; font-weight: 600; min-height: 40px; }
+body.orb-v2 .btn-primary:hover { background: var(--orb-marca-hover); }
+body.orb-v2 .btn-secondary { background: var(--orb-sup); color: var(--orb-tinta); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); box-shadow: none; font-weight: 600; min-height: 40px; }
+body.orb-v2 .btn-secondary:hover { border-color: var(--orb-azul); color: var(--orb-azul); }
+body.orb-v2 .btn-primary:disabled, body.orb-v2 .btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+/* dentro da faixa de marca os botões invertem */
+body.orb-v2 .page-header .btn-primary { background: #fff; color: var(--orb-marca); border-color: #fff; }
+body.orb-v2 .page-header .btn-primary:hover { background: var(--orb-marca-suave); }
+body.orb-v2 .page-header .btn-secondary { background: transparent; color: #dbe4f2; border-color: rgba(255,255,255,.28); }
+body.orb-v2 .page-header .btn-secondary:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* ---------- campos ---------- */
+body.orb-v2 .select-filter, body.orb-v2 .search-input, body.orb-v2 input[type="text"], body.orb-v2 input[type="date"], body.orb-v2 textarea {
+  border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); background: var(--orb-sup); color: var(--orb-tinta); min-height: 40px; }
+body.orb-v2 .select-filter:focus, body.orb-v2 .search-input:focus, body.orb-v2 input:focus, body.orb-v2 textarea:focus { border-color: var(--orb-azul); box-shadow: 0 0 0 3px rgba(31,111,178,.15); outline: none; }
+body.orb-v2 .semestre-bar { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); box-shadow: none; }
+body.orb-v2 .semestre-bar .select-filter { background: var(--orb-sup); color: var(--orb-tinta); border-color: var(--orb-linha); font-weight: 600; }
+
+/* ---------- abas e chips ---------- */
+body.orb-v2 .abas { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-pilula); box-shadow: none; padding: 3px; }
+body.orb-v2 .abas .aba { border: 0; border-radius: var(--orb-raio-pilula); color: var(--orb-tinta2); font-weight: 600; background: transparent; }
+body.orb-v2 .abas .aba.ativa { background: var(--orb-marca); color: #fff; }
+body.orb-v2 .curso-chip { border-radius: var(--orb-raio-pilula); border: 1px solid var(--orb-linha); box-shadow: none; transform: none; }
+body.orb-v2 .curso-chip.ativo { background: var(--orb-marca); border-color: var(--orb-marca); color: #fff; box-shadow: none; }
+
+/* ---------- cartões: borda fina, sem sombra (uma só elevação: a borda) ---------- */
+body.orb-v2 .card { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); box-shadow: none; }
+body.orb-v2 .card-secao-titulo { font-family: var(--orb-display); font-size: 1rem; font-weight: 700; color: var(--orb-tinta); }
+body.orb-v2 .card-secao-titulo small, body.orb-v2 .card-secao-titulo .cb-sub { font-family: var(--orb-texto); font-weight: 400; color: var(--orb-mudo); font-size: 0.78rem; }
+
+/* ---------- indicadores: faixa de cor à esquerda (padrão do relatório), número em Archivo ---------- */
+body.orb-v2 .kpi-grid { gap: 12px; }
+body.orb-v2 .kpi-card { position: relative; background: var(--orb-sup); border: 1px solid var(--orb-linha) !important; border-radius: var(--orb-raio-card); box-shadow: none; padding: 14px 14px 13px 18px; overflow: hidden; }
+body.orb-v2 .kpi-card:hover { transform: none; box-shadow: none; }
+body.orb-v2 .kpi-card::before { display: none; }
+body.orb-v2 .kpi-card::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; right: auto; width: 4px; height: auto; background: var(--orb-kpi, var(--orb-azul)); }
+body.orb-v2 .kpi-card .kpi-label { font-size: 0.72rem; font-weight: 600; color: var(--orb-mudo); letter-spacing: 0.02em; text-transform: none; }
+body.orb-v2 .kpi-card .kpi-value { font-weight: 800; font-size: 1.6rem; line-height: 1.15; margin-top: 6px; color: var(--orb-tinta); }
+body.orb-v2 .kpi-card .kpi-hint { font-size: 0.74rem; color: var(--orb-tinta2); margin-top: 4px; line-height: 1.4; }
+/* cor = significado: perda/atraso vermelho, ganho verde, total azul, marca para o resultado principal */
+body.orb-v2 .kpi-perda, body.orb-v2 .kpi-des, body.orb-v2 .cb-kpi-vencido { --orb-kpi: var(--orb-crit); }
+body.orb-v2 .kpi-perda .kpi-value, body.orb-v2 .kpi-des .kpi-value { color: var(--orb-crit); }
+body.orb-v2 .kpi-verde, body.orb-v2 .kpi-ass { --orb-kpi: var(--orb-bom); }
+body.orb-v2 .kpi-verde .kpi-value { color: var(--orb-bom); }
+body.orb-v2 .kpi-azul { --orb-kpi: var(--orb-azul); }
+body.orb-v2 .kpi-roxo, body.orb-v2 .kpi-menor { --orb-kpi: var(--orb-marca); }
+body.orb-v2 .kpi-roxo .kpi-value { color: var(--orb-marca); }
+body.orb-v2 .kpi-sem { --orb-kpi: var(--orb-laranja); }
+body.orb-v2 .kpi-destaque { background: var(--orb-sup); }
+body.orb-v2 .kpi-destaque .kpi-value { font-size: 2rem; }
+body.orb-v2 .kpi-lupa, body.orb-v2 .btn-detalhe-total { font-size: 0.74rem; font-weight: 600; color: var(--orb-azul); }
+
+/* ---------- tabelas ---------- */
+body.orb-v2 .data-table { font-size: 0.86rem; }
+body.orb-v2 .data-table th { background: transparent; font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--orb-mudo); font-weight: 700; border-bottom: 1px solid var(--orb-linha); }
+body.orb-v2 .data-table td { border-bottom: 1px solid var(--orb-linha2); color: var(--orb-tinta); }
+body.orb-v2 .data-table tbody tr:hover td { background: var(--orb-sup2); }
+
+/* ---------- celular: alvo de toque confortável ---------- */
+@media (max-width: 720px) {
+  body.orb-v2 .btn-primary, body.orb-v2 .btn-secondary, body.orb-v2 .select-filter, body.orb-v2 .abas .aba { min-height: 44px; }
+  body.orb-v2 .page-header { padding: 1.1rem 1.1rem; }
+  body.orb-v2 .page-header .page-title { font-size: 1.35rem; }
+  body.orb-v2 .kpi-card .kpi-value { font-size: 1.4rem; }
+}
+
+@media (prefers-reduced-motion: reduce) { body.orb-v2 * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+
+@media print {
+  body.orb-v2, body.orb-v2 .layout-main, body.orb-v2 .layout-content { background: #fff; }
+  body.orb-v2 .kpi-card { break-inside: avoid; }
+}
