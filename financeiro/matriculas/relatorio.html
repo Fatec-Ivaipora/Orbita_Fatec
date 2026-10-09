@@ -6,7 +6,7 @@
     <title>Relatório de Matrículas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=108">
+    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=111">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
 </head>
 <body class="pagina-relatorio">
@@ -79,12 +79,22 @@
                     <h3 class="card-secao-titulo">Resumo do semestre</h3>
                 <div>
                 <div class="kpi-grid">
-                    <!-- Ordem pedida pela direção (02/10/2026): total -> perdas dos
-                         veteranos e % sobre o total -> veteranos -> calouros captados,
-                         perdas de calouro, calouros que ficaram e % sobre a captação
-                         -> ativos -> formandos -> vão para o próximo semestre. -->
-                    <!-- 1) Total de alunos -->
-                    <div class="kpi-card kpi-destaque kpi-azul">
+                    <!-- Ordem pedida pela direção (09/10/2026): vindos do semestre anterior
+                         -> perdas dos veteranos -> veteranos (já com a Pendência Financeira) e
+                         a própria Pendência -> calouros captados (como estava) -> quantidade de
+                         matrículas (calouros ativos + novas matrículas acima do 1º período) ->
+                         ativos -> [espaço] -> formandos -> vão para o próximo semestre.
+                         O "Total de alunos" fica em 1º só quando não há Virada de Semestre
+                         (aí não existe "vindos"); com virada ele vai pro fim (ver app.js). -->
+                    <!-- 1) Vindos do semestre anterior (só aparece quando há registro vindo da Virada) -->
+                    <div class="kpi-card kpi-destaque kpi-azul hidden" id="kpi-vindos-card">
+                        <div class="kpi-label">Vindos do semestre anterior</div>
+                        <div class="kpi-value" id="kpi-vindos-virada">—</div>
+                        <div class="kpi-hint">Copiados pela Virada de Semestre</div>
+                    </div>
+
+                    <!-- Total de alunos -->
+                    <div class="kpi-card kpi-destaque kpi-azul" id="kpi-total-card">
                         <div class="kpi-label">Total de alunos</div>
                         <div class="kpi-value" id="kpi-total">—</div>
                         <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="total" title="Ver o que está somando aqui">🔍 ver a conta</button>
@@ -119,15 +129,17 @@
                     <div class="kpi-card">
                         <div class="kpi-label">Veteranos (Rematrícula)</div>
                         <div class="kpi-value" id="kpi-veteranos">—</div>
-                        <div class="kpi-hint">Rematrícula Assinada + Não Assinou + Formando + Reprovado (Pendência Financeira não entra até resolver)</div>
+                        <div class="kpi-hint">Rematrícula Assinada + Não Assinou + Formando + Reprovado + Pendência Financeira (valor junto, a Pendência aparece separada logo ao lado)</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Pendência Financeira</div>
                         <div class="kpi-value" id="kpi-pendencia">—</div>
+                        <div class="kpi-hint">Já está dentro dos Veteranos ao lado</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Não Assinou</div>
                         <div class="kpi-value" id="kpi-nao-assinou">—</div>
+                        <div class="kpi-hint" id="kpi-nao-assinou-hint"></div>
                     </div>
 
                     <!-- 4) Calouros: captados, o que perdeu e o que sobrou -->
@@ -170,13 +182,25 @@
                         <div class="kpi-hint">Calouros que saíram (1ª/2ª Evasão + Cancelou + Desistente) ÷ Total de Calouros captados</div>
                     </div>
 
+                    <!-- Quantidade de matrículas = calouros ativos + novas matrículas em períodos acima
+                         do 1º que não são calouros (cadastradas direto neste semestre, sem vir da Virada) -->
+                    <div class="kpi-card kpi-roxo hidden" id="kpi-matricula-card">
+                        <div class="kpi-label">Quantidade de matrículas</div>
+                        <div class="kpi-value" id="kpi-matricula-direta">—</div>
+                        <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="quantidadeMatriculas" title="Ver o que está somando aqui">🔍 ver a conta</button>
+                        <div class="kpi-hint">Calouros ativos + novas matrículas em períodos acima do 1º que não são calouros</div>
+                    </div>
+
                     <!-- 5) Ativos — fecha a conta do semestre -->
                     <div class="kpi-card kpi-destaque kpi-verde">
                         <div class="kpi-label">Ativos</div>
                         <div class="kpi-value" id="kpi-ativos">—</div>
                         <button type="button" class="btn-detalhe-total kpi-lupa" data-relatorio-chave="ativos" title="Ver o que está somando aqui">🔍 ver a conta</button>
-                        <div class="kpi-hint">Veteranos + Pendência Financeira + Calouros</div>
+                        <div class="kpi-hint">Veteranos (já com a Pendência Financeira) + Calouros</div>
                     </div>
+
+                    <!-- Espaço: quebra a linha, para os Formandos começarem separados dos Ativos -->
+                    <div class="kpi-quebra" aria-hidden="true"></div>
 
                     <!-- Formandos — campo próprio (checkbox no cadastro), marca o
                          último período de cada curso sem mexer na Situação. Não é
@@ -190,21 +214,6 @@
                         <div class="kpi-label">Vão para <span id="kpi-vao-proximo-sem">o próximo semestre</span></div>
                         <div class="kpi-value" id="kpi-vao-proximo">—</div>
                         <div class="kpi-hint">Ativos menos Formandos — estimativa de quem passa pela Virada de Semestre</div>
-                    </div>
-
-                    <!-- Origem dos alunos deste semestre — só aparece quando há
-                         registro vindo da Virada de Semestre (origemAlunoId) -->
-                    <div id="kpi-origem-grupo" class="hidden" style="display:contents">
-                        <div class="kpi-card">
-                            <div class="kpi-label">Vindos do semestre anterior</div>
-                            <div class="kpi-value" id="kpi-vindos-virada">—</div>
-                            <div class="kpi-hint">Copiados pela Virada de Semestre</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Matrícula nova neste semestre</div>
-                            <div class="kpi-value" id="kpi-matricula-direta">—</div>
-                            <div class="kpi-hint">Cadastrados direto neste semestre, não vieram de virada</div>
-                        </div>
                     </div>
 
                     <div class="kpi-card hidden" id="kpi-revisar-card">
@@ -382,6 +391,6 @@
     .ranking-primeiro .ranking-num-total { font-size: 1.8rem !important; }
     .ranking-primeiro .ranking-num { font-size: 1.35rem; }
     </style>
-    <script type="module" src="/financeiro/matriculas/app.js?v=115"></script>
+    <script type="module" src="/financeiro/matriculas/app.js?v=120"></script>
 </body>
 </html>

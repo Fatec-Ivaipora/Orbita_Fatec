@@ -591,3 +591,7 @@ body .kpi-card::before { display: none; }
   body .kpi-grid { grid-template-columns: repeat(3, 1fr) !important; }
   body .kpi-card { padding: 0.75rem 1rem !important; }
 }
+
+/* Espaço entre grupos de cartões do Resumo do semestre (09/10/2026) */
+/* a grade de cartões deste relatório é flex (quebra de linha), por isso flex-basis 100%; grid-column vale se voltar a ser grid */
+.kpi-quebra { flex: 0 0 100%; grid-column: 1 / -1; height: 0; margin: 0; padding: 0; }

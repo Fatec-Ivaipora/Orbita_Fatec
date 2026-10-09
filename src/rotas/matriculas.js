@@ -465,6 +465,11 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         // matriculados direto neste semestre — pedido pra conferir a virada
         // (01/10).
         let vindosDeVirada = 0;
+        // Matrícula nova acima do 1º período que não é calouro (ex.: veterano que voltou ou
+        // segundo curso) e está ATIVA — entra na "Quantidade de matrículas" (09/10/2026).
+        // Só faz sentido em semestre com Virada (sem origemAlunoId não dá pra separar).
+        const SITS_ATIVAS_NAO_CALOURO = [...VETERANOS_SITS, 'Pendência Financeira'];
+        let novasAcimaAtivas = 0;
         // Marcação independente de "formando" (campo `formando`, não a
         // situação) — conta certo mesmo que a situação real seja Rematrícula
         // Assinada/Pendência/Não Assinou (01/10).
@@ -476,6 +481,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             const a = doc.data();
             total++;
             if (a.origemAlunoId) vindosDeVirada++;
+            else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao)) novasAcimaAtivas++;
             if (a.formando) formandos++;
             const curso = a.curso || '—';
             if (a.revisarManualmente) pendentesRevisao++;
@@ -509,6 +515,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             cancelouCalouroPorCurso,
             desistenteCalouroPorCurso,
             vindosDeVirada,
+            novasAcimaAtivas,
             formandos,
             situacoes: SITUACOES_RELATORIO,
             planosConfissao: PLANOS_CONFISSAO
