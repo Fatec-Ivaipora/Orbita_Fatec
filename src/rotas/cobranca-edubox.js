@@ -345,6 +345,52 @@ router.get('/retorno', verifyToken, checkPermission, async (req, res) => {
 });
 
 // ---------- MODELOS DE MENSAGEM ----------
+// ---------- RELATÓRIO GERAL DA COBRANÇA (impressão, 09/10/2026) ----------
+// Todas as ações registradas no período (qualquer tipo), na ordem, e quanto cada aluno cobrado pagou
+// depois da 1ª cobrança. Sem texto de mensagem (só se houve) e sem CPF.
+router.get('/relatorio-geral', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+        if (!ok(req.query.inicio) || !ok(req.query.fim)) return res.status(400).json({ error: 'Informe o período.' });
+        const de = new Date(`${req.query.inicio}T00:00:00-03:00`);
+        const ate = new Date(`${req.query.fim}T23:59:59-03:00`);
+        const [acoesSnap, pagSnap] = await Promise.all([
+            db.collection(COL_ACOES).where('criadoEm', '>=', de).where('criadoEm', '<=', ate).get(),
+            db.collection('cobranca_edubox_pagamentos').doc('recentes').get()
+        ]);
+        const pagamentos = pagSnap.exists ? (pagSnap.data().porAluno || {}) : {};
+        const acoes = [];
+        acoesSnap.docs.forEach(d => {
+            const a = d.data();
+            const chave = a.chave || a.cpf;
+            if (!chave) return;
+            const em = a.criadoEm && a.criadoEm.toDate ? a.criadoEm.toDate().toISOString() : a.criadoEm;
+            acoes.push({
+                chave, nome: a.nomeAluno || '', grupo: a.grupo || 'graduacao', tipo: a.tipo, em, por: a.criadoPorNome || '',
+                obs: a.observacoes || '', promessaData: a.promessaData || null, promessaValor: a.promessaValor || null, temMensagem: !!a.mensagem,
+                mensagem: a.mensagem || ''
+            });
+        });
+        acoes.sort((a, b) => (a.em || '').localeCompare(b.em || ''));
+        // pagou depois da 1ª cobrança (dia da cobrança em diante, horário de Brasília) — só alunos que foram cobrados
+        const diaBR = (iso) => new Date(new Date(iso).getTime() - 3 * 3600000).toISOString().slice(0, 10);
+        const primeira = {};
+        acoes.forEach(x => { if (TIPOS_COBRANCA.includes(x.tipo) && (!primeira[x.chave] || x.em < primeira[x.chave])) primeira[x.chave] = x.em; });
+        const pagouDepois = {}, pagamentosDepois = {};
+        for (const [chave, em] of Object.entries(primeira)) {
+            const desde = diaBR(em);
+            const dias = pagamentos[chave] || {};
+            const lista = Object.entries(dias).filter(([d]) => d >= desde).sort();
+            pagouDepois[chave] = Math.round(lista.reduce((s2, [, v]) => s2 + v, 0) * 100) / 100;
+            if (lista.length) pagamentosDepois[chave] = lista.map(([d, v]) => ({ d, v: Math.round(v * 100) / 100 }));
+        }
+        res.json({ acoes, pagouDepois, pagamentosDepois, pagamentosAte: pagSnap.exists ? pagSnap.data().geradoEm : null });
+    } catch (err) {
+        console.error('[cobranca-edubox] relatorio-geral:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/modelos', verifyToken, checkPermission, async (req, res) => {
     try {
         const d = await DOC_MODELOS.get();
