@@ -1124,6 +1124,7 @@ function atualizarLabelImpressaoComparativo() {
 // buscar de novo — atualizado toda vez que o comparativo recarrega.
 let ultimoComparativo = { modulo: 'fatec', linhas: [] };
 let ultimoRelatorioLinha = null; // dados do semestre atual na tela de relatório
+let contaQtdMatriculas = null;    // conta do cartão "Quantidade de matrículas" (ver a conta, 09/10/2026)
 
 async function carregarComparativo() {
   const modulo = document.getElementById('comp-modulo-select')?.value || 'fatec';
@@ -1247,6 +1248,18 @@ function montarDetalhe(chave, ps, linha) {
       itens.push({ secao: '⚠ Outros — situação fora dos grupos', tipo: 'header-neutro' });
       outros.forEach(([nome, qtd]) => itens.push({ nome, qtd, tipo: 'neutro' }));
     }
+  } else if (chave === 'quantidadeMatriculas') {
+    const c = contaQtdMatriculas || { novasAcima: 0, comVirada: false };
+    grupo('Calouros ativos', CALOUROS_SITS, 'verde', 'Subtotal calouros ativos');
+    itens.push({ secao: 'Matrículas novas acima do 1º período (ativas)', tipo: 'header-verde' });
+    itens.push({ nome: c.comVirada ? 'Não vieram pela Virada, período 2º ou mais, situação ativa' : 'Semestre sem Virada — não dá para separar', qtd: c.novasAcima, tipo: 'verde' });
+    itens.push({ nome: 'Subtotal matrículas novas acima do 1º', qtd: c.novasAcima, tipo: 'verde', subtotal: true });
+    // o que NÃO entra, só para conferência
+    const fora = [['Cancelou (calouro)', linha.cancelouCalouro || 0], ['1ª Evasão', ps['1ª Evasão'] || 0], ['2ª Evasão', ps['2ª Evasão'] || 0], ['Desistente (calouro)', linha.desistenteCalouro || 0], ['Trancou (calouro)', linha.trancouCalouro || 0]].filter(([, q]) => q > 0);
+    if (fora.length) {
+      itens.push({ secao: 'Não entram nesta conta (não estão ativos)', tipo: 'header-neutro' });
+      fora.forEach(([nome, qtd]) => itens.push({ nome, qtd, tipo: 'neutro' }));
+    }
   } else if (chave === 'totalCalouros') {
     COMPONENTES_TOTAL.totalCalouros.forEach(situacao => {
       const qtd = ps[situacao] || 0;
@@ -1301,10 +1314,13 @@ function abrirDetalheRelatorio(chave) {
 
   const linhasDetalhe = montarDetalhe(chave, porSituacaoTotal, linha);
 
-  const def = LINHAS_COMPARATIVO.find(d => d.chave === chave);
+  const def = LINHAS_COMPARATIVO.find(d => d.chave === chave) || (chave === 'quantidadeMatriculas'
+    ? { rotulo: 'Quantidade de matrículas', formula: 'Só quem está ativo no semestre: calouros ativos + matrículas novas acima do 1º período que não são calouros. Cancelados, trancados, transferências e evasões não entram.' }
+    : null);
   document.getElementById('detalhe-total-titulo').textContent = `${def?.rotulo || chave} — ${linha.semestre}`;
   document.getElementById('detalhe-total-sub').textContent = def?.formula || '';
-  const totalValor = chave === 'total' ? linha.total : (chave === 'ativos' ? linha.ativos : linha[chave]);
+  const totalValor = chave === 'total' ? linha.total : chave === 'ativos' ? linha.ativos
+    : chave === 'quantidadeMatriculas' ? (contaQtdMatriculas ? contaQtdMatriculas.total : '—') : linha[chave];
   document.getElementById('detalhe-total-tbody').innerHTML =
     linhasDetalhe.map(item => {
       if (Array.isArray(item)) {
@@ -1360,7 +1376,9 @@ function renderRelatorio(dados) {
   // assinou ainda ou é matrícula nova) — 1ª Evasão e Cancelou são coisas
   // diferentes (saiu antes x depois das aulas começarem/1ª mensalidade).
   document.getElementById('kpi-total').textContent = total;
-  document.getElementById('kpi-veteranos').textContent = somaSituacoes(porSituacaoTotal, ...VETERANOS_SITS);
+  // Veteranos (Rematrícula) já com a Pendência Financeira dentro (pedido 09/10/2026); o card da
+  // Pendência continua ao lado, só pra mostrar quanto do total é pendência.
+  document.getElementById('kpi-veteranos').textContent = somaSituacoes(porSituacaoTotal, ...VETERANOS_SITS, ...PENDENCIA_SITS);
   document.getElementById('kpi-calouros').textContent = somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS);
   // "Total de Calouros captados" = todo mundo que entrou pela porta de
   // calouro, independente de ter ficado — mesma conta da planilha antiga
@@ -1400,23 +1418,40 @@ function renderRelatorio(dados) {
   const proxSemLabel = document.getElementById('kpi-vao-proximo-sem');
   if (proxSemLabel) proxSemLabel.textContent = proximoSemestreLabel(semestreAtualSel) || 'próximo semestre';
   const vindosDeVirada = dados.vindosDeVirada ?? null;
-  const cardOrigem = document.getElementById('kpi-origem-grupo');
-  if (cardOrigem) {
-    // Só mostra quando tem alguém realmente vindo de virada — em 2026.2
-    // ninguém foi "virado" pra dentro (a virada é de 2026.2 pra 2027.1), então
-    // vindosDeVirada é sempre 0 e "Matrícula nova" ficaria igual ao Total do
-    // topo — duplicado à toa (pedido 01/10). Com isso, o card só aparece a
-    // partir do semestre que já recebeu gente pela Virada de Semestre.
-    if (vindosDeVirada !== null && vindosDeVirada > 0) {
-      cardOrigem.classList.remove('hidden');
-      document.getElementById('kpi-vindos-virada').textContent = vindosDeVirada;
-      document.getElementById('kpi-matricula-direta').textContent = total - vindosDeVirada;
-    } else {
-      cardOrigem.classList.add('hidden');
-    }
+  const cardVindos = document.getElementById('kpi-vindos-card');
+  const cardMatricula = document.getElementById('kpi-matricula-card');
+  const cardTotal = document.getElementById('kpi-total-card');
+  const gradeKpi = cardTotal && cardTotal.parentElement;
+  if (cardVindos && cardMatricula && gradeKpi) {
+    // Mesmo modelo em todos os semestres (pedido 09/10/2026): "Vindos do semestre anterior" e
+    // "Quantidade de matrículas" sempre aparecem e o Total de alunos fica no fim. Com Virada o
+    // número de vindos é exato (copiados pela Virada); sem Virada (2026.2 pra trás, histórico)
+    // é estimado como total − calouros captados — quem não entrou como calouro veio de antes.
+    const comVirada = vindosDeVirada !== null && vindosDeVirada > 0;
+    const vindos = comVirada ? vindosDeVirada : Math.max(0, total - totalCalourosCaptados);
+    cardVindos.classList.remove('hidden');
+    cardMatricula.classList.remove('hidden');
+    document.getElementById('kpi-vindos-virada').textContent = vindos;
+    // Quantidade de matrículas: só quem está ATIVO no semestre (09/10/2026) — calouros ativos +
+    // matrículas novas acima do 1º período que não são calouros. Cancelado, trancado,
+    // transferência e evasão não entram.
+    const calourosAtivos = somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS);
+    const novasAcima = comVirada ? (dados.novasAcimaAtivas || 0) : 0;
+    document.getElementById('kpi-matricula-direta').textContent = calourosAtivos + novasAcima;
+    contaQtdMatriculas = { calourosAtivos, novasAcima, comVirada, total: calourosAtivos + novasAcima };
+    const dicaMat = cardMatricula.querySelector('.kpi-hint');
+    if (dicaMat) dicaMat.textContent = comVirada
+      ? `${calourosAtivos} calouros ativos + ${novasAcima} ${novasAcima === 1 ? 'matrícula nova' : 'matrículas novas'} acima do 1º período (ativas). Cancelados, trancados e transferências não entram.`
+      : `${calourosAtivos} calouros ativos. Semestre sem Virada: não dá para separar matrícula nova acima do 1º período. Cancelados, trancados e transferências não entram.`;
+    const dicaVindos = cardVindos.querySelector('.kpi-hint');
+    if (dicaVindos) dicaVindos.textContent = comVirada ? 'Copiados pela Virada de Semestre' : 'Estimado: total de alunos − calouros captados (semestre sem Virada)';
+    cardTotal.classList.add('hidden');   // o cartão Total de alunos saiu do resumo (pedido 09/10/2026); o total segue no % de perda e no "ver a conta"
   }
   document.getElementById('kpi-pendencia').textContent = porSituacaoTotal['Pendência Financeira'] || 0;
-  document.getElementById('kpi-nao-assinou').textContent = porSituacaoTotal['Não Assinou'] || 0;
+  // Não assinou = todo veterano que ainda não assinou a rematrícula, inclusive quem está com
+  // pendência financeira (também não assinou) — bate com o cartão Veteranos (09/10/2026).
+  document.getElementById('kpi-nao-assinou').textContent = (porSituacaoTotal['Não Assinou'] || 0) + (porSituacaoTotal['Pendência Financeira'] || 0);
+  { const h = document.getElementById('kpi-nao-assinou-hint'); if (h) h.textContent = `inclui ${porSituacaoTotal['Pendência Financeira'] || 0} com pendência financeira`; }
   document.getElementById('kpi-1-evasao').textContent = porSituacaoTotal['1ª Evasão'] || 0;
 
   const card2Evasao = document.getElementById('kpi-2-evasao-card');
