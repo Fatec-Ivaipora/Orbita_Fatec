@@ -499,7 +499,11 @@ async function montarConsultoria(linhas, hoje) {
         vencido: novoBloco(), aVencer: novoBloco(),
         grupos: { financeiro: novoBloco(), advogado: novoBloco(), debito: novoBloco(), enviar: novoBloco() },
         faixas: Object.fromEntries(FAIXAS_CONSULTORIA.map(f => [f[2], novoBloco()])),
-        porCurso: {}, meses: {}, porAluno: {}, carteira: 0, recebido: 0
+        porCurso: {}, meses: {}, porAluno: {}, carteira: 0, recebido: 0,
+        // o mesmo recorte, mas separado por grupo (09/10/2026): clicar num grupo na tela mostra só ele
+        detalhe: Object.fromEntries(['financeiro', 'advogado', 'debito', 'enviar'].map(k => [k, {
+            faixas: Object.fromEntries(FAIXAS_CONSULTORIA.map(f => [f[2], novoBloco()])), porCurso: {}, meses: {}, porAluno: {}
+        }]))
     });
     const G = { graduacao: novo(), medicina: novo() };
     const cursoDe = (g, c) => (g.porCurso[c] = g.porCurso[c] || { vencido: novoBloco(), aVencer: 0, carteira: 0 });
@@ -518,6 +522,9 @@ async function montarConsultoria(linhas, hoje) {
             somar(g.aVencer, v, l.clictr);
             cursoDe(g, curso).aVencer += v;
             mesDe(g, mes).aVencer += v;
+            const ladoAV = l.juridico ? (/ADVOGADO/i.test(l.despla || '') ? 'advogado' : 'debito') : ladoDe(l);
+            const dmAV = (g.detalhe[ladoAV].meses[mes] = g.detalhe[ladoAV].meses[mes] || { vencido: 0, vencidoAPagar: 0, aVencer: 0 });
+            dmAV.aVencer += v;
             continue;
         }
         const valor = Number(l.valctr) - Number(l.valpag);
@@ -534,6 +541,13 @@ async function montarConsultoria(linhas, hoje) {
         m.vencido += valor; m.vencidoAPagar += ap;
         const a = (g.porAluno[l.clictr] = g.porAluno[l.clictr] || { valor: 0, aPagar: 0 });
         a.valor += valor; a.aPagar += ap;
+        const det = g.detalhe[lado];
+        if (f) somar(det.faixas[f[2]], valor, l.clictr, ap);
+        somar((det.porCurso[curso] = det.porCurso[curso] || novoBloco()), valor, l.clictr, ap);
+        const dm = (det.meses[mes] = det.meses[mes] || { vencido: 0, vencidoAPagar: 0, aVencer: 0 });
+        dm.vencido += valor; dm.vencidoAPagar += ap;
+        const da = (det.porAluno[l.clictr] = det.porAluno[l.clictr] || { valor: 0, aPagar: 0 });
+        da.valor += valor; da.aPagar += ap;
     }
     for (const c of carteiraLinhas) {
         const g = G[c.med ? 'medicina' : 'graduacao'];
@@ -553,7 +567,16 @@ async function montarConsultoria(linhas, hoje) {
             porCurso: Object.fromEntries(Object.entries(g.porCurso).map(([k, c]) => [k, { vencido: fecharBloco(c.vencido), aVencer: r2(c.aVencer), carteira: r2(c.carteira) }])),
             meses: Object.fromEntries(Object.entries(g.meses).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).map(([x, v]) => [x, r2(v)]))])),
             abc: { valor: curvaABC(alunos.map(a => a.valor)), aPagar: curvaABC(alunos.map(a => a.aPagar)) },
-            carteira: r2(g.carteira), recebido: r2(g.recebido)
+            carteira: r2(g.carteira), recebido: r2(g.recebido),
+            detalhe: Object.fromEntries(Object.entries(g.detalhe).map(([k, d]) => {
+                const as = Object.values(d.porAluno);
+                return [k, {
+                    faixas: Object.fromEntries(Object.entries(d.faixas).map(([x, b]) => [x, fecharBloco(b)])),
+                    porCurso: Object.fromEntries(Object.entries(d.porCurso).map(([x, b]) => [x, { vencido: fecharBloco(b) }])),
+                    meses: Object.fromEntries(Object.entries(d.meses).map(([x, m]) => [x, Object.fromEntries(Object.entries(m).map(([y, v]) => [y, r2(v)]))])),
+                    abc: { valor: curvaABC(as.map(a => a.valor)), aPagar: curvaABC(as.map(a => a.aPagar)) }
+                }];
+            }))
         };
     }
     return { ano, resumo: { [ano]: saida } };

@@ -51,6 +51,7 @@ let mes = '';               // 'AAAA-MM' = visão mensal (só Painel e Visão do
 const mesesDados = {};      // 'AAAA-MM' -> resposta de /mes (carregado ao escolher)
 let panMetric = 'valor';     // Panorama: curso por R$ atrasado ou por taxa
 let consultoria = null;     // /consultoria: ano inteiro na régua do painel Fiasini (carregado ao escolher)
+let consGrupo = null;       // Visão consultoria: grupo escolhido (financeiro/advogado/debito/enviar); null = os 4
 let consBase = 'aPagar';    // Visão consultoria: com juros (como o Fiasini mostra) ou valor original
 let carregandoRecebido = false;
 let recebidoDados = null;
@@ -278,7 +279,7 @@ function montarPeriodo(anoSel) {
   if (lista.includes(`${anoSel}.2`)) opts.push(['2', `2º semestre (${anoSel}.2)`]);
   // "Ano inteiro" (Visão consultoria) só existe pro ano atual — o agente só
   // grava resumo[anoAtual()] no doc de consultoria, nada de anos passados.
-  if (anoSel === anoAtual()) opts.push(['ano-inteiro', 'Ano inteiro (4 grupos — Visão consultoria)']);
+  if (anoSel === anoAtual()) opts.push(['ano-inteiro', 'Ano inteiro']);
   sel.innerHTML = opts.map(([v, rot]) => `<option value="${v}">${rot}</option>`).join('');
 }
 // Lê `semestre` e ajusta as 3 caixas pra combinar — chamada sempre que
@@ -398,9 +399,11 @@ function previsaoMeses() {
     const rot = m === atual ? `${nomeMes(m).split('/')[0]} <small>de hoje até ${fmtData(fimDoMes(m))}</small>` : nomeMes(m).split('/')[0];
     return `<div class="cb-prev-linha"><span>${rot}</span><b>${brl(x.f + x.j)}<small>Financeiro ${brlCurto(x.f)} (${plural(x.alunosF, 'aluno', 'alunos')}) · advogado/débito ${brlCurto(x.j)}${x.s ? ` · fora: saldo devedor ${brlCurto(x.s)}` : ''}</small></b></div>`;
   });
+  const fim = fmtData(fimDoMes(meses[meses.length - 1]));
   return `<div class="cb-prev" style="grid-column:1/-1">${linhas.join('')}
-    <div class="cb-prev-linha total"><span>Total até ${fmtData(fimDoMes(meses[meses.length - 1]))}</span><b>${brl(tf + tj)}<small>Financeiro ${brlCurto(tf)} · advogado/débito ${brlCurto(tj)}</small></b></div>
-    ${ts ? `<div class="cb-prev-linha"><span>Saldo devedor <small>plano "Saldo devedor Nº semestre": negociação com vencimento em 30/12 que costuma ser empurrada para o ano seguinte — não entra na previsão</small></span><b>${brl(ts)}</b></div>` : ''}</div>`;
+    <div class="cb-prev-linha total"><span>${ts ? 'Mensalidades' : 'Total'} até ${fim}</span><b>${brl(tf + tj)}<small>Financeiro ${brlCurto(tf)} · advogado/débito ${brlCurto(tj)}</small></b></div>
+    ${ts ? `<div class="cb-prev-linha"><span>Saldo devedor <small>plano "Saldo devedor Nº semestre": negociação com vencimento em 30/12 que costuma ser empurrada para o ano seguinte — fica fora das mensalidades do mês</small></span><b>${brl(ts)}</b></div>
+    <div class="cb-prev-linha total"><span>Total que ainda vai vencer <small>mensalidades + saldo devedor</small></span><b>${brl(tf + tj + ts)}</b></div>` : ''}</div>`;
 }
 
 // Mês que já terminou: venceu, já foi pago, ainda em aberto e o que entrou.
@@ -938,10 +941,12 @@ function carregarContextoPanorama() {
 
 async function renderPanorama() {
   const consult = semestre === 'consultoria';
-  document.getElementById('p-divisao').classList.toggle('hidden', !consult);
+  document.getElementById('p-divisao').classList.remove('hidden');
   document.getElementById('p-aviso').innerHTML = consult
-    ? `<b>Visão consultoria:</b> inclui Advogado, Débito judicial e desistentes/trancados/cancelados; apenas parcelas de ${anoAtual()}; mesma régua de hoje do painel Fiasini. Só parcela com matrícula (protocolo e eventos ficam fora, como no Fiasini). Aluno que deve nos dois semestres conta uma vez só. Não mostra nome de aluno.`
-    : 'Resumo da carteira de atraso <b>do que o Financeiro cobra</b> (sem advogado, débito judicial e desistentes), organizado a partir do painel da consultoria Fiasini. Não mostra nome de aluno. Muda com o semestre escolhido acima.';
+    ? `<b>Visão consultoria:</b> inclui Advogado, Débito judicial e desistentes/trancados/cancelados; apenas parcelas de ${anoAtual()}; mesma régua de hoje do painel Fiasini. Só parcela com matrícula (protocolo e eventos ficam fora, como no Fiasini). Aluno que deve nos dois semestres conta uma vez só. Clique em Financeiro, Advogado, Débito judicial ou Desistentes para ver só aquele grupo. Não mostra nome de aluno.`
+    : (panGrupo === 'financeiro'
+      ? 'Resumo da carteira de atraso <b>do que o Financeiro cobra</b> (sem advogado, débito judicial e desistentes), organizado a partir do painel da consultoria Fiasini. Clique em Advogado, Débito judicial ou Desistentes para ver só aquele grupo. Não mostra nome de aluno. Muda com o período escolhido acima.'
+      : 'Resumo do atraso do grupo escolhido, organizado a partir do painel da consultoria Fiasini. Valor original, sem juros. Não mostra nome de aluno. Muda com o período escolhido acima.');
   document.getElementById('p-tl-fut-tit').textContent = consult ? `A vencer até dezembro de ${anoAtual()} (todos os grupos, já com desconto)` : 'A vencer nos próximos meses (Financeiro)';
   if (consult) return renderConsultoria();
   const r = recorte();
@@ -950,6 +955,10 @@ async function renderPanorama() {
     try { listas[grupo] = await apiFetch(`/cobranca/edubox/alunos?grupo=${grupo}`); }
     catch (err) { document.getElementById('p-kpis').innerHTML = `<div class="tabela-msg">Não foi possível carregar: ${esc(err.message)}</div>`; return; }
   }
+  const U = agruparPanorama(listas[grupo]);
+  document.getElementById('p-divisao').innerHTML = seletorGruposPeriodo(U);
+  if (panGrupo !== 'financeiro') return renderPanoramaOutros(U);
+  document.getElementById('p-curso-metric').classList.remove('hidden');
   const hoje = Date.now();
   const porAluno = new Map();
   const meses = {};
@@ -1038,9 +1047,11 @@ async function renderPanorama() {
   const prev = painel.previsao || {};
   const noPeriodo = mesesDoPeriodo();
   const mesesFut = Object.keys(prev).filter(m => prev[m][grupo] && (!noPeriodo || noPeriodo.includes(m))).sort();
-  document.getElementById('p-tl-fut').innerHTML = mesesFut.length
+  const saldoFora = mesesFut.reduce((t, m) => t + (prev[m][grupo].s || 0), 0);   // saldo devedor fica fora da previsão mensal
+  document.getElementById('p-tl-fut').innerHTML = (mesesFut.length
     ? miniBarras(mesesFut.map(m => ({ rot: abrev(m), v: prev[m][grupo].f, destaque: false })), '#1f6fb2')
-    : '<div class="tabela-msg">Sem previsão para os próximos meses.</div>';
+    : '<div class="tabela-msg">Sem previsão para os próximos meses.</div>')
+    + (saldoFora > 0 ? `<p class="cb-sub" style="margin:0.5rem 0 0"><b>Fora do gráfico:</b> ${brlCurto(saldoFora)} de “Saldo devedor” (parcelas com vencimento em 30/12 que costumam ser empurradas para o ano seguinte). Com ele, o que ainda vai vencer do Financeiro é ${brlCurto(r.financeiro.aVencer.valor)}.</p>` : '');
 }
 
 // ---------- VISÃO CONSULTORIA ----------
@@ -1054,6 +1065,127 @@ const GRUPOS_CONS = [['financeiro', 'Financeiro', '#1B3A4B'], ['advogado', 'Advo
 const FAIXAS_CONS = [['1-30', '1 a 30 dias', '#edc24e'], ['31-60', '31 a 60 dias', '#e79a39'], ['61-90', '61 a 90 dias', '#e8791e'], ['91-180', '91 a 180 dias', '#d8542e'], ['180+', 'Mais de 180 dias', '#b12f28']];
 // Tecnólogos somados num curso só, como na referência da consultoria (só nesta visão).
 const cursoCons = (c) => (/^SUPERIOR DE TECNOLOGIA/i.test(c) ? 'Gestão (Tecnólogo)' : nomeCurso(c));
+
+// ---------- PANORAMA POR SEMESTRE/MÊS: seleção do grupo (09/10/2026) ----------
+// Os mesmos quatro grupos da Visão consultoria (Financeiro, Advogado, Débito judicial e Desistentes/
+// trancados/cancelados), agora em qualquer período. Padrão = Financeiro (o que o Financeiro cobra);
+// "todos" soma os quatro. Os números saem das parcelas vencidas da lista (valor original, sem juros).
+let panGrupo = 'financeiro';
+const NOME_GRUPO_PAN = Object.fromEntries(GRUPOS_CONS.map(([k, rot]) => [k, rot]));
+
+function agruparPanorama(L) {
+  const hoje = Date.now();
+  const U = Object.fromEntries(GRUPOS_CONS.map(([k]) => [k, {
+    porAluno: new Map(), meses: {}, cursos: new Map(), aging: FAIXAS_PAN.map(() => ({ v: 0, n: new Set() }))
+  }]));
+  for (const a of L.alunos) {
+    const curso = (a.cursos && a.cursos[0]) || 'Sem curso';
+    for (const p of a.parcelas) {
+      if (semestre !== 'todos' && p.s !== semestre) continue;
+      if (usaMes() && p.v.slice(0, 7) !== mes) continue;
+      const dias = Math.round((hoje - dataLocal(p.v).getTime()) / 86400000);
+      if (dias < 1) continue;
+      const k = p.j ? (/ADVOGADO/i.test((L.planos || [])[p.pl] || '') ? 'advogado' : 'debito') : (p.e ? 'enviar' : 'financeiro');
+      const u = U[k];
+      u.porAluno.set(a.chave, (u.porAluno.get(a.chave) || 0) + p.valor);
+      const f = FAIXAS_PAN.findIndex(([, de, ate]) => dias >= de && dias <= ate);
+      u.aging[f].v += p.valor; u.aging[f].n.add(a.chave);
+      const m = p.v.slice(0, 7); u.meses[m] = (u.meses[m] || 0) + p.valor;
+      const c = u.cursos.get(curso) || { v: 0, alunos: new Set() }; c.v += p.valor; c.alunos.add(a.chave); u.cursos.set(curso, c);
+    }
+  }
+  for (const u of Object.values(U)) u.total = [...u.porAluno.values()].reduce((s, x) => s + x, 0);
+  return U;
+}
+
+// junta os universos escolhidos (um aluno que aparece em mais de um conta uma vez, com a soma)
+function mesclarUniversos(U, chaves) {
+  const out = { porAluno: new Map(), meses: {}, cursos: new Map(), aging: FAIXAS_PAN.map(() => ({ v: 0, n: new Set() })) };
+  for (const k of chaves) {
+    const u = U[k];
+    for (const [a, v] of u.porAluno) out.porAluno.set(a, (out.porAluno.get(a) || 0) + v);
+    for (const [m, v] of Object.entries(u.meses)) out.meses[m] = (out.meses[m] || 0) + v;
+    for (const [c, x] of u.cursos) { const o = out.cursos.get(c) || { v: 0, alunos: new Set() }; o.v += x.v; x.alunos.forEach(a => o.alunos.add(a)); out.cursos.set(c, o); }
+    u.aging.forEach((f, i) => { out.aging[i].v += f.v; f.n.forEach(a => out.aging[i].n.add(a)); });
+  }
+  out.total = [...out.porAluno.values()].reduce((s, x) => s + x, 0);
+  return out;
+}
+
+function seletorGruposPeriodo(U) {
+  const totalGeral = Object.values(U).reduce((s, u) => s + u.total, 0);
+  const item = ([k, rot, cor]) => `<span class="item-g ${panGrupo === k ? 'sel' : ''}" data-g="${k}" role="button" tabindex="0" title="Clique para ver só: ${esc(rot)}"><em style="background:${cor}"></em><b>${brlCurto(U[k].total)}</b> ${rot} <small>${plural(U[k].porAluno.size, 'aluno', 'alunos')}${totalGeral ? ` · ${pct(U[k].total / totalGeral, 0)}` : ''}</small></span>`;
+  const nomeSel = panGrupo === 'todos' ? 'os 4 grupos juntos' : NOME_GRUPO_PAN[panGrupo];
+  return `
+    <div class="cab"><span>Atrasado por grupo — ${esc(nomeGrupo())} · ${esc(nomeSemestre())} <small class="cb-sub">· valor original, sem juros</small></span></div>
+    <div class="barra">${GRUPOS_CONS.map(([k, rot, cor]) => `<i data-g="${k}" class="${panGrupo !== 'todos' && panGrupo !== k ? 'apagada' : ''}" style="width:${totalGeral ? (U[k].total / totalGeral) * 100 : 0}%;background:${cor}" title="${esc(rot)}: ${brl(U[k].total)}"></i>`).join('')}</div>
+    <div class="itens">${GRUPOS_CONS.map(item).join('')}</div>
+    <div class="foco">Mostrando <b>${esc(nomeSel)}</b>. Clique em um grupo para ver só ele${panGrupo === 'todos' ? '' : ` · <button type="button" class="btn-detalhe-total" data-g="todos">ver os 4 grupos juntos (${brlCurto(totalGeral)})</button>`}${panGrupo === 'financeiro' ? '' : ` · <button type="button" class="btn-detalhe-total" data-g="financeiro">← voltar ao Financeiro</button>`}</div>`;
+}
+
+// Advogado, Débito judicial, Desistentes... ou os 4 juntos (o Financeiro sozinho segue o desenho de sempre)
+function renderPanoramaOutros(U) {
+  const todos = panGrupo === 'todos';
+  const u = mesclarUniversos(U, todos ? GRUPOS_CONS.map(g => g[0]) : [panGrupo]);
+  const nomeG = todos ? 'os 4 grupos' : NOME_GRUPO_PAN[panGrupo];
+  const V = u.total, N = u.porAluno.size;
+  const totalGeral = Object.values(U).reduce((s, x) => s + x.total, 0);
+  const critico = u.aging[3].v + u.aging[4].v;
+  const ordenados = [...u.porAluno.values()].sort((a, b) => b - a);
+  const ABC = { A: { n: 0, v: 0 }, B: { n: 0, v: 0 }, C: { n: 0, v: 0 } };
+  let antes = 0;
+  for (const v of ordenados) { const k = antes < V * 0.8 ? 'A' : antes < V * 0.95 ? 'B' : 'C'; ABC[k].n++; ABC[k].v += v; antes += v; }
+  const cursos = [...u.cursos.entries()].map(([nome, c]) => ({ nome, v: c.v, alunos: c.alunos.size })).sort((a, b) => b.v - a.v);
+
+  const kpi = (cls, rot, val, dica) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div></div>`;
+  document.getElementById('p-kpis').innerHTML =
+    kpi('cb-kpi-vencido', `Atrasado — ${esc(nomeG)}`, brlCurto(V), `${esc(nomeGrupo())} · ${esc(nomeSemestre())}`) +
+    kpi('', todos ? 'Parte do Financeiro' : 'Parte do atrasado total', totalGeral ? pct((todos ? U.financeiro.total : V) / totalGeral, 0) : '—', todos ? `o Financeiro cobra ${brlCurto(U.financeiro.total)} deste total` : `de ${brlCurto(totalGeral)} nos 4 grupos`) +
+    kpi('', 'Alunos em atraso', N.toLocaleString('pt-BR'), `média de ${N ? brlCurto(V / N) : '—'} por aluno, valor original`) +
+    kpi('kpi-menor', 'Atraso crítico (+90 dias)', brlCurto(critico), V ? `${pct(critico / V, 0)} do atrasado` : '') +
+    kpi('kpi-sem', 'Classe A (alta prioridade)', `${ABC.A.n} alunos`, V ? `respondem por ${pct(ABC.A.v / V, 0)} do atrasado` : '');
+  document.getElementById('p-rosca').innerHTML = '<div class="tabela-msg">A posição da carteira (recebido × a vencer × atrasado) é calculada só para as mensalidades do Financeiro.</div>';
+
+  const ins = [];
+  if (V) {
+    ins.push(`<div class="ruim"><small>Concentração de risco</small><b>${ABC.A.n} alunos</b> (${pct(ABC.A.n / N, 0)} dos devedores) respondem por <b>${pct(ABC.A.v / V, 0)}</b> do atrasado (${brlCurto(ABC.A.v)}).</div>`);
+    if (cursos[0]) ins.push(`<div class="azul"><small>Curso com mais atraso</small><b>${esc(nomeCurso(cursos[0].nome))}</b>: ${brlCurto(cursos[0].v)} (${pct(cursos[0].v / V, 0)} de ${esc(nomeG)}, ${plural(cursos[0].alunos, 'aluno', 'alunos')}).</div>`);
+    ins.push(`<div class="ruim"><small>Atraso crítico</small><b>${brlCurto(critico)}</b> (${pct(critico / V, 0)} do atrasado) já passou de 90 dias.</div>`);
+  }
+  document.getElementById('p-insights').innerHTML = ins.join('');
+
+  const maxA = Math.max(1, ...u.aging.map(x => x.v));
+  document.getElementById('p-aging').innerHTML = V ? FAIXAS_PAN.map(([rot, , , cor], i) =>
+    `<div class="cb-pan-faixa"><span>${rot}</span><div class="trilho"><i style="width:${(u.aging[i].v / maxA) * 100}%;background:${cor}"></i></div><b>${brlCurto(u.aging[i].v)}<small>${plural(u.aging[i].n.size, 'aluno', 'alunos')} · ${pct(u.aging[i].v / V, 0)}</small></b></div>`).join('')
+    : '<div class="tabela-msg">Nada atrasado neste grupo e período.</div>';
+
+  document.getElementById('p-curso-metric').classList.add('hidden');
+  const maxC = Math.max(0.0001, ...cursos.map(c => c.v));
+  document.getElementById('p-cursos').innerHTML = cursos.length
+    ? cursos.slice(0, 14).map(c => `<div class="cb-rank"><span>${esc(nomeCurso(c.nome))}</span><div class="cb-rank-barra"><span style="width:${(c.v / maxC) * 100}%"></span></div><b>${brlCurto(c.v)}<small>${pct(c.v / V, 0)} do grupo · ${plural(c.alunos, 'aluno', 'alunos')}</small></b></div>`).join('')
+    : '<div class="tabela-msg">Nada atrasado neste grupo e período.</div>';
+
+  const cl = (k, rot, dica) => `<div class="${k}"><span class="cl">${rot}</span><span class="vl">${brlCurto(ABC[k].v)}</span><small>${plural(ABC[k].n, 'aluno', 'alunos')} · ${V ? pct(ABC[k].v / V, 0) : '0%'} do atrasado · ${dica}</small></div>`;
+  document.getElementById('p-abc').innerHTML = V
+    ? `<div class="cb-abc">${cl('A', 'Classe A · alta prioridade', 'maiores saldos')}${cl('B', 'Classe B · prioridade média', 'saldos médios')}${cl('C', 'Classe C · cauda longa', 'muitos alunos, pouco valor')}</div>
+       <p class="cb-sub" style="margin:0.8rem 0 0">Os ${ABC.A.n} alunos da classe A (${pct(ABC.A.n / N, 0)} dos devedores) concentram ${pct(ABC.A.v / V, 0)} do atrasado deste grupo.</p>`
+    : '<div class="tabela-msg">Nada atrasado neste grupo e período.</div>';
+
+  const abrev = (m) => NOMES_MES[Number(m.slice(5, 7)) - 1].slice(0, 3) + (m.slice(2, 4) !== String(new Date().getFullYear()).slice(2) ? '/' + m.slice(2, 4) : '');
+  const mesesVenc = Object.keys(u.meses).sort().slice(-8);
+  document.getElementById('p-tl-venc').innerHTML = mesesVenc.length
+    ? miniBarras(mesesVenc.map(m => ({ rot: abrev(m), v: u.meses[m], destaque: false })), '#c8392f')
+    : '<div class="tabela-msg">Nada atrasado neste grupo e período.</div>';
+  // a vencer: só as parcelas de acordo (advogado/débito, juntas) têm previsão por mês; Desistentes não
+  const prev = painel.previsao || {};
+  const mesesFut = Object.keys(prev).filter(m => prev[m][grupo]).sort();
+  const usaJ = panGrupo === 'advogado' || panGrupo === 'debito' || todos;
+  document.getElementById('p-tl-fut-tit').textContent = todos ? 'A vencer nos próximos meses (Financeiro + advogado e débito)' : 'A vencer nos próximos meses (advogado e débito juntos)';
+  document.getElementById('p-tl-fut').innerHTML = usaJ && mesesFut.length
+    ? miniBarras(mesesFut.map(m => ({ rot: abrev(m), v: (todos ? prev[m][grupo].f : 0) + prev[m][grupo].j, destaque: false })), '#1f6fb2')
+    : '<div class="tabela-msg">Sem previsão mensal para este grupo.</div>';
+}
+
 
 async function renderConsultoria() {
   const ano = anoAtual();
@@ -1072,31 +1204,48 @@ async function renderConsultoria() {
   }
   const B = consBase;
   const vb = (b) => (b ? b[B] || 0 : 0);
-  const V = vb(r.vencido);
-  const N = r.vencido.alunos;
-  const orig = r.vencido.valor;
+  // Grupo escolhido nos cartões "Como o total se divide" (09/10/2026): Financeiro, Advogado, Débito
+  // judicial ou Desistentes/trancados/cancelados. Tudo abaixo passa a ser só dele. Sem escolha = os 4 grupos.
+  const gSel = (consGrupo && r.detalhe && r.detalhe[consGrupo]) ? consGrupo : null;
+  const D = gSel ? r.detalhe[gSel] : null;
+  const nomeG = gSel ? GRUPOS_CONS.find(g => g[0] === gSel)[1] : '';
+  const totalV = vb(r.vencido);
+  const V = gSel ? vb(r.grupos[gSel]) : totalV;
+  const N = gSel ? r.grupos[gSel].alunos : r.vencido.alunos;
+  const orig = gSel ? r.grupos[gSel].valor : r.vencido.valor;
+  const apag = gSel ? r.grupos[gSel].aPagar : r.vencido.aPagar;
+  const faixasSrc = D ? D.faixas : r.faixas;
+  const mesesSrc = D ? D.meses : (r.meses || {});
   const taxa = r.carteira ? V / r.carteira : null;
-  const critico = vb(r.faixas['91-180']) + vb(r.faixas['180+']);
-  const ABC = r.abc[B];
+  const critico = vb(faixasSrc['91-180']) + vb(faixasSrc['180+']);
+  const ABC = (D ? D.abc : r.abc)[B];
   const rotBase = B === 'aPagar' ? 'com multa e juros' : 'valor original, sem juros';
+  const ehFinG = !gSel || gSel === 'financeiro';
 
-  // 1) números principais (total consolidado dos 4 grupos)
+  // 1) números principais
   const lupa = (chave, extra) => `<button type="button" class="btn-detalhe-total kpi-lupa" data-ver-conta="${esc(chave)}"${extra ? ` data-ver-extra="${esc(extra)}"` : ''} title="Ver de onde vem esse número">🔍 ver a conta</button>`;
-  const kpi = (cls, rot, val, dica, chave, extra) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div>${chave ? lupa(chave, extra) : ''}</div>`;
+  const lupaT = (chave, extra) => (gSel ? '' : lupa(chave, extra));   // "ver a conta" dos totais só na visão dos 4 grupos
+  const kpi = (cls, rot, val, dica, lp) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div>${lp || ''}</div>`;
   document.getElementById('p-kpis').innerHTML =
-    kpi('cb-kpi-vencido', 'Vencido total (4 grupos)', brlCurto(V), B === 'aPagar' ? `original ${brlCurto(orig)} · ${esc(nomeGrupo())} · ${ano}` : `com juros ${brlCurto(r.vencido.aPagar)} · ${esc(nomeGrupo())} · ${ano}`, 'cons-vencido') +
-    kpi('', 'Inadimplência sobre a carteira', taxa === null ? '—' : pct(taxa), `vencido ÷ ${brlCurto(r.carteira)} de carteira prevista ${ano} (valor − desconto) — régua da consultoria`, 'cons-pct') +
-    kpi('', 'Alunos devedores', N.toLocaleString('pt-BR'), 'cada aluno conta uma vez no ano', 'cons-devedores') +
+    kpi('cb-kpi-vencido', gSel ? `Vencido — ${esc(nomeG)}` : 'Vencido total (4 grupos)', brlCurto(V), B === 'aPagar' ? `original ${brlCurto(orig)} · ${esc(nomeGrupo())} · ${ano}` : `com juros ${brlCurto(apag)} · ${esc(nomeGrupo())} · ${ano}`, gSel ? lupa('cons-grupo', gSel) : lupa('cons-vencido')) +
+    (ehFinG
+      ? kpi('', gSel ? 'Inadimplência do Financeiro' : 'Inadimplência sobre a carteira', taxa === null ? '—' : pct(taxa), `vencido ÷ ${brlCurto(r.carteira)} de carteira prevista ${ano} (valor − desconto) — régua da consultoria`, lupaT('cons-pct'))
+      : kpi('', 'Parte do vencido total', totalV ? pct(V / totalV, 0) : '—', `de ${brlCurto(totalV)} nos 4 grupos`)) +
+    kpi('', gSel ? 'Alunos neste grupo' : 'Alunos devedores', N.toLocaleString('pt-BR'), gSel ? 'um aluno pode aparecer em mais de um grupo' : 'cada aluno conta uma vez no ano', lupaT('cons-devedores')) +
     kpi('', 'Vencido médio por aluno', N ? brlCurto(V / N) : '—', rotBase) +
-    kpi('kpi-menor', 'Atraso crítico (+90 dias)', brlCurto(critico), V ? `${pct(critico / V, 0)} do vencido` : '', 'cons-faixa', '91-180,180+') +
-    kpi('kpi-sem', 'Classe A (alta prioridade)', `${ABC.A.alunos} alunos`, V ? `respondem por ${pct(ABC.A.valor / V, 0)} do vencido` : '', 'cons-abc', 'A');
+    kpi('kpi-menor', 'Atraso crítico (+90 dias)', brlCurto(critico), V ? `${pct(critico / V, 0)} do vencido` : '', lupaT('cons-faixa', '91-180,180+')) +
+    kpi('kpi-sem', 'Classe A (alta prioridade)', `${ABC.A.alunos} alunos`, V ? `respondem por ${pct(ABC.A.valor / V, 0)} do vencido` : '', lupaT('cons-abc', 'A'));
 
-  // 2) divisão do total entre os 4 grupos
+  // 2) divisão do total entre os 4 grupos — cada grupo é uma seleção: clique para ver só ele
+  const item = ([k, rot, cor]) => `<span class="item-g ${gSel === k ? 'sel' : ''}" data-g="${k}" role="button" tabindex="0" title="Clique para ver só: ${esc(rot)}"><em style="background:${cor}"></em><b>${brlCurto(vb(r.grupos[k]))}</b> ${rot} <small>${plural(r.grupos[k].alunos, 'aluno', 'alunos')}${totalV ? ` · ${pct(vb(r.grupos[k]) / totalV, 0)}` : ''}</small> ${lupa('cons-grupo', k)}</span>`;
   document.getElementById('p-divisao').innerHTML = `
-    <div class="cab"><span>Como o total de ${brlCurto(V)} se divide <small class="cb-sub">· calculado em ${fmtDataHora(consultoria.geradoEm)}</small></span>
+    <div class="cab"><span>Como o total de ${brlCurto(totalV)} se divide <small class="cb-sub">· calculado em ${fmtDataHora(consultoria.geradoEm)}</small></span>
       <span class="cb-pan-tog" id="p-cons-base"><button type="button" data-b="aPagar" class="${B === 'aPagar' ? 'ativa' : ''}">Com juros (como o Fiasini)</button><button type="button" data-b="valor" class="${B === 'valor' ? 'ativa' : ''}">Valor original</button></span></div>
-    <div class="barra">${GRUPOS_CONS.map(([k, , cor]) => `<i style="width:${V ? (vb(r.grupos[k]) / V) * 100 : 0}%;background:${cor}" title="${esc(GRUPOS_CONS.find(g => g[0] === k)[1])}: ${brl(vb(r.grupos[k]))}"></i>`).join('')}</div>
-    <div class="itens">${GRUPOS_CONS.map(([k, rot, cor]) => `<span><em style="background:${cor}"></em><b>${brlCurto(vb(r.grupos[k]))}</b> ${rot} <small>${plural(r.grupos[k].alunos, 'aluno', 'alunos')}${V ? ` · ${pct(vb(r.grupos[k]) / V, 0)}` : ''}</small> ${lupa('cons-grupo', k)}</span>`).join('')}</div>`;
+    <div class="barra">${GRUPOS_CONS.map(([k, rot, cor]) => `<i data-g="${k}" class="${gSel && gSel !== k ? 'apagada' : ''}" style="width:${totalV ? (vb(r.grupos[k]) / totalV) * 100 : 0}%;background:${cor}" title="${esc(rot)}: ${brl(vb(r.grupos[k]))}"></i>`).join('')}</div>
+    <div class="itens">${GRUPOS_CONS.map(item).join('')}</div>
+    <div class="foco">${gSel
+      ? `Mostrando só <b>${esc(nomeG)}</b> — ${brlCurto(V)}, ${plural(N, 'aluno', 'alunos')}. <button type="button" class="btn-detalhe-total" data-g="todos">← voltar aos 4 grupos</button>`
+      : (consGrupo ? '<b style="color:#b45309">Ainda sem o detalhe deste grupo:</b> ele aparece depois da próxima atualização do Edubox (botão "Atualizar agora").' : 'Clique em um grupo (Financeiro, Advogado, Débito judicial ou Desistentes…) para ver só ele: concentração de risco, cursos, idade do atraso e linha do tempo.')}</div>`;
 
   {
     const aVencerAno = Object.values(r.meses || {}).reduce((t, m) => t + (m.aVencer || 0), 0);
@@ -1105,53 +1254,59 @@ async function renderConsultoria() {
 
   // 3) o que chama atenção
   const cursosMap = {};
-  for (const [nome, c] of Object.entries(r.porCurso || {})) {
+  const fonteCursos = D ? Object.fromEntries(Object.entries(D.porCurso).map(([nome, c]) => [nome, { vencido: c.vencido, carteira: (r.porCurso[nome] || {}).carteira || 0 }])) : (r.porCurso || {});
+  for (const [nome, c] of Object.entries(fonteCursos)) {
     const k = cursoCons(nome);
     const x = (cursosMap[k] = cursosMap[k] || { nome: k, v: 0, alunos: 0, carteira: 0 });
     x.v += vb(c.vencido); x.alunos += c.vencido.alunos; x.carteira += c.carteira || 0;
   }
   const cursos = Object.values(cursosMap).filter(c => c.v > 0).map(c => ({ ...c, taxa: c.carteira ? c.v / c.carteira : 0 }));
-  const piorTaxa = [...cursos].filter(c => c.alunos >= 5).sort((a, b) => b.taxa - a.taxa)[0];
+  const piorTaxa = ehFinG ? [...cursos].filter(c => c.alunos >= 5).sort((a, b) => b.taxa - a.taxa)[0] : null;
+  const maiorValor = !ehFinG ? [...cursos].sort((a, b) => b.v - a.v)[0] : null;
   const ins = [];
   if (V) {
     ins.push(`<div class="ruim"><small>Concentração de risco</small><b>${ABC.A.alunos} alunos</b> (${pct(ABC.A.alunos / N, 0)} dos devedores) respondem por <b>${pct(ABC.A.valor / V, 0)}</b> do vencido (${brlCurto(ABC.A.valor)}).</div>`);
     if (piorTaxa) ins.push(`<div class="azul"><small>Curso com maior taxa</small><b>${esc(piorTaxa.nome)}</b>: ${pct(piorTaxa.taxa)} de inadimplência (${brlCurto(piorTaxa.v)}, ${plural(piorTaxa.alunos, 'aluno', 'alunos')})${taxa !== null ? `, contra ${pct(taxa)} na média` : ''}.</div>`);
+    if (maiorValor) ins.push(`<div class="azul"><small>Curso com mais atraso</small><b>${esc(maiorValor.nome)}</b>: ${brlCurto(maiorValor.v)} (${pct(maiorValor.v / V, 0)} deste grupo, ${plural(maiorValor.alunos, 'aluno', 'alunos')}).</div>`);
     ins.push(`<div class="ruim"><small>Atraso crítico</small><b>${brlCurto(critico)}</b> (${pct(critico / V, 0)} do vencido) já passou de 90 dias.</div>`);
   }
   document.getElementById('p-insights').innerHTML = ins.join('');
 
   // 4) idade do atraso
-  const maxA = Math.max(1, ...FAIXAS_CONS.map(([k]) => vb(r.faixas[k])));
+  const maxA = Math.max(1, ...FAIXAS_CONS.map(([k]) => vb(faixasSrc[k])));
   document.getElementById('p-aging').innerHTML = V ? FAIXAS_CONS.map(([k, rot, cor]) =>
-    `<div class="cb-pan-faixa"><span>${rot}</span><div class="trilho"><i style="width:${(vb(r.faixas[k]) / maxA) * 100}%;background:${cor}"></i></div><b>${brlCurto(vb(r.faixas[k]))}<small>${plural(r.faixas[k].alunos, 'aluno', 'alunos')} · ${pct(vb(r.faixas[k]) / V, 0)}</small>${lupa('cons-faixa', k)}</b></div>`).join('')
+    `<div class="cb-pan-faixa"><span>${rot}</span><div class="trilho"><i style="width:${(vb(faixasSrc[k]) / maxA) * 100}%;background:${cor}"></i></div><b>${brlCurto(vb(faixasSrc[k]))}<small>${plural(faixasSrc[k].alunos, 'aluno', 'alunos')} · ${pct(vb(faixasSrc[k]) / V, 0)}</small>${lupaT('cons-faixa', k)}</b></div>`).join('')
     : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
 
   // 5) cursos
-  const lista = [...cursos].sort((a, b) => (panMetric === 'taxa' ? b.taxa - a.taxa : b.v - a.v));
-  const maxC = Math.max(0.0001, ...lista.map(c => (panMetric === 'taxa' ? c.taxa : c.v)));
+  const lista = [...cursos].sort((a, b) => (ehFinG && panMetric === 'taxa' ? b.taxa - a.taxa : b.v - a.v));
+  const porTaxa = ehFinG && panMetric === 'taxa';
+  document.getElementById('p-curso-metric').classList.toggle('hidden', !ehFinG);
+  const maxC = Math.max(0.0001, ...lista.map(c => (porTaxa ? c.taxa : c.v)));
   document.getElementById('p-cursos').innerHTML = lista.length
-    ? lista.map(c => `<div class="cb-rank"><span>${esc(c.nome)}</span><div class="cb-rank-barra"><span style="width:${((panMetric === 'taxa' ? c.taxa : c.v) / maxC) * 100}%"></span></div><b>${panMetric === 'taxa' ? pct(c.taxa) : brlCurto(c.v)}<small><span class="cb-taxa ${c.taxa >= TAXA_CRITICA ? 'crit' : ''}">${panMetric === 'taxa' ? brlCurto(c.v) : pct(c.taxa)}</span> · ${plural(c.alunos, 'aluno', 'alunos')}</small>${lupa('cons-curso', c.nome)}</b></div>`).join('')
+    ? lista.map(c => `<div class="cb-rank"><span>${esc(c.nome)}</span><div class="cb-rank-barra"><span style="width:${((porTaxa ? c.taxa : c.v) / maxC) * 100}%"></span></div><b>${porTaxa ? pct(c.taxa) : brlCurto(c.v)}<small><span class="cb-taxa ${ehFinG && c.taxa >= TAXA_CRITICA ? 'crit' : ''}">${porTaxa ? brlCurto(c.v) : (ehFinG ? pct(c.taxa) : pct(c.v / V, 0) + ' do grupo')}</span> · ${plural(c.alunos, 'aluno', 'alunos')}</small>${lupaT('cons-curso', c.nome)}</b></div>`).join('')
     : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
 
-  // 6) curva ABC (sobre o total consolidado)
-  const cl = (k, rot, dica) => `<div class="${k}"><span class="cl">${rot}</span><span class="vl">${brlCurto(ABC[k].valor)}</span><small>${plural(ABC[k].alunos, 'aluno', 'alunos')} · ${V ? pct(ABC[k].valor / V, 0) : '0%'} do vencido · ${dica}</small>${lupa('cons-abc', k)}</div>`;
+  // 6) curva ABC (do grupo escolhido; sem escolha, sobre o total consolidado)
+  const cl = (k, rot, dica) => `<div class="${k}"><span class="cl">${rot}</span><span class="vl">${brlCurto(ABC[k].valor)}</span><small>${plural(ABC[k].alunos, 'aluno', 'alunos')} · ${V ? pct(ABC[k].valor / V, 0) : '0%'} do vencido · ${dica}</small>${lupaT('cons-abc', k)}</div>`;
   document.getElementById('p-abc').innerHTML = V
     ? `<div class="cb-abc">${cl('A', 'Classe A · alta prioridade', 'cobrar primeiro')}${cl('B', 'Classe B · prioridade média', 'segunda rodada')}${cl('C', 'Classe C · cauda longa', 'muitos alunos, pouco valor')}</div>
-       <p class="cb-sub" style="margin:0.8rem 0 0">${plural(N, 'devedor', 'devedores')} no ano. Os ${ABC.A.alunos} da classe A (${pct(ABC.A.alunos / N, 0)}) concentram ${pct(ABC.A.valor / V, 0)} do vencido.</p>`
+       <p class="cb-sub" style="margin:0.8rem 0 0">${plural(N, 'devedor', 'devedores')}${gSel ? ' neste grupo' : ' no ano'}. Os ${ABC.A.alunos} da classe A (${pct(ABC.A.alunos / N, 0)}) concentram ${pct(ABC.A.valor / V, 0)} do vencido.</p>`
     : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
 
   // 7) linha do tempo do ano: vencido e a vencer por mês de vencimento
+  document.getElementById('p-tl-fut-tit').textContent = gSel ? `A vencer até dezembro de ${ano} — ${nomeG} (já com desconto)` : `A vencer até dezembro de ${ano} (todos os grupos, já com desconto)`;
   const abrev = (m) => NOMES_MES[Number(m.slice(5, 7)) - 1].slice(0, 3);
-  const meses = Object.keys(r.meses || {}).sort();
-  const mv = meses.filter(m => (B === 'aPagar' ? r.meses[m].vencidoAPagar : r.meses[m].vencido) > 0);
+  const meses = Object.keys(mesesSrc).sort();
+  const mv = meses.filter(m => (B === 'aPagar' ? mesesSrc[m].vencidoAPagar : mesesSrc[m].vencido) > 0);
   document.getElementById('p-tl-venc').innerHTML = mv.length
-    ? miniBarras(mv.map(m => ({ rot: abrev(m), v: B === 'aPagar' ? r.meses[m].vencidoAPagar : r.meses[m].vencido, destaque: false })), '#c8392f')
-      + `<div class="cb-tl-lupas">${mv.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`
+    ? miniBarras(mv.map(m => ({ rot: abrev(m), v: B === 'aPagar' ? mesesSrc[m].vencidoAPagar : mesesSrc[m].vencido, destaque: false })), '#c8392f')
+      + (gSel ? '' : `<div class="cb-tl-lupas">${mv.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`)
     : '<div class="tabela-msg">Nada vencido neste recorte.</div>';
-  const mf = meses.filter(m => r.meses[m].aVencer > 0);
+  const mf = meses.filter(m => (mesesSrc[m].aVencer || 0) > 0);
   document.getElementById('p-tl-fut').innerHTML = mf.length
-    ? miniBarras(mf.map(m => ({ rot: abrev(m), v: r.meses[m].aVencer, destaque: false })), '#1f6fb2')
-      + `<div class="cb-tl-lupas">${mf.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes-avencer" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`
+    ? miniBarras(mf.map(m => ({ rot: abrev(m), v: mesesSrc[m].aVencer, destaque: false })), '#1f6fb2')
+      + (gSel ? '' : `<div class="cb-tl-lupas">${mf.map(m => `<button type="button" class="btn-detalhe-total cb-tl-lupa" data-ver-conta="cons-mes-avencer" data-ver-extra="${esc(m)}">🔍 ${abrev(m)}</button>`).join('')}</div>`)
     : '<div class="tabela-msg">Nada a vencer até o fim do ano.</div>';
 }
 
@@ -1536,6 +1691,7 @@ function renderLista() {
           ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="Enviar pelo WhatsApp pro celular do aluno (cadastro do Edubox)">💬 WhatsApp</button>`
           : '<span class="cb-sem-cel-aviso" title="Só usamos o celular do próprio aluno no Edubox — nunca de pais/responsáveis">📵 Sem celular no Edubox — atualizar o cadastro</span>') : ''}
         <button type="button" class="btn-acao" data-abrir="${i}" title="Parcelas, histórico e registrar ligação/negociação/promessa">📋 Detalhes</button>
+        <button type="button" class="btn-acao" data-ficha="${i}" title="Imprimir a ficha de cobrança (dados, parcelas vencidas e histórico de atendimento)">🖨 Ficha</button>
       </td>
     </tr>`).join('');
   document.getElementById('l-mais-wrap').classList.toggle('hidden', filtrados.length <= mostrando);
@@ -1642,6 +1798,268 @@ async function registrarAcao(a, dados) {
       ...(dados.tipo === 'promessa_pagamento' ? { promessa: { data: dados.promessaData, valor: nova.promessaValor } } : {}) };
   }
   return nova;
+}
+
+// ---------- FICHA DE COBRANÇA (impressão) ----------
+// Documento do aluno para entregar se for pedido (09/10/2026): dados, tudo que está vencido e não
+// pago, e o histórico de atendimento. Abre numa janela própria (A4) e chama a impressão.
+// CPF sai parcialmente oculto. Não vai mensagem de WhatsApp na íntegra, só o que foi registrado.
+function mascaraCpf(c) {
+  const d = String(c || '').replace(/\D/g, '');
+  return d.length === 11 ? `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••` : '';
+}
+async function imprimirFicha() {
+  const a = alunoAberto;
+  if (!a) return;
+  const btn = document.getElementById('al-imprimir');
+  btn.disabled = true;
+  const janela = window.open('', '_blank');
+  if (!janela) { btn.disabled = false; showToast('O navegador bloqueou a janela de impressão. Libere pop-ups para o Órbita e tente de novo.', 'error'); return; }
+  janela.document.write('<p style="font-family:sans-serif">Montando a ficha...</p>');
+  try {
+    const hist = await apiFetch(`/cobranca/edubox/acoes/${encodeURIComponent(a.chave)}`);
+    const nomesPl = (listas[grupo] && listas[grupo].planos) || [];
+    const hoje = Date.now();
+    const lado = (p) => (p.j ? (/ADVOGADO/i.test(nomesPl[p.pl] || '') ? 'Acordo com advogado' : 'Débito judicial') : (p.e ? 'Fora da cobrança (matrícula encerrada)' : 'Financeiro'));
+    const parcelas = [...a.parcelas].sort((x, y) => x.v.localeCompare(y.v));
+    const totOrig = parcelas.reduce((s, p) => s + p.valor, 0);
+    const totAtual = parcelas.reduce((s, p) => s + aPagarParcela(p.valor, p.v), 0);
+    const diasDe = (v) => Math.max(0, Math.round((hoje - dataLocal(v).getTime()) / 86400000));
+    const linhasP = parcelas.map(p => `<tr><td>${fmtData(p.v)}</td><td>${esc(p.s)}</td><td>${esc(nomesPl[p.pl] || '')}</td><td>${esc(lado(p))}</td><td class="n">${diasDe(p.v)}</td><td class="n">${brl(p.valor)}</td><td class="n">${brl(aPagarParcela(p.valor, p.v))}</td></tr>`).join('');
+    const linhasH = hist.length ? hist.map(x => {
+      const [ic, nome] = TIPOS[x.tipo] || ['•', x.tipo];
+      const prom = x.tipo === 'promessa_pagamento' && x.promessaData ? ` — promessa para ${fmtData(x.promessaData)}${x.promessaValor ? ` (${brl(x.promessaValor)})` : ''}` : '';
+      return `<tr><td class="nw">${x.criadoEm ? fmtDataHora(x.criadoEm) : ''}</td><td>${ic} ${esc(nome)}${esc(prom)}</td><td>${esc(x.criadoPorNome || '')}</td><td>${esc(x.observacoes || '')}${x.mensagem ? `<div class="msg">Mensagem enviada: ${esc(x.mensagem)}</div>` : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="vazio">Nenhum atendimento registrado até esta data.</td></tr>';
+    const pg = a.pagamento || {};
+    const dados = [
+      ['Aluno', esc(a.nome)],
+      ['CPF', esc(mascaraCpf(a.cpf)) || '—'],
+      ['Curso', esc((a.cursos || []).map(nomeCurso).join(' / ')) || '—'],
+      ['Situação da matrícula', esc((a.situacoes || []).join(', ')) || '—'],
+      ['Contato (cadastro do Edubox)', esc(a.fone || '—')],
+      ['Último pagamento', pg.ultimo ? fmtData(pg.ultimo) + (pg.pago90 > 0 ? ` (${brl(pg.pago90)} nos últimos 90 dias)` : '') : 'sem pagamento registrado']
+    ].map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('');
+    const emitido = new Date().toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' });
+    const html = `<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"><title>Ficha de cobrança — ${esc(a.nome)}</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #0b1f33; font-size: 10.5pt; margin: 0; }
+  header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #1B3A4B; padding-bottom: 8px; margin-bottom: 12px; }
+  header img { height: 46px; }
+  header h1 { font-size: 16pt; margin: 0; color: #1B3A4B; }
+  header p { margin: 2px 0 0; color: #475569; font-size: 9pt; }
+  h2 { font-size: 11pt; color: #1B3A4B; margin: 16px 0 6px; border-left: 4px solid #34B3A0; padding-left: 8px; }
+  .dados { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 14px; }
+  .dados div { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; }
+  .dados small { display: block; color: #64748b; font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; }
+  .resumo { display: flex; gap: 10px; margin-top: 4px; }
+  .resumo div { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 10px; background: #f8fafc; }
+  .resumo small { display: block; color: #64748b; font-size: 8pt; }
+  .resumo b { font-size: 13pt; color: #1B3A4B; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th { background: #1B3A4B; color: #fff; text-align: left; padding: 5px 6px; font-weight: 600; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr { break-inside: avoid; }
+  .n { text-align: right; white-space: nowrap; } .nw { white-space: nowrap; }
+  tfoot td { font-weight: 700; border-top: 2px solid #1B3A4B; border-bottom: 0; }
+  .msg { color: #64748b; font-size: 8pt; margin-top: 2px; }
+  .vazio { text-align: center; color: #64748b; padding: 10px; }
+  .nota { color: #64748b; font-size: 8.5pt; margin-top: 8px; line-height: 1.4; }
+  .assina { display: flex; gap: 40px; margin-top: 38px; }
+  .assina div { flex: 1; border-top: 1px solid #0b1f33; padding-top: 4px; text-align: center; font-size: 9pt; }
+  @media screen { body { max-width: 190mm; margin: 12px auto; padding: 0 10px; } }
+</style></head><body>
+<header><img src="${location.origin}/img/fateclogoazul.png" alt="FATEC Ivaiporã"><div><h1>Ficha de cobrança</h1><p>FATEC Ivaiporã · Setor Financeiro · emitida em ${esc(emitido)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}</p></div></header>
+<h2>Identificação</h2><div class="dados">${dados}</div>
+<h2>Resumo da dívida em aberto</h2>
+<div class="resumo"><div><small>Parcelas vencidas e não pagas</small><b>${parcelas.length}</b></div><div><small>Valor original</small><b>${brl(totOrig)}</b></div><div><small>Valor atualizado (multa + juros)</small><b>${brl(totAtual)}</b></div><div><small>Vencida mais antiga</small><b>${parcelas[0] ? fmtData(parcelas[0].v) : '—'}</b></div></div>
+<h2>Parcelas vencidas e não pagas</h2>
+<table><thead><tr><th>Vencimento</th><th>Semestre</th><th>Plano</th><th>Situação</th><th class="n">Dias de atraso</th><th class="n">Valor original</th><th class="n">Valor atualizado</th></tr></thead><tbody>${linhasP}</tbody>
+<tfoot><tr><td colspan="5">Total</td><td class="n">${brl(totOrig)}</td><td class="n">${brl(totAtual)}</td></tr></tfoot></table>
+<p class="nota">Valor atualizado = valor original + multa de 2% + juros de 1% ao mês por mês completo de atraso, no mesmo critério do Edubox, calculado na data de emissão.</p>
+<h2>Histórico de atendimento</h2>
+<table><thead><tr><th>Data e hora</th><th>Atendimento</th><th>Registrado por</th><th>Observações</th></tr></thead><tbody>${linhasH}</tbody></table>
+<div class="assina"><div>Financeiro — FATEC Ivaiporã</div><div>Recebido por / data</div></div>
+<p class="nota">Documento gerado pelo Órbita com dados do sistema acadêmico (Edubox). Contém dados pessoais protegidos pela LGPD: entregar somente ao titular ou a quem tenha autorização para recebê-lo.</p>
+</body></html>`;
+    janela.document.open(); janela.document.write(html); janela.document.close();
+    const logo = janela.document.querySelector('header img');
+    const imprimirAgora = () => { janela.focus(); janela.print(); };
+    if (logo && !logo.complete) { logo.onload = logo.onerror = () => setTimeout(imprimirAgora, 150); } else setTimeout(imprimirAgora, 250);
+  } catch (err) {
+    janela.close();
+    showToast(`Não foi possível montar a ficha: ${err.message}`, 'error');
+  } finally { btn.disabled = false; }
+}
+
+// ---------- RELATÓRIO GERAL DA COBRANÇA (impressão) ----------
+// O que a cobrança fez num período (09/10/2026), para entregar se for solicitado: resumo (atendimentos,
+// quem atendeu, promessas, quem pagou depois) e, aluno por aluno, nome, valor em aberto hoje e o
+// histórico de atendimento. Abre numa janela A4 e chama a impressão. CPF não sai neste relatório.
+const ROTULO_TIPO = (t) => { const x = TIPOS[t]; return x ? `${x[0]} ${x[1]}` : t; };
+function abrirRelGeral() {
+  const hoje = new Date();
+  document.getElementById('rg-de').value = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+  document.getElementById('rg-ate').value = iso(hoje);
+  document.getElementById('rg-grupo').value = grupo;   // começa no grupo que está na tela, mas pergunta
+  document.getElementById('modal-rel-geral').classList.remove('hidden');
+}
+function presetRelGeral(p) {
+  const h = new Date();
+  let de = new Date(h), ate = new Date(h);
+  if (p === 'semana') de = segunda(h);
+  else if (p === 'mes') de = new Date(h.getFullYear(), h.getMonth(), 1);
+  else if (p === 'mes-passado') { de = new Date(h.getFullYear(), h.getMonth() - 1, 1); ate = new Date(h.getFullYear(), h.getMonth(), 0); }
+  else if (p === 'ano') de = new Date(h.getFullYear(), 0, 1);
+  document.getElementById('rg-de').value = iso(de);
+  document.getElementById('rg-ate').value = iso(ate);
+}
+// Plano B: com o servidor ainda sem a rota /relatorio-geral (404), monta o mesmo conjunto de dados com
+// as rotas antigas: /retorno (alunos cobrados no período) + /acoes/:chave (histórico completo de cada um).
+async function relatorioGeralAlternativo(de, ate) {
+  const rt = await apiFetch(`/cobranca/edubox/retorno?inicio=${de}&fim=${ate}`);
+  const ini = new Date(`${de}T00:00:00-03:00`).toISOString(), fim = new Date(`${ate}T23:59:59-03:00`).toISOString();
+  const acoes = [], pagouDepois = {};
+  const alunos = rt.alunos || [];
+  for (let i = 0; i < alunos.length; i += 6) {
+    showToast(`Montando o relatório... ${Math.min(i + 6, alunos.length)} de ${alunos.length} alunos`);
+    await Promise.all(alunos.slice(i, i + 6).map(async (x) => {
+      const h = await apiFetch(`/cobranca/edubox/acoes/${encodeURIComponent(x.chave)}`);
+      pagouDepois[x.chave] = x.pagouDepois || 0;
+      h.filter(a => a.criadoEm && a.criadoEm >= ini && a.criadoEm <= fim).forEach(a => acoes.push({
+        chave: x.chave, nome: x.nome || a.nomeAluno || '', grupo: x.grupo || a.grupo || 'graduacao', tipo: a.tipo, em: a.criadoEm, por: a.criadoPorNome || '',
+        obs: a.observacoes || '', promessaData: a.promessaData || null, promessaValor: a.promessaValor || null, temMensagem: !!a.mensagem
+      }));
+    }));
+  }
+  acoes.sort((a, b) => a.em.localeCompare(b.em));
+  return { acoes, pagouDepois, pagamentosAte: rt.pagamentosAte || null };
+}
+async function gerarRelGeral() {
+  const de = document.getElementById('rg-de').value, ate = document.getElementById('rg-ate').value;
+  const gSel = document.getElementById('rg-grupo').value;   // graduacao | medicina | ambos
+  const rotGrupo = { graduacao: 'Graduação', medicina: 'Medicina', ambos: 'Graduação e Medicina' }[gSel];
+  if (!de || !ate || de > ate) { showToast('Informe o período (de / até).', 'error'); return; }
+  const btn = document.getElementById('rg-gerar');
+  btn.disabled = true;
+  const janela = window.open('', '_blank');
+  if (!janela) { btn.disabled = false; showToast('O navegador bloqueou a janela de impressão. Libere pop-ups para o Órbita e tente de novo.', 'error'); return; }
+  janela.document.write('<p style="font-family:sans-serif">Montando o relatório...</p>');
+  try {
+    let rel;
+    try { rel = await apiFetch(`/cobranca/edubox/relatorio-geral?inicio=${de}&fim=${ate}`); }
+    catch (err) {
+      if (!/404/.test(err.message)) throw err;   // servidor ainda sem a rota nova: usa o plano B
+      rel = await relatorioGeralAlternativo(de, ate);
+    }
+    // quem ainda deve hoje (nome, curso, valor): lista dos dois grupos
+    for (const g of ['graduacao', 'medicina']) if (!listas[g]) listas[g] = await apiFetch(`/cobranca/edubox/alunos?grupo=${g}`);
+    const devendo = new Map();
+    for (const g of ['graduacao', 'medicina']) for (const a of listas[g].alunos) devendo.set(a.chave, { ...a, _g: g });
+
+    const acoes = rel.acoes.filter(x => gSel === 'ambos' || (x.grupo || 'graduacao') === gSel);
+    const porAluno = new Map();
+    acoes.forEach(x => { if (!porAluno.has(x.chave)) porAluno.set(x.chave, []); porAluno.get(x.chave).push(x); });
+    const porTipo = {}, porPessoa = {}, porDia = {};
+    let promessas = 0, valorPromessas = 0;
+    acoes.forEach(x => {
+      porTipo[x.tipo] = (porTipo[x.tipo] || 0) + 1;
+      const p = (porPessoa[x.por || '—'] = porPessoa[x.por || '—'] || { n: 0, alunos: new Set() }); p.n++; p.alunos.add(x.chave);
+      const d = x.em.slice(0, 10); porDia[d] = (porDia[d] || 0) + 1;
+      if (x.tipo === 'promessa_pagamento') { promessas++; valorPromessas += Number(x.promessaValor) || 0; }
+    });
+    const pagaram = Object.entries(rel.pagouDepois || {}).filter(([, v]) => v > 0);
+    const valorPagou = pagaram.reduce((s, [, v]) => s + v, 0);
+    const alunos = [...porAluno.entries()].map(([chave, lista]) => {
+      const d = devendo.get(chave);
+      const ultimo = lista[lista.length - 1];
+      return { chave, lista, nome: (d && d.nome) || lista.find(x => x.nome)?.nome || '(aluno sem nome registrado)', d, ultimo };
+    }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+    const linhasAluno = alunos.map(a => {
+      const parc = a.d ? a.d.parcelas.filter(p => !p.j && !p.e) : [];
+      const orig = parc.reduce((s, p) => s + p.valor, 0), atual = parc.reduce((s, p) => s + aPagarParcela(p.valor, p.v), 0);
+      const pago = (rel.pagouDepois || {})[a.chave] || 0;
+      const sit = a.d
+        ? (parc.length ? `${plural(parc.length, 'parcela vencida', 'parcelas vencidas')} · <b>${brl(orig)}</b> (atualizado ${brl(atual)})` : (a.d.comAdvogado ? 'Dívida com o advogado (fora da cobrança do Financeiro)' : 'Parcelas fora da cobrança do Financeiro'))
+        : '<b>Sem parcela vencida hoje</b> (regularizado)';
+      const curso = a.d ? (a.d.cursos || []).map(nomeCurso).join(' / ') : '';
+      const atend = a.lista.map(x => {
+        const prom = x.tipo === 'promessa_pagamento' && x.promessaData ? ` — promessa para ${fmtData(x.promessaData)}${x.promessaValor ? ` (${brl(x.promessaValor)})` : ''}` : '';
+        return `<tr><td class="nw">${fmtDataHora(x.em)}</td><td>${esc(ROTULO_TIPO(x.tipo))}${esc(prom)}</td><td>${esc(x.por)}</td><td>${x.obs ? `<div><b>Conversa:</b> ${esc(x.obs)}</div>` : ''}${x.mensagem ? `<div class="msg"><b>Mensagem enviada:</b><br>${esc(x.mensagem).replace(/\n/g, '<br>')}</div>` : (x.temMensagem ? '<div class="msg">(mensagem de WhatsApp enviada)</div>' : '')}</td></tr>`;
+      }).join('');
+      const prom = a.lista.filter(x => x.tipo === 'promessa_pagamento' && x.promessaData);
+      const pgs = (rel.pagamentosDepois || {})[a.chave] || [];
+      const retornoPartes = [];
+      prom.forEach(x => retornoPartes.push(`Prometeu pagar em <b>${fmtData(x.promessaData)}</b>${x.promessaValor ? ` (${brl(x.promessaValor)})` : ''}`));
+      if (pago > 0) retornoPartes.push(`<span class="ok">Pagou ${brl(pago)}</span>${pgs.length ? ` (${pgs.map(p => `${fmtData(p.d)}: ${brl(p.v)}`).join(' · ')})` : ''} depois da 1ª cobrança`);
+      const retorno = retornoPartes.length ? retornoPartes.join(' · ') : 'Sem retorno registrado (nem promessa, nem pagamento) até a data dos dados.';
+      return `<section class="aluno"><div class="cab"><b>${esc(a.nome)}</b>${curso ? ` <span class="sub">· ${esc(curso)}</span>` : ''}${gSel === 'ambos' ? ` <span class="sub">· ${(a.lista[0].grupo === 'medicina') ? 'Medicina' : 'Graduação'}</span>` : ''}<div class="sit">${sit}${pago > 0 ? ` · <span class="ok">pagou ${brl(pago)} depois da 1ª cobrança</span>` : ''}</div></div>
+        <table class="at"><thead><tr><th>Data e hora</th><th>Atendimento</th><th>Registrado por</th><th>Observações</th></tr></thead><tbody>${atend}</tbody></table><div class="retorno"><b>Retorno:</b> ${retorno}</div></section>`;
+    }).join('');
+
+    const tabTipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<tr><td>${esc(ROTULO_TIPO(t))}</td><td class="n">${n}</td></tr>`).join('');
+    const tabPessoas = Object.entries(porPessoa).sort((a, b) => b[1].n - a[1].n).map(([p, x]) => `<tr><td>${esc(p)}</td><td class="n">${x.n}</td><td class="n">${x.alunos.size}</td></tr>`).join('');
+    const tabDias = Object.entries(porDia).sort().map(([d, n]) => `<tr><td>${fmtData(d)}</td><td class="n">${n}</td></tr>`).join('');
+    const emitido = new Date().toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' });
+    const html = `<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"><title>Relatório da cobrança — ${rotGrupo} — ${fmtData(de)} a ${fmtData(ate)}</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #0b1f33; font-size: 10pt; margin: 0; }
+  header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #1B3A4B; padding-bottom: 8px; margin-bottom: 12px; }
+  header img { height: 46px; } header h1 { font-size: 16pt; margin: 0; color: #1B3A4B; } header p { margin: 2px 0 0; color: #475569; font-size: 9pt; }
+  h2 { font-size: 11pt; color: #1B3A4B; margin: 16px 0 6px; border-left: 4px solid #34B3A0; padding-left: 8px; break-after: avoid; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .kpis div { border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 10px; background: #f8fafc; }
+  .kpis small { display: block; color: #64748b; font-size: 8pt; } .kpis b { font-size: 14pt; color: #1B3A4B; }
+  .tres { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th { background: #1B3A4B; color: #fff; text-align: left; padding: 4px 6px; font-weight: 600; }
+  td { padding: 3px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr { break-inside: avoid; } .n { text-align: right; white-space: nowrap; } .nw { white-space: nowrap; }
+  .aluno { margin: 10px 0; break-inside: avoid-page; } .aluno .cab { background: #f1f5f9; border-left: 4px solid #34B3A0; padding: 5px 8px; font-size: 10pt; }
+  .aluno .sub { color: #475569; font-size: 9pt; } .aluno .sit { font-size: 9pt; color: #334155; margin-top: 1px; } .ok { color: #15803d; font-weight: 600; }
+  .msg { color: #475569; font-size: 8.5pt; margin-top: 3px; background: #f8fafc; border-left: 3px solid #cbd5e1; padding: 3px 6px; }
+  .retorno { margin: 3px 0 0; padding: 5px 8px; border: 1px dashed #94a3b8; border-radius: 4px; font-size: 9pt; background: #fffbeb; }
+  .info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; background: #f8fafc; margin-bottom: 4px; }
+  .info small { display: block; color: #64748b; font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; } .info b { font-size: 10pt; color: #0b1f33; } .nota { color: #64748b; font-size: 8.5pt; margin-top: 10px; line-height: 1.4; }
+  .assina { display: flex; gap: 40px; margin-top: 36px; } .assina div { flex: 1; border-top: 1px solid #0b1f33; padding-top: 4px; text-align: center; font-size: 9pt; }
+  @media screen { body { max-width: 195mm; margin: 12px auto; padding: 0 10px; } }
+</style></head><body>
+<header><img src="${location.origin}/img/fateclogoazul.png" alt="FATEC Ivaiporã"><div><h1>Relatório da cobrança — ${esc(rotGrupo)}</h1><p>FATEC Ivaiporã · Setor Financeiro</p></div></header>
+<div class="info">
+  <div><small>Curso</small><b>${esc(rotGrupo)}</b></div>
+  <div><small>Período</small><b>${fmtData(de)} a ${fmtData(ate)}</b></div>
+  <div><small>Emitido em</small><b>${esc(emitido)}</b></div>
+  <div><small>Emitido por</small><b>${esc(currentUserNome || '—')}</b></div>
+  <div><small>Dados do Edubox atualizados em</small><b>${painel?.status?.ultimaAtualizacao ? fmtDataHora(painel.status.ultimaAtualizacao) : '—'}</b></div>
+  <div><small>Pagamentos considerados até</small><b>${rel.pagamentosAte ? fmtDataHora(rel.pagamentosAte) : '—'}</b></div>
+</div>
+<h2>Resumo do período</h2>
+<div class="kpis"><div><small>Alunos atendidos</small><b>${porAluno.size}</b></div><div><small>Atendimentos registrados</small><b>${acoes.length}</b></div><div><small>Promessas de pagamento</small><b>${promessas}</b>${valorPromessas ? `<small>${brl(valorPromessas)} prometidos</small>` : ''}</div><div><small>Pagaram depois da cobrança</small><b>${pagaram.length}</b><small>${brl(valorPagou)} recebidos deles</small></div></div>
+<div class="tres" style="margin-top:12px">
+  <div><table><thead><tr><th>Tipo de atendimento</th><th class="n">Qtde</th></tr></thead><tbody>${tabTipos || '<tr><td colspan="2">—</td></tr>'}</tbody></table></div>
+  <div><table><thead><tr><th>Quem atendeu</th><th class="n">Atend.</th><th class="n">Alunos</th></tr></thead><tbody>${tabPessoas || '<tr><td colspan="3">—</td></tr>'}</tbody></table></div>
+  <div><table><thead><tr><th>Dia</th><th class="n">Atend.</th></tr></thead><tbody>${tabDias || '<tr><td colspan="2">—</td></tr>'}</tbody></table></div>
+</div>
+<p class="nota">"Pagaram depois da cobrança" = pagamentos baixados no Edubox a partir do dia da primeira cobrança do período${rel.pagamentosAte ? ` (dados de pagamento até ${fmtDataHora(rel.pagamentosAte)})` : ''}. "Valor em aberto" considera só o que o Financeiro cobra, com multa de 2% e juros de 1% ao mês, no critério do Edubox.</p>
+<h2>Atendimento por aluno (${alunos.length})</h2>
+${linhasAluno || '<p class="nota">Nenhum atendimento registrado neste período.</p>'}
+<div class="assina"><div>Financeiro — FATEC Ivaiporã</div><div>Recebido por / data</div></div>
+<p class="nota">Documento gerado pelo Órbita com dados do sistema acadêmico (Edubox) e do histórico de cobrança. Contém dados pessoais protegidos pela LGPD: entregar somente a quem tenha autorização para recebê-lo.</p>
+</body></html>`;
+    janela.document.open(); janela.document.write(html); janela.document.close();
+    const logo = janela.document.querySelector('header img');
+    const imprimirAgora = () => { janela.focus(); janela.print(); };
+    if (logo && !logo.complete) { logo.onload = logo.onerror = () => setTimeout(imprimirAgora, 150); } else setTimeout(imprimirAgora, 250);
+    document.getElementById('modal-rel-geral').classList.add('hidden');
+  } catch (err) {
+    janela.close();
+    showToast(`Não foi possível montar o relatório: ${err.message}`, 'error');
+  } finally { btn.disabled = false; }
 }
 
 // ---------- DETALHE DO ALUNO ----------
@@ -2065,8 +2483,23 @@ function wireEventos() {
     renderPanorama();
   });
   document.getElementById('p-divisao').addEventListener('click', (e) => {
+    if (e.target.closest('[data-ver-conta]')) return;   // a lupa 🔍 tem tratamento próprio
+    const g = e.target.closest('[data-g]');
+    if (g) {
+      const v = g.dataset.g;
+      if (semestre === 'consultoria') consGrupo = (v === 'todos' || v === consGrupo) ? null : v;   // sem escolha = os 4 grupos
+      else panGrupo = v;
+      renderPanorama(); return;
+    }
     const b = e.target.closest('[data-b]'); if (!b) return;
     consBase = b.dataset.b;
+    renderPanorama();
+  });
+  document.getElementById('p-divisao').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const g = e.target.closest && e.target.closest('.item-g[data-g]'); if (!g) return;
+    e.preventDefault();
+    if (semestre === 'consultoria') consGrupo = g.dataset.g === consGrupo ? null : g.dataset.g; else panGrupo = g.dataset.g;
     renderPanorama();
   });
   // "ver a conta" — delegado no container do Panorama/Visão consultoria,
@@ -2087,6 +2520,10 @@ function wireEventos() {
     renderTudo();
   });
   document.getElementById('btn-imprimir').addEventListener('click', imprimir);
+  document.getElementById('btn-rel-geral').addEventListener('click', abrirRelGeral);
+  document.getElementById('rg-gerar').addEventListener('click', gerarRelGeral);
+  document.getElementById('rg-cancelar').addEventListener('click', () => document.getElementById('modal-rel-geral').classList.add('hidden'));
+  document.getElementById('rg-presets').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b) presetRelGeral(b.dataset.p); });
   document.getElementById('btn-baixar-relatorio').addEventListener('click', baixarRelatorio);
   document.getElementById('btn-modelos').addEventListener('click', abrirModelos);
 
@@ -2100,6 +2537,8 @@ function wireEventos() {
   document.getElementById('l-plano').addEventListener('input', () => { clearTimeout(tp); tp = setTimeout(() => { mostrando = POR_PAGINA; filtrarLista(); }, 300); });
   document.getElementById('l-mais').addEventListener('click', () => { mostrando += POR_PAGINA; renderLista(); });
   document.getElementById('tb-alunos').addEventListener('click', (e) => {
+    const fi = e.target.closest('[data-ficha]');
+    if (fi) { const x = filtrados[Number(fi.dataset.ficha)]; if (x) { alunoAberto = { ...x, idx: Number(fi.dataset.ficha) }; imprimirFicha(); } return; }
     const z = e.target.closest('[data-zap]');
     if (z) { abrirZap(Number(z.dataset.zap)); return; }
     const a = e.target.closest('[data-abrir]');
@@ -2122,6 +2561,7 @@ function wireEventos() {
 
   // detalhe do aluno
   document.getElementById('al-fechar').addEventListener('click', () => document.getElementById('modal-aluno').classList.add('hidden'));
+  document.getElementById('al-imprimir').addEventListener('click', imprimirFicha);
   document.getElementById('ac-tipo').addEventListener('change', (e) => {
     document.getElementById('ac-promessa').classList.toggle('hidden', e.target.value !== 'promessa_pagamento');
     if (e.target.value === 'promessa_pagamento' && !document.getElementById('ac-valor').value) document.getElementById('ac-valor').value = alunoAberto.totalVis;
@@ -2159,6 +2599,6 @@ function wireEventos() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    ['modal-zap', 'modal-aluno', 'modal-modelos', 'modal-detalhe-total'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['modal-zap', 'modal-aluno', 'modal-modelos', 'modal-detalhe-total', 'modal-rel-geral'].forEach(id => document.getElementById(id).classList.add('hidden'));
   });
 }

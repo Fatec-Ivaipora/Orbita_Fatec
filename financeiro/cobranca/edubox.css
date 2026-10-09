@@ -465,3 +465,12 @@ body.cb-rel .cb-tend.igual { background: var(--rel-sup2); color: var(--rel-tinta
 body.cb-rel .kpi-card.kpi-ass .kpi-value { color: var(--rel-bom); }
 body.cb-rel .cb-rank-link { cursor: pointer; border-radius: 8px; }
 body.cb-rel .cb-rank-link:hover > span { color: var(--rel-azul); text-decoration: underline; }
+
+/* Visão consultoria: grupos selecionáveis (09/10/2026) */
+.cb-pan-div .itens .item-g { cursor: pointer; border-radius: 8px; padding: 0.3rem 0.5rem; margin: -0.3rem -0.5rem; border: 1px solid transparent; flex-wrap: wrap; }
+.cb-pan-div .itens .item-g:hover { background: #f1f5f9; }
+.cb-pan-div .itens .item-g.sel { background: #e7f3f1; border-color: #34B3A0; box-shadow: inset 3px 0 0 #34B3A0; }
+.cb-pan-div .barra i { cursor: pointer; transition: opacity .15s; }
+.cb-pan-div .barra i.apagada { opacity: 0.25; }
+.cb-pan-div .foco { margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px dashed #e2e8f0; font-size: 0.82rem; color: #475569; }
+.cb-pan-div .foco b { color: #1B3A4B; }
