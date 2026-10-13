@@ -617,4 +617,4 @@ async function gerarGabaritoDocx(prova, questoes, opts) {
     return Packer.toBuffer(doc);
 }
 
-module.exports = { gerarProvaDocx, gerarGabaritoDocx, gerarPreviewHtml };
+module.exports = { gerarProvaDocx, gerarGabaritoDocx, gerarPreviewHtml, numerarQuestoesObjetivas };

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Correção de Provas - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/correcao-provas/correcao.css?v=4">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="cp-wrap" id="tela"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- leitor pela câmera (tela cheia) -->
+    <div id="leitor" class="cp-leitor hidden" role="dialog" aria-label="Ler folhas com a câmera">
+        <div class="cp-leitor-topo">
+            <div><b id="lt-nome">Ler folhas</b><small id="lt-cont"></small></div>
+            <button type="button" class="cp-leitor-fechar" id="lt-fechar" aria-label="Fechar o leitor">✕</button>
+        </div>
+        <div class="cp-leitor-video">
+            <video id="lt-video" playsinline muted autoplay></video>
+            <canvas id="lt-overlay"></canvas>
+            <div class="cp-leitor-guia" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="cp-leitor-status" id="lt-status" aria-live="polite">Aponte a câmera para a folha, com os 4 quadrados pretos aparecendo.</div>
+        <div class="cp-leitor-res hidden" id="lt-res"></div>
+        <div class="cp-leitor-pe">
+            <label class="cp-btn cp-btn-sec" for="lt-foto">Usar foto ou arquivo
+                <input type="file" id="lt-foto" accept="image/*" multiple hidden></label>
+            <button type="button" class="cp-btn cp-btn-sec" id="lt-lanterna" hidden>Lanterna</button>
+        </div>
+    </div>
+
+    <div id="toast" class="cp-toast hidden" role="status"></div>
+    <script type="module" src="/correcao-provas/app.js?v=3"></script>
+</body>
+</html>
