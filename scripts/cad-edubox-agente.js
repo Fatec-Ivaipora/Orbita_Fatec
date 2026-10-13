@@ -1,11 +1,11 @@
 // ==========================================================================
-// Agente do CAD (Edubox -> Órbita) — mesmo modelo do agente da Cobrança: fica rodando num PC da Fatec,
+// Agente do CADD (Edubox -> Órbita) — mesmo modelo do agente da Cobrança: fica rodando num PC da Fatec,
 // que é quem consegue acessar o Edubox. Inicia junto com o Windows pelo "cad-edubox-agente.vbs"
 // (pasta Inicializar do usuário, sem janela).
 //
 //  - Atualiza sozinho às 9h, 10h, 11h e 16h (pedido da coordenação, 13/10/2026). À noite não há
 //    horário fixo: só pelo botão. Se o PC estava desligado no horário, atualiza assim que ligar.
-//  - Botão "Atualizar agora" do CAD grava config/cad_sync.pedidoEm; o agente escuta e atualiza na hora.
+//  - Botão "Atualizar agora" do CADD grava config/cad_sync.pedidoEm; o agente escuta e atualiza na hora.
 //  - A cada 5 min grava agenteVivoEm, pra tela avisar se o PC estiver desligado.
 //
 // Log em scripts/logs/cad-edubox-agente.log (fora do git).
@@ -82,7 +82,7 @@ async function pulso() {
 }
 
 async function iniciar() {
-    log('Agente do CAD iniciado.');
+    log('Agente do CADD iniciado.');
     await pulso();
     setInterval(pulso, PULSO_MS);
 
@@ -93,7 +93,7 @@ async function iniciar() {
     if (!ult || ult < ultimoHorario()) await rodar('automatica');
     agendarProximo();
 
-    // "Atualizar agora" do CAD
+    // "Atualizar agora" do CADD
     let pedidoVisto = snap.exists ? snap.data().pedidoEm || null : null;
     cfg.onSnapshot(doc => {
         const pedido = doc.exists ? doc.data().pedidoEm : null;

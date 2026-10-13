@@ -1,5 +1,5 @@
 // ==========================================================================
-// Sincronização Edubox -> Órbita (módulo CAD — Conselho Acadêmico de Desempenho Discente).
+// Sincronização Edubox -> Órbita (módulo CADD — Conselho Acadêmico de Desempenho Discente).
 //
 // O Edubox (Postgres na nuvem do fornecedor) só aceita conexão do IP da Fatec. Este script roda num
 // PC da Fatec, SÓ LÊ o Edubox e grava no Firestore, por turma, a nota e as faltas de cada aluno ATIVO

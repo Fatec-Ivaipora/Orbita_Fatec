@@ -1,4 +1,4 @@
-' Inicia o agente do CAD (Edubox -> Órbita) sem abrir janela e o
+' Inicia o agente do CADD (Edubox -> Órbita) sem abrir janela e o
 ' reinicia se ele parar. Um atalho para este arquivo fica na pasta
 ' "Inicializar" do Windows (shell:startup), pra subir junto com o PC.
 Set fso = CreateObject("Scripting.FileSystemObject")

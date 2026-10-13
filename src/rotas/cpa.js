@@ -10,9 +10,10 @@ const verifyToken = require('../middlewares/auth');
 //
 // Quem vê o quê:
 //   adm_l1 / adm_l2       todos os cursos, a visão da IES (com comentários) e o resultado de cada professor
-//   coordenador           só os cursos do próprio cadastro (users.cursos)
-//   coord_medicina        só Medicina
-//   Na visão da IES, quem não é ADM recebe só os números (sem comentários de outros cursos).
+//   coordenador           só os cursos do próprio cadastro (users.cursos): avaliação dos alunos e dos
+//                         professores do curso. Não vê a visão geral da IES nem os resultados de
+//                         docentes/administrativo (pedido da direção, 13/10/2026).
+//   coord_medicina        só Medicina, com a mesma restrição
 // ==========================================================================
 const checkPermission = verifyToken.requireModulePermission('cpa');
 const VE_TUDO = ['adm_l1', 'adm_l2'];
@@ -62,13 +63,13 @@ router.get('/relatorio/:codava/:curso', verifyToken, checkPermission, async (req
     try {
         const { codava, curso } = req.params;
         const escopo = await escopoDe(req);
-        if (curso === 'IES' ? false : !podeVer(escopo, curso)) return res.status(403).json({ error: 'Você não tem acesso a este curso.' });
+        if (curso === 'IES' && escopo !== null) return res.status(403).json({ error: 'A visão geral da instituição é restrita à direção.' });
+        if (curso !== 'IES' && !podeVer(escopo, curso)) return res.status(403).json({ error: 'Você não tem acesso a este curso.' });
         const snap = await db.collection('cpa_relatorios').doc(`${Number(codava)}__${curso}`).get();
         if (!snap.exists) return res.status(404).json({ error: 'Relatório não encontrado. Rode a sincronização da CPA.' });
         const r = snap.data();
         // Docentes/Administrativo (e a avaliação do coordenador) só para a direção
         if ((r.publico || 'A') !== 'A' && escopo !== null) return res.status(403).json({ error: 'Este resultado é restrito à direção.' });
-        if (curso === 'IES' && escopo !== null) r.dimensoes.forEach(d => { d.comentarios = []; });   // comentários de outros cursos não vão para coordenador
         res.json(r);
     } catch (err) {
         res.status(500).json({ error: err.message });
