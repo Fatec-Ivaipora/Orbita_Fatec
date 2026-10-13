@@ -67,6 +67,32 @@ const SQL_BASE = `
     join tfi_cliente cl on cl.codcli = a.clialu
    where tm.semtur = $1`;
 
+// Turmas que estudam juntas (mesma regra do módulo Matrizes): no curso de Tecnologia todos os períodos
+// estudam juntos; nos demais, pares de períodos vizinhos com 60% ou mais das disciplinas em comum
+// (matriz rotativa). Cada turma entra em no máximo um par. Usado na Correção de Provas pra imprimir
+// as folhas de quem faz a prova junto. t.grupo = id da primeira turma do grupo.
+function marcarGrupos(lista) {
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const porCurso = new Map();
+  lista.forEach(t => { t.grupo = t.id; (porCurso.get(t.codcur) || porCurso.set(t.codcur, []).get(t.codcur)).push(t); });
+  for (const ts of porCurso.values()) {
+    const regulares = ts.filter(t => !/^DP\b/i.test(t.turma) && [...t.disciplinas.values()].some(d => !d.dp)).sort((a, b) => a.periodo - b.periodo);
+    if (/SUPERIOR DE TECNOLOGIA/i.test(ts[0].curso)) { regulares.forEach(t => { t.grupo = regulares[0].id; }); continue; }
+    const nomes = regulares.map(t => new Set([...t.disciplinas.values()].filter(d => !d.dp).map(d => norm(d.nome))));
+    const arestas = [];
+    regulares.forEach((a, i) => {
+      const j = regulares.findIndex(t => t.periodo === a.periodo + 1);
+      if (j < 0) return;
+      const inter = [...nomes[i]].filter(x => nomes[j].has(x)).length, menor = Math.min(nomes[i].size, nomes[j].size);
+      const score = menor >= 2 ? inter / menor : 0;
+      if (score >= 0.6) arestas.push({ i, j, score, impar: a.periodo % 2 === 1, p: a.periodo });
+    });
+    arestas.sort((x, y) => y.score - x.score || Number(y.impar) - Number(x.impar) || x.p - y.p);
+    const usado = new Set();
+    arestas.forEach(e => { if (usado.has(e.i) || usado.has(e.j)) return; usado.add(e.i); usado.add(e.j); regulares[e.j].grupo = regulares[e.i].id; });
+  }
+}
+
 async function sincronizarSemestre(semEdubox, db, dry) {
   const fases = await q(`select codfas, trim(nomfas) nome, dinfas::date ini, dfifas::date fim from tac_faseletiva where semfas = $1 order by codfas`, [semEdubox]);
   if (!fases.length) { console.log(`${semEdubox}: sem bimestres cadastrados — pulei`); return null; }
@@ -125,10 +151,11 @@ async function sincronizarSemestre(semEdubox, db, dry) {
 
   const agora = new Date().toISOString();
   const lista = [...turmas.values()].sort((a, b) => a.turma.localeCompare(b.turma, 'pt-BR'));
+  marcarGrupos(lista);
   const ciclo = {
     id: sem, semestre: sem, semEdubox, segmento, atualizadoEm: agora,
     fases: fases.map(f => ({ id: f.codfas, nome: limpa(f.nome).replace('°', 'º'), ini: new Date(f.ini).toISOString().slice(0, 10), fim: new Date(f.fim).toISOString().slice(0, 10) })),
-    turmas: lista.map(t => ({ id: t.id, turma: t.turma, codcur: t.codcur, curso: t.curso, periodo: t.periodo, alunos: t.alunos.size }))
+    turmas: lista.map(t => ({ id: t.id, turma: t.turma, codcur: t.codcur, curso: t.curso, periodo: t.periodo, alunos: t.alunos.size, grupo: t.grupo }))
   };
   console.log(`${semEdubox}: ${lista.length} turmas, ${lista.reduce((s, t) => s + t.alunos.size, 0)} alunos ativos, ${base.length} aluno x disciplina, bimestres ${ciclo.fases.map(f => f.nome).join(' / ')}`);
   ciclo._turmas = lista;   // pro histórico por aluno (não vai pro Firestore)

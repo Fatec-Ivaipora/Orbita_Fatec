@@ -204,6 +204,7 @@ const requireModulePermission = (moduleName) => {
         const defaultPermissions = {
             adm_l2: {
                 cad: 3,
+                'correcao-provas': 3,
                 cpa: 3,
                 matrizes: 3,
                 emprestimo: 3,
@@ -311,6 +312,7 @@ const requireModulePermission = (moduleName) => {
             // src/rotas/avaliacao-docente.js).
             coordenador: {
                 cad: 3,
+                'correcao-provas': 3,
                 cpa: 2,
                 matrizes: 3,
                 emprestimo: 1,
@@ -372,6 +374,7 @@ const requireModulePermission = (moduleName) => {
             // criar/editar questões e provas); nenhum outro módulo.
             coord_medicina: {
                 cad: 3,
+                'correcao-provas': 3,
                 cpa: 2,
                 emprestimo: 1,
                 usuarios: 1,
