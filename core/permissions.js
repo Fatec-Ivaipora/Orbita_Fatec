@@ -174,6 +174,16 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>`,
     url: "/cpa/index.html"
   },
+  // CAD — Conselho Acadêmico de Desempenho Discente: nota e faltas por bimestre de cada aluno (Edubox),
+  // filtros de alunos em atenção, observação do coordenador e ata. Mesmo acesso do Relatório CPA.
+  // Dados vêm de scripts/cad-edubox-sync.js (Firestore cad_*).
+  cad: {
+    id: "cad",
+    category: "docencia",
+    title: "CAD — Desempenho Discente",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg>`,
+    url: "/cad/index.html"
+  },
   "banco-provas": {
     id: "banco-provas",
     category: "docencia",
@@ -244,11 +254,11 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "carga-horaria", "funcionarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad"]
   },
   ti: {
     label: "T.I.",
@@ -267,7 +277,7 @@ export const ROLE_PERMISSIONS = {
   // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos", "matrizes", "cpa"]
+    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos", "matrizes", "cpa", "cad"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da
@@ -286,7 +296,7 @@ export const ROLE_PERMISSIONS = {
   // (ver CARGOS_SEM_CARTAO em core/layout.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos", "cpa"]
+    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "agenda-espacos", "cpa", "cad"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (Meu Espaço +
   // Banco de Questões), cargo separado só pra aparecer com rótulo próprio na

@@ -203,6 +203,7 @@ const requireModulePermission = (moduleName) => {
         // Fallback de segurança para permissões padrão
         const defaultPermissions = {
             adm_l2: {
+                cad: 3,
                 cpa: 3,
                 matrizes: 3,
                 emprestimo: 3,
@@ -309,6 +310,7 @@ const requireModulePermission = (moduleName) => {
             // avaliações que ele mesmo criou — ver `apenasProprias` em
             // src/rotas/avaliacao-docente.js).
             coordenador: {
+                cad: 3,
                 cpa: 2,
                 matrizes: 3,
                 emprestimo: 1,
@@ -369,6 +371,7 @@ const requireModulePermission = (moduleName) => {
             // Coordenação da Medicina — só o Banco de Questões (nível 3, pode
             // criar/editar questões e provas); nenhum outro módulo.
             coord_medicina: {
+                cad: 3,
                 cpa: 2,
                 emprestimo: 1,
                 usuarios: 1,
