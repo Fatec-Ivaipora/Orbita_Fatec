@@ -4,7 +4,7 @@ const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 // ==========================================================================
-// CAD — Conselho Acadêmico de Desempenho Discente (13/10/2026).
+// CADD — Conselho Acadêmico de Desempenho Discente (13/10/2026).
 // Lê do Firestore o que scripts/cad-edubox-sync.js grava a partir do Edubox (nota, composição e
 // faltas de cada aluno ativo por disciplina e bimestre; desempenho do aluno ao longo dos semestres)
 // e guarda o que é do Órbita: o HISTÓRICO DE ATENDIMENTO de cada aluno (registros com observação e
@@ -42,7 +42,7 @@ router.get('/ciclos', verifyToken, checkPermission, async (req, res) => {
 router.get('/turma/:id', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection('cad_turmas').doc(req.params.id).get();
-        if (!snap.exists) return res.status(404).json({ error: 'Turma não encontrada. Rode a sincronização do CAD.' });
+        if (!snap.exists) return res.status(404).json({ error: 'Turma não encontrada. Rode a sincronização do CADD.' });
         const t = snap.data();
         const escopo = await escopoDe(req);
         if (!podeVer(escopo, t.codcur)) return res.status(403).json({ error: 'Você não tem acesso a esta turma.' });

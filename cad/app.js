@@ -5,7 +5,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../c
 import { getEffectiveLevel } from '../core/permissions.js';
 
 // ==========================================================================
-// CAD — Conselho Acadêmico de Desempenho Discente (13/10/2026). Os números vêm de
+// CADD — Conselho Acadêmico de Desempenho Discente (13/10/2026). Os números vêm de
 // scripts/cad-edubox-sync.js (Edubox -> Firestore): nota do bimestre (soma das avaliações lançadas)
 // e faltas por aluno e disciplina. Aqui o coordenador filtra quem entra em atenção (notas vermelhas
 // e/ou faltas — filtros separados, ajustáveis), registra a observação e a intervenção de cada aluno
@@ -104,7 +104,7 @@ async function carregarCiclos() {
     });
     montarSemestres();
   } catch (err) {
-    $('vazio').textContent = `Não foi possível carregar o CAD: ${err.message}`;
+    $('vazio').textContent = `Não foi possível carregar o CADD: ${err.message}`;
   }
 }
 const cicloAtual = () => ciclos.find(c => c.id === semSel);
@@ -112,7 +112,7 @@ const cicloAtual = () => ciclos.find(c => c.id === semSel);
 function montarSemestres() {
   const lista = ciclos.filter(c => c.segmento === seg);
   const sel = $('sel-sem');
-  if (!lista.length) { sel.innerHTML = ''; $('vazio').textContent = 'Ainda não há dados do CAD. Rode a sincronização com o Edubox.'; return; }
+  if (!lista.length) { sel.innerHTML = ''; $('vazio').textContent = 'Ainda não há dados do CADD. Rode a sincronização com o Edubox.'; return; }
   if (!lista.some(c => c.id === semSel)) semSel = lista[0].id;
   sel.innerHTML = lista.map(c => `<option value="${esc(c.id)}">${esc(c.semestre.replace('-', '.'))}</option>`).join('');
   sel.value = semSel;
@@ -217,7 +217,7 @@ function render() {
   const lista = f.todos ? todos.slice().sort(ordemAlfa) : atencao.sort((x, y) => (y.vermelhas - x.vermelhas) || (y.maiorFalta - x.maiorFalta) || x.aluno.nome.localeCompare(y.aluno.nome, 'pt-BR'));
   const semNota = turma.disciplinas.length && todos.every(s => s.discs.every(d => d.n === null));
 
-  $('ata-cab').innerHTML = `<div class="cad-ata-marca">FATEC Ivaiporã · Conselho Acadêmico de Desempenho Discente (CAD)</div>
+  $('ata-cab').innerHTML = `<div class="cad-ata-marca">FATEC Ivaiporã · Conselho Acadêmico de Desempenho Discente (CADD)</div>
     <h1>${esc(titulo(turma.turma))} — ${esc(nomeFase)} de ${esc(turma.semestre.replace('-', '.'))}</h1>
     <p>Critério: nota vermelha abaixo de ${fmtNota(MEDIA)} · em atenção com ${f.notas}+ notas vermelhas ${f.modo === 'e' ? 'e' : 'ou'} ${f.faltas}+ faltas numa disciplina (EAD não tem falta) · emitida em ${new Date().toLocaleDateString('pt-BR')}</p>`;
 
@@ -501,7 +501,7 @@ function imprimirFicha(alunoId) {
   .assina div { flex: 1; border-top: 1px solid #0b1f33; padding-top: 4px; text-align: center; font-size: 9pt; }
   @media screen { body { max-width: 190mm; margin: 12px auto; padding: 0 10px; } }
 </style></head><body>
-<header><img src="${location.origin}/img/fateclogoazul.png" alt="FATEC Ivaiporã"><div><h1>Ficha de acompanhamento do aluno</h1><p>FATEC Ivaiporã · Conselho Acadêmico de Desempenho Discente (CAD) · emitida em ${esc(emitido)}${quem ? ' por ' + esc(quem) : ''}</p></div></header>
+<header><img src="${location.origin}/img/fateclogoazul.png" alt="FATEC Ivaiporã"><div><h1>Ficha de acompanhamento do aluno</h1><p>FATEC Ivaiporã · Conselho Acadêmico de Desempenho Discente (CADD) · emitida em ${esc(emitido)}${quem ? ' por ' + esc(quem) : ''}</p></div></header>
 <h2>Identificação</h2><div class="dados">${ident}</div>
 <h2>Situação no ${esc(nomeFase.toLowerCase())}</h2>
 <div class="resumo"><div><small>Notas vermelhas (abaixo de ${fmtNota(MEDIA)})</small><b class="${st.vermelhas >= f.notas ? 'ruim' : ''}">${st.vermelhas}</b></div><div><small>Maior nº de faltas numa disciplina</small><b class="${st.maiorFalta >= f.faltas ? 'ruim' : ''}">${st.maiorFalta}</b></div><div><small>Disciplinas</small><b>${st.discs.length}</b></div><div><small>Atendimentos registrados</small><b>${atend.length}</b></div></div>
@@ -564,7 +564,7 @@ async function atualizarAgora() {
   try {
     const { pedidoEm } = await apiFetch('/cad/atualizar', { method: 'POST' });
     renderStatus({ ...statusSync, status: 'rodando' });
-    const limite = Date.now() + 4 * 60000;   // a leitura do CAD leva ~1 min
+    const limite = Date.now() + 4 * 60000;   // a leitura do CADD leva ~1 min
     aguardando = setInterval(async () => {
       try {
         const st = await apiFetch('/cad/status');

@@ -1,4 +1,4 @@
-/* CAD — Conselho Acadêmico de Desempenho Discente (13/10/2026). Segue o padrão do Órbita (core/orbita.css). */
+/* CADD — Conselho Acadêmico de Desempenho Discente (13/10/2026). Segue o padrão do Órbita (core/orbita.css). */
 .cad-wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
 .cad-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px 16px; }
 .cad-campo { display: grid; gap: 4px; font-size: 0.74rem; font-weight: 600; color: var(--orb-mudo, #5b6a80); min-width: 150px; }
