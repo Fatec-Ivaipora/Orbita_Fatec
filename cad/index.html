@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAD — Desempenho Discente - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/cad/cad.css?v=9">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="cad-wrap">
+                    <div class="page-header cad-no-print">
+                        <div>
+                            <h1 class="page-title"><span class="cm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg></span>CAD — Desempenho Discente</h1>
+                            <p class="page-subtitle">Conselho Acadêmico: nota e faltas do bimestre de cada aluno (Edubox). Nota vermelha é abaixo de 7,0.</p>
+                        </div>
+                        <div class="page-header-actions">
+                            <button type="button" class="btn-secondary" id="btn-atualizar" title="Busca de novo as notas e faltas no Edubox">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+                                <span id="btn-atualizar-texto">Atualizar agora</span>
+                            </button>
+                            <button type="button" class="btn-primary" id="btn-ata" disabled>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                                Imprimir ata
+                            </button>
+                        </div>
+                    </div>
+                    <div class="cad-status cad-no-print" id="cad-status"></div>
+
+                    <section class="card cad-filtros cad-no-print" aria-label="Escolha da turma">
+                        <div class="abas" id="seg" role="tablist">
+                            <button type="button" class="aba ativa" data-seg="GRA" role="tab">Graduação</button>
+                            <button type="button" class="aba" data-seg="MED" role="tab">Medicina</button>
+                        </div>
+                        <label class="cad-campo">Semestre<select id="sel-sem" class="select-filter"></select></label>
+                        <label class="cad-campo">Bimestre<select id="sel-fase" class="select-filter"></select></label>
+                        <label class="cad-campo">Curso<select id="sel-curso" class="select-filter"></select></label>
+                        <label class="cad-campo cad-campo-largo">Turma<select id="sel-turma" class="select-filter"></select></label>
+                    </section>
+
+                    <section class="card cad-regras cad-no-print" aria-label="Quem entra em atenção">
+                        <div class="cad-regras-tit">Quem entra em atenção</div>
+                        <label class="cad-num">Notas vermelhas a partir de <input type="number" id="f-notas" min="1" max="12" value="2"> disciplinas</label>
+                        <label class="cad-num">Faltas a partir de <input type="number" id="f-faltas" min="1" max="99" value="5"> em alguma disciplina <small class="cad-mudo">(no semestre até hoje)</small></label>
+                        <div class="abas cad-modo" id="f-modo" role="radiogroup" aria-label="Como combinar">
+                            <button type="button" class="aba ativa" data-modo="ou" role="radio" aria-checked="true">Nota <b>ou</b> falta</button>
+                            <button type="button" class="aba" data-modo="e" role="radio" aria-checked="false">Nota <b>e</b> falta</button>
+                        </div>
+                        <label class="cad-check"><input type="checkbox" id="f-todos" autocomplete="off"> Mostrar todos os alunos da turma (ordem alfabética)</label>
+                    </section>
+
+                    <div id="vazio" class="card cad-vazio">Escolha a turma para ver o desempenho do bimestre.</div>
+
+                    <div id="conteudo" class="hidden">
+                        <div class="cad-ata-cab" id="ata-cab"></div>
+                        <div class="kpi-grid cad-kpis" id="kpis"></div>
+
+                        <section class="card cad-bloco">
+                            <h2 class="card-secao-titulo">Disciplinas que pedem atenção <small>— % de alunos com nota vermelha no bimestre</small></h2>
+                            <div id="panorama"></div>
+                        </section>
+
+                        <section class="card cad-bloco">
+                            <h2 class="card-secao-titulo" id="lista-tit">Alunos em atenção</h2>
+                            <div id="lista"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="cad-toast hidden" role="status"></div>
+    <script type="module" src="/cad/app.js?v=13"></script>
+</body>
+</html>

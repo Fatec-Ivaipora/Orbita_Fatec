@@ -1,0 +1,150 @@
+/* CAD — Conselho Acadêmico de Desempenho Discente (13/10/2026). Segue o padrão do Órbita (core/orbita.css). */
+.cad-wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
+.cad-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px 16px; }
+.cad-campo { display: grid; gap: 4px; font-size: 0.74rem; font-weight: 600; color: var(--orb-mudo, #5b6a80); min-width: 150px; }
+.cad-campo-largo { min-width: 260px; flex: 1; }
+.cad-campo select { width: 100%; }
+.cad-regras { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 16px; }
+.cad-regras-tit { font-family: var(--orb-display, inherit); font-weight: 700; color: var(--orb-tinta, #0d1b33); }
+.cad-num { display: inline-flex; align-items: center; gap: 6px; font-size: 0.86rem; color: var(--orb-tinta2, #44536b); }
+.cad-num input { width: 58px; min-height: 36px; text-align: center; font-weight: 700; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 8px; }
+.cad-modo { margin-bottom: 0; }
+.cad-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.86rem; color: var(--orb-tinta2, #44536b); cursor: pointer; }
+.cad-vazio { padding: 28px; text-align: center; color: var(--orb-mudo, #5b6a80); }
+.cad-aviso { padding: 14px; color: var(--orb-tinta2, #44536b); background: var(--orb-sup2, #f6f8fb); border-radius: 10px; }
+.cad-kpis { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.cad-bloco { padding: 16px 18px; }
+.cad-bloco .card-secao-titulo { margin: 0 0 10px; padding: 0; }
+.cad-ata-cab { display: none; }
+
+/* panorama por disciplina */
+.cad-pan { display: grid; gap: 8px; }
+.cad-pan-linha { display: grid; grid-template-columns: minmax(180px, 1.3fr) 2fr 130px; gap: 12px; align-items: center; padding: 6px 4px; border-radius: 8px; }
+.cad-pan-nome { min-width: 0; }
+.cad-pan-nome b { display: block; font-weight: 600; color: var(--orb-tinta, #0d1b33); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cad-pan-nome small, .cad-pan-val small { display: block; font-size: 0.74rem; color: var(--orb-mudo, #5b6a80); }
+.cad-pan-barra { height: 18px; background: var(--orb-sup2, #f6f8fb); border-radius: 6px; overflow: hidden; }
+.cad-pan-barra span { display: block; height: 100%; background: var(--orb-azul, #1f6fb2); border-radius: 6px; }
+.cad-pan-linha.critica .cad-pan-barra span { background: var(--orb-crit, #c8392f); }
+.cad-pan-linha.critica .cad-pan-val b { color: var(--orb-crit, #c8392f); }
+.cad-pan-val { text-align: right; font-variant-numeric: tabular-nums; }
+.cad-legenda { margin: 10px 0 0; font-size: 0.76rem; color: var(--orb-mudo, #5b6a80); }
+.cad-tag { display: inline-block; font-size: 0.66rem; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--orb-alerta-suave, #fdf0dd); color: var(--orb-alerta, #a8650b); vertical-align: middle; }
+
+/* lista de alunos */
+.cad-aluno { border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 12px; margin-bottom: 8px; background: #fff; overflow: hidden; }
+.cad-aluno.crit { border-color: #ecb8b2; }
+.cad-aluno-cab { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: minmax(200px, 1fr) auto; gap: 6px 14px; padding: 12px 14px; align-items: center; }
+.cad-aluno-cab:hover { background: var(--orb-sup2, #f6f8fb); }
+.cad-aluno-cab:focus-visible { outline: 2px solid var(--orb-azul, #1f6fb2); outline-offset: -2px; }
+.cad-aluno-nome { font-weight: 700; color: var(--orb-tinta, #0d1b33); }
+.cad-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.cad-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.cad-chips:empty { display: none; }
+.cad-badge, .cad-chip { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cad-badge.crit { background: var(--orb-crit, #c8392f); color: #fff; }
+.cad-badge.ruim { background: var(--orb-crit-suave, #fbe9e6); color: var(--orb-crit, #c8392f); }
+.cad-badge.falta { background: var(--orb-alerta-suave, #fdf0dd); color: var(--orb-alerta, #a8650b); }
+.cad-badge.ok { background: var(--orb-sup2, #f6f8fb); color: var(--orb-tinta2, #44536b); }
+.cad-badge.obs { background: var(--orb-bom-suave, #e2f2ea); color: var(--orb-bom, #0f7a4b); }
+.cad-chip.verm { background: var(--orb-crit-suave, #fbe9e6); color: var(--orb-crit, #c8392f); font-weight: 600; }
+.cad-detalhe { padding: 4px 14px 14px; border-top: 1px solid var(--orb-linha2, #eef2f7); display: grid; gap: 14px; }
+.cad-tab td small { display: block; font-size: 0.72rem; color: var(--orb-mudo, #5b6a80); }
+.cad-tab tr.verm td:nth-child(2) { color: var(--orb-crit, #c8392f); font-weight: 700; }
+.cad-mudo { color: var(--orb-mudo, #5b6a80); font-size: 0.8rem; }
+.cad-obs { display: grid; gap: 10px; }
+.cad-obs label { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: var(--orb-tinta, #0d1b33); }
+.cad-obs label small { font-weight: 400; color: var(--orb-mudo, #5b6a80); }
+.cad-obs textarea { width: 100%; padding: 8px 10px; font: inherit; resize: vertical; }
+.cad-obs-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.cad-toast { position: fixed; right: 18px; bottom: 18px; background: var(--orb-marca, #12294d); color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 0.86rem; z-index: 50; }
+.cad-toast.erro { background: var(--orb-crit, #c8392f); }
+.cad-dica { position: fixed; z-index: 60; pointer-events: none; background: #12294d; color: #fff; padding: 8px 11px; border-radius: 9px; font-size: 12px; line-height: 1.45; max-width: 260px; opacity: 0; transition: opacity .12s; }
+.cad-dica .t { font-weight: 700; } .cad-dica div:not(.t) { color: #c9d5e8; }
+
+@media (max-width: 720px) {
+  .cad-pan-linha { grid-template-columns: 1fr 90px; }
+  .cad-pan-barra { grid-column: 1 / -1; grid-row: 2; }
+  .cad-aluno-cab { grid-template-columns: 1fr; }
+  .cad-badges { justify-content: flex-start; }
+}
+
+/* ata: só o conteúdo, com cabeçalho próprio */
+@media print {
+  .cad-no-print, .layout-sidebar, .layout-header, .cad-toast, .cad-dica, .cad-obs-rodape .btn-primary { display: none !important; }
+  .cad-ata-cab { display: block; margin-bottom: 10px; }
+  .cad-ata-cab .cad-ata-marca { font-size: 10px; color: #44536b; }
+  .cad-ata-cab h1 { font-size: 18px; margin: 2px 0; }
+  .cad-ata-cab p { font-size: 10px; color: #44536b; margin: 0; }
+  .cad-aluno { break-inside: avoid; }
+  .cad-obs textarea { border: 1px solid #ccc; min-height: 0; }
+  .layout-main, .layout-content { margin: 0 !important; padding: 0 !important; }
+}
+
+/* base de layout (as outras telas trazem isso de contratos.css/comercial-tema.css; aqui é autossuficiente) */
+.cad-wrap .page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.cad-wrap .page-title { display: flex; align-items: center; gap: 0.6rem; margin: 0; }
+.cad-wrap .cm-titulo-icone { display: inline-grid; place-items: center; flex: none; }
+.cad-wrap .page-header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.cad-wrap .btn-primary, .cad-wrap .btn-secondary { display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; cursor: pointer; font-size: 0.88rem; }
+.cad-wrap .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.cad-wrap .abas { display: inline-flex; gap: 2px; }
+.cad-wrap .abas .aba { padding: 0.45rem 0.95rem; cursor: pointer; font-size: 0.84rem; white-space: nowrap; }
+.cad-wrap .abas .aba.hidden { display: none; }
+.cad-wrap .select-filter { padding: 0 10px; font-size: 0.88rem; }
+.cad-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 0; }
+.cad-kpis .kpi-card { margin: 0; }
+.cad-tab th { text-align: left; } .cad-tab th.num, .cad-tab td.num { text-align: right; }
+.cad-tab td { vertical-align: top; }
+
+/* composição da nota: de qual avaliação veio cada parte */
+.cad-comp { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin-top: 4px; font-size: 0.74rem; color: var(--orb-tinta2, #44536b); }
+.cad-comp > span { white-space: nowrap; }
+.cad-comp b { font-weight: 700; color: var(--orb-tinta, #0d1b33); font-variant-numeric: tabular-nums; }
+.cad-comp > span.falta b { color: var(--orb-alerta, #a8650b); font-weight: 600; }
+.cad-comp i { font-style: normal; color: var(--orb-mudo, #5b6a80); }
+.cad-chip.ua { background: var(--orb-alerta-suave, #fdf0dd); color: var(--orb-alerta, #a8650b); font-weight: 600; }
+
+/* tipo da disciplina */
+.cad-modal { display: inline-block; font-size: 0.64rem; font-weight: 700; padding: 0 6px; border-radius: 999px; vertical-align: middle; letter-spacing: 0.02em; }
+.cad-modal.ead { background: #ede9f8; color: #4c3d8f; }
+.cad-modal.sincrona { background: #e3effa; color: #1f6fb2; }
+.cad-modal.estagio { background: #e2f2ea; color: #0f7a4b; }
+.cad-modal.presencial { background: var(--orb-sup2, #f6f8fb); color: var(--orb-tinta2, #44536b); }
+/* gráfico e histórico */
+.cad-sub { font-family: var(--orb-display, inherit); font-weight: 700; font-size: 0.92rem; color: var(--orb-tinta, #0d1b33); margin-top: 4px; }
+.cad-sub small { font-family: var(--orb-texto, inherit); font-weight: 400; color: var(--orb-mudo, #5b6a80); font-size: 0.76rem; }
+.cad-graf { border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 10px; padding: 6px; }
+.cad-graf svg { width: 100%; height: auto; display: block; }
+.cad-hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cad-hist-item { border-left: 3px solid var(--orb-azul, #1f6fb2); background: var(--orb-sup2, #f6f8fb); border-radius: 0 10px 10px 0; padding: 10px 12px; }
+.cad-hist-item p { margin: 6px 0 0; white-space: pre-wrap; color: var(--orb-tinta, #0d1b33); font-size: 0.88rem; }
+.cad-hist-int { color: var(--orb-tinta2, #44536b) !important; }
+.cad-hist-cab { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 0.8rem; color: var(--orb-mudo, #5b6a80); }
+.cad-hist-cab b { color: var(--orb-tinta, #0d1b33); }
+.cad-hist-acoes { margin-left: auto; display: inline-flex; gap: 10px; }
+.cad-link { all: unset; cursor: pointer; color: var(--orb-azul, #1f6fb2); font-weight: 600; font-size: 0.8rem; }
+.cad-link:hover { text-decoration: underline; } .cad-link:focus-visible { outline: 2px solid var(--orb-azul, #1f6fb2); }
+.cad-link.perigo { color: var(--orb-crit, #c8392f); }
+.cad-hist-item.editando { display: grid; gap: 8px; border-left-color: var(--orb-laranja, #e8791e); }
+.cad-hist-item.editando label, .cad-novo label { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; }
+.cad-hist-item.editando textarea { width: 100%; font: inherit; padding: 8px 10px; }
+.cad-novo { border-top: 1px dashed var(--orb-linha, #e3e8f0); padding-top: 12px; }
+.cad-novo-tit { font-weight: 700; color: var(--orb-tinta, #0d1b33); }
+.cad-data { max-width: 200px; }
+@media print { .cad-novo, .cad-hist-acoes { display: none !important; } }
+
+.cad-ficha-bar { display: flex; justify-content: flex-end; }
+@media print { .cad-ficha-bar { display: none !important; } }
+
+/* status do agente (mesmo modelo da Cobrança) */
+.cad-status { font-size: 0.8rem; color: var(--orb-mudo, #5b6a80); margin: -6px 2px 0; line-height: 1.9; }
+.cad-status strong { color: var(--orb-tinta, #0d1b33); }
+.cad-pill { border-radius: 20px; padding: 0.1rem 0.6rem; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 6px; }
+.cad-pill.ok { background: #ecfdf5; color: #047857; }
+.cad-pill.off { background: #fef2f2; color: #b91c1c; }
+.cad-pill.run { background: #eff6ff; color: #1d4ed8; }
+.cad-girando { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cad-gira .8s linear infinite; }
+@keyframes cad-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cad-girando { animation: none; } }
