@@ -210,8 +210,22 @@ async function trajetoria(semestres) {
   return porAluno;
 }
 
-async function sincronizar(semestres, { dry = false } = {}) {
+async function sincronizar(semestres, { dry = false, origem = 'manual' } = {}) {
   const db = dry ? null : require(path.join(RAIZ, 'src', 'firebase')).db;
+  const cfg = db && db.collection('config').doc('cad_sync');
+  const t0 = Date.now();
+  if (cfg) await cfg.set({ status: 'rodando', rodandoDesde: new Date().toISOString(), origemRodando: origem }, { merge: true });
+  try {
+    const feitos = await sincronizarTudo(semestres, db, dry);
+    if (cfg) await cfg.set({ status: 'ok', ultimaAtualizacao: new Date().toISOString(), ultimaOrigem: origem, duracaoMs: Date.now() - t0, semestres: feitos, erro: null }, { merge: true });
+    return feitos;
+  } catch (err) {
+    if (cfg) await cfg.set({ status: 'erro', erro: err.message, erroEm: new Date().toISOString() }, { merge: true }).catch(() => {});
+    throw err;
+  }
+}
+
+async function sincronizarTudo(semestres, db, dry) {
   const feitos = [], ciclos = [];
   for (const s of semestres) { const c = await sincronizarSemestre(s, db, dry); if (c) { feitos.push(c.id); ciclos.push(c); } }
   const alunos = pontosPorAluno(ciclos);
@@ -230,11 +244,10 @@ async function sincronizar(semestres, { dry = false } = {}) {
       await b.commit();
     }
   }
-  if (db) await db.collection('config').doc('cad_sync').set({ ultimaAtualizacao: new Date().toISOString(), semestres: feitos }, { merge: true });
   return feitos;
 }
 
-module.exports = { sincronizar };
+module.exports = { sincronizar, semestresAtuais };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

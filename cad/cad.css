@@ -137,3 +137,14 @@
 
 .cad-ficha-bar { display: flex; justify-content: flex-end; }
 @media print { .cad-ficha-bar { display: none !important; } }
+
+/* status do agente (mesmo modelo da Cobrança) */
+.cad-status { font-size: 0.8rem; color: var(--orb-mudo, #5b6a80); margin: -6px 2px 0; line-height: 1.9; }
+.cad-status strong { color: var(--orb-tinta, #0d1b33); }
+.cad-pill { border-radius: 20px; padding: 0.1rem 0.6rem; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 6px; }
+.cad-pill.ok { background: #ecfdf5; color: #047857; }
+.cad-pill.off { background: #fef2f2; color: #b91c1c; }
+.cad-pill.run { background: #eff6ff; color: #1d4ed8; }
+.cad-girando { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cad-gira .8s linear infinite; }
+@keyframes cad-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cad-girando { animation: none; } }

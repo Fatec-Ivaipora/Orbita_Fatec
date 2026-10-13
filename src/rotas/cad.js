@@ -31,7 +31,7 @@ router.get('/ciclos', verifyToken, checkPermission, async (req, res) => {
             .filter(c => c.turmas.length)
             .sort((a, b) => String(b.semestre).localeCompare(String(a.semestre)));
         const cfg = await db.collection('config').doc('cad_sync').get();
-        res.json({ ciclos, escopo: escopo === null ? 'todos' : 'cursos', atualizadoEm: cfg.exists ? cfg.data().ultimaAtualizacao : null, uid: req.user.uid, adm: ADM.includes(req.user.role) });
+        res.json({ ciclos, escopo: escopo === null ? 'todos' : 'cursos', atualizadoEm: cfg.exists ? cfg.data().ultimaAtualizacao : null, status: cfg.exists ? cfg.data() : {}, uid: req.user.uid, adm: ADM.includes(req.user.role) });
     } catch (err) {
         console.error('[cad] ciclos:', err);
         res.status(500).json({ error: err.message });
@@ -74,6 +74,29 @@ router.get('/aluno/:alu', verifyToken, checkPermission, async (req, res) => {
         res.json({ historico: hist, atendimentos });
     } catch (err) {
         console.error('[cad] aluno:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/cad/status — de quando são os dados e se o PC do agente está ligado
+router.get('/status', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const d = await db.collection('config').doc('cad_sync').get();
+        res.json(d.exists ? d.data() : {});
+    } catch (err) {
+        console.error('[cad] status:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/cad/atualizar — "Atualizar agora": o agente (scripts/cad-edubox-agente.js) escuta e atualiza
+router.post('/atualizar', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const pedidoEm = new Date().toISOString();
+        await db.collection('config').doc('cad_sync').set({ pedidoEm, pedidoPor: req.user.uid, pedidoPorNome: req.user.name || req.user.email || '' }, { merge: true });
+        res.json({ pedidoEm });
+    } catch (err) {
+        console.error('[cad] atualizar:', err);
         res.status(500).json({ error: err.message });
     }
 });

@@ -21,7 +21,7 @@ const NIVEL_PADRAO = { adm_l2: 3, coordenador: 3, coord_medicina: 3 };
 const MEDIA = 7;                 // nota vermelha: abaixo disso
 const DISC_CRITICA = 0.4;        // disciplina "pede atenção" a partir de 40% de notas vermelhas
 
-let currentUser = null, appInitialized = false, initializedRole = null, podeEditar = false, meuUid = '', souAdm = false;
+let currentUser = null, appInitialized = false, initializedRole = null, podeEditar = false, meuUid = '', souAdm = false, statusSync = {};
 let ciclos = [], seg = 'GRA', semSel = '', faseSel = '', cursoSel = '', turmaSel = '';
 let turma = null;                // /cad/turma/:id
 let modo = 'ou';
@@ -96,6 +96,7 @@ async function carregarCiclos() {
   try {
     const r = await apiFetch('/cad/ciclos');
     ciclos = r.ciclos || []; meuUid = r.uid || ''; souAdm = !!r.adm;
+    statusSync = r.status || {}; renderStatus(statusSync);
     if (!ciclos.some(c => c.segmento === seg) && ciclos.length) seg = ciclos[0].segmento;
     document.querySelectorAll('#seg .aba').forEach(b => {
       b.classList.toggle('ativa', b.dataset.seg === seg);
@@ -531,6 +532,60 @@ async function imprimirAta() {
   setTimeout(() => window.print(), 200);
 }
 
+
+// ---------- STATUS DO AGENTE / ATUALIZAR AGORA (mesmo modelo da Cobrança) ----------
+// O agente roda no PC do TI e atualiza às 9h, 10h, 11h e 16h; fora disso, pelo botão.
+const AGENTE_OFF_MIN = 15;   // sem sinal do PC há mais que isso = desligado
+let aguardando = null;
+const fmtDataHora = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function renderStatus(st = {}) {
+  const partes = [];
+  if (st.status === 'rodando') partes.push('<span class="cad-pill run"><span class="cad-girando"></span> Atualizando agora...</span>');
+  if (st.ultimaAtualizacao) {
+    const origem = { automatica: 'automática', pedido: `pedida${st.pedidoPorNome ? ` por ${esc(st.pedidoPorNome)}` : ''}`, manual: 'manual' }[st.ultimaOrigem] || '';
+    partes.push(`Dados do Edubox de <strong>${fmtDataHora(st.ultimaAtualizacao)}</strong>${origem ? ` (${origem})` : ''}`);
+  } else partes.push('Ainda sem atualização do Edubox');
+  const vivo = st.agenteVivoEm && (Date.now() - new Date(st.agenteVivoEm).getTime()) < AGENTE_OFF_MIN * 60000;
+  partes.push(vivo
+    ? `<span class="cad-pill ok" title="Atualiza sozinho às ${(st.agenteHorarios || [9, 10, 11, 16]).map(h => `${h}h`).join(', ')}; fora disso, pelo botão">PC de atualização ligado</span>`
+    : `<span class="cad-pill off" title="O programa que busca no Edubox roda no computador do TI. Desligado, não há atualização automática nem pelo botão.">PC de atualização desligado${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
+  if (st.status === 'erro' && st.erro) partes.push(`<span class="cad-pill off">Última tentativa falhou: ${esc(st.erro)}</span>`);
+  $('cad-status').innerHTML = partes.join(' · ');
+}
+async function atualizarAgora() {
+  const btn = $('btn-atualizar');
+  if (aguardando) return;
+  btn.disabled = true; $('btn-atualizar-texto').textContent = 'Atualizando...';
+  const fim = (msg, tipo) => {
+    clearInterval(aguardando); aguardando = null;
+    btn.disabled = false; $('btn-atualizar-texto').textContent = 'Atualizar agora';
+    if (msg) toast(msg, tipo);
+  };
+  try {
+    const { pedidoEm } = await apiFetch('/cad/atualizar', { method: 'POST' });
+    renderStatus({ ...statusSync, status: 'rodando' });
+    const limite = Date.now() + 4 * 60000;   // a leitura do CAD leva ~1 min
+    aguardando = setInterval(async () => {
+      try {
+        const st = await apiFetch('/cad/status');
+        statusSync = st;
+        if (st.ultimaAtualizacao && st.ultimaAtualizacao > pedidoEm && st.status !== 'rodando') {
+          fim('Atualizado com os dados do Edubox.');
+          renderStatus(st);
+          Object.keys(alunoCache).forEach(k => delete alunoCache[k]);
+          const turmaAntes = turmaSel;
+          await carregarCiclos();
+          if (turmaAntes && $('sel-turma').value === turmaAntes) carregarTurma();
+        } else if (st.status === 'erro' && st.erroEm > pedidoEm) {
+          renderStatus(st); fim(`O Edubox não respondeu: ${st.erro}`, 'erro');
+        } else if (Date.now() > limite) {
+          renderStatus(st); fim('O PC que busca no Edubox não respondeu (pode estar desligado). Tente de novo mais tarde.', 'erro');
+        } else renderStatus(st);
+      } catch (e) { /* tenta de novo no próximo ciclo */ }
+    }, 4000);
+  } catch (err) { fim(err.message, 'erro'); }
+}
+
 // ---------- DICA (mesmo padrão da Cobrança) ----------
 function ligarDicas() {
   const d = document.createElement('div'); d.className = 'cad-dica'; document.body.appendChild(d);
@@ -578,4 +633,5 @@ function wireEventos() {
     render();
   });
   $('btn-ata').addEventListener('click', imprimirAta);
+  $('btn-atualizar').addEventListener('click', atualizarAgora);
 }
