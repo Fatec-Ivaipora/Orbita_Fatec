@@ -6,7 +6,7 @@
     <title>Contratos - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=4">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=6">
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
@@ -87,6 +87,7 @@
                     </div>
                     <div class="filtro-resumo" id="filtro-resumo"></div>
 
+                    <p class="ct-legenda"><span class="ct-legenda-cor" aria-hidden="true"></span>Em azul: aluno que veio do <b>Relatório de Matrículas</b> (cadastrado pela Secretaria/Financeiro). A situação acompanha a matrícula; "Assinou" pode ser marcado aqui normalmente.</p>
                     <div class="card">
                         <div class="tabela-wrap">
                             <table class="data-table">
@@ -121,6 +122,7 @@
             <h2 id="modal-aluno-titulo">Novo aluno</h2>
             <p class="modal-subtitle" id="modal-aluno-sub"></p>
             <div class="ct-ultima-alt" id="modal-ultima-alt"></div>
+            <p class="ct-aviso-matricula hidden" id="modal-aviso-matricula">Este aluno vem do <b>Relatório de Matrículas</b>: nome, curso, cidade, telefone, data e vencimento do boleto são alterados lá. Aqui ficam o histórico de contatos, a coleta e o "Assinou".</p>
             <form id="form-aluno">
                 <div class="form-group">
                     <label for="f-nome">Nome *</label>
@@ -250,6 +252,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=7"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=9"></script>
 </body>
 </html>

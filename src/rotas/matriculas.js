@@ -4,6 +4,13 @@ const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 const checkPermission = verifyToken.requireModulePermission('matriculas');
+// Calouro cadastrado aqui aparece sozinho nos Contratos do Comercial (src/rotas/contratos.js).
+async function sincronizarContrato(id, dados, req, situacaoMudou) {
+    try {
+        const { sincronizarDaMatricula } = require('./contratos')._interno;
+        await sincronizarDaMatricula(id, dados, req.user.name || req.user.email || '', situacaoMudou);
+    } catch (e) { console.error('[matriculas] sincronizar contrato:', e.message); }
+}
 
 const COL_ALUNOS = 'matriculas_alunos';
 const COL_CONFIG = 'matriculas_config';
@@ -259,6 +266,7 @@ router.get('/alunos/contagem', verifyToken, checkPermission, async (req, res) =>
 router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
         const { modulo, cursoId, curso, periodo, nome, cidade, telefone, situacao, planoConfissao, observacoes, indicadoPorAlunoId, indicadoPorNome, formando } = req.body;
+        const vencimentoBoleto = /^\d{4}-\d{2}-\d{2}$/.test(req.body.vencimentoBoleto || '') ? req.body.vencimentoBoleto : null;
         const semestre = (req.body.semestre || '').trim();
 
         if (!MODULOS.includes(modulo)) return res.status(400).json({ error: 'Informe o módulo (fatec ou medicina).' });
@@ -278,6 +286,7 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             nome: nome.trim(),
             cidade: (cidade || '').trim(),
             telefone: (telefone || '').trim(),
+            vencimentoBoleto,
             situacao: normalizarDesistente(situacao, normalizarPeriodo(periodo)),
             planoConfissao: planoConfissao || 'Não',
             observacoes: (observacoes || '').trim(),
@@ -298,6 +307,7 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             updatedAt: new Date().toISOString()
         };
         const docRef = await db.collection(COL_ALUNOS).add(dados);
+        await sincronizarContrato(docRef.id, dados, req, true);
         res.status(201).json({ id: docRef.id, message: 'Aluno cadastrado.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -331,6 +341,7 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
         if (periodo !== undefined) dados.periodo = normalizarPeriodo(periodo);
         if (cidade !== undefined) dados.cidade = (cidade || '').trim();
         if (telefone !== undefined) dados.telefone = (telefone || '').trim();
+        if (req.body.vencimentoBoleto !== undefined) dados.vencimentoBoleto = /^\d{4}-\d{2}-\d{2}$/.test(req.body.vencimentoBoleto || '') ? req.body.vencimentoBoleto : null;
         if (observacoes !== undefined) dados.observacoes = (observacoes || '').trim();
         if (cursoId !== undefined && curso !== undefined) {
             dados.cursoId = cursoId;
@@ -353,6 +364,8 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
         }
 
         await db.collection(COL_ALUNOS).doc(req.params.id).update(dados);
+        const final = (await db.collection(COL_ALUNOS).doc(req.params.id).get()).data();
+        await sincronizarContrato(req.params.id, final, req, dados.situacao !== undefined);
         res.json({ message: 'Aluno atualizado.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -377,6 +390,7 @@ router.get('/alunos/:id/indicados', verifyToken, checkPermission, async (req, re
 router.delete('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
     try {
         await db.collection(COL_ALUNOS).doc(req.params.id).delete();
+        try { await require('./contratos')._interno.matriculaExcluida(req.params.id); } catch (e) { console.error('[matriculas] contrato:', e.message); }
         res.json({ message: 'Aluno excluído.' });
     } catch (err) {
         res.status(500).json({ error: err.message });

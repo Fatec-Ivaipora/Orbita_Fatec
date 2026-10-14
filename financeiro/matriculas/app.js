@@ -818,6 +818,7 @@ function setupModalAluno() {
         periodo: document.getElementById('aluno-periodo').value,
         cidade: document.getElementById('aluno-cidade').value,
         telefone: document.getElementById('aluno-telefone').value,
+        vencimentoBoleto: document.getElementById('aluno-vencimento-boleto').value || null,
         situacao: document.getElementById('aluno-situacao').value,
         planoConfissao: document.getElementById('aluno-plano').value,
         observacoes: document.getElementById('aluno-observacoes').value,
@@ -865,6 +866,7 @@ function abrirModalAluno(aluno) {
   selPeriodo.value = periodoAtual;
   document.getElementById('aluno-cidade').value = aluno?.cidade || '';
   document.getElementById('aluno-telefone').value = aluno?.telefone || '';
+  document.getElementById('aluno-vencimento-boleto').value = aluno?.vencimentoBoleto || '';
   document.getElementById('aluno-situacao').value = aluno?.situacao || opcoes.situacoes[0] || '';
   document.getElementById('aluno-plano').value = aluno?.planoConfissao || 'Não';
   document.getElementById('aluno-observacoes').value = aluno?.observacoes || '';
