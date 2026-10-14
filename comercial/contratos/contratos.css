@@ -267,3 +267,16 @@
   background: #e8f0fe; color: #0F4EB8; font-size: 0.72rem; font-weight: 800;
 }
 .ct-coleta-tag.atrasada { background: #fef2f2; color: #b91c1c; }
+
+/* aluno que veio do Relatório de Matrículas (14/10/2026) */
+.ct-linha-matricula td { background: #eef5fc; }
+.ct-linha-matricula:hover td { background: #e3effa; }
+.ct-linha-matricula td:first-child { box-shadow: inset 3px 0 0 #1f6fb2; }
+.ct-matricula-linha { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; }
+.ct-matricula { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #1f6fb2; color: #fff; }
+.ct-matricula.removida { background: #fbe9e6; color: #c8392f; }
+.ct-legenda { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: #44536b; margin: 0 0 10px; }
+.ct-legenda-cor { width: 14px; height: 14px; border-radius: 4px; background: #eef5fc; box-shadow: inset 3px 0 0 #1f6fb2; border: 1px solid #cfe0f2; flex: none; }
+
+.ct-aviso-matricula { background: #eef5fc; border: 1px solid #cfe0f2; color: #12294d; border-radius: 10px; padding: 8px 12px; font-size: 0.85rem; margin: 6px 0 4px; }
+.ct-travado { background: #f6f8fb !important; color: #44536b !important; cursor: not-allowed; }

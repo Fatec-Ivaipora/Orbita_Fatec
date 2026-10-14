@@ -423,10 +423,13 @@ function renderTabela(base) {
     }
     acoes += `<button class="btn-acao" data-acao="editar" data-id="${r.id}">Editar</button>`;
     acoes += `<button class="btn-acao desistir" data-acao="excluir" data-id="${r.id}" title="Excluir aluno da lista">🗑</button>`;
+    // Veio do Relatório de Matrículas (cadastro da Secretaria/Financeiro): linha em outra cor + etiqueta
+    const daMatricula = r.matriculaId
+      ? `<span class="ct-matricula ${r.matriculaRemovida ? 'removida' : ''}" title="${r.matriculaRemovida ? 'A matrícula foi excluída no Relatório de Matrículas' : `Vem do Relatório de Matrículas · situação: ${esc(r.matriculaSituacao || '—')}`}">${r.matriculaRemovida ? 'matrícula excluída' : 'Matrículas'}</span>` : '';
     return `
-      <tr>
+      <tr class="${r.matriculaId ? 'ct-linha-matricula' : ''}">
         <td class="ct-sub">${i + 1}</td>
-        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}</td>
+        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
         <td>${fmtData(r.dataMatricula) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.curso) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.cidade) || '<span class="ct-vazio">—</span>'}</td>
@@ -506,6 +509,10 @@ function abrirModalAluno(id) {
   document.getElementById('f-assinado-em').value = r?.assinadoEm || '';
   document.getElementById('f-menor').checked = !!r?.menor18;
   document.getElementById('f-obs').value = r?.observacoes || '';
+  // veio das Matrículas: o cadastro é de lá (só leitura aqui)
+  const travar = !!(r && r.matriculaId && !r.matriculaRemovida);
+  ['f-nome', 'f-matricula', 'f-curso', 'f-cidade', 'f-contato', 'f-boleto'].forEach(idc => { const el = document.getElementById(idc); el.readOnly = travar; el.classList.toggle('ct-travado', travar); });
+  document.getElementById('modal-aviso-matricula').classList.toggle('hidden', !travar);
   // Coleta de assinatura — equipe carrega sem travar a abertura.
   document.getElementById('f-coleta-data').value = r?.coletaData || '';
   document.getElementById('f-coleta-hora').value = r?.coletaHora || '';
