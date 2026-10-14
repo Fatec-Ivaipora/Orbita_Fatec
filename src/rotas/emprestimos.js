@@ -3,18 +3,50 @@ const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
+// Economia de leitura (mesmo padrão do cache de cargo/permissões em
+// middlewares/auth.js): cada abertura da tela, o polling de 2 min e o
+// recarregamento depois de devolver/cadastrar liam a coleção INTEIRA de novo
+// (~50 documentos por vez). Agora a lista fica em memória por alguns minutos
+// e as escritas (PUT/DELETE) atualizam o cache no lugar, sem reler o banco.
+// O prazo existe porque na Vercel pode haver mais de uma instância: uma
+// escrita feita em outra instância aparece aqui em no máximo CACHE_TTL.
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutos (mesmo intervalo do polling da tela)
+let cacheLista = { dados: null, lidoEm: 0 };
+
+const ordenarPorId = (lista) => lista.sort((a, b) => a.id.localeCompare(b.id));
+
+async function lerLista() {
+    if (cacheLista.dados && (Date.now() - cacheLista.lidoEm) < CACHE_TTL) {
+        return cacheLista.dados;
+    }
+    const snapshot = await db.collection('notebooks').get();
+    const lista = [];
+    snapshot.forEach(doc => lista.push({ id: doc.id, ...doc.data() }));
+    cacheLista = { dados: ordenarPorId(lista), lidoEm: Date.now() };
+    return cacheLista.dados;
+}
+
+// Aplica no cache o mesmo merge que foi gravado no Firestore (set com merge)
+function atualizarNoCache(id, dados) {
+    if (!cacheLista.dados) return;
+    const i = cacheLista.dados.findIndex(n => n.id === id);
+    if (i >= 0) {
+        cacheLista.dados[i] = { ...cacheLista.dados[i], ...dados, id };
+    } else {
+        cacheLista.dados.push({ ...dados, id });
+        ordenarPorId(cacheLista.dados);
+    }
+}
+
+function removerDoCache(id) {
+    if (!cacheLista.dados) return;
+    cacheLista.dados = cacheLista.dados.filter(n => n.id !== id);
+}
+
 // GET /api/emprestimos - Retorna todos os notebooks
 router.get('/', verifyToken, verifyToken.requireModulePermission('emprestimo'), async (req, res) => {
     try {
-        const snapshot = await db.collection('notebooks').get();
-        const notebooks = [];
-        snapshot.forEach(doc => {
-            notebooks.push({ id: doc.id, ...doc.data() });
-        });
-        
-        // Retorna ordenado pelo ID
-        notebooks.sort((a, b) => a.id.localeCompare(b.id));
-        res.json(notebooks);
+        res.json(await lerLista());
     } catch (error) {
         console.error('Erro ao buscar empréstimos:', error);
         res.status(500).json({ error: 'Erro ao buscar dados.' });
@@ -24,6 +56,11 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('emprestimo'), 
 // GET /api/emprestimos/:id - Retorna um notebook específico
 router.get('/:id', verifyToken, verifyToken.requireModulePermission('emprestimo'), async (req, res) => {
     try {
+        // Com o cache ainda válido, responde sem ler o banco (polling da tela Movimentar)
+        if (cacheLista.dados && (Date.now() - cacheLista.lidoEm) < CACHE_TTL) {
+            const doCache = cacheLista.dados.find(n => n.id === req.params.id);
+            if (doCache) return res.json(doCache);
+        }
         const docRef = await db.collection('notebooks').doc(req.params.id).get();
         if (!docRef.exists) {
             return res.status(404).json({ error: 'Equipamento não encontrado.' });
@@ -87,6 +124,7 @@ router.put('/:id', verifyToken, verifyToken.requireModulePermission('emprestimo'
         }
 
         await docRef.set(data, { merge: true });
+        atualizarNoCache(id, data);
         res.json({ status: 'success', message: `Equipamento ${id} atualizado.` });
     } catch (error) {
         console.error('Erro ao atualizar empréstimo:', error);
@@ -99,6 +137,7 @@ router.delete('/:id', verifyToken, verifyToken.requireModulePermission('empresti
     try {
         const id = req.params.id;
         await db.collection('notebooks').doc(id).delete();
+        removerDoCache(id);
         res.json({ status: 'success', message: `Equipamento ${id} excluído com sucesso.` });
     } catch (error) {
         console.error('Erro ao excluir empréstimo:', error);
