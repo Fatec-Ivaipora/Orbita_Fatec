@@ -201,6 +201,13 @@ router.delete('/disciplinas/:id', verifyToken, checkPermission, async (req, res)
     }
 });
 
+// Conhecimentos Gerais (14/10/2026): é UM conjunto por semestre, igual para todos os cursos (mesmas
+// questões, na mesma ordem, mesmo gabarito no simulado de todo mundo) — por isso a questão precisa dizer
+// de qual semestre é, e o simulado só puxa as do semestre dele.
+const SEMESTRE_VALIDO = /^\d{4}\.[12]$/;
+const erroSemestreGeral = (disciplinaId, semestre) => (disciplinaId === DISCIPLINA_GERAL_ID && !SEMESTRE_VALIDO.test(normalizarTexto(semestre) || '')
+    ? 'Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): ela vale para todos os cursos naquele semestre.' : null);
+
 function validarQuestao(body) {
     if (!TIPOS_VALIDOS.includes(body.tipo)) return 'Selecione o tipo da questão (objetiva ou dissertativa).';
     if (body.dificuldade && !DIFICULDADES_VALIDAS.includes(body.dificuldade)) return 'Dificuldade inválida.';
@@ -256,10 +263,11 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
 // com acesso ao módulo pode usar essas questões nos próprios simulados).
 router.get('/questoes-gerais', verifyToken, checkPermission, async (req, res) => {
     try {
-        const snap = await db.collection(COL_QUESTOES)
+        let q = db.collection(COL_QUESTOES)
             .where('disciplinaId', '==', DISCIPLINA_GERAL_ID)
-            .where('status', '==', 'publicada')
-            .get();
+            .where('status', '==', 'publicada');
+        if (req.query.semestre) q = q.where('semestre', '==', normalizarTexto(req.query.semestre));
+        const snap = await q.get();
         const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
@@ -295,6 +303,29 @@ router.get('/questoes/semestres', verifyToken, checkPermission, async (req, res)
     }
 });
 
+// GET /periodos-juntos?curso=X — períodos que estudam juntos no semestre atual (14/10/2026), pela mesma
+// regra da Correção de Provas (scripts/cad-edubox-sync.js marca o "grupo" de cada turma no CADD):
+// ex.: [[1,2],[3,4],[5]]. A prova de quem estuda junto é uma só.
+router.get('/periodos-juntos', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const curso = normalizarTexto(req.query.curso);
+        const { CODCUR } = require('./cpa')._interno;
+        const codcur = CODCUR[curso];
+        if (!codcur) return res.json({ grupos: [] });
+        const snap = await db.collection('cad_ciclos').get();
+        const ciclos = snap.docs.map(d => d.data()).filter(c => (c.turmas || []).some(t => t.codcur === codcur));
+        if (!ciclos.length) return res.json({ grupos: [] });
+        const atual = ciclos.sort((a, b) => String(b.semestre).localeCompare(String(a.semestre)))[0];
+        const turmas = atual.turmas.filter(t => t.codcur === codcur && !/^DP\b/i.test(t.turma) && t.periodo);
+        const porGrupo = new Map();
+        turmas.forEach(t => { const k = t.grupo || t.id; (porGrupo.get(k) || porGrupo.set(k, new Set()).get(k)).add(Number(t.periodo)); });
+        const grupos = [...porGrupo.values()].map(s => [...s].sort((a, b) => a - b)).sort((a, b) => a[0] - b[0]);
+        res.json({ semestre: atual.semestre, grupos });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 async function periodoDaDisciplina(disciplinaId) {
     if (!disciplinaId || disciplinaId === DISCIPLINA_GERAL_ID) return null;
     const snap = await db.collection(COL_DISCIPLINAS).doc(disciplinaId).get();
@@ -308,6 +339,8 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
 
         const disciplinaId = normalizarTexto(req.body.disciplinaId);
         const geral = disciplinaId === DISCIPLINA_GERAL_ID;
+        const erroSem = erroSemestreGeral(disciplinaId, req.body.semestre);
+        if (erroSem) return res.status(400).json({ error: erroSem });
         const curso = geral ? null : normalizarTexto(req.body.curso);
         if (!geral && !curso) return res.status(400).json({ error: 'Informe o curso (ou marque como Conhecimentos Gerais).' });
         if (!geral) {
@@ -347,7 +380,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
 
-        const atual = snap.data();
+        const atual = snap.data();
+        { const disc = req.body.disciplinaId !== undefined ? normalizarTexto(req.body.disciplinaId) : atual.disciplinaId; const sem = req.body.semestre !== undefined ? req.body.semestre : atual.semestre; const e2 = erroSemestreGeral(disc, sem); if (e2) return res.status(400).json({ error: e2 }); }
         if (atual.curso) {
             const erroAcesso = await checarAcessoCurso(req, atual.curso);
             if (erroAcesso) return res.status(403).json({ error: erroAcesso });
@@ -378,7 +412,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
             valor: req.body.valor !== undefined && req.body.valor !== '' ? Number(req.body.valor) : null,
             professorNome: normalizarTexto(req.body.professorNome) || null
         });
-        res.json({ message: 'Questão atualizada.' });
+        const avs = tipo === 'objetiva' && atual.gabarito !== gabarito ? await require('./correcao-provas')._interno.propagarGabarito(req.params.id, gabarito, req.user.name || req.user.email) : 0;
+        res.json({ message: avs ? `Questão atualizada (gabarito novo também em ${avs} avaliação(ões) da Correção de Provas).` : 'Questão atualizada.', avaliacoesAtualizadas: avs });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -407,7 +442,8 @@ router.put('/questoes/:id/gabarito', verifyToken, checkPermission, async (req, r
         if (!letrasValidas.includes(req.body.gabarito)) return res.status(400).json({ error: 'Selecione uma alternativa válida.' });
 
         await ref.update({ gabarito: req.body.gabarito });
-        res.json({ message: 'Gabarito atualizado.' });
+        const avs = atual.gabarito !== req.body.gabarito ? await require('./correcao-provas')._interno.propagarGabarito(req.params.id, req.body.gabarito, req.user.name || req.user.email) : 0;
+        res.json({ message: avs ? `Gabarito atualizado (e em ${avs} avaliação(ões) da Correção de Provas).` : 'Gabarito atualizado.', avaliacoesAtualizadas: avs });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -564,6 +600,8 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         if (req.body.chamada !== 'exame' && !req.body.bimestre) return res.status(400).json({ error: 'Selecione o bimestre antes de confirmar.' });
 
         const geral = disciplinaId === DISCIPLINA_GERAL_ID;
+        const erroSem = erroSemestreGeral(disciplinaId, req.body.semestre);
+        if (erroSem) return res.status(400).json({ error: erroSem });
         const periodo = geral ? null : await periodoDaDisciplina(disciplinaId);
         if (!geral && periodo === null) return res.status(404).json({ error: 'Disciplina não encontrada.' });
 
@@ -659,8 +697,12 @@ router.post('/provas/simular', verifyToken, checkPermission, async (req, res) =>
 
         const bimestre = req.body.bimestre ? parseInt(req.body.bimestre, 10) : null;
         const chamada = normalizarChamada(req.body.chamada);
+        const semestre = normalizarTexto(req.body.semestre) || null;
 
         const cotas = Array.isArray(req.body.cotas) ? req.body.cotas : [];
+        if (cotas.some(c => c.disciplinaId === DISCIPLINA_GERAL_ID && c.quantidade > 0) && !semestre) {
+            return res.status(400).json({ error: 'Escolha o semestre do simulado: as questões de Conhecimentos Gerais são as do semestre (iguais para todos os cursos).' });
+        }
         const resultado = [];
         for (const cota of cotas) {
             const geral = cota.disciplinaId === DISCIPLINA_GERAL_ID;
@@ -672,6 +714,8 @@ router.post('/provas/simular', verifyToken, checkPermission, async (req, res) =>
                 // filtra por isso nas disciplinas do curso mesmo.
                 if (bimestre) query = query.where('bimestre', '==', bimestre);
                 if (chamada) query = query.where('chamada', '==', chamada);
+            } else {
+                query = query.where('semestre', '==', semestre);
             }
             const snap = await query.get();
             const disponiveis = ordenarSequencial(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -817,6 +861,19 @@ router.get('/provas/:id/exportar-gabarito', verifyToken, checkPermission, async 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         res.setHeader('Content-Disposition', `attachment; filename="Gabarito - ${prova.nome.replace(/[^a-zA-Z0-9 ]/g, '')}.docx"`);
         res.send(buffer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /questoes/:id — a questão inteira, pra editar na visualização da prova (14/10/2026)
+router.get('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_QUESTOES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+        const q = snap.data();
+        if (q.curso) { const e = await checarAcessoCurso(req, q.curso); if (e) return res.status(403).json({ error: e }); }
+        res.json({ id: snap.id, ...q });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

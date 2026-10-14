@@ -1019,6 +1019,7 @@ function renderListaSelecaoQuestoes() {
 
 async function abrirModalMontarProva(id) {
   provaEmEdicao = provas.find(p => p.id === id);
+  document.getElementById('bmf-btn-folhas-prova').classList.toggle('hidden', !['adm_l1', 'adm_l2', 'coord_medicina'].includes(currentRole));
   if (!provaEmEdicao) return;
   selecaoProvaAtual = new Set(provaEmEdicao.questoesIds || []);
   const rotuloEscopo = provaEmEdicao.tipo === 'enamed' ? provaEmEdicao.areaEnamed : nomeCategoria(provaEmEdicao.categoriaId);
@@ -1812,6 +1813,13 @@ function bindEventos() {
   document.getElementById('bmf-btn-fechar-montar').addEventListener('click', fecharModalMontarProva);
   document.getElementById('bmf-btn-salvar-selecao').addEventListener('click', salvarSelecaoProva);
   document.getElementById('bmf-btn-exportar-prova').addEventListener('click', exportarProva);
+  // atalho pra Correção de Provas (folha de resposta + leitura pelo celular) — coordenação e ADM
+  const btnFolhas = document.getElementById('bmf-btn-folhas-prova');
+  btnFolhas.addEventListener('click', async () => {
+    if (!provaEmEdicao) return;
+    try { await salvarSelecaoProvaSilencioso(); } catch (e) { /* segue com o que já está salvo */ }
+    location.href = `/correcao-provas/index.html#nova/med:${encodeURIComponent(provaEmEdicao.id)}`;
+  });
   document.getElementById('bmf-btn-excluir-prova').addEventListener('click', excluirProva);
 
   document.getElementById('bmf-btn-fechar-resultado-importacao').addEventListener('click', () => fecharModalResultadoImportacao(false));

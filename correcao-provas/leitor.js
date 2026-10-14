@@ -173,16 +173,17 @@ export function lerFolha(img, { aoAcharCodigo, depurar } = {}) {
   if (cand.length < 4) return null;
   const mm = [[0, 0], [L.W, 0], [L.W, L.H], [0, L.H]];
   // a folha pode estar deitada ou de cabeça pra baixo: tenta os 4 giros (o código só confere no certo)
+  let semCodigo = null;   // achou os 4 quadrados mas o código não conferiu (rabiscado, dobrado, sombra)
   const giros = quads.flatMap(q => [0, 1, 2, 3].map(k => ({ pts: [...q.pts.slice(k), ...q.pts.slice(0, k)] })));
   for (const q of giros) {
     const Hf = homografia(mm, q.pts.map(p => [p.x / G.f, p.y / G.f]));
     if (!Hf) continue;
     const id = lerCodigo(Gf, Hf);
-    if (!id) continue;
+    if (!id) { if (!semCodigo) semCodigo = q.pts.map(p => [p.x / G.f, p.y / G.f]); continue; }
     const info = aoAcharCodigo ? aoAcharCodigo(id) : { nQuestoes: MAX_QUESTOES, nAlt: 5 };
     if (!info) return { cod: id.cod, i: id.i, outra: true, quad: q.pts.map(p => [p.x / G.f, p.y / G.f]) };
     const { nQuestoes, nAlt } = info;
-    const respostas = [], forca = [];
+    const respostas = [], forca = [], duplas = {}, duvidosas = [];
     for (let k = 0; k < nQuestoes; k++) {
       const brancos = [], cheios = [];
       for (let a = 0; a < nAlt; a++) {
@@ -195,11 +196,18 @@ export function lerFolha(img, { aoAcharCodigo, depurar } = {}) {
       forca.push(v.map(x => Math.round(x * 100) / 100));
       const ord = v.map((x, a) => [x, a]).sort((x, y) => y[0] - x[0]);
       const marc = ord.filter(([x]) => x > 0.38);
-      if (!marc.length) respostas.push('');
-      else if (marc.length === 1 || (ord[0][0] - ord[1][0] > 0.28 && ord[1][0] < 0.5)) respostas.push(LETRAS[ord[0][1]]);
-      else respostas.push('*');   // duas ou mais marcadas
+      if (!marc.length) {
+        respostas.push('');
+        if (ord[0][0] > 0.22) duvidosas.push(k);   // marca fraca (lápis, caneta falhando): em branco, mas conferir
+      } else if (marc.length === 1 || (ord[0][0] - ord[1][0] > 0.28 && ord[1][0] < 0.5)) {
+        respostas.push(LETRAS[ord[0][1]]);
+        if (marc.length > 1 || (ord[1] && ord[1][0] > 0.25)) duvidosas.push(k);   // apagou uma? conferir
+      } else {
+        respostas.push('*');   // duas ou mais marcadas
+        duplas[k] = marc.map(([, a]) => LETRAS[a]).sort().join('');
+      }
     }
-    return { cod: id.cod, i: id.i, respostas, forca, quad: q.pts.map(p => [p.x / G.f, p.y / G.f]) };
+    return { cod: id.cod, i: id.i, respostas, duplas, duvidosas, forca, quad: q.pts.map(p => [p.x / G.f, p.y / G.f]) };
   }
-  return null;
+  return semCodigo ? { semCodigo: true, quad: semCodigo } : null;
 }

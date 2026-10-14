@@ -260,8 +260,8 @@ function renderDisciplinas() {
           <td>${esc(d.nome)}${d.nomeBreve ? ` <span style="color:var(--text-secondary);">(${esc(d.nomeBreve)})</span>` : ''}</td>
           <td style="text-align:right;">${questoes.filter(q => q.disciplinaId === d.id).length || '—'}</td>
           <td class="acoes-col">
-            <button type="button" class="btn-icon action-execute" data-editar-disciplina="${d.id}" title="Editar">✎</button>
-            <button type="button" class="btn-icon btn-icon-perigo action-execute" data-excluir-disciplina="${d.id}" title="Excluir">🗑</button>
+            <button type="button" class="bp-acao action-execute" data-editar-disciplina="${d.id}" title="Editar a disciplina"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Editar</span></button>
+            <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-disciplina="${d.id}" title="Excluir a disciplina" aria-label="Excluir a disciplina"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
           </td>
         </tr>`).join('');
     return header + linhas;
@@ -355,7 +355,7 @@ async function carregarQuestoes() {
   try {
     const [doCurso, gerais] = await Promise.all([
       apiFetch(`/banco-provas/questoes?${params.toString()}`),
-      disciplinaId && disciplinaId !== DISCIPLINA_GERAL_ID ? Promise.resolve([]) : apiFetch('/banco-provas/questoes-gerais')
+      disciplinaId && disciplinaId !== DISCIPLINA_GERAL_ID ? Promise.resolve([]) : apiFetch(`/banco-provas/questoes-gerais${semestre ? `?semestre=${encodeURIComponent(semestre)}` : ''}`)
     ]);
     questoes = disciplinaId === DISCIPLINA_GERAL_ID ? gerais : [...doCurso, ...gerais];
   } catch (err) {
@@ -382,7 +382,7 @@ function renderQuestoes() {
         <div class="bp-q-row-badges">
           <span class="bp-badge ${q.tipo === 'objetiva' ? 'bp-badge-objetiva' : 'bp-badge-dissertativa'}">${q.tipo === 'objetiva' ? 'Objetiva' : 'Dissertativa'}</span>
           <span class="bp-badge bp-badge-dificuldade-${q.dificuldade || 'media'}">${DIFICULDADE_LABEL[q.dificuldade] || DIFICULDADE_LABEL.media}</span>
-          ${q.disciplinaId === DISCIPLINA_GERAL_ID ? '<span class="bp-badge bp-badge-geral">Conhecimentos Gerais</span>' : ''}
+          ${q.disciplinaId === DISCIPLINA_GERAL_ID ? `<span class="bp-badge bp-badge-geral">Conhecimentos Gerais · ${q.semestre ? esc(q.semestre) : 'SEM SEMESTRE'}</span>${q.semestre ? '' : '<span class="bp-badge" style="background:#fef2f2; color:#b91c1c;" title="Edite a questão e informe o semestre: sem ele, ela não entra em simulado nenhum">defina o semestre</span>'}` : ''}
           ${q.bimestre ? `<span class="bp-badge" style="background:#f1f5f9; color:var(--text-secondary);">${q.bimestre}º Bimestre</span>` : ''}
           ${q.chamada ? `<span class="bp-badge" style="background:#f1f5f9; color:var(--text-secondary);">${q.chamada}ª Chamada</span>` : ''}
         </div>
@@ -390,8 +390,8 @@ function renderQuestoes() {
         <div class="bp-q-row-meta">${esc(nomeDisciplina(q.disciplinaId))}${q.professorNome ? ` · por ${esc(q.professorNome)}` : ''}</div>
       </div>
       <div class="bp-q-row-actions">
-        <button type="button" class="btn-icon action-execute" data-editar-questao="${q.id}" title="Editar">✎</button>
-        <button type="button" class="btn-icon btn-icon-perigo action-execute" data-excluir-questao="${q.id}" title="Excluir">🗑</button>
+        <button type="button" class="bp-acao action-execute" data-editar-questao="${q.id}" title="Editar a questão"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Editar</span></button>
+        <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-questao="${q.id}" title="Excluir a questão" aria-label="Excluir a questão"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
       </div>
     </div>`).join('');
 
@@ -450,6 +450,7 @@ function abrirModalQuestao(id) {
       document.getElementById('questao-bimestre').value = q.bimestre || '';
       document.getElementById('questao-chamada').value = q.chamada || '';
       document.getElementById('questao-semestre').value = q.semestre || '';
+      setTimeout(avisoGeral, 0);
       document.getElementById('questao-tipo').value = q.tipo;
       document.getElementById('questao-dificuldade').value = q.dificuldade || 'media';
       document.getElementById('questao-enunciado').value = q.enunciadoHtml;
@@ -490,6 +491,11 @@ async function salvarQuestao(e) {
   const id = document.getElementById('questao-id').value;
   const tipo = document.getElementById('questao-tipo').value;
   const disciplinaId = document.getElementById('questao-disciplina').value;
+  if (disciplinaId === DISCIPLINA_GERAL_ID && !/^\d{4}\.[12]$/.test(document.getElementById('questao-semestre').value.trim())) {
+    showToast('Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): ela vale para todos os cursos naquele semestre.', 'error');
+    document.getElementById('questao-semestre').focus();
+    return;
+  }
 
   const payload = {
     curso: disciplinaId === DISCIPLINA_GERAL_ID ? undefined : cursoAtivo,
@@ -970,16 +976,31 @@ function renderProvas() {
     tbody.innerHTML = '<tr><td colspan="4" class="tabela-msg">Nenhuma prova criada ainda.</td></tr>';
     return;
   }
+  // Ações da prova (14/10/2026): botões com ícone de traço + nome (antes eram emojis soltos, sem rótulo).
+  // Ordem do uso: conferir → baixar a prova → gabarito (interno) → folhas de resposta/correção; excluir à parte.
+  const IC = {
+    ver: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    baixar: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+    gabarito: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    folhas: '<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><circle cx="9" cy="14.5" r="1.6"/><path d="M13 9h4M13 14.5h4"/>',
+    lixo: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'
+  };
+  const ico = (k) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
+  const quando = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '');
   tbody.innerHTML = provas.map(p => `
     <tr>
-      <td>${esc(p.nome)}</td>
-      <td>${TIPO_PROVA_LABEL[p.tipo] || p.tipo}</td>
+      <td><div class="bp-prova-nome">${esc(p.nome)}</div><div class="bp-prova-meta">${[p.semestre, p.bimestre ? `${p.bimestre}º bimestre` : '', p.createdPorNome ? `por ${esc(p.createdPorNome)}` : '', quando(p.createdAt)].filter(Boolean).join(' · ')}</div></td>
+      <td><span class="bp-prova-tipo bp-prova-tipo-${esc(p.tipo)}">${TIPO_PROVA_LABEL[p.tipo] || p.tipo}</span></td>
       <td style="text-align:right;">${(p.questoesIds || []).length}</td>
       <td class="acoes-col">
-        <button type="button" class="btn-icon action-execute" data-preview-prova="${p.id}" title="Pré-visualizar antes de baixar">👁</button>
-        <button type="button" class="btn-icon action-execute" data-exportar-prova="${p.id}" title="Exportar prova (.docx) — pro aluno">⬇</button>
-        <button type="button" class="btn-icon action-execute" data-exportar-gabarito="${p.id}" title="Exportar gabarito (.docx) — uso interno, não entregar ao aluno">🔑</button>
-        <button type="button" class="btn-icon btn-icon-perigo action-execute" data-excluir-prova="${p.id}" title="Excluir">🗑</button>
+        <div class="bp-acoes">
+          <button type="button" class="bp-acao action-execute" data-preview-prova="${p.id}" title="Ver a prova antes de baixar">${ico('ver')}<span>Visualizar</span></button>
+          <button type="button" class="bp-acao action-execute" data-exportar-prova="${p.id}" title="Baixar a prova em Word (.docx) para imprimir">${ico('baixar')}<span>Prova</span></button>
+          <button type="button" class="bp-acao action-execute" data-exportar-gabarito="${p.id}" title="Baixar o gabarito (.docx) — uso interno, não entregar ao aluno">${ico('gabarito')}<span>Gabarito</span></button>
+          <a class="bp-acao bp-acao-destaque action-execute" href="/correcao-provas/index.html#nova/bp:${encodeURIComponent(p.id)}" title="Gerar as folhas de resposta (uma por aluno) e corrigir pelo celular">${ico('folhas')}<span>Folhas de resposta</span></a>
+          <span class="bp-acoes-sep" aria-hidden="true"></span>
+          <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-prova="${p.id}" title="Excluir esta prova" aria-label="Excluir a prova ${esc(p.nome)}">${ico('lixo')}</button>
+        </div>
       </td>
     </tr>`).join('');
 
@@ -999,9 +1020,10 @@ function renderProvas() {
 
 let previewProvaIdAtual = null;
 
-async function abrirPreviewProva(id) {
+async function abrirPreviewProva(id, manterRolagem = false) {
   const modal = document.getElementById('modal-preview-prova');
   const conteudo = document.getElementById('preview-prova-conteudo');
+  const rolagem = manterRolagem ? modal.querySelector('.modal-content').scrollTop : 0;
   const prova = provas.find(p => p.id === id);
   document.getElementById('preview-prova-titulo').textContent = `Pré-visualizar: ${prova ? prova.nome : ''}`;
   conteudo.innerHTML = '<p class="tabela-msg">Carregando...</p>';
@@ -1011,6 +1033,7 @@ async function abrirPreviewProva(id) {
     const resp = await apiFetch(`/banco-provas/provas/${id}/preview`);
     conteudo.innerHTML = resp.html;
     bindGabaritoEditavelPreview();
+    if (manterRolagem) modal.querySelector('.modal-content').scrollTop = rolagem;
   } catch (err) {
     conteudo.innerHTML = `<p class="tabela-msg">${esc(err.message)}</p>`;
   }
@@ -1030,19 +1053,27 @@ function bindGabaritoEditavelPreview() {
   const conteudo = document.getElementById('preview-prova-conteudo');
   conteudo.querySelectorAll('.bp-prev-questao[data-questao-id]').forEach(bloco => {
     const questaoId = bloco.dataset.questaoId;
+    // Editar a questão aqui mesmo (14/10/2026): enunciado, alternativas e a correta. Trocar a correta
+    // muda o gabarito da prova e, se a prova já virou avaliação, a Correção de Provas (e as notas).
+    const editar = document.createElement('button');
+    editar.type = 'button'; editar.className = 'bp-prev-editar';
+    editar.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editar questão';
+    editar.addEventListener('click', () => editarQuestaoNoPreview(bloco, questaoId));
+    bloco.prepend(editar);
     bloco.querySelectorAll('.bp-prev-alt-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const letra = btn.dataset.letra;
         btn.disabled = true;
         try {
-          await apiFetch(`/banco-provas/questoes/${questaoId}/gabarito`, {
+          const resp = await apiFetch(`/banco-provas/questoes/${questaoId}/gabarito`, {
             method: 'PUT',
             body: JSON.stringify({ gabarito: letra })
           });
+          btn.dataset.msg = resp.message || '';
           bloco.querySelectorAll('.bp-prev-alt-btn').forEach(b => b.classList.toggle('bp-prev-alt-correta', b === btn));
           const q = questoes.find(x => x.id === questaoId);
           if (q) q.gabarito = letra;
-          showToast('Gabarito atualizado.');
+          showToast(btn.dataset.msg || 'Gabarito atualizado.');
         } catch (err) {
           showToast(err.message, 'error');
         } finally {
@@ -1051,6 +1082,46 @@ function bindGabaritoEditavelPreview() {
       });
     });
   });
+}
+
+async function editarQuestaoNoPreview(bloco, id) {
+  let q;
+  try { q = await apiFetch(`/banco-provas/questoes/${encodeURIComponent(id)}`); }
+  catch (err) { showToast(err.message, 'error'); return; }
+  const alts = q.tipo === 'objetiva' ? (q.alternativas || []) : [];
+  const original = bloco.innerHTML;
+  bloco.classList.add('bp-prev-editando');
+  bloco.innerHTML = `
+    <label class="bp-prev-ed-rot">Enunciado</label>
+    <textarea class="bp-prev-ed-enun" rows="4" maxlength="4000">${esc(q.enunciadoHtml || '')}</textarea>
+    ${alts.length ? `<label class="bp-prev-ed-rot">Alternativas <small>(marque a correta — o gabarito muda junto)</small></label>
+    <div class="bp-prev-ed-alts">${alts.map((a, i) => `<label class="bp-prev-ed-alt"><input type="radio" name="ed-correta-${esc(id)}" value="${LETRAS[i]}" ${q.gabarito === LETRAS[i] ? 'checked' : ''}><b>${LETRAS[i]}</b><input type="text" class="bp-prev-ed-alt-txt" value="${esc(a.texto || '')}" maxlength="1000"></label>`).join('')}</div>` : ''}
+    <div class="bp-prev-ed-acoes"><button type="button" class="btn-secondary" data-ed="cancelar">Cancelar</button><button type="button" class="btn-primary" data-ed="salvar">Salvar questão</button></div>`;
+  bloco.querySelector('[data-ed=cancelar]').addEventListener('click', () => { bloco.classList.remove('bp-prev-editando'); bloco.innerHTML = original; abrirPreviewProva(previewProvaIdAtual, true); });
+  bloco.querySelector('[data-ed=salvar]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const enunciado = bloco.querySelector('.bp-prev-ed-enun').value.trim();
+    if (!enunciado) { showToast('O enunciado não pode ficar vazio.', 'error'); return; }
+    const payload = {
+      disciplinaId: q.disciplinaId, curso: q.curso || undefined, bimestre: q.bimestre || '', chamada: q.chamada || '', semestre: q.semestre || '',
+      tipo: q.tipo, dificuldade: q.dificuldade || 'media', enunciadoHtml: enunciado, valor: q.valor ?? '', professorNome: q.professorNome || ''
+    };
+    if (q.tipo === 'objetiva') {
+      payload.alternativas = [...bloco.querySelectorAll('.bp-prev-ed-alt-txt')].map(inp => ({ texto: inp.value.trim() }));
+      if (payload.alternativas.some(a => !a.texto)) { showToast('Preencha o texto de todas as alternativas.', 'error'); return; }
+      const marcada = bloco.querySelector(`input[name="ed-correta-${CSS.escape(id)}"]:checked`);
+      if (!marcada) { showToast('Marque qual alternativa é a correta.', 'error'); return; }
+      payload.gabarito = marcada.value;
+    }
+    btn.disabled = true; btn.textContent = 'Salvando…';
+    try {
+      const r = await apiFetch(`/banco-provas/questoes/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+      showToast(r.message || 'Questão atualizada.');
+      const local = questoes.find(x => x.id === id); if (local) Object.assign(local, payload);
+      abrirPreviewProva(previewProvaIdAtual, true);
+    } catch (err) { showToast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Salvar questão'; }
+  });
+  bloco.querySelector('.bp-prev-ed-enun').focus();
 }
 
 // Pedido explícito: "gera o arquivo final e o arquivo com o gabarito" —
@@ -1125,8 +1196,42 @@ function selecionarTipoProva(tipo) {
 // as disciplinas do curso, deveria aparecer somente as do [período] no
 // edubox". Uma prova é sempre pra uma turma/período específico, não pra
 // grade inteira do curso.
+// Tecnólogos (14/10/2026): todos os períodos estudam juntos (matriz rotativa) e fazem a MESMA prova —
+// não tem por que escolher período; aparecem todas as disciplinas do curso.
+const TECNOLOGOS = ['agronegocio', 'gestao-comercial', 'gestao-financeira', 'logistica', 'rh'];
+const ehTecnologo = () => TECNOLOGOS.includes(cursoAtivo);
+const periodosJuntos = {};   // curso -> [[1,2],[3,4]...] (CADD/Edubox)
+async function carregarPeriodosJuntos() {
+  const curso = cursoAtivo;
+  try { periodosJuntos[curso] = (await apiFetch(`/banco-provas/periodos-juntos?curso=${encodeURIComponent(curso)}`)).grupos || []; }
+  catch (e) { periodosJuntos[curso] = []; }
+  if (curso === cursoAtivo && !document.getElementById('modal-prova').classList.contains('hidden')) {
+    popularSelectPeriodoProva();
+  }
+}
+
 function popularSelectPeriodoProva() {
   const select = document.getElementById('prova-periodo');
+  const dica = select.parentElement.querySelector('.form-hint');
+  if (ehTecnologo()) {
+    select.innerHTML = '<option value="todos">Todos os períodos (matriz rotativa)</option>';
+    select.value = 'todos'; select.disabled = true;
+    if (dica) dica.textContent = 'Curso tecnólogo: todos os períodos estudam juntos e fazem a mesma prova. Aparecem todas as disciplinas — deixe em 0 as que não são deste semestre.';
+    return;
+  }
+  select.disabled = false;
+  if (dica) dica.textContent = 'Períodos que estudam juntos (Edubox) aparecem juntos: a prova é uma só e mostra as disciplinas dos dois.';
+  // períodos que estudam juntos (vem do CADD/Edubox); o que não estiver em grupo aparece sozinho
+  const usados = [...new Set(disciplinas.map(d => d.periodo))].sort((a, b) => a - b);
+  const grupos = (periodosJuntos[cursoAtivo] || []).map(g => g.filter(p => usados.includes(p))).filter(g => g.length > 1);
+  const emGrupo = new Set(grupos.flat());
+  const opcoes = [...grupos.map(g => ({ v: g.join(','), rot: `${g.map(p => `${p}º`).join(g.length > 2 ? ', ' : ' e ').replace(/, (\d+º)$/, ' e $1')} períodos (estudam juntos)`, p: g[0] })),
+    ...usados.filter(p => !emGrupo.has(p)).map(p => ({ v: String(p), rot: `${ordinal(p)} Período`, p }))].sort((a, b) => a.p - b.p);
+  const atual = select.value;
+  select.innerHTML = '<option value="">Selecione o período</option>' + opcoes.map(o => `<option value="${o.v}">${esc(o.rot)}</option>`).join('');
+  select.value = opcoes.some(o => o.v === atual) ? atual : '';
+  if (!periodosJuntos[cursoAtivo]) carregarPeriodosJuntos();
+  return;
   const periodosUsados = [...new Set(disciplinas.map(d => d.periodo))].sort((a, b) => a - b);
   const valorAtual = select.value;
   select.innerHTML = '<option value="">Selecione o período</option>' +
@@ -1135,9 +1240,10 @@ function popularSelectPeriodoProva() {
 }
 
 function disciplinasDoPeriodoProva() {
-  const periodo = parseInt(document.getElementById('prova-periodo').value, 10);
-  if (!periodo) return [];
-  return disciplinas.filter(d => d.periodo === periodo);
+  if (ehTecnologo()) return disciplinas.slice().sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const periodos = String(document.getElementById('prova-periodo').value || '').split(',').map(Number).filter(Boolean);
+  if (!periodos.length) return [];
+  return disciplinas.filter(d => periodos.includes(d.periodo)).sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 function popularCotasSimulado() {
@@ -1148,7 +1254,7 @@ function popularCotasSimulado() {
     return;
   }
   const linhas = [
-    { id: DISCIPLINA_GERAL_ID, label: 'Conhecimentos Gerais' },
+    { id: DISCIPLINA_GERAL_ID, label: `Conhecimentos Gerais${document.getElementById('prova-semestre').value ? ` (as de ${document.getElementById('prova-semestre').value}, iguais para todos os cursos)` : ' (escolha o semestre da prova)'}` },
     ...doPeriodo.map(d => ({ id: d.id, label: `${ordinal(d.periodo)} · ${d.nome}` }))
   ];
   lista.innerHTML = linhas.map(l => `
@@ -1167,12 +1273,18 @@ async function sortearProvaSimulado() {
     .map(input => ({ disciplinaId: input.dataset.disciplinaId, quantidade: parseInt(input.value, 10) || 0 }))
     .filter(c => c.quantidade > 0);
   if (!cotas.length) { showToast('Defina a quantidade de pelo menos uma disciplina.', 'error'); return; }
+  const semestreSim = document.getElementById('prova-semestre').value.trim();
+  if (cotas.some(c => c.disciplinaId === DISCIPLINA_GERAL_ID) && !semestreSim) {
+    showToast('Escolha o semestre da prova: as questões de Conhecimentos Gerais são as do semestre (iguais para todos os cursos).', 'error');
+    document.getElementById('prova-semestre').focus();
+    return;
+  }
 
   try {
     sorteioAtual = await apiFetch('/banco-provas/provas/simular', {
       method: 'POST',
       body: JSON.stringify({
-        curso: cursoAtivo, cotas,
+        curso: cursoAtivo, cotas, semestre: semestreSim,
         bimestre: document.getElementById('prova-simulado-bimestre').value,
         chamada: document.getElementById('prova-simulado-chamada').value
       })
@@ -1474,7 +1586,7 @@ function bindEventos() {
   document.getElementById('prova-manual-disciplina').addEventListener('change', carregarQuestoesManual);
   document.getElementById('prova-manual-bimestre').addEventListener('change', carregarQuestoesManual);
   document.getElementById('prova-manual-chamada').addEventListener('change', carregarQuestoesManual);
-  document.getElementById('prova-semestre').addEventListener('change', carregarQuestoesManual);
+  document.getElementById('prova-semestre').addEventListener('change', () => { carregarQuestoesManual(); if (document.getElementById('prova-cotas-lista')) { const antes = [...document.querySelectorAll('.prova-cota-qtd')].map(i => [i.dataset.disciplinaId, i.value]); popularCotasSimulado(); antes.forEach(([id, v]) => { const el = document.querySelector(`.prova-cota-qtd[data-disciplina-id="${id}"]`); if (el) el.value = v; }); } });
   document.querySelectorAll('.prova-tipo-btn').forEach(btn => {
     btn.addEventListener('click', () => selecionarTipoProva(btn.dataset.provaTipo));
   });
@@ -1485,3 +1597,23 @@ function bindEventos() {
     });
   });
 }
+
+// Conhecimentos Gerais: semestre obrigatório e aviso de quantas o semestre já tem (é um conjunto só,
+// usado por todos os cursos — não precisa cada coordenador cadastrar as suas).
+async function avisoGeral() {
+  const geral = document.getElementById('questao-disciplina').value === DISCIPLINA_GERAL_ID;
+  const sem = document.getElementById('questao-semestre').value.trim();
+  const aviso = document.getElementById('questao-semestre-aviso');
+  document.getElementById('questao-semestre-rotulo').textContent = geral ? 'Semestre (obrigatório)' : 'Semestre (opcional)';
+  if (!geral) { aviso.classList.add('hidden'); return; }
+  aviso.classList.remove('hidden');
+  if (!/^\d{4}\.[12]$/.test(sem)) { aviso.textContent = 'Conhecimentos Gerais valem para todos os cursos no semestre: informe qual (ex.: 2026.2).'; return; }
+  try {
+    const lista = await apiFetch(`/banco-provas/questoes-gerais?semestre=${encodeURIComponent(sem)}`);
+    aviso.textContent = lista.length
+      ? `${sem} já tem ${lista.length} ${lista.length === 1 ? 'questão' : 'questões'} de Conhecimentos Gerais, usadas por todos os cursos. Só cadastre se faltar.`
+      : `Ainda não há questão de Conhecimentos Gerais em ${sem}.`;
+  } catch (e) { aviso.textContent = ''; }
+}
+document.getElementById('questao-disciplina').addEventListener('change', avisoGeral);
+document.getElementById('questao-semestre').addEventListener('change', avisoGeral);

@@ -34,24 +34,29 @@ function pagina(av, aluno, turma, logo) {
   s += `<text x="195" y="15" text-anchor="end" font-size="5.4" font-weight="700" fill="${AZUL}">FOLHA DE RESPOSTAS</text>`;
   s += `<text x="195" y="21" text-anchor="end" font-size="3.5" fill="${CINZA}">FATEC Ivaiporã · ${esc(tituloCaso(turma ? turma.curso : ''))}</text>`;
   s += `<rect x="15" y="27" width="180" height="0.9" fill="${AZUL}"/>`;
-  s += `<text x="15" y="35" font-size="4.6" font-weight="700" fill="${AZUL}">${esc(av.nome)}</text>`;
-  s += `<text x="195" y="35" text-anchor="end" font-size="3.4" fill="${CINZA}">${av.data ? new Date(av.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}${av.valorTotal ? ` · valor ${String(av.valorTotal).replace('.', ',')}` : ''} · ${n} questões</text>`;
+  s += `<text x="15" y="33.8" font-size="4.6" font-weight="700" fill="${AZUL}">${esc(av.nome)}</text>`;
+  const tipoTxt = { bimestral: 'Prova bimestral', exame: 'Exame', simulado: 'Simulado', ead: 'Prova EAD', dp: 'Prova de DP', outra: '' }[av.tipo] || '';
+  const discTxt = av.disciplina && av.disciplina !== 'Várias (simulado)' ? tituloCaso(av.disciplina) : '';
+  s += `<text x="195" y="33.8" text-anchor="end" font-size="3.4" fill="${CINZA}">${av.data ? new Date(av.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}${av.valorTotal ? ` · valor ${String(av.valorTotal).replace('.', ',')}` : ''} · ${n} questões</text>`;
+  if (discTxt || tipoTxt) s += `<text x="15" y="38.6" font-size="3" fill="${AZUL}"><tspan font-weight="700">${esc([tipoTxt, av.bimestre ? `${av.bimestre}º bimestre` : ''].filter(Boolean).join(' · '))}</tspan>${discTxt ? `  ·  Disciplina: ${esc(discTxt.length > 70 ? discTxt.slice(0, 68) + '…' : discTxt)}` : ''}</text>`;
   // caixa do aluno
-  s += `<rect x="15" y="39" width="180" height="21" rx="1.5" fill="none" stroke="#cbd5e1" stroke-width="0.3"/>`;
-  s += `<text x="19" y="44.5" font-size="2.5" fill="${CINZA}" letter-spacing="0.15">ALUNO(A)</text>`;
-  s += `<text x="19" y="51" font-size="5" font-weight="700" fill="#0b1f33">${esc(aluno.nome)}</text>`;
-  s += `<text x="19" y="57" font-size="3.2" fill="#334155">Turma ${esc(turma ? turma.turma : '')} · Matrícula ${esc(aluno.mat)}</text>`;
-  s += `<text x="191" y="44.5" text-anchor="end" font-size="2.5" fill="${CINZA}" letter-spacing="0.15">FOLHA</text>`;
-  s += `<text x="191" y="51" text-anchor="end" font-size="4.4" font-weight="700" fill="${AZUL}" font-family="Consolas, monospace">${codigoLegivel(av.codigo, aluno.i)}</text>`;
-  s += `<text x="191" y="57" text-anchor="end" font-size="2.6" fill="${CINZA}">Assinatura: ______________________</text>`;
+  s += `<rect x="15" y="41.5" width="180" height="19.5" rx="1.5" fill="none" stroke="#cbd5e1" stroke-width="0.3"/>`;
+  s += `<text x="19" y="46.3" font-size="2.5" fill="${CINZA}" letter-spacing="0.15">ALUNO(A)</text>`;
+  // nome comprido diminui pra não invadir o código da folha (à direita)
+  const tamNome = aluno.nome.length > 56 ? 3.3 : aluno.nome.length > 44 ? 4 : 5;
+  s += `<text x="19" y="52.4" font-size="${tamNome}" font-weight="700" fill="#0b1f33">${esc(aluno.nome.length > 70 ? aluno.nome.slice(0, 68) + '…' : aluno.nome)}</text>`;
+  s += `<text x="19" y="58.2" font-size="3.2" fill="#334155">Turma ${esc(turma ? turma.turma : '')} · Matrícula ${esc(aluno.mat)}</text>`;
+  s += `<text x="191" y="46.3" text-anchor="end" font-size="2.5" fill="${CINZA}" letter-spacing="0.15">FOLHA</text>`;
+  s += `<text x="191" y="52.4" text-anchor="end" font-size="4.4" font-weight="700" fill="${AZUL}" font-family="Consolas, monospace">${codigoLegivel(av.codigo, aluno.i)}</text>`;
+  s += `<text x="191" y="58.2" text-anchor="end" font-size="2.6" fill="${CINZA}">Assinatura: ______________________</text>`;
   // disciplinas
-  let y = 66;
+  let y = 67;
   if (disc.length) {
     s += `<text x="15" y="${y}" font-size="3.3" font-weight="700" fill="${AZUL}">Questões por disciplina</text>`;
     s += `<rect x="15" y="${y + 1.4}" width="1" height="${Math.ceil(disc.length / 2) * 4.6 + 1}" fill="${VERDE}"/>`;
     disc.slice(0, 16).forEach((f, k) => {
       const cx = 18 + (k % 2) * 90, cy = y + 5.4 + Math.floor(k / 2) * 4.6;
-      s += `<text x="${cx}" y="${cy}" font-size="3" fill="#0b1f33"><tspan font-weight="700">${f.de === f.ate ? f.de : `${f.de} a ${f.ate}`}</tspan>  ${esc(f.nome.length > 52 ? f.nome.slice(0, 50) + '…' : f.nome)}</text>`;
+      s += `<text x="${cx}" y="${cy}" font-size="3" fill="#0b1f33"><tspan font-weight="700">${f.de === f.ate ? f.de : `${f.de} a ${f.ate}`}</tspan>  ${esc((n2 => (n2.length > 52 ? n2.slice(0, 50) + '…' : n2))(tituloCaso(f.nome)))}</text>`;
     });
   }
   else if (av.dp) s += `<text x="15" y="${y}" font-size="3.3" fill="#0b1f33"><tspan font-weight="700" fill="${AZUL}">Prova de DP</tspan> — ${esc(av.dp.disciplina)}</text>`;
@@ -91,7 +96,7 @@ function pagina(av, aluno, turma, logo) {
       let m = `<circle cx="${cx}" cy="${cy}" r="${L.RAIO}" fill="${tipo === 'cheia' ? '#0b1f33' : 'none'}" stroke="#475569" stroke-width="0.3"/>`;
       if (tipo === 'x') m += `<path d="M${cx - 1.8} ${cy - 1.8}L${cx + 1.8} ${cy + 1.8}M${cx + 1.8} ${cy - 1.8}L${cx - 1.8} ${cy + 1.8}" stroke="#0b1f33" stroke-width="0.6"/>`;
       if (tipo === 'v') m += `<path d="M${cx - 1.8} ${cy}L${cx - 0.4} ${cy + 1.6}L${cx + 2} ${cy - 1.8}" fill="none" stroke="#0b1f33" stroke-width="0.6"/>`;
-      if (tipo === 'meia') m += `<path d="M${cx - L.RAIO} ${cy}A${L.RAIO} ${L.RAIO} 0 0 0 ${cx + L.RAIO} ${cy}Z" fill="#0b1f33"/>`;
+      if (tipo === 'meia') m += `<path d="M${Array.from({ length: 13 }, (_, k) => { const a = Math.PI * k / 12; return `${(cx - L.RAIO * Math.cos(a)).toFixed(2)} ${(cy + L.RAIO * Math.sin(a)).toFixed(2)}`; }).join(' L')} Z" fill="#0b1f33"/>`;
       return m + `<text x="${cx + 5}" y="${cy + 1.1}" font-size="2.9" fill="${ok ? '#0f7a4b' : '#b42318'}" font-weight="700">${rot}</text>`;
     };
     s += `<rect x="${bx - 3}" y="${by - 5}" width="50" height="58" rx="1.5" fill="none" stroke="#cbd5e1" stroke-width="0.3"/>`;
