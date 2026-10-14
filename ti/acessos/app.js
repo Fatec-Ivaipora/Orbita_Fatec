@@ -165,6 +165,11 @@ function renderAcessos(lista) {
     return;
   }
 
+  // Ordem alfabética de verdade (o Firestore ordena maiúsculas antes de
+  // minúsculas e acentos depois) — e, no mesmo sistema, pelo titular
+  const cmp = (x, y) => (x || '').trim().localeCompare((y || '').trim(), 'pt-BR', { sensitivity: 'base', numeric: true });
+  lista = [...lista].sort((a, b) => cmp(a.sistema, b.sistema) || cmp(a.titular, b.titular));
+
   const porCategoria = {};
   lista.forEach(a => {
     const cat = a.categoria || 'Outro';
@@ -187,18 +192,27 @@ function renderAcessos(lista) {
     itens.forEach(a => {
       const card = document.createElement('div');
       card.className = 'acs-card';
+      // Link: mostra só "Abrir ↗" (o endereço completo fica no title)
+      const urlHref = a.url && !/^https?:\/\//i.test(a.url) ? `https://${a.url}` : a.url;
       card.innerHTML = `
         <div class="acs-card-topo">
-          <div class="acs-card-nome">${esc(a.sistema)}</div>
-          <span class="acs-card-cat">${esc(a.categoria || 'Outro')}</span>
+          <div class="acs-card-ident">
+            <div class="acs-card-nome" title="${esc(a.sistema)}">${esc(a.sistema)}</div>
+            <div class="acs-card-titular">${a.titular ? `👤 ${esc(a.titular)}` : '&nbsp;'}</div>
+          </div>
+          ${a.url ? `<a class="acs-card-abrir" href="${esc(urlHref)}" target="_blank" rel="noopener" title="${esc(a.url)}">Abrir ↗</a>` : ''}
         </div>
-        ${a.titular ? `<div class="acs-card-linha"><b>Titular:</b> ${esc(a.titular)}</div>` : ''}
-        ${a.usuario ? `<div class="acs-card-linha"><b>Usuário:</b> ${esc(a.usuario)}</div>` : ''}
-        <div class="acs-card-senha">
-          <span class="acs-senha-valor" data-senha-oculta>••••••••</span>
+        <div class="acs-campos">
+          <div class="acs-campo">
+            <span class="acs-campo-lbl">Usuário</span>
+            <span class="acs-campo-val ${a.usuario ? '' : 'vazio'}" title="${esc(a.usuario || '')}">${a.usuario ? esc(a.usuario) : '—'}</span>
+          </div>
+          <div class="acs-campo">
+            <span class="acs-campo-lbl">Senha</span>
+            <span class="acs-senha-valor" data-senha-oculta>••••••••</span>
+          </div>
         </div>
-        ${a.url ? `<div class="acs-card-link"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a></div>` : ''}
-        ${a.observacoes ? `<div class="acs-card-obs">${esc(a.observacoes)}</div>` : ''}
+        ${a.observacoes ? `<div class="acs-card-obs" title="${esc(a.observacoes)}">${esc(a.observacoes)}</div>` : ''}
         <div class="acs-card-actions action-execute">
           <button class="btn-mostrar" data-acao="mostrar">👁 Mostrar</button>
           <button data-acao="historico">Histórico</button>
