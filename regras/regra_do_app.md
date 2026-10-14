@@ -109,6 +109,17 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-14] Documentação: integração com o Edubox só pelo relay (seção 8) + instruções para IA
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos criados:
+  - `AGENTS.md` (raiz): resumo das regras que mais dão problema, principalmente "Edubox só pelo relay". É o arquivo que Codex, Cursor, Copilot e Gemini leem automaticamente.
+  - `CLAUDE.md` (raiz): importa o `AGENTS.md`, pro Claude Code ler a mesma coisa.
+- Arquivos alterados:
+  - `regras/regra_do_app.md`: nova seção **8. Integração com o Edubox — SEMPRE pelo relay** (onde fica o relay, como chamar, como adicionar rota sem mexer no SIGMA, cuidados nas consultas, achados de schema, o que ainda é legado).
+- Tipo: Documentação
+- Motivo: Pedido do usuário — garantir que colegas (e as IAs deles) não voltem a criar script/agente rodando no PC da Fatec pra buscar dado do Edubox.
+
 ### [2026-10-14] Relatório CPA: corrige corte de pergunta/gráfico no meio da quebra de página do PDF
 - Autor: Claude Code (a pedido do usuário, que baixou o `.zip` de verdade e achou o problema)
 - Branch: main
@@ -1296,6 +1307,49 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - Se deslogado, deve redirecionar para `/auth/login.html?redirect=/fidelidade/index.html`.
   - Após o login, deve exibir a carteirinha digital com QR Code atualizando a cada 30 segundos e a lista de parceiros credenciados na seção "Clube de Vantagens".
   - Simule o acesso em modo PWA standalone ou utilize o banner de instalação no celular para fixar o atalho.
+
+## 8. Integração com o Edubox — SEMPRE pelo relay
+
+### ⚠️ REGRA OBRIGATÓRIA
+O Postgres do Edubox (sistema acadêmico, fornecedor terceiro) **só aceita conexão do IP da Fatec**. O Órbita roda no Vercel, que usa IP dinâmico e **nunca** alcança o Edubox. Por isso existe um **relay HTTP** num servidor de IP fixo, já autorizado pelo fornecedor. Todo dado novo do Edubox passa por ele.
+
+**Proibido em código novo** (vale pra gente e pra IA):
+- Importar `src/db-edubox.js` ou abrir conexão `pg` direto no Edubox.
+- Criar script, "agente", `.vbs` no Startup do Windows ou tarefa agendada pra rodar num PC da Fatec buscando dado do Edubox.
+- Criar sync Edubox → Firestore só pra contornar o bloqueio de IP.
+- Colocar credencial do Postgres do Edubox no `.env` do Órbita.
+
+### Onde fica
+- **Servidor**: droplet DigitalOcean `162.243.68.10`, porta `8443`. Acesso pelo painel da DigitalOcean → droplet → **Web Console**.
+- **Código**: `/opt/edubox-relay/server.mjs` (Node puro + `pg`, sem Express), com credenciais em `/opt/edubox-relay/.env`. Serviço systemd `edubox-relay` (roda como usuário `relay`, `Restart=always`).
+- **Compartilhado com o SIGMA** (outro sistema da Fatec). As rotas do SIGMA usam `RELAY_TOKEN`; uma ferramenta parceira usa `PARCEIRO_TOKEN`; o Órbita usa o **próprio** `ORBITA_TOKEN`. Cada token é revogável sem afetar os outros. **Nunca altere rota, token ou função existente do SIGMA: só acrescente.**
+
+### Como o Órbita chama o relay
+- Variáveis no `.env` local **e** no Vercel: `EDUBOX_RELAY_URL` (`http://162.243.68.10:8443`) e `EDUBOX_RELAY_TOKEN` (= `ORBITA_TOKEN` do relay). Os nomes ficam documentados em `.env_exemplo`; o valor nunca vai pro Git.
+- No backend, use `fetch` com `Authorization: Bearer <EDUBOX_RELAY_TOKEN>`. Modelo pronto: a função `relay()` em `src/rotas/cpa.js` (com tempo-limite e tratamento de erro).
+- **Divisão de responsabilidade**: o relay só consulta e devolve dado quase cru. Agregação, classificação, escopo por cargo (RBAC) e formatação ficam no backend do Órbita, onde dá pra revisar e mudar sem mexer no servidor compartilhado.
+
+### Como adicionar rota nova no relay
+1. Faça backup antes: `cp /opt/edubox-relay/server.mjs /opt/edubox-relay/server.mjs.bak-<motivo>`.
+2. Acrescente (não edite o que existe):
+   - a **função de consulta**, antes de `const server = http.createServer(...)`, seguindo o padrão das existentes: `novoClient()` → `connect` → `set search_path=ivp,public;` → queries → `end()`, devolvendo `{ ok, ... }` ou `{ ok: false, erro }`;
+   - a **rota**, **antes** do gate geral `if (!autenticado(req))` (mesmo lugar das rotas `/cpa/*`), conferindo `autenticadoOrbita(req)` e usando um prefixo do módulo (`/cadd/*`, `/matrizes/*`...).
+3. Valide e reinicie: `node --check /opt/edubox-relay/server.mjs && chown relay:relay /opt/edubox-relay/server.mjs && systemctl restart edubox-relay && systemctl is-active edubox-relay`.
+4. Teste no próprio servidor: `curl -s "http://localhost:8443/<rota>" -H "Authorization: Bearer <ORBITA_TOKEN>"`.
+5. Registre no changelog (seção 7) o que entrou no relay, já que o código dele não fica neste repositório.
+
+### Cuidados nas consultas
+- **Só leitura**: o usuário do banco é `consulta`.
+- **Sempre faça `JOIN` até `tac_curso`**: o banco é compartilhado com ~32 outras instituições da região, e é esse join que garante que só entra dado da Fatec.
+- Achados de schema que já custaram tempo:
+  - **Nome do aluno**: `tac_matricula.climat` → `tfi_cliente.codcli` → `nomcli`. `tac_aluno` não tem nome, e `alumat` é o RA, não chave.
+  - **Professor da disciplina** (avaliação dos alunos): `tav_nota_historico_aluno.pronot` / `tav_resp_historico_aluno.prores` → `tac_professor.codpro` → `trh_funcionario.nomfun`. **Não** use `tac_disciplina_turma.prodtu`: vem zerado.
+  - Um professor tem vários `codpro` (um por vínculo); a pessoa é `tac_professor.funpro`.
+  - A participação na CPA fica em `tav_participacao` (`dtipar` = iniciou, `datpar` = concluiu); `tav_aplica` diz quais turmas a campanha atinge.
+
+### O que já usa o relay e o que falta migrar
+- ✅ **Relatório CPA**: rotas `/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`, `/cpa/participacao-detalhe`.
+- ⏳ **Legado com conexão direta**, a migrar (não use como modelo): `scripts/cad-edubox-sync.js` + `cad-edubox-agente.vbs` (CADD), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` + `cobranca-edubox-agente.vbs` (Cobrança), `scripts/matrizes-edubox-sync.js` (Matrizes), `src/rotas/confirmacao-evento.js` (Confirmação de Presença; consulta ao vivo, então provavelmente não funciona no Vercel).
 
 ## 9. Diretrizes de Deploy no Vercel (Zero Config)
 
