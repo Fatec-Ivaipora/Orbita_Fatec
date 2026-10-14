@@ -7,7 +7,7 @@
   <title>Empréstimo · Órbita - FatecIVP</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
-  <link rel="stylesheet" href="/emprestimo/emprestimo.css?v=3">
+  <link rel="stylesheet" href="/emprestimo/emprestimo.css?v=4">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 
@@ -28,52 +28,73 @@
       <div class="layout-content">
 
         <main id="dashboard-view" class="mod-main hidden">
-          <!-- Filtro de Categorias em Abas (Pills) -->
-          <div class="category-tabs" id="category-tabs-container"></div>
+          <!-- Cabeçalho da página (padrão Órbita v2) -->
+          <div class="page-header emp-header">
+            <div class="emp-header-titulo">
+              <span class="cm-titulo-icone emp-header-icone" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+              </span>
+              <div>
+                <h1 class="page-title">Empréstimo de Equipamentos</h1>
+                <p class="page-subtitle">Notebooks, caixas de som, passadores e demais itens da T.I.</p>
+              </div>
+            </div>
+            <div class="emp-header-acoes">
+              <button type="button" onclick="abrirScanner()" class="btn-secondary action-execute mobile-hide">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                Escanear QR
+              </button>
+              <button type="button" onclick="abrirCadastro()" class="btn-secondary action-execute">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Cadastrar item
+              </button>
+              <button type="button" onclick="abrirEmprestimoRapido()" class="btn-primary action-execute mobile-hide">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Empréstimo rápido
+              </button>
+            </div>
+          </div>
 
-          <!-- Status Summary -->
+          <!-- Indicadores (clicáveis: filtram a lista) -->
           <div class="status-summary">
-            <div class="stat-item" data-filter="Todos" style="border-left-color: var(--purple-bright)">
-              <span class="stat-val" id="stat-total">0</span>
+            <button type="button" class="stat-item" data-filter="Todos" style="--stat-cor: var(--orb-marca, #12294d)">
               <span class="stat-lbl">Total</span>
-            </div>
-            <div class="stat-item" data-filter="guardado" style="border-left-color: var(--c-guardado)">
-              <span class="stat-val" id="stat-guardado">0</span>
+              <span class="stat-val" id="stat-total">0</span>
+            </button>
+            <button type="button" class="stat-item" data-filter="guardado" style="--stat-cor: var(--c-guardado)">
               <span class="stat-lbl">Disponíveis</span>
-            </div>
-            <div class="stat-item" data-filter="emprestado" style="border-left-color: var(--c-emprestado)">
-              <span class="stat-val" id="stat-emprestado">0</span>
+              <span class="stat-val" id="stat-guardado">0</span>
+            </button>
+            <button type="button" class="stat-item" data-filter="emprestado" style="--stat-cor: var(--c-emprestado)">
               <span class="stat-lbl">Emprestados</span>
-            </div>
-            <div class="stat-item" data-filter="cedido" style="border-left-color: var(--c-cedido)">
-              <span class="stat-val" id="stat-cedido">0</span>
+              <span class="stat-val" id="stat-emprestado">0</span>
+            </button>
+            <button type="button" class="stat-item" data-filter="cedido" style="--stat-cor: var(--c-cedido)">
               <span class="stat-lbl">Cedidos</span>
-            </div>
-            <div class="stat-item" data-filter="reservado" style="border-left-color: var(--c-reservado)">
-              <span class="stat-val" id="stat-reservado">0</span>
+              <span class="stat-val" id="stat-cedido">0</span>
+            </button>
+            <button type="button" class="stat-item" data-filter="reservado" style="--stat-cor: var(--c-reservado)">
               <span class="stat-lbl">Reservados</span>
-            </div>
-            <div class="stat-item" data-filter="temporario" style="border-left-color: #eb7025">
-              <span class="stat-val" id="stat-temporario">0</span>
+              <span class="stat-val" id="stat-reservado">0</span>
+            </button>
+            <button type="button" class="stat-item" data-filter="temporario" style="--stat-cor: var(--c-temporario)">
               <span class="stat-lbl">Temporários</span>
-            </div>
+              <span class="stat-val" id="stat-temporario">0</span>
+            </button>
           </div>
 
           <!-- Toolbar e Filtros -->
           <div class="toolbar-container">
-            <div class="toolbar-top" style="display: flex; gap: 1rem; align-items: center; width: 100%;">
-              <div class="search-box" style="flex: 1;">
-                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            <div class="category-tabs" id="category-tabs-container"></div>
+            <div class="toolbar-top">
+              <div class="search-box">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   stroke-width="2">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input type="text" id="search-input" class="search-input" placeholder="Buscar item (ex: Not_Med01, Proj01)">
+                <input type="text" id="search-input" class="search-input" placeholder="Buscar item (ex: Not_Med01, JBL3, Passador 02)">
               </div>
-              <button onclick="abrirCadastro()" class="btn-primary action-execute desktop-hide" style="flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1.2rem; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); border: none; border-radius: 12px; color: white; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(15, 78, 184, 0.25);">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                <span>Cadastrar Item</span>
-              </button>
               <!-- Speed Dial FAB (mobile) -->
               <div class="speed-dial" id="speed-dial">
                 <!-- Sub-ações (ficam ocultas até abrir) -->
@@ -137,17 +158,6 @@
             </div>
           </div>
 
-          <div class="desktop-quick-actions" style="display: none; gap: 1rem; margin-bottom: 1.25rem;">
-            <button onclick="abrirCadastro()" class="btn-primary action-execute" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.2rem; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); border: none; border-radius: 12px; color: white; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(15, 78, 184, 0.25); flex: 1;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Cadastrar Item</span>
-            </button>
-            <button onclick="abrirEmprestimoRapido();" class="btn-primary action-execute" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.2rem; border-radius: 12px; font-weight: 700; background: linear-gradient(135deg, #eb7025, #d95a18); border: none; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(235, 112, 37, 0.25); flex: 1;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              Empréstimo Rápido
-            </button>
-          </div>
-
           <div id="notebook-grid" class="notebook-grid">
             <!-- Cards -->
           </div>
@@ -188,7 +198,7 @@
               </div>
               <div style="display:flex; gap:1rem; margin-top:1.5rem;">
                 <button type="button" class="btn btn-secondary" onclick="fecharCadastro()" style="flex:1">Cancelar</button>
-                <button type="submit" class="btn btn-primary" style="flex:1; background:linear-gradient(135deg, var(--primary-blue), var(--primary-blue)); color:white; box-shadow: 0 4px 15px rgba(15, 78, 184, 0.25);">Confirmar</button>
+                <button type="submit" class="btn btn-primary" style="flex:1">Confirmar</button>
               </div>
             </form>
           </div>
@@ -275,7 +285,7 @@
     <div id="modal-emprestimo-rapido" class="modal-overlay">
       <div class="modal-box" style="max-width: 400px; padding: 1.25rem; border-radius: 16px;">
         <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
-          <div style="background:linear-gradient(135deg,#f59e0b,#eb7025); padding:0.5rem; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink: 0;">
+          <div style="background:var(--orb-marca, #12294d); padding:0.5rem; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink: 0;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </div>
           <div>
@@ -296,6 +306,9 @@
             <label class="form-label" style="font-size:0.8rem; margin-bottom:0.25rem;">Identificador do Item <span style="color:red">*</span></label>
             <input type="text" id="er-id" class="form-control" placeholder="Ex: Cabo_HDMI_01..." required autocomplete="off" style="padding: 0.6rem 0.8rem; font-size: 0.88rem; height: 38px; border-radius: 8px;">
             <div id="er-id-feedback" style="font-size:0.75rem; margin-top:0.25rem; display:none; line-height: 1.2;"></div>
+            <!-- Itens adicionais (empréstimo de vários itens de uma vez) -->
+            <div id="er-extra-ids"></div>
+            <button type="button" id="er-add-item" class="btn btn-secondary" style="width:100%; margin-top:0.5rem; padding:0.4rem; font-size:0.8rem; border-radius:8px; border-style:dashed;">+ Adicionar outro item</button>
           </div>
 
           <!-- Destino -->
@@ -329,7 +342,7 @@
           <!-- Botões -->
           <div style="display:flex; gap:0.5rem;">
             <button type="button" class="btn btn-secondary" onclick="fecharEmprestimoRapido()" style="flex:1; padding: 0.6rem; font-size: 0.85rem; height: 38px; border-radius: 8px;">Cancelar</button>
-            <button type="submit" id="er-submit-btn" class="btn" style="flex:1.5; background:linear-gradient(135deg,#f59e0b,#eb7025); color:white; font-weight:700; border:none; box-shadow:0 4px 15px rgba(235,112,37,0.3); padding: 0.6rem; font-size: 0.85rem; height: 38px; border-radius: 8px;">
+            <button type="submit" id="er-submit-btn" class="btn btn-primary" style="flex:1.5; padding: 0.6rem; font-size: 0.85rem; height: 38px; border-radius: 8px;">
               <span id="er-submit-text">⚡ Emprestar</span>
             </button>
           </div>
