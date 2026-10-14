@@ -370,7 +370,11 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
             imagem: (imagem && imagem.dataUrl) ? { nome: imagem.nome || 'imagem', dataUrl: imagem.dataUrl } : null,
             updatedAt: new Date().toISOString()
         });
-        res.json({ message: 'Questão atualizada!' });
+        // gabarito mudou: atualiza as avaliações da Correção de Provas que usam a questão
+        const { gabaritoMed, propagarGabarito } = require('./correcao-provas')._interno;
+        const gNovo = gabaritoMed({ alternativas: alternativas.map(a => ({ correta: !!a.correta })) });
+        const avs = gNovo && gNovo !== gabaritoMed(snap.data()) ? await propagarGabarito(req.params.id, gNovo, req.user.name || req.user.email) : 0;
+        res.json({ message: avs ? `Questão atualizada! (gabarito novo também em ${avs} avaliação(ões) da Correção de Provas)` : 'Questão atualizada!', avaliacoesAtualizadas: avs });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
