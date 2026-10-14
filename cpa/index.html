@@ -6,8 +6,11 @@
     <title>Relatório CPA - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/cpa/cpa.css?v=2">
+    <link rel="stylesheet" href="/cpa/cpa.css?v=5">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body class="orb-v2">
     <div id="auth-guard" class="layout-auth-guard">
@@ -23,79 +26,86 @@
                     <header class="cpa-topo cpa-no-print">
                         <div>
                             <h1 class="cpa-titulo">Relatório CPA</h1>
-                            <p class="cpa-sub" id="subtitulo">Resultado da avaliação aplicada no Edubox: por curso e por professor.</p>
-                        </div>
-                        <div class="cpa-topo-acoes">
-                            <div class="cpa-seg" id="seg-segmento" role="tablist" aria-label="Segmento">
-                                <button type="button" data-seg="GRA" class="ativo" role="tab">Graduação</button>
-                                <button type="button" data-seg="MED" role="tab">Medicina</button>
-                            </div>
-                            <label class="cpa-campo">Semestre
-                                <select id="sel-ciclo"></select>
-                            </label>
+                            <p class="cpa-sub">Resultado da avaliação institucional aplicada no Edubox, por curso.</p>
                         </div>
                     </header>
 
-                    <div id="aviso-segmento" class="cpa-info cpa-no-print hidden"></div>
-                    <div class="cpa-kpis cpa-no-print" id="kpis"></div>
-                    <div class="cpa-cursos cpa-no-print" id="cursos" role="tablist" aria-label="Cursos"></div>
-
-                    <div id="conteudo" class="hidden">
-                        <div class="cpa-abas cpa-no-print" role="tablist">
-                            <button type="button" class="cpa-aba ativa" data-aba="resultado" role="tab">Resultado</button>
-                            <button type="button" class="cpa-aba" data-aba="professores" role="tab">Professores</button>
-                        </div>
-                        <section id="painel-resultado" class="cpa-painel ativo"></section>
-                        <section id="painel-professores" class="cpa-painel"></section>
+                    <div class="cpa-abas cpa-no-print" role="tablist">
+                        <button type="button" class="cpa-aba ativa" data-aba="participacao" role="tab">Participação</button>
+                        <button type="button" class="cpa-aba" data-aba="alunos" role="tab">Alunos</button>
+                        <button type="button" class="cpa-aba" data-aba="docentes" role="tab" id="aba-docentes">Docentes</button>
+                        <button type="button" class="cpa-aba" data-aba="administrativo" role="tab" id="aba-administrativo">Administrativo</button>
                     </div>
 
-                    <div id="vazio" class="cpa-vazio hidden"></div>
+                    <!-- Participação -->
+                    <section id="painel-participacao" class="cpa-painel ativo">
+                        <div class="cpa-topo-acoes cpa-no-print" style="margin-bottom:1rem">
+                            <label class="cpa-campo">Campanha
+                                <select id="part-campanha"><option value="">Selecione a campanha…</option></select>
+                            </label>
+                        </div>
+                        <div id="part-resumo" class="cpa-kpis hidden"></div>
+                        <div id="part-conteudo"><p class="cpa-vazio">Escolha uma campanha pra ver a participação.</p></div>
+                    </section>
+
+                    <!-- Alunos -->
+                    <section id="painel-alunos" class="cpa-painel">
+                        <div class="cpa-topo-acoes cpa-no-print" style="margin-bottom:1rem">
+                            <label class="cpa-campo">Campanha
+                                <select id="alu-campanha"><option value="">Selecione a campanha…</option></select>
+                            </label>
+                            <label class="cpa-campo">Curso
+                                <select id="alu-curso" disabled><option value="">Selecione o curso…</option></select>
+                            </label>
+                            <span class="cpa-acoes" style="margin:0 0 0.1rem">
+                                <button type="button" class="cpa-btn cpa-btn-pri" id="alu-pdf-disciplinas" disabled>Gerar Relatório</button>
+                            </span>
+                        </div>
+                        <div id="alu-conteudo"><p class="cpa-vazio">Escolha uma campanha e um curso pra ver o relatório.</p></div>
+                    </section>
+
+                    <!-- Docentes -->
+                    <section id="painel-docentes" class="cpa-painel">
+                        <div class="cpa-topo-acoes cpa-no-print" style="margin-bottom:1rem">
+                            <label class="cpa-campo">Campanha
+                                <select id="doc-campanha"><option value="">Selecione a campanha…</option></select>
+                            </label>
+                            <label class="cpa-campo">Curso
+                                <select id="doc-curso" disabled><option value="">Selecione o curso…</option></select>
+                            </label>
+                        </div>
+                        <div id="doc-conteudo"><p class="cpa-vazio">Escolha uma campanha e um curso pra ver o relatório.</p></div>
+                    </section>
+
+                    <!-- Administrativo -->
+                    <section id="painel-administrativo" class="cpa-painel">
+                        <div class="cpa-topo-acoes cpa-no-print" style="margin-bottom:1rem">
+                            <label class="cpa-campo">Campanha
+                                <select id="adm-campanha"><option value="">Selecione a campanha…</option></select>
+                            </label>
+                        </div>
+                        <div id="adm-conteudo"><p class="cpa-vazio">Escolha uma campanha pra ver o relatório.</p></div>
+                    </section>
+
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Detalhe de um professor (mesmo conteúdo do PDF) -->
-    <div id="modal-prof" class="cpa-modal hidden cpa-no-print" role="dialog" aria-modal="true">
+    <!-- Comentários (modal, filtrável por classificação) -->
+    <div id="modal-comentarios" class="cpa-modal hidden cpa-no-print" role="dialog" aria-modal="true">
         <div class="cpa-modal-card">
             <div class="cpa-modal-barra">
-                <strong id="mp-titulo"></strong>
-                <span>
-                    <button type="button" class="cpa-btn cpa-btn-pri" id="mp-pdf">Imprimir / salvar PDF</button>
-                    <button type="button" class="cpa-btn cpa-btn-sec" id="mp-fechar">Fechar</button>
-                </span>
+                <strong id="mc-titulo">Comentários</strong>
+                <button type="button" class="cpa-btn cpa-btn-sec" id="mc-fechar">Fechar</button>
             </div>
-            <div id="mp-corpo"></div>
+            <div class="cpa-filtro-tabs" id="mc-tabs"></div>
+            <div id="mc-lista"></div>
         </div>
     </div>
 
-    <!-- Dados da capa do relatório institucional (só direção) -->
-    <div id="modal-capa" class="cpa-modal hidden cpa-no-print" role="dialog" aria-modal="true">
-        <div class="cpa-modal-card cpa-modal-estreito">
-            <h2>Dados da capa do relatório</h2>
-            <p class="cpa-sub">Aparecem na capa do relatório institucional. Confira os atos legais e a composição da CPA com a portaria vigente antes de apresentar ao MEC.</p>
-            <form id="form-capa" autocomplete="off">
-                <label class="cpa-campo">Instituição<input id="c-ies" type="text"></label>
-                <label class="cpa-campo">Mantenedora<input id="c-mantenedora" type="text"></label>
-                <label class="cpa-campo">Endereço e contato<input id="c-endereco" type="text"></label>
-                <label class="cpa-campo">Atos legais (credenciamento / recredenciamento)<textarea id="c-atos" rows="3"></textarea></label>
-                <label class="cpa-campo">Presidente da CPA<input id="c-presidente" type="text"></label>
-                <label class="cpa-campo">Portaria de nomeação da CPA<input id="c-portaria" type="text"></label>
-                <label class="cpa-campo">Membros da CPA (um por linha: nome — segmento)<textarea id="c-membros" rows="5"></textarea></label>
-                <div class="cpa-modal-acoes">
-                    <button type="button" class="cpa-btn cpa-btn-sec" id="c-cancelar">Cancelar</button>
-                    <button type="submit" class="cpa-btn cpa-btn-pri">Salvar</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Conteúdo que vai para o PDF (fica fora da tela; só aparece ao imprimir) -->
-    <div id="impressao" class="cpa-impressao"></div>
     <div id="toast" class="cpa-toast hidden cpa-no-print" role="status"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script type="module" src="/cpa/app.js?v=4"></script>
+    <script type="module" src="/cpa/app.js?v=5"></script>
 </body>
 </html>

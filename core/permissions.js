@@ -164,9 +164,11 @@ export const MODULES = {
     url: "/matrizes/index.html"
   },
 
-  // Relatório da CPA (Comissão Própria de Avaliação): resultado da avaliação dos alunos aplicada no Edubox,
-  // por curso e por professor, em Graduação e Medicina. Direção vê tudo; coordenador só o próprio curso.
-  // Dados vêm de scripts/cpa-edubox-sync.js (Firestore cpa_*) — ver regras/regra_do_app.md.
+  // Relatório da CPA (Comissão Própria de Avaliação): resultado da avaliação de alunos, docentes e
+  // administrativo aplicada no Edubox, por curso/dimensão/disciplina. Direção (adm_l1/adm_l2) vê tudo
+  // (inclusive administrativo); coordenador/coord_medicina só os próprios cursos (alunos e docentes).
+  // Dados ao vivo via relay (EDUBOX_RELAY_URL/TOKEN no .env) — sem cache/sync no Firestore desde
+  // 2026-10-14 (substituiu o módulo anterior, que usava scripts/cpa-edubox-sync.js). Ver regra_do_app.md.
   cpa: {
     id: "cpa",
     category: "docencia",

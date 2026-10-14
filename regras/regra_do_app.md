@@ -109,6 +109,140 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-14] Relatório CPA: corrige corte de pergunta/gráfico no meio da quebra de página do PDF
+- Autor: Claude Code (a pedido do usuário, que baixou o `.zip` de verdade e achou o problema)
+- Branch: main
+- Arquivos alterados:
+  - `cpa/app.js` — `pagebreak.avoid` do `html2pdf` (dentro de `gerarZipDePdfs`) ganha `.cpa-perg` (bloco inteiro de uma pergunta: texto + barra + contagem) e `.cpa-ficha`/`.cpa-cab`, além de `h4` — faltava justamente `.cpa-perg`, que é por isso que a barra de distribuição e o texto da pergunta apareciam cortados bem na borda da página. O módulo CPA anterior (já aprovado) usava exatamente essa lista (`['.cpa-perg', '.cpa-coment', 'tr', 'h3', 'h4']`) — ficou faltando `.cpa-perg` na reconstrução.
+  - `cpa/cpa.css` — `break-inside: avoid` / `page-break-inside: avoid` também direto no CSS de `.cpa-perg`, `.cpa-coment`, `.cpa-ficha`, `.cpa-cab` (reforça o modo `css` do html2pdf, que lê essa propriedade).
+- Tipo: Correção de bug
+- Motivo: Usuário baixou o `.zip` real (gerado fora da automação, então fora do alcance pra eu inspecionar o PDF binário direto) e relatou corte no gráfico/texto de uma disciplina.
+- Como testar: ADM N1/N2, Alunos, "Gerar Relatório" — abrir qualquer PDF gerado e conferir que nenhuma pergunta (texto + barra + contagem) fica partida entre duas páginas.
+- Como reverter: `git revert` deste commit.
+
+### [2026-10-14] Relatório CPA: troca o gráfico de barra do PDF de disciplina por distribuição estática (sem precisar de mouse)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - Relay (`/opt/edubox-relay/server.mjs`, droplet) — `perguntasD` (dentro de `cpaRelatorioAluno`) para de devolver média pré-calculada e passa a devolver a distribuição completa (uma linha por opção de resposta: `op` 1–5 + `n` = contagem), agrupando também por disciplina. Sem isso não tinha como montar uma barra de distribuição por disciplina — só a média do curso inteiro.
+  - `src/rotas/cpa.js` — `montarPerguntasPorGrupo` (visão do curso inteiro, tela normal) e `montarPerguntasPorDisciplina` (visão de uma disciplina, PDF) reconstroem a distribuição a partir dessas linhas cruas; a visão do curso inteiro soma a distribuição de todas as disciplinas da dimensão, continua idêntica ao que já era mostrado antes.
+  - `cpa/app.js`, `cpa/cpa.css` — o gráfico de barra do Chart.js dentro do PDF por disciplina (que virava imagem estática sem valor nenhum escrito, sem como passar o mouse) foi trocado por uma **barra de distribuição empilhada** com o percentual já escrito dentro de cada faixa, legenda de cores e contagem exata por opção (Ótimo/Bom/Regular/Ruim/Não sei) + satisfação — mesmo padrão visual (`.cpa-pilha`/`.cpa-leg`/`.cpa-contagem`) do módulo CPA anterior, que já tinha sido validado visualmente. Pergunta mostrada em frase normal (`frase()`), não mais em CAIXA ALTA. Nome do professor aumentado pra 1.5rem.
+- Tipo: Melhoria de UX / correção de usabilidade
+- Motivo: Pedido do usuário — o gráfico de barra ficou "muito ruim" no papel, sem como entender os valores sem passar o mouse (que não existe em PDF impresso).
+- Impacto/riscos a observar:
+  - A visão "do curso inteiro" (tela normal, gráfico Chart.js, inalterada) agora é alimentada pela distribuição reconstruída em vez da média que o Postgres já mandava pronta — matematicamente equivalente (mesma soma de contagens), testado comparando o nº de dimensões/gráficos renderizados antes e depois (9 em ambos, sem erro no console).
+- Como testar: ADM N1 ou N2, aba Alunos, "Gerar Relatório" — abrir um PDF e conferir que cada pergunta mostra uma barra com % escrito dentro, legenda e contagem exata embaixo (sem precisar de interação).
+- Como reverter: `git revert` deste commit.
+
+### [2026-10-14] Relatório CPA: gráfico por pergunta no PDF de disciplina + comentários separados + remove "Imprimir" de todas as telas
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - Relay (`/opt/edubox-relay/server.mjs`, droplet) — a consulta `perguntasD` de `cpaRelatorioAluno` passa a trazer `trim(d.nomdis) AS disciplina` e agrupar por ela também (antes agregava só por pergunta, cruzando todas as disciplinas da dimensão) — agora dá pra saber a nota de cada pergunta **dentro de uma disciplina específica**, não só do curso inteiro.
+  - `src/rotas/cpa.js` — `montarPerguntasPorGrupo` reaproveita essas linhas (agora por disciplina) somando de volta com média ponderada pelo nº de respostas, pra manter a visão "curso inteiro" igual a antes; função nova `montarPerguntasPorDisciplina` monta a visão por disciplina, anexada em `disciplinas[].perguntas`.
+  - `cpa/app.js` — `folhaDisciplinaHtml`: nome do professor grande e em negrito (`1.4rem`/800), gráfico de barras por pergunta (mesmo Chart.js do resto do app, com `animation:false` pra renderizar a tempo do html2canvas capturar), comentários agora em três seções separadas — Elogios / Neutros / Pontos de atenção (antes vinham todos misturados numa lista só). Nova função `frase()` (texto "COMO VOCÊ AVALIA..." do Edubox vem em maiúsculas; agora mostra em frase normal) usada no rótulo das perguntas do gráfico (on-screen e no PDF).
+  - `cpa/app.js`, `cpa/index.html` — botão "Imprimir" removido de **todas** as abas (Docentes e Administrativo também, não só Alunos — tinha ficado faltando da vez passada); função `imprimirAba` removida.
+  - `cpa/app.js` — "Gerar Relatório" volta a aparecer pra ADM N1 **e** N2 (`souAdmin`, não mais só `souAdmL1` — o usuário pediu N1-só numa mensagem e corrigiu pra N1+N2 logo em seguida).
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — queria o gráfico de pergunta (tipo "como você avalia metodologias ativas...") dentro do PDF por disciplina, nome do professor em destaque, comentários organizados por categoria, e tirar o "Imprimir" de vez (substituído pelo "Gerar Relatório").
+- Impacto/riscos a observar:
+  - A nota "do curso inteiro" por pergunta (mostrada na tela normal da dimensão) é recalculada como média ponderada a partir das linhas por disciplina — matematicamente equivalente à agregação direta de antes (mesma soma/contagem), só que montada em duas etapas.
+- Como testar: ADM N1 ou N2, aba Alunos, Gerar Relatório — abrir um PDF e conferir: nome do professor em destaque, gráfico "Resultado por pergunta", comentários em Elogios/Neutros/Pontos de atenção; conferir que nenhuma aba tem mais botão "Imprimir".
+- Como reverter: `git revert` deste commit.
+
+### [2026-10-14] Relatório CPA: "Gerar Relatório" (PDF por disciplina) vira exclusivo do ADM N1; remove "Imprimir" dos Alunos
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - `cpa/app.js` — nova flag `souAdmL1` (`role === 'adm_l1'`, diferente de `souAdmin` que inclui N2); o botão de gerar PDFs por disciplina é removido do DOM pra quem não é `adm_l1` (nem N2, nem coordenador).
+  - `cpa/index.html` — botão renomeado de "Gerar PDFs por disciplina (.zip)" pra "Gerar Relatório"; botão "Imprimir" removido da aba Alunos (continua existindo em Docentes/Administrativo).
+- Tipo: Ajuste de UX e de permissão
+- Motivo: Pedido do usuário — nome do botão antigo "muito ruim"; o PDF por disciplina deve ser exclusivo do ADM N1 (nem N2); "Imprimir" não fazia mais sentido ao lado do "Gerar Relatório".
+- Como testar: logar como ADM N1, conferir botão "Gerar Relatório" (sem "Imprimir") na aba Alunos; logar como ADM N2 ou coordenador e conferir que nenhum dos dois aparece.
+- Como reverter: `git revert` deste commit.
+
+### [2026-10-14] Relatório CPA: PDF por disciplina (Alunos) — nota, professor e comentários
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - `cpa/app.js` — generalizado o gerador de zip de PDFs (`gerarZipDePdfs`, usado tanto pela Participação quanto por este) pra aceitar qualquer lista de itens; novo botão "Gerar PDFs por disciplina (.zip)" na aba Alunos gera, pra cada disciplina do curso selecionado (já carregadas na tela, sem nova consulta), um PDF com cabeçalho (logo + disciplina + curso), professor(es), nota geral (0–10), total de avaliações e a lista completa de comentários classificados (bom/neutro/atenção) — tudo empacotado num `.zip`, um arquivo por disciplina, nome do arquivo = nome da disciplina.
+  - `cpa/index.html`, `cpa/cpa.css` — botão novo; `.cpa-ficha` (ficha técnica professor/nota/avaliações) trazida de volta do antigo módulo CPA.
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário (pensando em ADM N1/N2) — relatório por disciplina/professor em PDFs separados, igual ao de participação por turma.
+- Como testar: ADM N1, aba Alunos, escolher campanha+curso, clicar "Gerar PDFs por disciplina (.zip)", conferir o `.zip` com um PDF por disciplina (nome do arquivo = nome da disciplina), cada um com professor, nota e comentários.
+- Como reverter: `git revert` deste commit remove o botão e a função.
+
+### [2026-10-14] Relatório CPA: PDF de participação vira um arquivo por turma (zip) + layout
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - `cpa/app.js` — troca o `window.print()` (uma lista só, misturando turmas, "muito ruim"/"alinhado à esquerda" segundo o usuário) por geração de **um PDF por turma**, usando `html2pdf.js` + `JSZip` (mesma técnica já usada no PDF de professores do antigo módulo CPA): monta cada folha num palco invisível (794px, fundo branco), gera o PDF, empacota tudo num `.zip` e baixa. Cada folha agora tem cabeçalho com logo da Fatec + curso + turma, e tabela só com "#" e "Aluno" (a coluna Turma virou redundante, já que o PDF é por turma).
+  - `cpa/index.html` — scripts `html2pdf.js@0.10.2` e `jszip@3.10.1` (CDN).
+  - `cpa/cpa.css` — `.cpa-cab` (cabeçalho com logo, igual ao antigo módulo); removido o `#imp-lista`/`.cpa-imprimindo` da tentativa anterior (não serve mais, era pro `window.print()` que foi substituído).
+- Tipo: Melhoria de UX
+- Motivo: Pedido do usuário — o PDF único (todas as turmas juntas, alinhado à esquerda) ficou ruim de ler; queria um PDF por turma.
+- Como testar: aba Participação, expandir um curso, clicar "Gerar PDF", conferir que baixa um `.zip` com um PDF por turma, cada um com cabeçalho (logo + curso + turma) e as duas listas (responderam/faltam).
+- Como reverter: `git revert` deste commit volta ao `window.print()` de lista única.
+
+### [2026-10-14] Relatório CPA: PDF de "quem já respondeu / falta responder" na Participação
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - Relay (`/opt/edubox-relay/server.mjs`, droplet) — nova função `cpaParticipacaoDetalhe(codava, curso)` e rota `GET /cpa/participacao-detalhe?codava=&curso=`: lista nominal de quem está matriculado naquele curso/campanha, com nome (`tac_matricula.climat → tfi_cliente.codcli → nomcli`, mesmo caminho usado pra achar nome de aluno em outros módulos do Órbita) e se concluiu a CPA ou não (`tav_participacao`). Não expõe conteúdo de resposta nenhuma, só se respondeu — mesma informação que o relatório nativo de participação do Edubox já mostra em PDF.
+  - `src/rotas/cpa.js` — rota `/participacao-detalhe`, mesmo escopo por curso (`podeVer`) de todo o resto do módulo.
+  - `cpa/app.js`, `cpa/index.html`, `cpa/cpa.css` — botão "Gerar PDF" dentro do card expandido de cada curso na aba Participação; busca a lista, monta duas seções ("Já responderam" / "Ainda não responderam", cada uma com nome + turma) num container de impressão dedicado (`#imp-lista`) e aciona o `window.print()` do navegador (salvar como PDF é o próprio navegador quem oferece, sem lib nova).
+- Tipo: Nova funcionalidade
+- Motivo: Pedido do usuário — coordenador precisa de uma lista de nomes pra cobrar quem ainda não respondeu a CPA.
+- Impacto/riscos a observar:
+  - **Novo dado sensível exposto no módulo**: nome de aluno. Até aqui o CPA só mostrava números agregados; esta lista nominal é deliberada (pedido explícito) e seguiu o mesmo escopo por curso já existente (coordenador só vê os próprios cursos).
+- Como testar: aba Participação, expandir um curso, clicar "Gerar PDF", conferir as duas listas (responderam/faltam) com nome e turma, confirmar no diálogo de impressão do navegador.
+- Como reverter: `git revert` deste commit remove o botão e a rota; as rotas novas no relay do droplet não são desfeitas pelo revert (inofensivas, sem nada no Órbita chamando-as).
+
+### [2026-10-14] Relatório CPA: nome do professor por disciplina (Alunos) + Docentes restrito à direção
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados:
+  - Relay (`/opt/edubox-relay/server.mjs`, droplet) — `cpaRelatorioAluno`: a consulta de notas por disciplina passa a selecionar `n.pronot AS codpro`, e uma consulta nova resolve esses códigos em nome (`tac_professor` join `trh_funcionario`), devolvidos em `professores`. Achado importante: o vínculo direto professor↔disciplina do aluno está em `tav_nota_historico_aluno.pronot`/`tav_resp_historico_aluno.prores` (100% preenchido, testado com dado real) — **não** em `tac_disciplina_turma.prodtu`, que o app `cpa-fatec` original já tinha encontrado zerado e por isso nunca mostrou professor nenhum. O módulo CPA anterior do Órbita (antes de ser substituído) já usava essa coluna corretamente.
+  - `src/rotas/cpa.js` — `montarRelatorioAluno` resolve `codpro` → nome via o novo campo `professores` do relay e anexa uma lista de professores (pode ter mais de um, se a disciplina teve turmas diferentes com professores diferentes na mesma campanha) a cada item de `disciplinas`.
+  - `cpa/app.js` — tabela "Por disciplina" mostra o(s) nome(s) do professor embaixo do nome da disciplina; cabeçalho da coluna virou "Disciplina / Professor".
+  - `src/rotas/cpa.js` — `/campanhas` e `/relatorio-staff`: bloqueiam `tipo=P` (Docentes) pra qualquer cargo com escopo restrito (antes só bloqueava `tipo=O`/Administrativo) — pedido do usuário após testar com conta real de coordenador.
+  - `cpa/app.js`, `cpa/index.html` — aba "Docentes" só é montada/visível pra quem vê tudo (`adm_l1`/`adm_l2`); coordenador fica só com Participação e Alunos.
+  - `core/permissions.js`: sem mudança de código, mas a config `config/permissions` (Firestore) ganhou `coordenador.cpa=2`, `coord_medicina.cpa=2`, `adm_l2.cpa=3` — faltava essa entrada (nunca passou pela tela de Gerência de Acessos), o que fazia o item "Relatório CPA" não aparecer no menu desses cargos depois do primeiro login (o menu lê `config/permissions`, não a lista estática do cargo, assim que o cache local é preenchido).
+- Tipo: Melhoria + correção de acesso
+- Motivo: Pedido do usuário, testando com conta real de coordenador — queria ver o nome do professor na quebra por disciplina (recurso que o módulo anterior tinha) e decidiu que coordenador não deve ver Docentes de jeito nenhum (só Alunos).
+- Impacto/riscos a observar:
+  - Um `codpro` é por vínculo/turma, não por pessoa — o mesmo professor pode aparecer com códigos diferentes em disciplinas diferentes; isso já é tratado (resolve por nome, não por código).
+  - Igual antes: sem cache, cada abertura de relatório busca o Edubox na hora.
+- Como testar: logar como coordenador, abrir Relatório CPA → Alunos, conferir que a tabela de disciplinas mostra o nome do professor embaixo de cada disciplina; conferir que não existe mais aba "Docentes"; logar como ADM N1 e conferir que Docentes continua lá.
+- Como reverter: `git revert` deste commit. A entrada em `config/permissions` no Firestore não é desfeita pelo revert (precisaria remover manualmente se for voltar ao estado "módulo invisível pro coordenador").
+
+### [2026-10-14] Relatório CPA: módulo reconstruído do zero (substitui o anterior) + relay HTTP próprio pro Edubox (fim do PC da Fatec)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos criados:
+  - `src/utils/cpa-turma-labels.js` — rótulos T1/T2/T3 por coorte de ingresso (mesma lógica do app `cpa-fatec`, mas persistida em `config/cpa_rotulos_turma` no Firestore em vez de um JSON local — o Vercel não tem disco persistente entre invocações).
+- Arquivos reescritos:
+  - `src/rotas/cpa.js` — troca completa: antes lia `cpa_ciclos`/`cpa_relatorios`/`cpa_professores` (pré-agregados por `scripts/cpa-edubox-sync.js`); agora busca dado quase-cru do relay (`EDUBOX_RELAY_URL`/`EDUBOX_RELAY_TOKEN`) a cada requisição e agrega na hora (sem cache/sync, sempre ao vivo). Endpoints: `/campanhas`, `/cursos`, `/relatorio-aluno`, `/relatorio-staff` (docentes/administrativo), `/participacao`. RBAC: `adm_l1`/`adm_l2` veem tudo, inclusive administrativo; `coordenador`/`coord_medicina` só os próprios cursos (`users.cursos` → `CODCUR`), alunos e docentes, nunca administrativo.
+  - `src/utils/cpa-comentarios.js` — heurística de classificação (bom/neutro/atenção) trocada pela versão mais refinada do app `cpa-fatec` (trata "elogio ao processo de melhoria da própria CPA" como bom, não mais como crítica).
+  - `cpa/index.html`, `cpa/app.js`, `cpa/cpa.css` — UI nova com 4 abas (Participação, Alunos, Docentes, Administrativo — essa última só aparece pra quem vê tudo), gráfico de barras por pergunta (Chart.js), modal de comentários filtrável, participação por turma em cartão retrátil. Sem capa institucional/exportação em lote — não fazia parte do app aprovado.
+- Arquivos alterados:
+  - `core/permissions.js` — comentário acima do módulo `cpa` atualizado (não depende mais de `scripts/cpa-edubox-sync.js` nem de Firestore pré-agregado).
+- Arquivos removidos:
+  - `scripts/cpa-edubox-sync.js` — não tem mais o que sincronizar; os dados são buscados ao vivo a cada requisição.
+- Infra (fora deste repositório, documentado aqui porque não há outro lugar):
+  - Droplet DigitalOcean (`162.243.68.10`, mesmo servidor do relay do SIGMA, `/opt/edubox-relay/server.mjs`) ganhou 5 rotas novas (`/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`), autenticadas por um token próprio (`ORBITA_TOKEN` no `.env` do relay) — isolado do `RELAY_TOKEN` do SIGMA e do `PARCEIRO_TOKEN`, revogável sem afetar nenhum dos dois. Backup do `server.mjs`/`.env` de antes da mudança ficou em `server.mjs.bak-pre-orbita`/`.env.bak-pre-orbita` no próprio droplet.
+  - `.env` do Órbita ganhou `EDUBOX_RELAY_URL`/`EDUBOX_RELAY_TOKEN` (mesmo padrão de nome já usado pelo SIGMA, valores próprios do Órbita).
+- Tipo: Reconstrução de módulo + mudança de arquitetura (elimina dependência de PC da Fatec ligado)
+- Motivo: Pedido do usuário — o CPA anterior (dimensões por eixo SINAES, ranking de professor, capa institucional) não foi aprovado pela direção; a direção aprovou em vez dele um app standalone (`cpa-fatec`) que o usuário já tinha construído, então este módulo foi reconstruído pra reproduzir esse app dentro do Órbita (login/RBAC do Órbita, dado vindo do relay em vez de rodar só localmente). De quebra, resolve o problema mais antigo: os scripts que buscavam dado do Edubox (CPA, CADD, Matrizes, Cobrança histórica) dependiam de um PC físico da Fatec ligado o tempo todo (via VBS no Startup do Windows) porque o Postgres do Edubox só aceita conexão do IP da instituição — inseguro (credencial de banco de terceiro numa máquina de usuário comum) e frágil (para se o PC for desligado). O CPA é o primeiro módulo migrado pro relay; CADD/Matrizes/Confirmação de Presença continuam no modelo antigo por enquanto.
+- Impacto/riscos a observar:
+  - **Sem cache**: cada abertura de relatório consulta o Edubox na hora (como o app `cpa-fatec` original já fazia) — mais lento que ler Firestore, mas sempre atual e sem depender de ninguém rodar sincronização.
+  - **Novo recurso que o `cpa-fatec` original não tinha**: filtro de Docentes por curso (`tav_resp_curso_prof`), criado especificamente pra permitir coordenador ver só os professores do próprio curso — não existia no app standalone (lá não tinha login nem RBAC).
+  - **Gap conhecido, não implementado agora**: o relatório de Docentes não traz nome do professor nem quebra por professor individual (só o agregado do curso/instituição) — dava pra juntar com `tac_professor`/`trh_funcionario` (como o CPA anterior fazia) se um dia for pedido.
+  - **`cpa_ciclos`/`cpa_relatorios`/`cpa_professores` no Firestore não foram apagados** (dado histórico, inofensivo) — só não são mais lidos nem escritos por nada.
+  - **Dependência nova**: módulo CPA agora depende do relay estar no ar (`162.243.68.10:8443`) — se o droplet cair, o módulo inteiro para (antes dependia do PC da Fatec estar ligado, que era ainda menos confiável).
+- Como testar: logar como `adm_l1`, abrir "Relatório CPA", testar as 4 abas (Participação, Alunos, Docentes, Administrativo) com uma campanha e curso reais; conferir que os gráficos, chips de comentário e o modal de comentários funcionam; logar como `coordenador` e conferir que só vê os próprios cursos em Alunos/Docentes e que a aba Administrativo nem aparece.
+- Como reverter: `git revert` deste commit restaura o módulo anterior (volta a depender de `cpa_ciclos`/`cpa_relatorios`/`cpa_professores` no Firestore, que não foram apagados) — mas as rotas novas no relay do droplet (`/cpa/*`) e o `ORBITA_TOKEN` no `.env` dele não são desfeitos pelo revert (ficam inofensivos, sem nada no Órbita chamando-os).
+
 ### [2026-09-11] Matrículas: busca de "Aluno Indica" corrigida — não achava veterano de semestre anterior
 - Autor: Claude Code
 - Branch: main
