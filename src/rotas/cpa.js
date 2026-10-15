@@ -41,6 +41,8 @@ const CODCUR = {
 async function escopoDe(req) {
     if (VE_TUDO.includes(req.user.role)) return null;
     if (req.user.role === 'coord_medicina') return ['MED'];
+    // EAD (15/10/2026): as disciplinas a distância passam por todos os cursos da graduação — Medicina fica de fora
+    if (req.user.role === 'ead') return Object.values(CODCUR).filter(c => c !== 'MED');
     const snap = await db.collection('users').doc(req.user.uid).get();
     const d = snap.exists ? snap.data() : {};
     const ids = Array.isArray(d.cursos) && d.cursos.length ? d.cursos : (d.curso ? [d.curso] : []);
