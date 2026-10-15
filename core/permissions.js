@@ -7,7 +7,8 @@ export const CATEGORIES = {
   secretaria: "Secretaria",
   financeiro: "Financeiro",
   medicina: "Medicina",
-  comercial: "Comercial"
+  comercial: "Comercial",
+  ead: "EAD"
 };
 
 export const MODULES = {
@@ -323,6 +324,12 @@ export const ROLE_PERMISSIONS = {
   comercial: {
     label: "Comercial",
     modules: ["dashboard", "fidelidade", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
+  },
+  // Setor EAD (15/10/2026) — líder: Carlos Durlo. Só a Correção de Provas (Docência), de todos os
+  // cursos da graduação (escopo em src/rotas/cpa.js escopoDe). Sem nada da Secretaria.
+  ead: {
+    label: "EAD",
+    modules: ["dashboard", "fidelidade", "correcao-provas"]
   },
   visitante: {
     label: "Visitante",

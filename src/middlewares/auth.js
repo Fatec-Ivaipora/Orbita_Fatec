@@ -449,6 +449,32 @@ const requireModulePermission = (moduleName) => {
                 palestras: 3,
                 'agenda-espacos': 2
             },
+            // Setor EAD (15/10/2026) — só a Correção de Provas.
+            ead: {
+                emprestimo: 1,
+                usuarios: 1,
+                'carga-horaria': 1,
+                ferida: 1,
+                'almoxarifado-feridas': 1,
+                'almoxarifado-saude': 1,
+                'relatorio-dp': 1,
+                acessos: 1,
+                licitacao: 1,
+                matriculas: 1,
+                orcamento: 1,
+                'avaliacao-docente': 1,
+                cobranca: 1,
+                'banco-med-fatec': 1,
+                'relatorio-desempenho': 1,
+                'banco-provas': 1,
+                'confirmacao-evento': 1,
+                contratos: 1,
+                'aula-experimental': 1,
+                auloes: 1,
+                palestras: 1,
+                'correcao-provas': 3,
+                'agenda-espacos': 1
+            },
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,

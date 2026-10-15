@@ -109,6 +109,19 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-15] Novo setor EAD (cargo `ead`), com Correção de Provas de todos os cursos
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/setor-ead
+- Arquivos alterados:
+  - `core/permissions.js`: setor `ead` ("EAD") em CATEGORIES (Painel do Setor do Meu Espaço) e cargo `ead` em ROLE_PERMISSIONS: só a Correção de Provas (Docência), sem nada da Secretaria; Meu Espaço continua, como em todo cargo.
+  - `src/middlewares/auth.js`: níveis padrão do cargo `ead` (correção de provas 3, todo o resto 1).
+  - `src/rotas/cpa.js` (`escopoDe`): o cargo `ead` vê todos os cursos da graduação (sem Medicina), porque as disciplinas a distância passam por todos. Vale para a Correção de Provas, que usa o mesmo escopo.
+- Firestore: `roles/ead` ({ name: "EAD" }) e `config/permissions.ead` = { correcao-provas: 3, agenda-espacos: 1 }. Os 4 usuários também têm `cursos` com os 16 cursos da graduação.
+- Usuários: líder Carlos Durlo (`chefeDeSetor: true`) + Daiane, Nadia e Rodrigo, `role: 'ead'`, `setorId: 'ead'`, senha inicial com troca obrigatória.
+- Tipo: Novo setor / permissões
+- Como testar: entrar com um usuário EAD — o menu mostra só Meu Espaço e Docência → Correção de Provas; na Correção aparecem as turmas de todos os cursos menos Medicina.
+- Como reverter: reverter o commit e apagar `roles/ead` e `config/permissions.ead`.
+
 ### [2026-10-15] CPA: "Relatório da Direção" (visão executiva da campanha)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main
