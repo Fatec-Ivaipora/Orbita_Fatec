@@ -14,7 +14,7 @@ O Postgres do Edubox (sistema acadêmico) só aceita conexão do IP da Fatec. O 
 
 **Faça:**
 1. Crie uma rota específica do seu módulo no relay (ver "Como adicionar rota no relay" em `regras/regra_do_app.md`, seção 8).
-2. No backend do Órbita, chame o relay com `fetch` usando `EDUBOX_RELAY_URL` + `EDUBOX_RELAY_TOKEN` (Bearer). Modelo pronto: função `relay()` em `src/rotas/cpa.js`.
+2. No backend do Órbita, chame o relay com `fetch` usando `EDUBOX_RELAY_URL` + `EDUBOX_RELAY_TOKEN` (Bearer). Use o cliente compartilhado `src/utils/edubox-relay.js` (`relay(caminho)`); não crie outro.
 3. O relay devolve dado quase cru. Agregação, regra de negócio e permissão (RBAC) ficam no backend do Órbita.
 
 Regras do relay:
@@ -22,7 +22,7 @@ Regras do relay:
 - Rotas do Órbita usam o token próprio `ORBITA_TOKEN` e um prefixo por módulo (`/cpa/*`, `/cadd/*`...).
 - Só leitura. Toda consulta precisa de `JOIN` até `tac_curso`, porque o banco é compartilhado com ~32 instituições.
 
-Ainda usam conexão direta (legado, a migrar pro relay): `scripts/cad-edubox-sync.js` (+ `cad-edubox-agente.vbs`), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` (+ `cobranca-edubox-agente.vbs`), `scripts/matrizes-edubox-sync.js`, `src/rotas/confirmacao-evento.js`. Não use como modelo.
+Ainda usam conexão direta (legado, a migrar pro relay): `scripts/cad-edubox-sync.js` (+ `cad-edubox-agente.vbs`), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` (+ `cobranca-edubox-agente.vbs`), `scripts/matrizes-edubox-sync.js`. Não use como modelo.
 
 ## Outras regras do projeto
 

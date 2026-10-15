@@ -109,6 +109,21 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-15] Confirmação de Presença: lista de professores do Edubox passa a vir do relay
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos criados:
+  - `src/utils/edubox-relay.js`: cliente compartilhado do relay (`relay(caminho)`), tirado de dentro do `src/rotas/cpa.js` pra todos os módulos usarem o mesmo.
+- Arquivos alterados:
+  - Relay (`/opt/edubox-relay/server.mjs`, droplet): nova função `confirmacaoProfessoresAtivos()` e rota `GET /confirmacao/professores-ativos` (token `ORBITA_TOKEN`). Mesma consulta que o Órbita fazia direto, trocando o `LEFT JOIN tac_curso` por `JOIN` (regra da seção 8; conferido no banco real: 134 professores nos dois casos, nada muda). Backup antes da mudança: `server.mjs.bak-pre-confirmacao`.
+  - `src/rotas/confirmacao-evento.js`: `buscarProfessoresAtivosEdubox()` chama o relay em vez de `db-edubox` (as 3 rotas que usam essa função não mudam).
+  - `src/rotas/cpa.js`: passa a usar o cliente compartilhado.
+  - `regras/regra_do_app.md` (seção 8) e `AGENTS.md`: Confirmação de Presença saiu da lista de legado; modelo de cliente agora é `src/utils/edubox-relay.js`.
+- Tipo: Migração (conexão direta → relay)
+- Motivo: no Vercel essa tela não conseguia falar com o Edubox (IP não autorizado).
+- Como testar: em produção, abrir Confirmação de Presença e carregar a lista de professores do Edubox (deve trazer ~134 do semestre ativo, GRA e MED).
+- Como reverter: `git revert` deste commit; a rota nova no relay fica inofensiva.
+
 ### [2026-10-14] Documentação: integração com o Edubox só pelo relay (seção 8) + instruções para IA
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main
@@ -1326,7 +1341,7 @@ O Postgres do Edubox (sistema acadêmico, fornecedor terceiro) **só aceita cone
 
 ### Como o Órbita chama o relay
 - Variáveis no `.env` local **e** no Vercel: `EDUBOX_RELAY_URL` (`http://162.243.68.10:8443`) e `EDUBOX_RELAY_TOKEN` (= `ORBITA_TOKEN` do relay). Os nomes ficam documentados em `.env_exemplo`; o valor nunca vai pro Git.
-- No backend, use `fetch` com `Authorization: Bearer <EDUBOX_RELAY_TOKEN>`. Modelo pronto: a função `relay()` em `src/rotas/cpa.js` (com tempo-limite e tratamento de erro).
+- No backend, use `fetch` com `Authorization: Bearer <EDUBOX_RELAY_TOKEN>`. Use o cliente compartilhado `src/utils/edubox-relay.js` (`const { relay } = require('../utils/edubox-relay')`), que já trata tempo-limite e erro. Não crie outro.
 - **Divisão de responsabilidade**: o relay só consulta e devolve dado quase cru. Agregação, classificação, escopo por cargo (RBAC) e formatação ficam no backend do Órbita, onde dá pra revisar e mudar sem mexer no servidor compartilhado.
 
 ### Como adicionar rota nova no relay
@@ -1349,7 +1364,8 @@ O Postgres do Edubox (sistema acadêmico, fornecedor terceiro) **só aceita cone
 
 ### O que já usa o relay e o que falta migrar
 - ✅ **Relatório CPA**: rotas `/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`, `/cpa/participacao-detalhe`.
-- ⏳ **Legado com conexão direta**, a migrar (não use como modelo): `scripts/cad-edubox-sync.js` + `cad-edubox-agente.vbs` (CADD), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` + `cobranca-edubox-agente.vbs` (Cobrança), `scripts/matrizes-edubox-sync.js` (Matrizes), `src/rotas/confirmacao-evento.js` (Confirmação de Presença; consulta ao vivo, então provavelmente não funciona no Vercel).
+- ✅ **Confirmação de Presença**: rota `/confirmacao/professores-ativos`.
+- ⏳ **Legado com conexão direta**, a migrar (não use como modelo): `scripts/cad-edubox-sync.js` + `cad-edubox-agente.vbs` (CADD), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` + `cobranca-edubox-agente.vbs` (Cobrança), `scripts/matrizes-edubox-sync.js` (Matrizes).
 
 ## 9. Diretrizes de Deploy no Vercel (Zero Config)
 

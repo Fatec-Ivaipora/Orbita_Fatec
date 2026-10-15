@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
-const edubox = require('../db-edubox');
+const { relay } = require('../utils/edubox-relay');
 
 const checkPermission = verifyToken.requireModulePermission('confirmacao-evento');
 
@@ -114,26 +114,10 @@ function filtrarItensPorPermissao(itens, role, cursoIdsCoordenador) {
 // tabela tem CPF, RG, endereço, data de nascimento etc., e nada disso é
 // necessário aqui (minimização de dado pessoal).
 async function buscarProfessoresAtivosEdubox() {
-    const semAtivo = await edubox.query(`SELECT codsem FROM tac_semestre WHERE atisem = 'S'`);
-    const codsems = semAtivo.rows.map(r => r.codsem);
+    // A consulta roda no relay (rota /confirmacao/professores-ativos) — o
+    // Vercel não alcança o Edubox direto. Ver regras/regra_do_app.md, seção 8.
+    const { semestres: codsems, professores: rows } = await relay('/confirmacao/professores-ativos');
     if (!codsems.length) return { semestres: [], professores: [] };
-
-    const { rows } = await edubox.query(`
-        SELECT
-            f.codfun,
-            trim(f.nomfun) AS nome,
-            f.emafun AS email,
-            array_agg(DISTINCT trim(c.descur)) AS cursos,
-            array_agg(DISTINCT t.curtur) AS codcurs
-        FROM tac_professor p
-        JOIN tac_disciplina_turma dt ON dt.coddtu = p.dtupro
-        JOIN tac_turma t ON t.codtur = dt.turdtu
-        JOIN trh_funcionario f ON f.codfun = p.funpro
-        LEFT JOIN tac_curso c ON c.codcur = t.curtur
-        WHERE t.semtur = ANY($1::varchar[])
-        GROUP BY f.codfun, f.nomfun, f.emafun
-        ORDER BY nome
-    `, [codsems]);
 
     return {
         semestres: codsems,
