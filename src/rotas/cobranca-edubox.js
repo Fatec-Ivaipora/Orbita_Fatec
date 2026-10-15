@@ -1,6 +1,6 @@
 // ==========================================================================
 // Cobrança com dados do Edubox (/api/cobranca/edubox). Os números vêm do
-// agente que roda num PC da Fatec (scripts/cobranca-edubox-agente.js) e
+// agente que roda no servidor do relay (scripts/cobranca-edubox-agente.js, serviço orbita-cobranca-agente) e
 // grava resumos prontos no Firestore — aqui só lemos esses resumos e
 // guardamos o que é do Órbita: ações de cobrança (WhatsApp, ligação,
 // promessa...), o controle de "quem já foi cobrado" e os modelos de mensagem.

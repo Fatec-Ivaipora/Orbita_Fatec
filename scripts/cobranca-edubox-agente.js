@@ -1,14 +1,15 @@
 // ==========================================================================
-// Agente da Cobrança (Edubox -> Órbita) — fica rodando num PC da Fatec, que
-// é quem consegue acessar o Edubox. Inicia junto com o Windows pelo
-// "cobranca-edubox-agente.vbs" (pasta Inicializar do usuário, sem janela).
+// Agente da Cobrança (Edubox -> Órbita) — roda no servidor do relay
+// (DigitalOcean, IP autorizado pelo Edubox) como serviço systemd
+// "orbita-cobranca-agente", em /opt/orbita-sync, com TZ=America/Sao_Paulo.
+// Ver regras/regra_do_app.md, seção 8.
 //
-//  - Atualiza sozinho às 7h, 12h, 17h e 22h. Se o PC estava desligado no
-//    horário, atualiza assim que ligar.
+//  - Atualiza sozinho às 7h, 12h, 17h e 22h. Se o serviço estava fora do
+//    ar no horário, atualiza assim que voltar.
 //  - Botão "Atualizar agora" do Órbita grava config/cobranca_sync.pedidoEm;
 //    o agente escuta esse documento e atualiza na hora.
-//  - A cada 5 min grava agenteVivoEm, pra tela avisar se o PC estiver
-//    desligado (aí o botão não tem quem atenda).
+//  - A cada 5 min grava agenteVivoEm, pra tela avisar se o serviço
+//    estiver fora do ar (aí o botão não tem quem atenda).
 //
 // Log em scripts/logs/cobranca-edubox-agente.log (fora do git).
 // ==========================================================================

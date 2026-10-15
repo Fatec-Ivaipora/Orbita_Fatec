@@ -535,7 +535,7 @@ async function imprimirAta() {
 
 // ---------- STATUS DO AGENTE / ATUALIZAR AGORA (mesmo modelo da Cobrança) ----------
 // O agente roda no PC do TI e atualiza às 9h, 10h, 11h e 16h; fora disso, pelo botão.
-const AGENTE_OFF_MIN = 15;   // sem sinal do PC há mais que isso = desligado
+const AGENTE_OFF_MIN = 15;   // sem sinal do agente (servidor) há mais que isso = fora do ar
 let aguardando = null;
 const fmtDataHora = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 function renderStatus(st = {}) {
@@ -548,7 +548,7 @@ function renderStatus(st = {}) {
   const vivo = st.agenteVivoEm && (Date.now() - new Date(st.agenteVivoEm).getTime()) < AGENTE_OFF_MIN * 60000;
   partes.push(vivo
     ? `<span class="cad-pill ok" title="Atualiza sozinho às ${(st.agenteHorarios || [9, 10, 11, 16]).map(h => `${h}h`).join(', ')}; fora disso, pelo botão">PC de atualização ligado</span>`
-    : `<span class="cad-pill off" title="O programa que busca no Edubox roda no computador do TI. Desligado, não há atualização automática nem pelo botão.">PC de atualização desligado${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
+    : `<span class="cad-pill off" title="O serviço que busca no Edubox roda no servidor do relay (DigitalOcean). Fora do ar, não há atualização automática nem pelo botão.">Atualização automática fora do ar${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
   if (st.status === 'erro' && st.erro) partes.push(`<span class="cad-pill off">Última tentativa falhou: ${esc(st.erro)}</span>`);
   $('cad-status').innerHTML = partes.join(' · ');
 }
@@ -579,7 +579,7 @@ async function atualizarAgora() {
         } else if (st.status === 'erro' && st.erroEm > pedidoEm) {
           renderStatus(st); fim(`O Edubox não respondeu: ${st.erro}`, 'erro');
         } else if (Date.now() > limite) {
-          renderStatus(st); fim('O PC que busca no Edubox não respondeu (pode estar desligado). Tente de novo mais tarde.', 'erro');
+          renderStatus(st); fim('O serviço que busca no Edubox não respondeu. Tente de novo mais tarde.', 'erro');
         } else renderStatus(st);
       } catch (e) { /* tenta de novo no próximo ciclo */ }
     }, 4000);

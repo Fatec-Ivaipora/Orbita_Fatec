@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-15] Matrizes ao vivo pelo relay + agentes do CADD e da Cobrança saem do PC da Fatec para o servidor
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- **Matrizes** (consulta ao vivo):
+  - Relay (`/opt/edubox-relay/server.mjs`): novas rotas `GET /matrizes/semestres?formatos=` e `GET /matrizes/dados?formatos=&curso=` (token `ORBITA_TOKEN`), com as mesmas consultas que o script fazia. Backup: `server.mjs.bak-pre-matrizes`.
+  - `src/utils/matrizes-montar.js` (novo): a montagem por curso que estava em `scripts/matrizes-edubox-sync.js`.
+  - `src/rotas/matrizes.js`: monta a matriz na hora pelo relay em vez de ler `matrizes_edubox`/`config/matrizes_sync`. Os semestres oferecidos são o atual e os 2 próximos que existem no Edubox, como antes. Turmas do mesmo período agora saem ordenadas por nome (antes a ordem variava). `matrizes_grade` (horário dos coordenadores) continua igual.
+  - Conferido contra a última cópia do script (07/10): 16 cursos em 2026.2 e 16 em 2027.1, conteúdo idêntico campo a campo. Os horários já preenchidos continuam aparecendo (111 professores, 46 salas, 15 cursos).
+  - `matrizes/app.js`: textos "última carga do Edubox" → "consultado no Edubox"; mensagem de semestre vazio.
+  - Removido `scripts/matrizes-edubox-sync.js`. A coleção `matrizes_edubox` fica no Firestore (histórico), sem uso.
+- **CADD e Cobrança** (continuam gravando no Firestore; telas sem mudança de dado):
+  - Os agentes `scripts/cad-edubox-agente.js` e `scripts/cobranca-edubox-agente.js` passam a rodar no droplet do relay como serviços systemd `orbita-cad-agente` e `orbita-cobranca-agente` (pasta `/opt/orbita-sync`, clone do repositório, usuário `orbita`, `TZ=America/Sao_Paulo`). Detalhes e como atualizar: seção 8, "Agentes que rodam no servidor".
+  - Testados no servidor pelo botão "Atualizar agora": Cobrança OK em 17s (18.414 parcelas em aberto), CADD OK em 101s (8 semestres).
+  - No PC da Fatec (`C:OrbitaAgente`), os atalhos "Orbita - CAD Edubox" e "Orbita - Cobranca Edubox" foram removidos da pasta Inicializar e os processos encerrados, antes de ligar os do servidor (confirmado pelo `agenteVivoEm` parado).
+  - Removidos `scripts/cad-edubox-agente.vbs` e `scripts/cobranca-edubox-agente.vbs` (só serviam pro PC). Comentários dos agentes e textos das telas ("PC de atualização desligado" → "Atualização automática fora do ar") atualizados em `cad/app.js`, `financeiro/cobranca/edubox.js`, `src/rotas/cobranca-edubox.js`.
+- **Acesso ao servidor**: criada chave SSH (`~/.ssh/orbita_droplet` no computador do TI, comentário `orbita-droplet-FatecTi` no `authorized_keys` do root) pra copiar a credencial do Firebase sem digitá-la em navegador. Revogar = apagar essa linha do `/root/.ssh/authorized_keys`.
+- Tipo: Migração (script no PC → relay/servidor)
+- Como testar: abrir Matrizes (lista de semestres e cursos, horários salvos); no CADD e na Cobrança, conferir que não aparece "Atualização automática fora do ar" e que "Atualizar agora" funciona.
+- Como reverter: `git revert` deste commit (volta a Matrizes a ler o Firestore, que só seria atualizado rodando o script de novo). Para os agentes: `systemctl disable --now orbita-cad-agente orbita-cobranca-agente` no servidor.
+
 ### [2026-10-15] Confirmação de Presença: lista de professores do Edubox passa a vir do relay
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main
@@ -1365,7 +1385,16 @@ O Postgres do Edubox (sistema acadêmico, fornecedor terceiro) **só aceita cone
 ### O que já usa o relay e o que falta migrar
 - ✅ **Relatório CPA**: rotas `/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`, `/cpa/participacao-detalhe`.
 - ✅ **Confirmação de Presença**: rota `/confirmacao/professores-ativos`.
-- ⏳ **Legado com conexão direta**, a migrar (não use como modelo): `scripts/cad-edubox-sync.js` + `cad-edubox-agente.vbs` (CADD), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` + `cobranca-edubox-agente.vbs` (Cobrança), `scripts/matrizes-edubox-sync.js` (Matrizes).
+- ✅ **Matrizes**: rotas `/matrizes/semestres` e `/matrizes/dados`, consulta ao vivo. A montagem por curso fica em `src/utils/matrizes-montar.js`. O horário dos coordenadores continua em `matrizes_grade` (Firestore).
+- ✅ **CADD** e **Cobrança**: continuam gravando no Firestore (telas leem de lá), mas os agentes rodam no **servidor do relay** como serviços, não mais no PC da Fatec — ver abaixo.
+
+### Agentes que rodam no servidor (CADD e Cobrança)
+CADD e Cobrança fazem consultas pesadas com horário fixo de atualização, então não consultam o Edubox a cada tela: um agente atualiza o Firestore. Esse agente é o mesmo código do repositório (`scripts/cad-edubox-agente.js` e `scripts/cobranca-edubox-agente.js`) e roda **no mesmo droplet do relay**, que tem o IP autorizado — por isso pode usar `src/db-edubox.js` (é o único lugar onde isso é permitido).
+- **Pasta**: `/opt/orbita-sync` (clone do repositório público `Fatec-Ivaipora/Orbita_Fatec`), com `.env` próprio (só as variáveis `EDUBOX_*`) e `serviceAccountKey.json` do Firebase. Roda como usuário `orbita`.
+- **Serviços systemd**: `orbita-cad-agente` (CADD: 9h, 10h, 11h, 16h e botão "Atualizar agora") e `orbita-cobranca-agente` (Cobrança: 7h, 12h, 17h, 22h, botão e histórico semanal de noite). Ambos com `TZ=America/Sao_Paulo` (o servidor fica em UTC; sem isso os horários saem 3h adiantados) e `Restart=always`.
+- **Atualizar o código dos agentes** depois de um merge no `main`: `cd /opt/orbita-sync && sudo -u orbita git pull && sudo -u orbita npm ci --omit=dev && systemctl restart orbita-cad-agente orbita-cobranca-agente`.
+- **Ver o que estão fazendo**: `journalctl -u orbita-cad-agente -n 50` (ou `orbita-cobranca-agente`); também gravam em `/opt/orbita-sync/scripts/logs/`. A tela de cada módulo mostra "Atualização automática fora do ar" se o agente ficar mais de 15 min sem sinal (`config/cad_sync.agenteVivoEm` / `config/cobranca_sync.agenteVivoEm`).
+- **Nunca** rode esses agentes em outro lugar ao mesmo tempo (PC, notebook): dois agentes gravando juntos duplicam o histórico da Cobrança. Os atalhos do PC da Fatec foram removidos em 2026-10-15.
 
 ## 9. Diretrizes de Deploy no Vercel (Zero Config)
 

@@ -22,7 +22,7 @@ Regras do relay:
 - Rotas do Órbita usam o token próprio `ORBITA_TOKEN` e um prefixo por módulo (`/cpa/*`, `/cadd/*`...).
 - Só leitura. Toda consulta precisa de `JOIN` até `tac_curso`, porque o banco é compartilhado com ~32 instituições.
 
-Ainda usam conexão direta (legado, a migrar pro relay): `scripts/cad-edubox-sync.js` (+ `cad-edubox-agente.vbs`), `scripts/cobranca-edubox-sync.js` / `cobranca-edubox-historico.js` (+ `cobranca-edubox-agente.vbs`), `scripts/matrizes-edubox-sync.js`. Não use como modelo.
+Exceção: os agentes do CADD e da Cobrança (`scripts/*-edubox-agente.js`) usam `src/db-edubox.js` porque rodam **dentro do servidor do relay**, como serviços (ver seção 8, "Agentes que rodam no servidor"). Não rode esses agentes em outro computador e não copie esse padrão pra código que roda no Vercel.
 
 ## Outras regras do projeto
 

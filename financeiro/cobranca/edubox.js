@@ -6,7 +6,7 @@ import { getEffectiveLevel } from '../../core/permissions.js';
 
 // ==========================================================================
 // Cobrança com dados do Edubox. Os números são gravados no Firestore por um
-// agente que roda num PC da Fatec (scripts/cobranca-edubox-agente.js) às 7h,
+// agente que roda no servidor do relay (scripts/cobranca-edubox-agente.js, serviço orbita-cobranca-agente) às 7h,
 // 12h, 17h e 22h, ou na hora pelo "Atualizar agora".
 // Visões: Painel (vencido x a vencer, faixas, cursos), Lista de cobrança
 // (WhatsApp com mensagem pronta + controle de quem já foi cobrado) e
@@ -22,7 +22,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 
 const MODULO = 'cobranca';
 const POR_PAGINA = 100;
-const AGENTE_OFF_MIN = 15; // sem sinal do PC há mais que isso = desligado
+const AGENTE_OFF_MIN = 15; // sem sinal do agente (servidor) há mais que isso = fora do ar
 const FAIXAS = [['1-30', 'Até 30 dias', '#edc24e'], ['31-60', '31 a 60 dias', '#e79a39'], ['61-90', '61 a 90 dias', '#d8542e'], ['90+', 'Mais de 90 dias', '#b12f28']];
 const TIPOS = {
   whatsapp: ['💬', 'WhatsApp'], ligacao: ['📞', 'Ligação'], email: ['✉️', 'E-mail'], contato: ['🙋', 'Contato / atendimento'],
@@ -338,7 +338,7 @@ function renderStatus(st) {
   const vivo = st.agenteVivoEm && (Date.now() - new Date(st.agenteVivoEm).getTime()) < AGENTE_OFF_MIN * 60000;
   partes.push(vivo
     ? `<span class="cb-pill ok">PC de atualização ligado</span>`
-    : `<span class="cb-pill off" title="O programa que busca no Edubox roda no computador do TI. Desligado, não há atualização automática nem pelo botão.">PC de atualização desligado${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
+    : `<span class="cb-pill off" title="O serviço que busca no Edubox roda no servidor do relay (DigitalOcean). Fora do ar, não há atualização automática nem pelo botão.">Atualização automática fora do ar${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
   if (st.status === 'erro' && st.erro) partes.push(`<span class="cb-pill off">Última tentativa falhou: ${esc(st.erro)}</span>`);
   el.innerHTML = partes.join(' · ');
 }
@@ -374,7 +374,7 @@ async function atualizarAgora() {
           fim(`O Edubox não respondeu: ${st.erro}`, 'error');
         } else if (Date.now() > limite) {
           renderStatus(st);
-          fim('O PC que busca no Edubox não respondeu (pode estar desligado). Tente de novo mais tarde.', 'error');
+          fim('O serviço que busca no Edubox não respondeu. Tente de novo mais tarde.', 'error');
         }
       } catch (e) { /* tenta de novo no próximo ciclo */ }
     }, 3000);
@@ -2221,7 +2221,7 @@ async function renderSemana() {
   const fimFonte = atual ? null : sem.fotoFim;
   const avisos = [];
   if (iniSemana) { /* conta completa pelo resumo semanal: sem aviso */ }
-  else if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou o PC de atualização estava desligado). Os recebimentos estão completos.');
+  else if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou a atualização automática estava fora do ar). Os recebimentos estão completos.');
   else if (fotoAtrasada) avisos.push(`O primeiro registro do vencido nesta semana é de ${fmtDataHora(sem.fotoInicio.geradoEm)} (o PC de atualização não rodou antes disso). A conta abaixo parte desse momento; o "Recebido total na semana" e as tabelas mostram a semana inteira.`);
   document.getElementById('s-aviso').innerHTML = avisos.map(t => `<div class="cb-aviso">${esc(t)}</div>`).join('');
 

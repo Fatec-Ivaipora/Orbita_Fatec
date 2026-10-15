@@ -2,14 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { admin, db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
+const { relay } = require('../utils/edubox-relay');
+const { montar, semestresPadrao, normSemestre, formatosEdubox, codcurDe } = require('../utils/matrizes-montar');
 
 // ==========================================================================
-// Matrizes: o que cada curso estuda no semestre (vem do Edubox, ver
-// scripts/matrizes-edubox-sync.js) + professor/dia/hora de cada disciplina,
-// definidos pelo coordenador e que viram o horário de aula do curso.
+// Matrizes: o que cada curso estuda no semestre (consultado ao vivo no
+// Edubox pelo relay, rotas /matrizes/*) + professor/dia/hora de cada
+// disciplina, definidos pelo coordenador e que viram o horário de aula do curso.
 //
-// Coleções:
-//   matrizes_edubox/{AAAA.S}__{cursoId}  só o script de sincronização grava
+// Coleção:
 //   matrizes_grade/{AAAA.S}__{cursoId}   alocacoes: { "{codTurma}:{codDisciplina}":
 //                                        { disciplina, turma, aulas: [{professor,dia,inicio,fim}] } }
 //
@@ -94,11 +95,23 @@ function acharConflitos(aulas, docsGrade, ignorarDoc, ignorarKey, nomeDisc = '')
     return conflitos;
 }
 
+// Semestres que existem no Edubox entre o atual e os 2 próximos, ex. ["2026.2", "2027.1"].
+async function semestresDisponiveis() {
+    const candidatos = semestresPadrao();
+    const { semestres } = await relay(`/matrizes/semestres?formatos=${encodeURIComponent(candidatos.flatMap(formatosEdubox).join(','))}`);
+    return [...new Set(semestres.map(normSemestre))].filter(s => candidatos.includes(s)).sort();
+}
+
+// Docs por curso do semestre, montados na hora a partir do relay. `cursoId` filtra um curso só.
+async function matrizesDoSemestre(semestre, cursoId) {
+    const q = `formatos=${encodeURIComponent(formatosEdubox(semestre).join(','))}${cursoId ? `&curso=${encodeURIComponent(codcurDe(cursoId))}` : ''}`;
+    return montar(await relay(`/matrizes/dados?${q}`, { timeoutMs: 30000 }));
+}
+
 // GET /api/matrizes?semestre=2027.1
 router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
     try {
-        const sync = (await db.collection('config').doc('matrizes_sync').get()).data() || {};
-        const semestres = sync.semestres || [];
+        const semestres = await semestresDisponiveis();
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : (semestres[semestres.length - 1] || '');
         const escopo = await escopoDe(req);
 
@@ -106,8 +119,8 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), as
         let professores = [];
         let salas = [];
         if (semestre) {
-            const [mSnap, gSnap] = await Promise.all([
-                db.collection('matrizes_edubox').where('semestre', '==', semestre).get(),
+            const [docsEdubox, gSnap] = await Promise.all([
+                matrizesDoSemestre(semestre),
                 db.collection('matrizes_grade').where('semestre', '==', semestre).get()
             ]);
             const grades = new Map();
@@ -120,18 +133,17 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), as
                 Object.values(d.data().alocacoes || {}).forEach(a => (a.aulas || []).forEach(x => { nomes.add(x.professor); if (x.sala) addSala(x.sala); }));
                 (d.data().ensalamento || []).forEach(g => Object.values(g.dias || {}).forEach(c => { if (c && c.sala) c.sala.split('/').forEach(p => addSala(p.trim())); }));
             });
-            mSnap.forEach(d => {
-                const m = d.data();
+            docsEdubox.forEach(m => {
                 if (!podeVer(escopo, m.cursoId)) return;
                 cursos.push({
-                    id: d.id, cursoId: m.cursoId, cursoNome: m.cursoNome,
-                    turmas: (m.turmas || []).sort((a, b) => a.periodo - b.periodo),
+                    id: m.id, cursoId: m.cursoId, cursoNome: m.cursoNome,
+                    turmas: (m.turmas || []).sort((a, b) => a.periodo - b.periodo || a.nome.localeCompare(b.nome, 'pt-BR')),
                     grades: m.grades || [],
                     // períodos que estudam juntos, conforme os arquivos de horário (ex.: [[1,2],[3,4],[5]])
-                    grupos: ((grades.get(d.id) || {}).grupos || []).map(g => (Array.isArray(g) ? g : g.periodos || [])),
+                    grupos: ((grades.get(m.id) || {}).grupos || []).map(g => (Array.isArray(g) ? g : g.periodos || [])),
                     // quadro do ensalamento: por grupo de turmas, o que acontece em cada dia (sala, EAD, protegida...)
-                    ensalamento: (grades.get(d.id) || {}).ensalamento || [],
-                    alocacoes: (grades.get(d.id) || {}).alocacoes || {}
+                    ensalamento: (grades.get(m.id) || {}).ensalamento || [],
+                    alocacoes: (grades.get(m.id) || {}).alocacoes || {}
                 });
             });
             cursos.sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR'));
@@ -140,7 +152,8 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), as
         }
 
         res.json({
-            semestres, semestre, atualizadoEm: sync.atualizadoEm || null,
+            // dado do Edubox é consultado na hora: "atualizadoEm" é o momento desta consulta
+            semestres, semestre, atualizadoEm: new Date().toISOString(),
             escopo: escopo === null ? 'todos' : 'cursos', cursos, professores, salas
         });
     } catch (err) {
@@ -158,9 +171,8 @@ router.put('/grade/:semestre/:cursoId/:turma/:disciplina', verifyToken, verifyTo
         if (!podeVer(escopo, cursoId)) return res.status(403).json({ error: 'Você não tem acesso a esse curso.' });
 
         const docId = `${semestre}__${cursoId}`;
-        const mSnap = await db.collection('matrizes_edubox').doc(docId).get();
-        if (!mSnap.exists) return res.status(404).json({ error: 'Curso/semestre não encontrado.' });
-        const m = mSnap.data();
+        const m = (await matrizesDoSemestre(semestre, cursoId)).find(x => x.id === docId);
+        if (!m) return res.status(404).json({ error: 'Curso/semestre não encontrado.' });
         const t = (m.turmas || []).find(x => String(x.codTurma) === turma);
         const d = t && t.disciplinas.find(x => String(x.codDisciplina) === disciplina);
         if (!d) return res.status(404).json({ error: 'Disciplina não pertence a essa turma.' });

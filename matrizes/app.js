@@ -5,8 +5,8 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../c
 import { getEffectiveLevel } from '../core/permissions.js';
 
 // ==========================================================================
-// Matrizes e Horários. As matrizes vêm do Edubox (sincronizadas por
-// scripts/matrizes-edubox-sync.js). O coordenador define professor/dia/hora
+// Matrizes e Horários. As matrizes vêm do Edubox (consultadas na hora pelo
+// relay, ver src/rotas/matrizes.js). O coordenador define professor/dia/hora
 // das disciplinas do próprio curso; ADM (N1/N2) e RH veem todos os cursos.
 // Quem vê o quê é decidido no backend (src/rotas/matrizes.js) — a tela só
 // mostra o que a API devolve.
@@ -328,7 +328,7 @@ function renderTudo() {
     $('kpis').innerHTML = '';
     $('cursos').innerHTML = '';
     mostrarVazio(dados.escopo === 'todos'
-      ? 'Nenhuma matriz sincronizada para este semestre ainda.'
+      ? 'O Edubox ainda não tem turmas para este semestre.'
       : 'Nenhum curso vinculado ao seu cadastro neste semestre. Peça à TI para vincular seus cursos em Usuários.');
     return;
   }
@@ -364,7 +364,7 @@ function renderKpis() {
     <div class="mz-kpi"><b>${r.disc}</b><span>disciplinas no semestre</span></div>
     <div class="mz-kpi"><b>${pct}%</b><span>com horário definido (${r.comHorario}/${r.disc})</span><div class="mz-barra"><i style="width:${pct}%"></i></div></div>
     <div class="mz-kpi ${r.conferir ? 'alerta' : ''}"><b>${r.conferir}</b><span>turma(s) p/ conferir no Edubox</span></div>
-    <div class="mz-kpi"><b style="font-size:15px">${esc(ult)}</b><span>última carga do Edubox</span></div>`;
+    <div class="mz-kpi"><b style="font-size:15px">${esc(ult)}</b><span>consultado no Edubox</span></div>`;
 }
 
 function renderCursos() {
