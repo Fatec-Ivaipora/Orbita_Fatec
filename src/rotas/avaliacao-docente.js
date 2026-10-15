@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
+const { relay } = require('../utils/edubox-relay');
 
 const COL = 'avaliacoesDocentes';
 const CICLOS_COL = 'ciclosAvaliacao';
@@ -14,6 +15,7 @@ function isAdmin(role) {
 // Coordenador a um curso. Fixa aqui (e não na coleção `courses` do
 // Financeiro) pra não depender das permissões de Licitação/Matrículas só
 // pra listar cursos dentro de Avaliação Docente.
+// Medicina não participa desta avaliação (fica fora da lista e do relatório).
 const CURSOS = [
     { id: 'agronegocio', name: 'Agronegócio' },
     { id: 'agronomia', name: 'Agronomia' },
@@ -28,7 +30,6 @@ const CURSOS = [
     { id: 'gestao-comercial', name: 'Gestão Comercial' },
     { id: 'gestao-financeira', name: 'Gestão Financeira' },
     { id: 'logistica', name: 'Logística' },
-    { id: 'medicina', name: 'Medicina' },
     { id: 'medicina-veterinaria', name: 'Medicina Veterinária' },
     { id: 'pedagogia', name: 'Pedagogia' },
     { id: 'psicologia', name: 'Psicologia' }
@@ -177,6 +178,43 @@ router.delete('/ciclos/:id', verifyToken, verifyToken.requireModulePermission('a
         res.json({ message: 'Ciclo removido com sucesso!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Nome do curso no Edubox ("BACHARELADO EM PSICOLOGIA - FORMAÇÃO DE PSICÓLOGO (A)",
+// "SUPERIOR DE TECNOLOGIA EM GESTÃO DE AGRONEGÓCIO") -> nome usado aqui ("Psicologia", "Agronegócio").
+const semAcento = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+function cursoDoEdubox(descur) {
+    const base = semAcento(descur)
+        .replace(/^(bacharelado|licenciatura|superior de tecnologia) em /, '')
+        .replace(/ - formacao de psicologo.*$/, '')
+        .replace(/^gestao de agronegocio$/, 'agronegocio')
+        .replace(/^gestao de recursos humanos$/, 'recursos humanos');
+    const c = CURSOS.find(x => semAcento(x.name) === base);
+    return c ? c.name : String(descur || '').trim();
+}
+
+// GET /api/avaliacao-docente/professores-edubox — professores com aula no
+// semestre ativo do Edubox (pelo relay), agrupados por curso. Usado no
+// relatório pra mostrar quantos professores cada curso tem e quantos faltam
+// avaliar. Só pra quem vê o Painel do Diretor (coordenador não).
+router.get('/professores-edubox', verifyToken, verifyToken.requireModulePermission('avaliacao-docente'), async (req, res) => {
+    try {
+        if (apenasProprias(req.user.role)) return res.status(403).json({ error: 'Disponível só no Painel do Diretor.' });
+        const { semestres, professores } = await relay('/confirmacao/professores-ativos');
+        const porCurso = new Map();
+        (professores || []).forEach(p => (p.cursos || []).forEach(descur => {
+            const curso = cursoDoEdubox(descur);
+            if (semAcento(curso) === 'bacharelado em medicina') return; // Medicina não participa desta avaliação
+            if (!porCurso.has(curso)) porCurso.set(curso, new Set());
+            porCurso.get(curso).add(String(p.nome || '').trim());
+        }));
+        const cursos = [...porCurso.entries()]
+            .map(([curso, nomes]) => ({ curso, professores: [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR')) }))
+            .sort((a, b) => a.curso.localeCompare(b.curso, 'pt-BR'));
+        res.json({ semestres: semestres || [], total: (professores || []).length, cursos });
+    } catch (err) {
+        res.status(502).json({ error: 'Não foi possível consultar o Edubox: ' + err.message });
     }
 });
 

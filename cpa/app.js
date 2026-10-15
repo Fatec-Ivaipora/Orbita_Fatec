@@ -3,6 +3,8 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../core/layout.js';
 import { getEffectiveLevel } from '../core/permissions.js';
+import { montarPdfProfessor, disciplinasPorProfessor } from './pdf-professor.js?v=1';
+import { montarRelatorioDirecao } from './relatorio-direcao.js?v=1';
 
 // ==========================================================================
 // Relatório CPA — substitui em 2026-10-14 o módulo anterior (a diretoria não
@@ -80,7 +82,7 @@ function initApp(user, role) {
   setupLayout(user, role, MODULO, async () => { clearCachedAuth(); await signOut(auth); window.location.href = '../auth/login.html'; });
   $('app').classList.remove('hidden');
   if (!souAdmin) { $('aba-administrativo').remove(); $('aba-docentes').remove(); }
-  if (!souAdmin) { $('alu-pdf-disciplinas').remove(); }
+  if (!souAdmin) { $('alu-pdf-disciplinas').remove(); $('alu-pdf-direcao').remove(); }
   wireAbas();
   montarAba({ prefixo: 'part', tipo: 'A', carregar: carregarParticipacao });
   montarAba({ prefixo: 'alu', tipo: 'A', temCurso: true, carregar: carregarRelatorioAluno });
@@ -107,10 +109,13 @@ function montarAba({ prefixo, tipo, temCurso, cursoOpcional, filtrarCursosPorCam
   const selCampanha = $(`${prefixo}-campanha`);
   const selCurso = temCurso ? $(`${prefixo}-curso`) : null;
   const btnPdfDisciplinas = $(`${prefixo}-pdf-disciplinas`);
+  // Relatório da Direção: só precisa da campanha (é a campanha inteira, todos os cursos)
+  const btnDirecao = $(`${prefixo}-pdf-direcao`);
 
   async function onCampanhaMudou() {
     const codava = selCampanha.value;
     if (btnPdfDisciplinas) btnPdfDisciplinas.disabled = true;
+    if (btnDirecao) btnDirecao.disabled = !codava;
     if (!temCurso) {
       if (!codava) { mostrarVazio(prefixo, 'Escolha uma campanha pra ver o relatório.'); return; }
       await carregar(prefixo, { codava });
@@ -146,9 +151,10 @@ function montarAba({ prefixo, tipo, temCurso, cursoOpcional, filtrarCursosPorCam
       }
     });
   }
+  if (btnDirecao) btnDirecao.addEventListener('click', () => gerarRelatorioDirecao(tipo, selCampanha.value, btnDirecao));
   if (btnPdfDisciplinas) btnPdfDisciplinas.addEventListener('click', () => {
     const nomeCurso = selCurso.selectedOptions[0]?.textContent || selCurso.value;
-    gerarPdfsPorDisciplina(prefixo, nomeCurso, btnPdfDisciplinas);
+    gerarPdfsPorProfessor(prefixo, nomeCurso, btnPdfDisciplinas);
   });
 
   apiFetch(`/cpa/campanhas?tipo=${tipo}`).then(({ campanhas }) => {
@@ -332,70 +338,84 @@ async function gerarPdfsPorTurma(codava, curso, nomeCurso, btn) {
   });
 }
 
-// Distribuição de resposta por pergunta como barra empilhada estática (%
-// escrito dentro de cada faixa) — pensado pra PDF/impresso, onde não dá pra
-// passar o mouse em cima de nada. Mesmo padrão visual do módulo CPA anterior.
-const ROT_DIST = ['Ótimo', 'Bom', 'Regular', 'Ruim', 'Não sei'];
-const CORES_DIST = ['#15803d', '#84cc16', '#f59e0b', '#dc2626', '#cbd5e1'];
-function pilhaHtml(dist) {
-  const v = dist[0] + dist[1] + dist[2] + dist[3];
-  if (!v) return '<div class="cpa-pilha"></div>';
-  const segmentos = [0, 1, 2, 3].map(i => {
-    if (!dist[i]) return '';
-    const p = dist[i] / v * 100;
-    return `<span style="width:${p}%;background:${CORES_DIST[i]}">${p >= 9 ? Math.round(p) + '%' : ''}</span>`;
-  }).join('');
-  return `<div class="cpa-pilha">${segmentos}</div>`;
-}
-function contagemHtml(dist, satisfacao) {
-  return `<div class="cpa-contagem">${ROT_DIST.map((r, i) => `<span>${r} <b>${dist[i]}</b></span>`).join('')}<span class="cpa-sat">Satisfação (Ótimo + Bom): ${satisfacao === null ? '—' : fmtPct(satisfacao)}</span></div>`;
-}
-function legendaDistHtml() {
-  return `<div class="cpa-leg">${[0, 1, 2, 3].map(i => `<span><i style="background:${CORES_DIST[i]}"></i>${ROT_DIST[i]}</span>`).join('')}<span>"Não sei" fica fora da base de satisfação</span></div>`;
-}
-function perguntaDistHtml(p) {
-  return `<div class="cpa-perg"><div class="cpa-perg-txt">${esc(frase(p.pergunta))}</div>${pilhaHtml(p.dist)}${contagemHtml(p.dist, p.satisfacao)}</div>`;
+// Relatório dos professores: um PDF por professor com todas as disciplinas
+// dele no curso (antes era um por disciplina — 46 arquivos em Agronomia).
+// PDF vetorial montado direto com o jsPDF (cpa/pdf-professor.js): sai em
+// segundos, pesa poucos KB e não corta pergunta nem comentário.
+let logoPdf = null;
+async function carregarLogoPdf() {
+  if (logoPdf) return logoPdf;
+  const blob = await (await fetch('/img/fateclogoazul.png')).blob();
+  const dataUrl = await new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(blob); });
+  const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = dataUrl; });
+  logoPdf = { dataUrl, w: img.naturalWidth, h: img.naturalHeight };
+  return logoPdf;
 }
 
-function folhaDisciplinaHtml(nomeCurso, dim) {
-  const cs = dim.comentarios || [];
-  const nc = (k) => cs.filter(c => c.classificacao === k).length;
-  const grupoComentarios = (chave, rotulo) => {
-    const lista = cs.filter(c => c.classificacao === chave);
-    if (!lista.length) return '';
-    return `<h4 style="margin:1.1rem 0 0.4rem">${esc(rotulo)} <span class="cpa-meta">(${lista.length})</span></h4>${lista.map(c => `<div class="cpa-coment ${chave}">${esc(c.texto)}</div>`).join('')}`;
-  };
-  return `<div class="cpa-folha">
-    <div class="cpa-cab"><img src="/img/fateclogoazul.png" alt="FATEC Ivaiporã"><div><h2>${esc(dim.disciplina)}</h2><p>${esc(nomeCurso)} · FATEC Ivaiporã</p></div></div>
-    <p class="cpa-meta" style="margin-bottom:0.3rem">Emitido em ${esc(new Date().toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' }))}</p>
-    <p style="font-size:1.5rem;font-weight:800;color:var(--primary-blue);margin:0.8rem 0 1.1rem;line-height:1.25">${dim.professores && dim.professores.length ? esc(dim.professores.join(' · ')) : 'Professor não identificado'}</p>
-    <div class="cpa-ficha">
-      <div><small>Nota geral (0–10)</small><b style="font-size:1.6rem">${dim.mediaGeral !== null ? dim.mediaGeral.toFixed(1) : '—'}</b></div>
-      <div><small>Avaliações</small><b style="font-size:1.6rem">${dim.totalAvaliacoes}</b></div>
-    </div>
-    ${dim.perguntas && dim.perguntas.length ? `<h3>Resultado por pergunta</h3>${legendaDistHtml()}${dim.perguntas.map(perguntaDistHtml).join('')}` : ''}
-    <h3 style="margin-top:1.4rem">Comentários dos estudantes <span class="cpa-meta">(${cs.length})</span></h3>
-    <div class="cpa-chips" style="margin-bottom:0.4rem">${Object.entries(CLASSES).map(([k, v]) => `<span class="cpa-chip ${k}">${nc(k)} ${v.label.toLowerCase()}</span>`).join('')}</div>
-    ${cs.length ? `${grupoComentarios('bom', 'Elogios')}${grupoComentarios('neutro', 'Neutros')}${grupoComentarios('atencao', 'Pontos de atenção')}` : '<p class="cpa-meta">Sem comentários.</p>'}
-  </div>`;
+// Relatório da Direção: visão executiva da campanha inteira (alunos = todos os
+// cursos juntos; docentes; administrativo). PDF montado em cpa/relatorio-direcao.js.
+async function gerarRelatorioDirecao(tipo, codava, btn) {
+  if (!codava) return;
+  if (!window.jspdf) { toast('Não foi possível carregar o gerador de PDF. Verifique a conexão e tente de novo.', 'erro'); return; }
+  const rotuloOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Buscando dados…';
+  try {
+    const dados = await apiFetch(`/cpa/relatorio-direcao?codava=${encodeURIComponent(codava)}&tipo=${tipo}`);
+    if (!dados.dimensoes.length) { toast('Nenhuma resposta encontrada nessa campanha ainda.', 'erro'); return; }
+    btn.textContent = 'Montando o PDF…';
+    await new Promise(r => setTimeout(r)); // deixa o botão atualizar antes da análise dos comentários
+    const logo = await carregarLogoPdf().catch(() => null);
+    const doc = montarRelatorioDirecao(window.jspdf.jsPDF, { dados, tipo, logo });
+    doc.save(nomeArquivo(`Relatório da Direção CPA - ${dados.avaliacao.descricao}`) + '.pdf');
+    toast('Relatório da Direção gerado.');
+  } catch (err) {
+    toast('Erro ao gerar o Relatório da Direção: ' + err.message, 'erro');
+  } finally {
+    btn.disabled = false; btn.textContent = rotuloOriginal;
+  }
 }
 
-async function gerarPdfsPorDisciplina(prefixo, nomeCurso, btn) {
-  const dimensoes = dimensoesPorAba.get(prefixo) || [];
-  const disciplinas = dimensoes.flatMap(d => d.disciplinas || []);
-  await gerarZipDePdfs({
-    itens: disciplinas,
-    nomeDoItem: (d) => d.disciplina,
-    montarHtml: (d) => folhaDisciplinaHtml(nomeCurso, d),
-    nomeZip: `Disciplinas CPA - ${nomeCurso}`,
-    btn,
-  });
+async function gerarPdfsPorProfessor(prefixo, nomeCurso, btn) {
+  if (!window.jspdf || !window.JSZip) { toast('Não foi possível carregar o gerador de PDF. Verifique a conexão e tente de novo.', 'erro'); return; }
+  const grupos = disciplinasPorProfessor(dimensoesPorAba.get(prefixo) || []);
+  if (!grupos.length) { toast('Nada pra gerar.', 'erro'); return; }
+  const rotuloOriginal = btn.textContent;
+  btn.disabled = true;
+  try {
+    const logo = await carregarLogoPdf().catch(() => null);
+    const campanha = campanhaPorAba.get(prefixo) || '';
+    const zip = new window.JSZip();
+    const usados = new Set();
+    for (let i = 0; i < grupos.length; i++) {
+      btn.textContent = `Gerando ${i + 1} de ${grupos.length}…`;
+      const { professor, disciplinas } = grupos[i];
+      const doc = montarPdfProfessor(window.jspdf.jsPDF, { professor, nomeCurso, campanha, disciplinas, logo });
+      let nome = nomeArquivo(professor);
+      let k = 2; while (usados.has(nome.toLowerCase())) nome = nomeArquivo(`${professor} (${k++})`);
+      usados.add(nome.toLowerCase());
+      zip.file(`${nome}.pdf`, doc.output('arraybuffer'));
+      await new Promise(r => setTimeout(r)); // deixa o botão atualizar o contador
+    }
+    btn.textContent = 'Compactando…';
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = nomeArquivo(`CPA por professor - ${nomeCurso}`) + '.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`${grupos.length} PDF(s) gerado(s), um por professor.`);
+  } catch (err) {
+    toast('Erro ao gerar PDF: ' + err.message, 'erro');
+  } finally {
+    btn.disabled = false; btn.textContent = rotuloOriginal;
+  }
 }
 
 // ---------- RENDER: RELATÓRIO (Alunos / Docentes / Administrativo) ----------
 const CLASSES = { bom: { label: 'Bons', cor: '#0f7a4b' }, neutro: { label: 'Neutros', cor: '#a8650b' }, atencao: { label: 'Atenção', cor: '#c8392f' } };
 const chartsPorAba = new Map();   // prefixo -> Map(idx -> Chart)
 const dimensoesPorAba = new Map(); // prefixo -> array de dimensões (pra abrir modal de comentário)
+const campanhaPorAba = new Map();  // prefixo -> nome da campanha (vai no PDF dos professores)
 
 function contarPorClasse(comentarios) {
   return comentarios.reduce((acc, c) => { acc[c.classificacao] = (acc[c.classificacao] || 0) + 1; return acc; }, {});
@@ -420,6 +440,7 @@ const frase = (s) => String(s || '').toLowerCase().replace(/(^\s*[a-zà-ú])/, m
 function renderRelatorio(prefixo, dados, { comDisciplinas }) {
   const dimensoes = dados.dimensoes.filter(d => d.totalAvaliacoes > 0);
   dimensoesPorAba.set(prefixo, dimensoes);
+  campanhaPorAba.set(prefixo, dados.avaliacao.descricao);
   (chartsPorAba.get(prefixo) || new Map()).forEach(c => c && c.destroy());
   chartsPorAba.set(prefixo, new Map());
 

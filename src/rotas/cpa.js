@@ -216,6 +216,32 @@ function montarRelatorioStaff({ avaliacao, grupos, perguntas, notas }) {
     return { avaliacao, dimensoes };
 }
 
+// Relatório da Direção: campanha inteira (alunos de todos os cursos, docentes
+// ou administrativo) já agregada no relay (/cpa/direcao). Mesmas regras do
+// resto: média da dimensão = nota 0–10 do respondente, comentário com 2+ palavras.
+function montarRelatorioDirecao({ avaliacao, tipo, grupos, dist, notas, comentarios, respondentes, cursos }) {
+    const perguntasPorGrupo = montarPerguntasPorGrupo(dist || []);
+    const notaPorGrupo = new Map((notas || []).map(n => [n.codgru, n]));
+    const comentPorGrupo = new Map();
+    for (const c of comentarios || []) {
+        const texto = String(c.obsnot || '').trim();
+        if (texto.split(/\s+/).filter(Boolean).length < 2) continue;
+        if (!comentPorGrupo.has(c.codgru)) comentPorGrupo.set(c.codgru, []);
+        comentPorGrupo.get(c.codgru).push({ texto, classificacao: classificarComentario(texto) });
+    }
+    const dimensoes = (grupos || []).map(g => {
+        const n = notaPorGrupo.get(g.codgru) || { total: 0, validas: 0, soma: 0 };
+        return {
+            codgru: g.codgru, nome: g.nome,
+            mediaGeral: n.validas ? Math.round((Number(n.soma) / n.validas) * 100) / 100 : null,
+            totalAvaliacoes: Number(n.total) || 0,
+            perguntas: perguntasPorGrupo.get(g.codgru) || [],
+            comentarios: comentPorGrupo.get(g.codgru) || [],
+        };
+    }).filter(d => d.totalAvaliacoes > 0 || d.perguntas.length);
+    return { avaliacao, tipo, respondentes: respondentes || 0, cursos: cursos || 0, dimensoes };
+}
+
 function extrairOrdemTurma(nomeTurma) {
     const m = /(\d{4})[/-](\d)\s*$/.exec(nomeTurma || '');
     if (!m) return 0;
@@ -312,6 +338,21 @@ router.get('/relatorio-staff', verifyToken, checkPermission, async (req, res) =>
     }
 });
 
+// GET /api/cpa/relatorio-direcao?codava=&tipo=A|P|O
+router.get('/relatorio-direcao', verifyToken, checkPermission, async (req, res) => {
+    // visão executiva da campanha inteira (alunos = todos os cursos juntos). Só direção (ADM N1/N2).
+    const { codava, tipo } = req.query;
+    if (!codava || !['A', 'P', 'O'].includes(tipo)) return res.status(400).json({ error: 'codava e tipo (A, P ou O) são obrigatórios.' });
+    try {
+        const escopo = await escopoDe(req);
+        if (escopo !== null) return res.status(403).json({ error: 'O relatório da direção é restrito à direção.' });
+        const r = await relay(`/cpa/direcao?codava=${encodeURIComponent(codava)}&tipo=${tipo}`, { timeoutMs: 60000 });
+        res.json(montarRelatorioDirecao(r));
+    } catch (err) {
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
 // GET /api/cpa/participacao?codava=
 router.get('/participacao', verifyToken, checkPermission, async (req, res) => {
     const { codava } = req.query;
@@ -342,4 +383,4 @@ router.get('/participacao-detalhe', verifyToken, checkPermission, async (req, re
 });
 
 module.exports = router;
-module.exports._interno = { escopoDe, podeVer, CODCUR, montarRelatorioAluno, montarRelatorioStaff, montarParticipacao };
+module.exports._interno = { escopoDe, podeVer, CODCUR, montarRelatorioAluno, montarRelatorioStaff, montarParticipacao, montarRelatorioDirecao };

@@ -111,7 +111,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* barra de rolagem fina, no tom do menu, só aparece com o mouse em cima;
+     o espaço dela fica reservado pra os itens não "pularem" quando um submenu abre */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
+.layout-nav:hover { scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
+.layout-nav::-webkit-scrollbar { width: 6px; }
+.layout-nav::-webkit-scrollbar-track { background: transparent; }
+.layout-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.layout-nav:hover::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); }
+.layout-nav::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.6); }
 
 .layout-nav-item {
   display: flex;

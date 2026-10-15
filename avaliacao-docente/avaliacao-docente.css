@@ -55,6 +55,19 @@
   border-color: #cbd5e1;
 }
 
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#btn-relatorio-curso {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  margin-left: auto;
+}
+
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: 0.8rem;

@@ -4,6 +4,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../core/layout.js';
 import { getEffectiveLevel } from '../core/permissions.js';
 import { escapeHTML as esc } from '../core/security.js';
+import { montarRelatorioDocente, resumirAvaliacoes } from './relatorio-pdf.js?v=4';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -359,6 +360,8 @@ async function initApp(user, role) {
   // Diretor Acadêmico etc.) enxerga o painel comparativo entre cursos.
   const ehCoordenador = role === 'coordenador';
   document.getElementById('tab-btn-diretor').classList.toggle('hidden', ehCoordenador);
+  // relatório geral (todos os cursos) — mesmo público do Painel do Diretor
+  document.getElementById('btn-gerar-relatorio').classList.toggle('hidden', ehCoordenador);
   document.getElementById('page-subtitle').textContent = ehCoordenador
     ? 'Cadastre o professor e a turma, depois responda o questionário de avaliação'
     : 'Gerencie e acompanhe as avaliações de desempenho dos docentes';
@@ -414,7 +417,7 @@ async function loadCursos() {
     if (selectDir) {
       selectDir.innerHTML = '<option value="">Todos os Cursos</option>' +
         cursos.map(c => `<option value="${c.name}">${esc(c.name)}</option>`).join('');
-      selectDir.addEventListener('change', renderDiretorList);
+      selectDir.addEventListener('change', () => { renderDiretorList(); atualizarBotaoRelatorioCurso(); });
     }
   } catch (err) {
     console.error('Erro ao carregar cursos:', err.message);
@@ -466,7 +469,7 @@ async function loadCiclos() {
     if (selectFiltroDir) {
       selectFiltroDir.innerHTML = '<option value="">Todos os Ciclos</option>' +
         ciclos.map(c => `<option value="${c.nome}">${esc(c.nome)}</option>`).join('');
-      selectFiltroDir.addEventListener('change', renderDiretorList);
+      selectFiltroDir.addEventListener('change', () => { renderDiretorList(); atualizarBotaoRelatorioCurso(); });
     }
   } catch (err) {
     console.error('Erro ao carregar ciclos:', err.message);
@@ -527,6 +530,101 @@ window.deleteCiclo = async function (id) {
   } catch (err) {
     alert('Erro ao excluir ciclo: ' + err.message);
   }
+}
+
+// ==========================================
+// RELATÓRIO EM PDF (Diretor Acadêmico) — montado em avaliacao-docente/relatorio-pdf.js
+// ==========================================
+window.abrirModalRelatorio = function () {
+  const select = document.getElementById('relatorio-ciclo');
+  // `ciclos` vem ordenado do mais recente pro mais antigo: o primeiro já fica escolhido
+  select.innerHTML = ciclos.map(c => `<option value="${esc(c.nome)}">${esc(c.nome)}</option>`).join('') +
+    '<option value="">Todos os ciclos</option>';
+  document.getElementById('relatorio-erro').classList.add('hidden');
+  document.getElementById('modal-relatorio').classList.remove('hidden');
+}
+
+window.closeModalRelatorio = function () {
+  document.getElementById('modal-relatorio').classList.add('hidden');
+}
+
+let logoRelatorio = null;
+async function carregarLogoRelatorio() {
+  if (logoRelatorio) return logoRelatorio;
+  const blob = await (await fetch('/img/fateclogoazul.png')).blob();
+  const dataUrl = await new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(blob); });
+  const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = dataUrl; });
+  logoRelatorio = { dataUrl, w: img.naturalWidth, h: img.naturalHeight };
+  return logoRelatorio;
+}
+
+window.baixarRelatorio = async function () {
+  const btn = document.getElementById('btn-baixar-relatorio');
+  const erroEl = document.getElementById('relatorio-erro');
+  erroEl.classList.add('hidden');
+  if (!window.jspdf) {
+    erroEl.textContent = 'Não foi possível carregar o gerador de PDF. Verifique a conexão e tente de novo.';
+    erroEl.classList.remove('hidden');
+    return;
+  }
+  const ciclo = document.getElementById('relatorio-ciclo').value;
+  const rotulo = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando…';
+  try {
+    await gerarRelatorioPdf({ ciclo, curso: '' });
+    closeModalRelatorio();
+  } catch (err) {
+    erroEl.textContent = err.message;
+    erroEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = rotulo;
+  }
+}
+
+// Relatório geral (curso vazio) ou de um curso só. `ciclo` vazio = todos os ciclos.
+async function gerarRelatorioPdf({ ciclo, curso }) {
+  if (!window.jspdf) throw new Error('Não foi possível carregar o gerador de PDF. Verifique a conexão e tente de novo.');
+  const todas = await apiFetch('/avaliacao-docente');
+  const doCiclo = todas.filter(a => !ciclo || a.ciclo === ciclo);
+  // professores de cada curso no Edubox (pelo relay): se falhar, o relatório sai sem essas colunas
+  const edubox = await apiFetch('/avaliacao-docente/professores-edubox').catch(err => { console.warn('Edubox indisponível:', err.message); return null; });
+  const geral = resumirAvaliacoes(doCiclo, PERGUNTAS, edubox);
+  const resumo = curso
+    ? resumirAvaliacoes(doCiclo.filter(a => a.curso === curso), PERGUNTAS, edubox && { ...edubox, cursos: edubox.cursos.filter(c => c.curso === curso) })
+    : geral;
+  if (!resumo.total) throw new Error(curso ? `Nenhuma avaliação concluída de ${curso} nesse ciclo ainda.` : 'Nenhuma avaliação concluída nesse ciclo ainda.');
+  const logo = await carregarLogoRelatorio().catch(() => null);
+  const nomeCiclo = ciclo || 'Todos os ciclos';
+  const doc = montarRelatorioDocente(window.jspdf.jsPDF, { ciclo: nomeCiclo, resumo, logo, curso: curso || null, mediaInstitucional: geral.mediaGeral });
+  const nome = curso ? `Relatório Avaliação Docente - ${curso} - ${nomeCiclo}` : `Relatório Avaliação Docente - ${nomeCiclo}`;
+  doc.save(`${nome.replace(/[\\/:*?"<>|]+/g, ' ')}.pdf`);
+}
+
+// Botão "Relatório do Curso" do Painel do Diretor: usa o curso e o ciclo dos filtros do painel.
+window.baixarRelatorioCurso = async function () {
+  const curso = document.getElementById('filter-curso-dir').value;
+  const ciclo = document.getElementById('filter-ciclo-dir').value;
+  if (!curso || !ciclo) { alert('Escolha o curso e o ciclo nos filtros do painel para gerar o relatório do curso.'); return; }
+  const btn = document.getElementById('btn-relatorio-curso');
+  const rotulo = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Gerando…';
+  try {
+    await gerarRelatorioPdf({ ciclo, curso });
+  } catch (err) {
+    alert('Erro ao gerar o relatório: ' + err.message);
+  } finally {
+    btn.innerHTML = rotulo; atualizarBotaoRelatorioCurso();
+  }
+}
+
+// só fica ativo com curso E ciclo escolhidos nos filtros do painel
+function atualizarBotaoRelatorioCurso() {
+  const btn = document.getElementById('btn-relatorio-curso');
+  if (!btn) return;
+  const curso = document.getElementById('filter-curso-dir').value;
+  const ciclo = document.getElementById('filter-ciclo-dir').value;
+  btn.disabled = !curso || !ciclo;
+  btn.title = btn.disabled ? 'Escolha o curso e o ciclo nos filtros para gerar o relatório' : `Baixar o relatório de ${curso} · ciclo ${ciclo}`;
 }
 
 // ==========================================
@@ -785,24 +883,6 @@ document.getElementById('form-questionario').addEventListener('submit', async (e
 // ==========================================
 async function loadDashboard() {
   try {
-    const dados = await apiFetch('/avaliacao-docente/dashboard');
-    document.getElementById('dash-total').textContent = dados.total;
-    document.getElementById('dash-media').textContent = dados.mediaGeral.toFixed(1);
-    document.getElementById('dash-cursos').textContent = dados.porCurso.length;
-
-    const tbody = document.getElementById('dashboard-porcurso-list');
-    if (!dados.porCurso.length) {
-      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 24px; color:#64748b;">Nenhuma avaliação cadastrada ainda.</td></tr>`;
-    } else {
-      tbody.innerHTML = dados.porCurso.map(c => `
-                <tr>
-                    <td><strong>${esc(c.curso)}</strong></td>
-                    <td>${c.total}</td>
-                    <td>${notaBadge(c.media)}</td>
-                </tr>
-            `).join('');
-    }
-
     // Reaproveita a lista completa (não escopada) só disponível pra quem tem
     // acesso ao painel do diretor — busca de novo pois `avaliacoes` (a de
     // "Minhas Avaliações") já está escopada por coordenador quando aplicável.
@@ -817,12 +897,50 @@ async function loadDashboard() {
   }
 }
 
+// Cards e "Média por Curso" calculados da lista já filtrada (curso/ciclo) —
+// mesma conta do GET /dashboard: total = todas as avaliações do recorte,
+// média = só as que têm nota, cursos ordenados pela média.
+function renderResumoDiretor(lista) {
+  const temNota = (a) => a.nota !== null && a.nota !== undefined;
+  const media = (l) => {
+    const n = l.filter(temNota);
+    return n.length ? n.reduce((s, a) => s + Number(a.nota), 0) / n.length : 0;
+  };
+  const porCursoMap = new Map();
+  lista.forEach(a => {
+    const k = a.curso || 'Sem curso';
+    if (!porCursoMap.has(k)) porCursoMap.set(k, []);
+    porCursoMap.get(k).push(a);
+  });
+  const porCurso = [...porCursoMap.entries()]
+    .map(([curso, l]) => ({ curso, total: l.length, media: media(l) }))
+    .sort((a, b) => b.media - a.media);
+
+  document.getElementById('dash-total').textContent = lista.length;
+  document.getElementById('dash-media').textContent = media(lista).toFixed(1);
+  document.getElementById('dash-cursos').textContent = porCurso.length;
+
+  const tbody = document.getElementById('dashboard-porcurso-list');
+  if (!porCurso.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 24px; color:#64748b;">Nenhuma avaliação encontrada.</td></tr>`;
+  } else {
+    tbody.innerHTML = porCurso.map(c => `
+                <tr>
+                    <td><strong>${esc(c.curso)}</strong></td>
+                    <td>${c.total}</td>
+                    <td>${notaBadge(c.media)}</td>
+                </tr>
+            `).join('');
+  }
+}
+
 function renderDiretorList() {
   const cursoFiltro = document.getElementById('filter-curso-dir')?.value || '';
   const cicloFiltro = document.getElementById('filter-ciclo-dir')?.value || '';
   const lista = avaliacoesTodas.filter(a =>
     (!cursoFiltro || a.curso === cursoFiltro) && (!cicloFiltro || a.ciclo === cicloFiltro)
   );
+  renderResumoDiretor(lista);
 
   const tbody = document.getElementById('diretor-list');
   if (!lista.length) {

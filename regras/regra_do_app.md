@@ -109,6 +109,73 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-15] CPA: "Relatório da Direção" (visão executiva da campanha)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `cpa/relatorio-direcao.js` (novo — PDF vetorial), `cpa/temas-cpa.js` (novo — temas dos comentários), `cpa/app.js` e `cpa/index.html` (botão "Relatório da Direção" nas abas Alunos, Docentes e Administrativo), `src/rotas/cpa.js` (rota `GET /api/cpa/relatorio-direcao?codava=&tipo=A|P|O`, só ADM N1/N2, e `montarRelatorioDirecao`). Relay (droplet, fora do Git): função nova `cpaDirecao` e rota nova `GET /cpa/direcao` — só acréscimo, nenhuma rota existente (nem do SIGMA) mudou; backup em `server.mjs.bak-pre-cpa-direcao`.
+- Tipo: Nova funcionalidade
+- Motivo: A direção não usa o PDF por professor (que vai para os coordenadores); quer o relatório executivo que a CPA fazia antes do Órbita, com resumo, temas dos comentários, consolidado por dimensão e análise por dimensão.
+- Impacto: PDF por campanha (alunos = todos os cursos juntos, numa consulta só ao relay; docentes; administrativo) com: resumo executivo (respondentes, média geral 0–10, satisfação Ótimo+Bom, dimensões, destaques e oportunidades), temas mais mencionados nos comentários (lista fixa de 16 temas com elogios/críticas), temas emergentes (expressões de 2 palavras que se repetem em comentários de crítica e não estão na lista), consolidado por dimensão com conceito e classificação (Ponto forte / Estável / Atenção / Prioridade, pela distância da média geral), matriz de prioridades, recomendações tiradas dos números, e uma página por dimensão (perguntas com % Ótimo/Bom/Regular/Ruim, pontos positivos, oportunidades, sugestões e comentários reais). Conferido com o PDF antigo de Docentes 2026/1: mesmas médias por dimensão (9,3 · 9,2 · 8,7 · 9,4 · 8,9 · 9,5 · 9,2 · 9,1) e mesmas porcentagens por pergunta. Alunos 2026/2: 1.401 respondentes, 6.107 comentários, PDF de 21 páginas em ~2 s.
+- Como testar: CPA → aba Alunos, Docentes ou Administrativo → escolher a campanha → "Relatório da Direção".
+- Como reverter: reverter o commit; a rota `/cpa/direcao` do relay fica sem uso (ou restaurar `server.mjs.bak-pre-cpa-direcao`).
+
+### [2026-10-15] Avaliação Docente: "Relatório Geral" + "Relatório do Curso"
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `avaliacao-docente/relatorio-pdf.js` (modo de um curso: tabela por professor), `avaliacao-docente/app.js` (`gerarRelatorioPdf`, botão do curso), `avaliacao-docente/index.html` (botão de cima renomeado para "Relatório Geral"; botão "Relatório do Curso" na barra de filtros do Painel do Diretor), `avaliacao-docente/avaliacao-docente.css` (estado desativado do botão).
+- Tipo: Nova funcionalidade
+- Motivo: O Diretor Acadêmico também precisa do relatório de um curso só.
+- Impacto: "Relatório do Curso" usa o curso e o ciclo escolhidos nos filtros do painel (só libera com os dois escolhidos). Mesmo visual do geral, com: nome do curso no topo; avaliações, média do curso (com a média da instituição ao lado), professores avaliados x professores do curso no Edubox e quantos faltam; tabela por professor em ordem alfabética (avaliações, períodos avaliados, média, barra 0–5 com a média do curso marcada, classificação; quem não foi avaliado aparece como "Não avaliado"); página 2 com critérios e distribuição só do curso.
+- Como testar: Painel do Diretor → escolher um curso (e o ciclo) → "Relatório do Curso".
+- Como reverter: reverter o commit.
+
+### [2026-10-15] Avaliação Docente: Painel do Diretor obedece aos filtros de curso e ciclo
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `avaliacao-docente/app.js` (`renderResumoDiretor`), `avaliacao-docente/index.html` (versão do script).
+- Tipo: Correção
+- Motivo: Ao escolher curso/ciclo, só a lista "Avaliações por Curso" filtrava; os cards (Total, Média geral, Cursos avaliados) e a tabela "Média por Curso" continuavam mostrando todos os cursos.
+- Impacto: Cards e "Média por Curso" agora são calculados da mesma lista filtrada (mesma conta de antes). O painel deixou de chamar `GET /api/avaliacao-docente/dashboard` (a rota continua existindo).
+- Como testar: Painel do Diretor → escolher um curso e/ou ciclo → a tabela "Média por Curso" mostra só o curso escolhido e os cards mudam junto.
+- Como reverter: reverter o commit.
+
+### [2026-10-15] Avaliação Docente: botão "Gerar Relatório" (PDF para o Diretor Acadêmico)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `avaliacao-docente/relatorio-pdf.js` (novo — monta o PDF vetorial com jsPDF e confere nome digitado x nome do Edubox), `avaliacao-docente/app.js` (modal e geração), `avaliacao-docente/index.html` (botão ao lado de "Gerenciar Ciclos", modal de escolha do ciclo, carrega jsPDF 2.5.1), `src/rotas/avaliacao-docente.js` (nova rota `GET /professores-edubox`, via relay `/confirmacao/professores-ativos`, que já existia; Medicina sai da lista de cursos do módulo).
+- Tipo: Nova funcionalidade
+- Motivo: O Diretor Acadêmico precisa levar o resultado da avaliação docente para reunião; o Painel do Diretor só mostrava na tela.
+- Impacto: Relatório por ciclo (ou todos os ciclos). Página 1: avaliações realizadas, média geral (0 a 5), professores avaliados x professores com aula no semestre (Edubox) e quantos faltam; tabela com TODOS os cursos em ordem alfabética, inclusive os sem avaliação (professores, avaliados, faltam, avaliações, média, barra 0–5 com a média geral marcada) e total geral (professor de mais de um curso conta uma vez). Página 2: média de cada um dos 10 critérios, 3 pontos fortes e 3 a desenvolver, distribuição por faixa. Anexo: nomes de quem falta avaliar por curso e avaliações cujo nome digitado não bateu com o Edubox. A conferência de nomes é tolerante (primeiro nome + sobrenomes, aceita 1 letra de diferença e 1 sobrenome a mais): no ciclo 2026.2, 166 de 167 avaliações foram reconhecidas. Só avaliações concluídas e com nota entram na média (mesma regra do Painel do Diretor). Se o Edubox não responder, o relatório sai sem as colunas de professores. Medicina não participa desta avaliação: saiu da lista de cursos do módulo e da contagem do Edubox. Botão visível para quem vê o Painel do Diretor (não aparece para coordenador).
+- Como testar: Docência → Avaliação Docente → "Gerar Relatório" → escolher o ciclo → "Baixar PDF".
+- Como reverter: reverter o commit.
+
+### [2026-10-15] Menu lateral: barra de rolagem discreta
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `core/layout.css` (`.layout-nav`).
+- Tipo: Ajuste visual
+- Motivo: Ao abrir um submenu, aparecia a barra de rolagem padrão do navegador (clara e larga), destoando do menu escuro e empurrando os itens para o lado.
+- Impacto: Barra fina e translúcida, que só aparece com o mouse sobre o menu; espaço reservado (`scrollbar-gutter: stable`), então os itens não se mexem quando ela surge. Vale para todas as páginas.
+- Como testar: abrir um menu com submenu longo e rolar; Ctrl+F5 se o CSS antigo estiver em cache.
+- Como reverter: reverter o commit.
+
+### [2026-10-15] CPA: relatório dos professores em um PDF por professor + classificação de comentários corrigida
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `cpa/pdf-professor.js` (novo — monta o PDF vetorial com jsPDF), `cpa/app.js` (botão "Gerar Relatório" passa a gerar um PDF por professor; saiu o PDF por disciplina feito com html2pdf), `cpa/index.html` (carrega jsPDF 2.5.1), `src/utils/cpa-comentarios.js` (classificador).
+- Tipo: Melhoria / Correção
+- Motivo: O relatório era um PDF por disciplina (46 em Agronomia), feito a partir de "foto" da tela: lento, pesado e com conteúdo cortado. No classificador, trechos como "não tem" ou "nenhum problema" encerravam a análise e escondiam a crítica que vinha depois ("...não tem muita paciência... debochou" saía como elogio), e críticas de postura/didática ("perdido", "confuso", "grosseiro") não estavam na lista.
+- Impacto: Agronomia passa a 13 PDFs (um por professor, com todas as disciplinas dele), gerados em ~1 s, ~0,5 MB no total, sem pergunta ou comentário partido entre páginas. Disciplina com dois professores sai no PDF de cada um. Os PDFs de participação por turma não mudaram. Classificador: agora as frases de negação ("nada a reclamar", "nenhuma crítica ou sugestão") são retiradas do texto e a análise continua no resto; "não tem" só vale como elogio no comentário curto (até 4 palavras); elogio escrito com palavra de crítica ("deveria ser mais valorizada", "poderia ser ela em todas as matérias", "entende as dificuldades dos alunos") conta como elogio quando o comentário já elogia; novas palavras de crítica e de elogio ("top", "amo ela", "atenciosa", "a melhor"). Em 3.984 comentários reais, 525 mudaram de grupo (elogios 1.175 → 1.350, atenção 871 → 1.071, neutros 1.938 → 1.563).
+- Como testar: CPA → aba Alunos → campanha + curso → "Gerar Relatório" (só ADM N1/N2) → abrir o .zip e conferir os PDFs; conferir os comentários de Hidráulica e Irrigação (Agronomia, ALUNOS 2026/2).
+- Como reverter: reverter o commit.
+
+### [2026-10-15] Documentação: pendências conhecidas do relay (seção 8)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `regras/regra_do_app.md` — nova subseção "Pendências conhecidas do relay" na seção 8 (HTTPS, backup, atualizações do Ubuntu, versionamento do relay, capacidade).
+- Tipo: Documentação
+- Motivo: Pedido do usuário — deixar registrado para a equipe o que ainda precisa ser feito no servidor do relay.
+
 ### [2026-10-15] Matrizes ao vivo pelo relay + agentes do CADD e da Cobrança saem do PC da Fatec para o servidor
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main
@@ -1383,7 +1450,7 @@ O Postgres do Edubox (sistema acadêmico, fornecedor terceiro) **só aceita cone
   - A participação na CPA fica em `tav_participacao` (`dtipar` = iniciou, `datpar` = concluiu); `tav_aplica` diz quais turmas a campanha atinge.
 
 ### O que já usa o relay e o que falta migrar
-- ✅ **Relatório CPA**: rotas `/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`, `/cpa/participacao-detalhe`.
+- ✅ **Relatório CPA**: rotas `/cpa/campanhas`, `/cpa/cursos`, `/cpa/relatorio-aluno`, `/cpa/relatorio-staff`, `/cpa/participacao`, `/cpa/participacao-detalhe`, `/cpa/direcao` (Relatório da Direção: campanha inteira já agregada — distribuição por opção de cada pergunta, nota média por dimensão, comentários e respondentes).
 - ✅ **Confirmação de Presença**: rota `/confirmacao/professores-ativos`.
 - ✅ **Matrizes**: rotas `/matrizes/semestres` e `/matrizes/dados`, consulta ao vivo. A montagem por curso fica em `src/utils/matrizes-montar.js`. O horário dos coordenadores continua em `matrizes_grade` (Firestore).
 - ✅ **CADD** e **Cobrança**: continuam gravando no Firestore (telas leem de lá), mas os agentes rodam no **servidor do relay** como serviços, não mais no PC da Fatec — ver abaixo.
@@ -1395,6 +1462,18 @@ CADD e Cobrança fazem consultas pesadas com horário fixo de atualização, ent
 - **Atualizar o código dos agentes** depois de um merge no `main`: `cd /opt/orbita-sync && sudo -u orbita git pull && sudo -u orbita npm ci --omit=dev && systemctl restart orbita-cad-agente orbita-cobranca-agente`.
 - **Ver o que estão fazendo**: `journalctl -u orbita-cad-agente -n 50` (ou `orbita-cobranca-agente`); também gravam em `/opt/orbita-sync/scripts/logs/`. A tela de cada módulo mostra "Atualização automática fora do ar" se o agente ficar mais de 15 min sem sinal (`config/cad_sync.agenteVivoEm` / `config/cobranca_sync.agenteVivoEm`).
 - **Nunca** rode esses agentes em outro lugar ao mesmo tempo (PC, notebook): dois agentes gravando juntos duplicam o histórico da Cobrança. Os atalhos do PC da Fatec foram removidos em 2026-10-15.
+
+### ⚠️ Pendências conhecidas do relay (levantadas em 2026-10-15, ainda não feitas)
+1. **HTTPS no relay (prioridade).** Hoje `EDUBOX_RELAY_URL` é `http://162.243.68.10:8443`: o token e os dados que o relay devolve (inclusive nomes de alunos e professores) trafegam **sem criptografia** entre o Vercel e o servidor. O SIGMA usa o mesmo endereço. Plano:
+   - instalar o **Caddy** no droplet (certificado Let's Encrypt automático), repassando para `localhost:8443`; o código do relay não muda;
+   - trocar `EDUBOX_RELAY_URL` no Vercel do Órbita para o endereço `https://`;
+   - pedir ao responsável pelo SIGMA que troque o dele;
+   - só então fechar a porta `8443` para fora (firewall `ufw`).
+   - **Decisão pendente:** o nome do servidor — (a) subdomínio da Fatec, ex. `relay.fatecivaipora.com.br` (registro DNS tipo A → `162.243.68.10`, pedido a quem administra o domínio), ou (b) nome automático `162-243-68-10.sslip.io` (imediato, mas depende de um serviço de terceiros).
+2. **Backup automático do droplet** (~US$ 1,20/mês). O servidor é ponto único de falha: se cair, param CPA, Matrizes, Confirmação de Presença, as atualizações do CADD e da Cobrança, e o SIGMA.
+3. **Atualizações do Ubuntu** pendentes no droplet. Ele guarda a chave do Firebase (acesso total ao banco do Órbita) e a senha do Edubox.
+4. **Versionar o código do relay** (`/opt/edubox-relay`, sem o `.env`) num repositório Git privado. Hoje ele só existe no servidor, com cópias `server.mjs.bak-*`, e não tem revisão do que cada um muda.
+5. **Capacidade do servidor** (1 GB de memória, 1 processador): durante a atualização do CADD sobram ~330 MB e ela leva ~100s. Se mais coisa for para lá, avaliar o plano de 2 GB.
 
 ## 9. Diretrizes de Deploy no Vercel (Zero Config)
 

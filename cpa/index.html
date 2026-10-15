@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body class="orb-v2">
     <div id="auth-guard" class="layout-auth-guard">
@@ -59,6 +60,7 @@
                             </label>
                             <span class="cpa-acoes" style="margin:0 0 0.1rem">
                                 <button type="button" class="cpa-btn cpa-btn-pri" id="alu-pdf-disciplinas" disabled>Gerar Relatório</button>
+                                <button type="button" class="cpa-btn cpa-btn-sec" id="alu-pdf-direcao" disabled title="Visão executiva da campanha com todos os cursos juntos">Relatório da Direção</button>
                             </span>
                         </div>
                         <div id="alu-conteudo"><p class="cpa-vazio">Escolha uma campanha e um curso pra ver o relatório.</p></div>
@@ -73,6 +75,9 @@
                             <label class="cpa-campo">Curso
                                 <select id="doc-curso" disabled><option value="">Selecione o curso…</option></select>
                             </label>
+                            <span class="cpa-acoes" style="margin:0 0 0.1rem">
+                                <button type="button" class="cpa-btn cpa-btn-sec" id="doc-pdf-direcao" disabled title="Visão executiva da campanha (todos os docentes)">Relatório da Direção</button>
+                            </span>
                         </div>
                         <div id="doc-conteudo"><p class="cpa-vazio">Escolha uma campanha e um curso pra ver o relatório.</p></div>
                     </section>
@@ -83,6 +88,9 @@
                             <label class="cpa-campo">Campanha
                                 <select id="adm-campanha"><option value="">Selecione a campanha…</option></select>
                             </label>
+                            <span class="cpa-acoes" style="margin:0 0 0.1rem">
+                                <button type="button" class="cpa-btn cpa-btn-sec" id="adm-pdf-direcao" disabled title="Visão executiva da campanha (todo o administrativo)">Relatório da Direção</button>
+                            </span>
                         </div>
                         <div id="adm-conteudo"><p class="cpa-vazio">Escolha uma campanha pra ver o relatório.</p></div>
                     </section>
@@ -106,6 +114,6 @@
 
     <div id="toast" class="cpa-toast hidden cpa-no-print" role="status"></div>
 
-    <script type="module" src="/cpa/app.js?v=5"></script>
+    <script type="module" src="/cpa/app.js?v=7"></script>
 </body>
 </html>

@@ -18,6 +18,22 @@ const PALAVRAS_ATENCAO = [
     'gostaria que', 'gostaria de mais', 'deixa a desejar', 'a desejar',
     'carente', 'carencia', 'sem estrutura', 'nunca teve',
     'escasso', 'escassez', 'deficiente', 'defasado',
+    // postura/didática do professor (antes passavam como neutro ou até elogio)
+    'perdido', 'perdida', 'se confunde', 'confus', 'nao domina', 'nao sabe explicar',
+    'nao explica', 'explica mal', 'mal explica', 'dificil de entender', 'nao entendo', 'nao entendi',
+    'nao aprendi', 'nao aprendemos', 'enrola', 'desorganizad',
+    'grosseir', 'grosso', 'grossa', 'deboch', 'arrogan', 'ignorante', 'desrespeit',
+    'falta de respeito', 'mal educad', 'humilh', 'constrang', 'impaciente', 'pouca paciencia',
+    'sem paciencia', 'nao tem paciencia', 'nao tem muita paciencia', 'desnecessari',
+    'nao tira duvida', 'nao responde', 'decepcion', 'desmotiv', 'nao ajuda',
+    'nao consigo aprender', 'nao consigo entender', 'monoton', 'macante', 'superficia',
+    'nao tem espaco', 'nao tem lugar',
+    'atrapalh', 'dificultando', 'rapido demais', 'explica muito rapido', 'explicando muito rapido',
+    'passa muito rapido', 'acelera demais', 'nao cativa', 'aulas paradas', 'muito parad', 'cansativ',
+    'nao estamos contentes', 'nao tem resolut', 'pouco didatic', 'nada didatic', 'sem didatica', 'impacien', 'entediante', 'se excede',
+    'mais paciencia', 'falar devagar', 'mais devagar', 'acelerad', 'nao achei legal', 'nao e legal',
+    'podia colocar', 'podia ter', 'podia ser mais', 'podia dar', 'podia passar','precisamos de mais', 'precisariamos', 'muito puxad',
+    'para pouco tempo', 'pra pouco tempo', 'em pouco tempo', 'pouco tempo para', 'pouco tempo pra', 'pouco tempo de aula', 'pouco tempo que temos',
 ];
 // "melhorar"/"melhoria"/"melhorias" sozinhas aparecem tanto em crítica real
 // ("precisa melhorar a limpeza") quanto em elogio ao próprio processo de
@@ -34,6 +50,13 @@ const PALAVRAS_BOM = [
     'satisfatori', 'agradec', 'muito feliz', 'orgulho', 'amei',
     'nota 10', 'esta bom', 'esta boa', 'gosto muito',
     'bom trabalho', 'excelente trabalho', 'sempre atencioso', 'sempre atenciosa',
+    'melhor professor', 'melhor professora', 'explica bem', 'explica muito bem', 'facil de entender',
+    'boa didatica', 'otima didatica', 'gente boa', 'muito legal', 'nao tem igual', 'coloquei 10', 'empenhad', 'dedicad',
+    'amo ela', 'amo ele', 'amo a ', 'amo o ', 'amo as aulas', 'amo essa', 'amo esse', 'atencios', 'respeitos',
+    'sempre disponivel', 'sempre esta disponivel', 'presta disponivel', 'sempre disposta', 'sempre disposto', 'prestativ', 'competente', 'paciente',
+    'muita paciencia', 'querid', 'acolhedor', 'uma das melhores', 'um dos melhores', 'favorit',
+    'muito didatic', 'extremamente didatic', 'super didatic', 'nota mil', 'ministra bem', 'humana',
+    'carismatic', 'maravi', 'bom desempenho', 'dispensa comentario', 'um amor', 'apenas elogios', 'so elogios',
 ];
 // Frases específicas elogiando a própria CPA/instituição usando vocabulário
 // de "melhoria" ou "problema" — sem essas, batem em PALAVRAS_ATENCAO_FRACAS
@@ -68,8 +91,9 @@ const NEGACAO_SEM_QUEIXA = [
 ];
 // "Não tem" sozinho, no contexto de comentário de CPA, quase sempre quer
 // dizer "não tem [reclamação/crítica]" — bem mais perto de satisfação do
-// que de crítica. Ao contrário das negações acima (que caem em "neutro"),
-// essa vira direto "bom".
+// que de crítica, e vira "bom". Só vale pro comentário curto (até 4
+// palavras): no meio de um texto maior, "não tem" costuma ser crítica
+// ("não tem muita paciência", "não tem material").
 const NEGACAO_POSITIVA = ['nao tem', 'nada tem'];
 
 // "Tem como melhorar", "a melhorar", "sempre pode melhorar" — sugestão de
@@ -95,25 +119,76 @@ function normalizar(texto) {
 // "nada ... a reclamar" com palavras no meio ("nada especificamente a
 // reclamar", "nada em especial a reclamar") — mais tolerante que checar
 // frases fixas uma a uma.
-const REGEX_NADA_RECLAMAR = /\bnada\b[a-z ]{0,25}\breclamar\b/;
+const REGEX_NADA_RECLAMAR = /\bnada\b[a-z ]{0,25}\breclamar\b/g;
+// "nenhuma crítica ou sugestão", "sem reclamações e nem sugestões", "não tenho
+// críticas nem sugestões": a negação vale pra lista inteira, não só pro 1º item.
+const QUEIXA = '(critica|sugest|reclama|queixa|problema|observac|apontament)[a-z]*';
+const REGEX_NEGA_LISTA = new RegExp(`\\b(nenhuma?|sem|nada de|nao (tenho|ha|tem|tive|vejo|encontro)( nenhuma?)?)( (mais|outra|outras|muitas?))? ${QUEIXA}((,? (ou|e|nem|e nem|e\\/ou) | ?\\/ ?)(nenhuma? |de )?${QUEIXA})*`, 'g');
+// Crítica negada ("não é difícil de entender", "pra não ficar cansativo") não é crítica.
+const REGEX_CRITICA_NEGADA = /\bnao (e|eh|fica|ficar|foi|sao|seja|torna) (tao |muito |nada |nem um pouco )?(dificil de entender|cansativ[a-z]*|confus[a-z]*|chat[a-z]*|monoton[a-z]*|macante|ruim)\b|\bnao deixa (nada )?a desejar\b/g;
+// Elogio escrito com palavra de crítica: "deveria ser mais valorizada",
+// "poderia ser ela em todas as matérias", "precisamos de mais professores
+// como ele", "entende as dificuldades dos alunos", "sempre resolve os
+// problemas". Só valem quando o comentário já tem elogio explícito ("o curso
+// deveria ser mais valorizado" sozinho continua sendo crítica). Retirados
+// antes de procurar crítica e contam como elogio.
+const ELOGIO_DISFARCADO = [
+    /\b(deveria|deveriam|merece|merecia|precisa|precisava)( ser)?( muito| bem)? mais (valorizad|reconhecid)[a-z]*/g,
+    /\b(poderia|podia|deveria|queria|queremos) (ser|ter) (ela|ele|a professora|o professor|essa professora|esse professor|a prof|o prof)( [a-z]+)? (em|nas|nos|de|para|pra) (todas|todos)/g,
+    /\b(precisamos de|deveria ter|deveria haver|poderia ter|poderia haver|queria|faltam) mais (professores|professoras|profissionais|pessoas) (como|tao|assim|iguais|igual)/g,
+    /\b(entende|entender|compreende|compreender|ajuda|ajudar|ajudando|respeita|considera|acolhe|percebe|resolve|resolver|resolvendo|soluciona|solucionar|sana|sanar|supera|superar)( [a-z]+){0,3} (dificuldades?|problemas?)\b/g,
+];
+// "top", "show" e "amo" só como palavra inteira ("tópico" e "laptop" não contam).
+const REGEX_BOM = /\b(top|show|amo|amoo|foda|legal)\b|^\W*(a|o) (melhor|melhores)\b/;
+// "não tem o que reclamar", "não tem nada pra falar", "não tem o que dizer" =
+// satisfeito, conta como elogio (se não houver crítica no resto do comentário).
+const REGEX_NADA_A_DIZER = /\bnao (tem|tenho|temos|ha) (nada|o que|oq|oque|do que|absolutamente nada)( de| pra| para| a)? (dizer|falar|reclamar|criticar|declarar|comentar|acrescentar)\b/g;
 
+// Tira do texto os trechos casados por `frases` (mais longos primeiro) e diz se achou algum.
+function tirar(t, frases) {
+    let achou = false;
+    for (const p of [...frases].sort((a, b) => b.length - a.length)) {
+        if (t.includes(p)) { achou = true; t = t.split(p).join(' | '); }
+    }
+    return [t, achou];
+}
+
+// Os trechos que negam queixa ("nada a reclamar"), elogiam a própria CPA ou
+// pedem melhoria genérica são retirados ANTES de procurar crítica — mas a
+// análise continua no resto do comentário. Antes, achar um desses trechos
+// encerrava a classificação, e uma crítica real que viesse depois se perdia
+// (ex.: "...não tem muita paciência... debochou da minha cara" saía como elogio).
 function classificarComentario(texto) {
     const t = normalizar(texto);
     const numPalavras = t.split(/\s+/).filter(Boolean).length;
-    const temElogio = PALAVRAS_BOM.some(p => t.includes(p));
+    const temElogio = PALAVRAS_BOM.some(p => t.includes(p)) || REGEX_BOM.test(t);
 
-    if (NEGACAO_POSITIVA.some(p => t.includes(p))) return 'bom';
-    if (ELOGIO_PROCESSO_MELHORIA.some(p => t.includes(p))) return 'bom';
-    if (NEGACAO_SEM_QUEIXA.some(p => t.includes(p)) || REGEX_NADA_RECLAMAR.test(t)) {
-        return temElogio ? 'bom' : 'neutro';
+    let [resto, elogioProcesso] = tirar(t, ELOGIO_PROCESSO_MELHORIA);
+    const satisfeito = t.replace(REGEX_NADA_A_DIZER, '') !== t;
+    if (temElogio || satisfeito) for (const re of ELOGIO_DISFARCADO) {
+        const sem = resto.replace(re, ' | ');
+        if (sem !== resto) { elogioProcesso = true; resto = sem; }
     }
-    if (MELHORIA_VAGA.some(p => t.includes(p))) {
-        if (temElogio) return 'bom';
-        return numPalavras <= 4 ? 'neutro' : 'atencao';
+    let negouQueixa = false, negouFixa, melhoriaVaga;
+    const semNadaADizer = resto.replace(REGEX_NADA_A_DIZER, ' | ');
+    const nadaADizer = semNadaADizer !== resto;
+    resto = semNadaADizer;
+    resto = resto.replace(REGEX_CRITICA_NEGADA, ' | ');
+    for (const re of [REGEX_NEGA_LISTA, REGEX_NADA_RECLAMAR]) {
+        const sem = resto.replace(re, ' | ');
+        if (sem !== resto) { negouQueixa = true; resto = sem; }
     }
-    if (PALAVRAS_ATENCAO.some(p => t.includes(p))) return 'atencao';
-    if (PALAVRAS_ATENCAO_FRACAS.some(p => t.includes(p))) return temElogio ? 'bom' : 'atencao';
-    if (temElogio) return 'bom';
+    [resto, negouFixa] = tirar(resto, NEGACAO_SEM_QUEIXA);
+    negouQueixa = negouQueixa || negouFixa;
+    [resto, melhoriaVaga] = tirar(resto, MELHORIA_VAGA);
+
+    if (PALAVRAS_ATENCAO.some(p => resto.includes(p))) return 'atencao';
+    const elogio = temElogio || elogioProcesso || nadaADizer;
+    if (melhoriaVaga) return elogio ? 'bom' : (numPalavras <= 4 ? 'neutro' : 'atencao');
+    if (PALAVRAS_ATENCAO_FRACAS.some(p => resto.includes(p))) return elogio ? 'bom' : (negouQueixa ? 'neutro' : 'atencao');
+    if (elogio) return 'bom';
+    // "Não tem" / "não tem nada" sozinho = não tem do que reclamar
+    if (numPalavras <= 4 && NEGACAO_POSITIVA.some(p => t.includes(p))) return 'bom';
     return 'neutro';
 }
 
