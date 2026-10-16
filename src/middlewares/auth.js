@@ -88,6 +88,7 @@ const verifyToken = async (req, res, next) => {
             req.user.setorId = cached.setorId;
             req.user.chefeDeSetor = cached.chefeDeSetor;
             req.user.primeiroAcesso = cached.primeiroAcesso;
+            req.user.matriculasSemestreMinimo = cached.matriculasSemestreMinimo;
         } else {
             const { db } = require('../firebase');
             const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -106,6 +107,9 @@ const verifyToken = async (req, res, next) => {
             req.user.setorId = userData.setorId || null;
             req.user.chefeDeSetor = userData.chefeDeSetor === true;
             req.user.primeiroAcesso = userData.primeiroAcesso === true;
+            // Trava de semestre nas Matrículas (ex.: robô da ODTech só de
+            // 2027.1 em diante) — aplicada em src/rotas/matriculas.js.
+            req.user.matriculasSemestreMinimo = userData.matriculasSemestreMinimo || null;
             if (req.user.primeiroAcesso && await senhaTrocadaDepoisDaMarcacao(req.user.uid, userData)) {
                 await db.collection('users').doc(req.user.uid).update({ primeiroAcesso: false });
                 req.user.primeiroAcesso = false;
@@ -116,6 +120,7 @@ const verifyToken = async (req, res, next) => {
                 setorId: req.user.setorId,
                 chefeDeSetor: req.user.chefeDeSetor,
                 primeiroAcesso: req.user.primeiroAcesso,
+                matriculasSemestreMinimo: req.user.matriculasSemestreMinimo,
                 lastFetched: now
             });
         }
@@ -474,6 +479,11 @@ const requireModulePermission = (moduleName) => {
                 palestras: 1,
                 'correcao-provas': 3,
                 'agenda-espacos': 1
+            },
+            // Robô da ODTech (16/10/2026) — só Matrículas, e só de 2027.1 em
+            // diante (users.matriculasSemestreMinimo, ver src/rotas/matriculas.js).
+            robo: {
+                matriculas: 3
             },
             visitante: {
                 emprestimo: 2,

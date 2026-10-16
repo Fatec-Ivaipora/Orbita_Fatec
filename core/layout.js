@@ -30,7 +30,7 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   // Cargos da Medicina (coordenação e professores) têm o Meu Espaço, mas não
   // o Cartão FATEC — não entram na regra abaixo de "todo cargo sempre vê o
   // Cartão".
-  const CARGOS_SEM_CARTAO = ['coord_medicina', 'professor_medicina'];
+  const CARGOS_SEM_CARTAO = ['coord_medicina', 'professor_medicina', 'robo'];
 
   // Visibilidade de módulo no menu: nível efetivo >= 2 quando há cache;
   // sem cache, fallback para a lista estática do cargo
