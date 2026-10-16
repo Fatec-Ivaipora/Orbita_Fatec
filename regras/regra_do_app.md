@@ -139,6 +139,20 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: menu Gestão de T.I. mostra só Empréstimos e Acessos; Agenda Interna (Secretaria) e Meu Espaço seguem funcionando.
 - Como reverter: reverter o commit.
 
+### [2026-10-16] Banco de Provas: importar do Word questões numeradas "1 - 2 - 3" e por lista automática
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/importar-word-questoes-numeradas
+- Arquivos alterados:
+  - `src/utils/parseProvaDocx.js`:
+    - Número com traço ou travessão ("1 - Texto", "2- Texto", "3 – Texto") passa a valer como início de questão. Também aceita aspas/parêntese logo depois ("1 - (ENEM) ...").
+    - Lista numerada automática do Word: o número não vinha no texto, e nenhuma questão era encontrada. Agora o .docx é lido antes (numbering.xml) e o número de cada item de lista decimal é escrito no começo do parágrafo.
+    - Lista de vários níveis (questão no nível 1, alternativas a/b/c no nível 2): a questão não é mais juntada com a 1ª alternativa.
+- Tipo: Correção
+- Motivo: os professores mandam a prova numerada "1 - 2 - 3 - 4", sem escrever "Questão"; a importação não achava nenhuma questão.
+- Como testar: importar um .docx com questões "1 - ..." e outro com a numeração automática do Word. As questões e alternativas devem aparecer na revisão. Os formatos "Questão N" e "1.Texto" continuam iguais.
+- Limitação: no .doc antigo (Word 97-2003) a numeração automática continua sem chegar ao texto; salvar como .docx resolve.
+- Como reverter: reverter o commit.
+
 ### [2026-10-16] Usuário do robô da ODTech: só Matrículas, de 2027.1 em diante
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/usuario-robo-odtech
