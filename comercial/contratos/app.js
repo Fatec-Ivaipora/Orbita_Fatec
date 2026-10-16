@@ -234,7 +234,7 @@ function wireEventos() {
     renderTudo();
   }));
 
-  ['busca', 'filtro-curso', 'filtro-cidade', 'filtro-menor'].forEach(id => {
+  ['busca', 'filtro-curso', 'filtro-cidade', 'filtro-menor', 'filtro-assinado'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener(el.type === 'text' ? 'input' : 'change', renderTudo);
   });
@@ -251,6 +251,7 @@ function wireEventos() {
     document.getElementById('filtro-curso').value = '';
     document.getElementById('filtro-cidade').value = '';
     document.getElementById('filtro-menor').checked = false;
+    document.getElementById('filtro-assinado').value = '';
     renderTudo();
   });
 
@@ -261,6 +262,7 @@ function wireEventos() {
     opcaoEscolhida('filtro-curso') && `Curso: ${opcaoEscolhida('filtro-curso')}`,
     opcaoEscolhida('filtro-cidade') && `Cidade: ${opcaoEscolhida('filtro-cidade')}`,
     document.getElementById('filtro-menor').checked && 'Só menores de 18',
+    document.getElementById('filtro-assinado').value && `Ordenado pela assinatura a partir de ${fmtData(document.getElementById('filtro-assinado').value)}`,
     document.getElementById('busca').value.trim() && `Busca: "${document.getElementById('busca').value.trim()}"`,
     `${document.querySelectorAll('#tabela-corpo tr:not(.mes-linha):not(:has(.tabela-msg))').length} aluno(s) listados`
   ], currentUser.displayName || currentUser.email));
@@ -324,7 +326,9 @@ function lerFiltros() {
     buscaDig: busca.replace(/\D/g, ''),
     curso: document.getElementById('filtro-curso').value,
     cidade: document.getElementById('filtro-cidade').value,
-    soMenor: document.getElementById('filtro-menor').checked
+    soMenor: document.getElementById('filtro-menor').checked,
+    // não esconde ninguém: só reordena a tabela pela data de assinatura (ver ordenarPorAssinatura)
+    assinadoDesde: document.getElementById('filtro-assinado').value
   };
 }
 
@@ -383,26 +387,53 @@ function renderTudo() {
 
   renderCursos(f);
 
-  const filtrando = !!(f.busca || f.curso || f.cidade || f.soMenor);
+  const filtrando = !!(f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
   document.getElementById('btn-limpar-filtros').classList.toggle('hidden', !filtrando);
-  const partes = [f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`].filter(Boolean);
+  const partes = [f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
   const naAba = qtd(abaAtual);
   const totalAba = registros.filter(r => r.status === abaAtual).length;
   document.getElementById('filtro-resumo').innerHTML = filtrando
     ? `Mostrando <strong>${naAba}</strong> de ${totalAba} em ${STATUS_LABEL[abaAtual]} · filtro: ${esc(partes.join(', '))}`
     : '';
 
-  renderTabela(base);
+  renderTabela(base, f);
 }
 
-function renderTabela(base) {
+// Com "Assinatura a partir de" preenchido: primeiro quem assinou no dia
+// escolhido, depois os dias seguintes (15, 16...), depois os dias anteriores
+// (do mais recente para o mais antigo) e, por último, quem não tem data de
+// assinatura. Dentro do mesmo dia mantém a ordem de sempre.
+function ordenarPorAssinatura(lista, desde) {
+  const grupo = (r) => (!r.assinadoEm ? 2 : r.assinadoEm >= desde ? 0 : 1);
+  return lista.map((r, i) => ({ r, i })).sort((a, b) => {
+    const ga = grupo(a.r), gb = grupo(b.r);
+    if (ga !== gb) return ga - gb;
+    if (ga === 0 && a.r.assinadoEm !== b.r.assinadoEm) return a.r.assinadoEm < b.r.assinadoEm ? -1 : 1;
+    if (ga === 1 && a.r.assinadoEm !== b.r.assinadoEm) return a.r.assinadoEm > b.r.assinadoEm ? -1 : 1;
+    return a.i - b.i;
+  }).map(x => x.r);
+}
+
+function renderTabela(base, f = {}) {
   const corpo = document.getElementById('tabela-corpo');
-  const lista = base.filter(r => r.status === abaAtual);
+  let lista = base.filter(r => r.status === abaAtual);
+  if (f.assinadoDesde) lista = ordenarPorAssinatura(lista, f.assinadoDesde);
   if (!lista.length) {
     corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno cadastrado nesse semestre ainda. Use "Novo aluno".'}</td></tr>`;
     return;
   }
+  // separador quando muda o dia de assinatura (classe mes-linha: a impressão já não conta essas linhas)
+  const qtdPorDia = {};
+  lista.forEach(r => { const k = r.assinadoEm || ''; qtdPorDia[k] = (qtdPorDia[k] || 0) + 1; });
+  let diaAnterior = null;
   corpo.innerHTML = lista.map((r, i) => {
+    let separador = '';
+    if (f.assinadoDesde && (r.assinadoEm || '') !== diaAnterior) {
+      diaAnterior = r.assinadoEm || '';
+      const n = qtdPorDia[diaAnterior];
+      const antes = diaAnterior && diaAnterior < f.assinadoDesde;
+      separador = `<tr class="mes-linha ct-dia-linha ${diaAnterior && !antes ? '' : 'outros'}"><td colspan="10">${diaAnterior ? `Assinados em ${fmtData(diaAnterior)}` : 'Sem data de assinatura'} · ${n} aluno${n > 1 ? 's' : ''}</td></tr>`;
+    }
     const zap = linkWhatsapp(r.contato);
     const obs = r.observacoes || '';
     const linhasObs = obs.split('\n');
@@ -438,7 +469,7 @@ function renderTabela(base) {
         <td>${fmtData(r.vencimentoBoleto) || '<span class="ct-vazio">—</span>'}</td>
         <td>${contrato}</td>
         <td class="acoes-col action-execute">${acoes}</td>
-      </tr>`;
+      </tr>`.replace(/^/, separador);
   }).join('');
 }
 

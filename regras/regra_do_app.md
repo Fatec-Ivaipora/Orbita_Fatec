@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-16] Contratos: ordenar pela data de assinatura
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `comercial/contratos/index.html` (campo "Assinatura a partir de" na barra de filtros; versões do CSS/JS), `comercial/contratos/app.js` (`ordenarPorAssinatura` e separador por dia em `renderTabela`; o campo entra em "Limpar filtros", no resumo do filtro e na impressão), `comercial/contratos/contratos.css` (estilo do campo e do separador).
+- Tipo: Melhoria
+- Motivo: Pedido da equipe do Comercial — achar rápido quem assinou num dia.
+- Impacto: Com uma data escolhida, ninguém some da lista: ela é reordenada — primeiro o dia escolhido, depois os dias seguintes, depois os dias anteriores (do mais recente ao mais antigo) e, por último, quem não tem data de assinatura —, com uma linha separadora por dia ("Assinados em 14/10/2026 · 12 alunos"). Sem data escolhida, a tela fica exatamente como antes. Nada muda no backend nem nos dados.
+- Como testar: Comercial → Contratos → aba Assinado → "Assinatura a partir de" = um dia → os daquele dia aparecem no topo.
+- Como reverter: reverter o commit.
+
 ### [2026-10-16] Remoção do menu Recursos Humanos (Carga Horária e Funcionários)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main

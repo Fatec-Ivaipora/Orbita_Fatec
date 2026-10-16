@@ -6,7 +6,7 @@
     <title>Contratos - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=6">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=7">
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
@@ -82,6 +82,7 @@
                         </div>
                         <select id="filtro-curso" class="select-filter"><option value="">Todos os cursos</option></select>
                         <select id="filtro-cidade" class="select-filter"><option value="">Todas as cidades</option></select>
+                        <label class="filtro-data" title="Ordena a lista pela data de assinatura: primeiro o dia escolhido, depois os dias seguintes">Assinatura a partir de <input type="date" id="filtro-assinado" class="select-filter"></label>
                         <label class="filtro-check"><input type="checkbox" id="filtro-menor"> Só menores de 18</label>
                         <button type="button" class="btn-secondary hidden" id="btn-limpar-filtros">Limpar filtros</button>
                     </div>
@@ -252,6 +253,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=9"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=10"></script>
 </body>
 </html>

@@ -200,6 +200,11 @@
 .kpi-menor { border-left: 4px solid var(--purple); }
 
 .filtro-check { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--text-main); cursor: pointer; white-space: nowrap; }
+.filtro-data { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--text-main); white-space: nowrap; }
+
+/* separador por dia quando a lista está ordenada pela data de assinatura */
+.ct-dia-linha td { background: #eef4ff; color: var(--primary-blue); font-weight: 700; font-size: 0.82rem; padding: 0.45rem 0.9rem; border-top: 2px solid #c9dafb; }
+.ct-dia-linha.outros td { background: #f4f6f9; color: var(--text-secondary); border-top-color: #e2e8f0; }
 
 .ct-nome { font-weight: 700; }
 .ct-menor {
