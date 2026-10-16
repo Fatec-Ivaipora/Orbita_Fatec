@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-16] Remoção do menu Recursos Humanos (Carga Horária e Funcionários)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: removidos `rh/carga-horaria/`, `rh/funcionarios/` e `src/rotas/carga-horaria.js` (`/api/carga-horaria`, usada pelos dois módulos); `api/index.js` (rota desmontada); `core/permissions.js` (módulos `carga-horaria` e `funcionarios` e a categoria "Recursos Humanos" fora do menu e das listas de cargo); `src/middlewares/auth.js` (níveis padrão de `carga-horaria` removidos).
+- Tipo: Remoção
+- Motivo: Módulos não são mais usados.
+- Impacto: O menu "Recursos Humanos" deixa de existir. O cargo **RH continua** (com Matrizes e Agenda Interna). As coleções `funcionarios_rh`, `registros_carga_horaria` e `recessos_rh` do Firestore NÃO foram apagadas.
+- Como testar: nenhum cargo mostra "Recursos Humanos" no menu; `/rh/...` e `/api/carga-horaria` dão 404; usuário com cargo RH entra normalmente e vê Matrizes e Agenda Interna.
+- Como reverter: reverter o commit.
+
+### [2026-10-16] Remoção do módulo Agenda (Gestão de T.I.)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: removidos `agenda/` (tela interna da T.I.), `agendar/` (página pública de solicitação de agendamento), `src/rotas/agenda.js` e `src/rotas/locais.js` (`/api/agenda` e `/api/locais`, usadas só por esse módulo); `api/index.js` (rotas desmontadas); `core/permissions.js` (módulo `agenda` fora do menu e das listas de cargo).
+- Tipo: Remoção
+- Motivo: Módulo não é mais usado. (Não confundir com a "Agenda Interna Fatec IVP" da Secretaria — `agenda-espacos` — nem com a agenda do Meu Espaço, que continuam.)
+- Impacto: "Agenda" some do menu Gestão de T.I.; `/agenda`, `/agendar`, `/api/agenda` e `/api/locais` deixam de existir. As coleções `agenda` e `locais` do Firestore NÃO foram apagadas (histórico preservado).
+- Como testar: menu Gestão de T.I. mostra só Empréstimos e Acessos; Agenda Interna (Secretaria) e Meu Espaço seguem funcionando.
+- Como reverter: reverter o commit.
+
 ### [2026-10-16] Usuário do robô da ODTech: só Matrículas, de 2027.1 em diante
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/usuario-robo-odtech

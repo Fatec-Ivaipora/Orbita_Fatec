@@ -214,7 +214,6 @@ const requireModulePermission = (moduleName) => {
                 matrizes: 3,
                 emprestimo: 3,
                 usuarios: 3,
-                'carga-horaria': 3,
                 ferida: 3,
                 'almoxarifado-feridas': 3,
                 'almoxarifado-saude': 3,
@@ -238,7 +237,6 @@ const requireModulePermission = (moduleName) => {
             ti: {
                 emprestimo: 3,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -263,7 +261,6 @@ const requireModulePermission = (moduleName) => {
                 matrizes: 3,
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 3,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -287,7 +284,6 @@ const requireModulePermission = (moduleName) => {
             financeiro: {
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -322,7 +318,6 @@ const requireModulePermission = (moduleName) => {
                 matrizes: 3,
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -354,7 +349,6 @@ const requireModulePermission = (moduleName) => {
             sec: {
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -383,7 +377,6 @@ const requireModulePermission = (moduleName) => {
                 cpa: 2,
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -408,7 +401,6 @@ const requireModulePermission = (moduleName) => {
             professor_medicina: {
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -433,7 +425,6 @@ const requireModulePermission = (moduleName) => {
             comercial: {
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -458,7 +449,6 @@ const requireModulePermission = (moduleName) => {
             ead: {
                 emprestimo: 1,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
@@ -488,7 +478,6 @@ const requireModulePermission = (moduleName) => {
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,
-                'carga-horaria': 1,
                 ferida: 1,
                 'almoxarifado-feridas': 1,
                 'almoxarifado-saude': 1,
