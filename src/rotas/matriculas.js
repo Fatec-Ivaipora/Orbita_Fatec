@@ -3,7 +3,33 @@ const router = express.Router();
 const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
-const checkPermission = verifyToken.requireModulePermission('matriculas');
+// Trava de semestre por usuário (users.matriculasSemestreMinimo, ex.: robô da
+// ODTech só de 2027.1 em diante, 16/10/2026). Vale pra todas as rotas: barra
+// semestre pedido/gravado abaixo do mínimo e, nas rotas /alunos/:id, confere
+// o semestre do próprio aluno. Listas (semestres, comparativo, indicados)
+// são filtradas dentro de cada rota com semestreLiberado().
+function semestreLiberado(req, semestre) {
+    const minimo = req.user && req.user.matriculasSemestreMinimo;
+    return !minimo || (validarSemestre(semestre) && semestre >= minimo);
+}
+async function travaSemestre(req, res, next) {
+    const minimo = req.user && req.user.matriculasSemestreMinimo;
+    if (!minimo) return next();
+    const negar = () => res.status(403).json({ error: `Acesso Negado. Seu usuário só acessa matrículas a partir de ${minimo}.` });
+    try {
+        const pedidos = [req.query.semestre, req.body && req.body.semestre, req.body && req.body.semestreOrigem, req.body && req.body.semestreDestino]
+            .filter(v => v !== undefined && v !== null && v !== '');
+        if (pedidos.some(s => !semestreLiberado(req, String(s).trim()))) return negar();
+        if (req.params.id) {
+            const doc = await db.collection(COL_ALUNOS).doc(req.params.id).get();
+            if (doc.exists && !semestreLiberado(req, doc.data().semestre)) return negar();
+        }
+        next();
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+const checkPermission = [verifyToken.requireModulePermission('matriculas'), travaSemestre];
 // Calouro cadastrado aqui aparece sozinho nos Contratos do Comercial (src/rotas/contratos.js).
 async function sincronizarContrato(id, dados, req, situacaoMudou) {
     try {
@@ -380,6 +406,7 @@ router.get('/alunos/:id/indicados', verifyToken, checkPermission, async (req, re
         const snap = await db.collection(COL_ALUNOS).where('indicadoPorAlunoId', '==', req.params.id).get();
         const indicados = snap.docs
             .map(d => ({ id: d.id, nome: d.data().nome, curso: d.data().curso, semestre: d.data().semestre, situacao: d.data().situacao }))
+            .filter(i => semestreLiberado(req, i.semestre))
             .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
         res.json({ total: indicados.length, indicados });
     } catch (err) {
@@ -560,7 +587,7 @@ router.get('/comparativo', verifyToken, checkPermission, async (req, res) => {
         // Mesma lista que alimenta o seletor da tela.
         const cfg = await db.collection(COL_CONFIG).doc(DOC_SEMESTRES).get();
         const daBase = (cfg.exists && Array.isArray(cfg.data().lista)) ? cfg.data().lista : [];
-        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort();
+        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort().filter(s => semestreLiberado(req, s));
 
         const linhas = [];
         for (const semestre of semestres) {
@@ -723,7 +750,7 @@ router.get('/config/semestres', verifyToken, checkPermission, async (req, res) =
     try {
         const doc = await db.collection(COL_CONFIG).doc(DOC_SEMESTRES).get();
         const daBase = (doc.exists && Array.isArray(doc.data().lista)) ? doc.data().lista : [];
-        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort();
+        const semestres = [...new Set([...SEMESTRES_PADRAO, ...daBase])].sort().filter(s => semestreLiberado(req, s));
         res.json({ semestres });
     } catch (err) {
         res.status(500).json({ error: err.message });

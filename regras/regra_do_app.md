@@ -109,6 +109,20 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-16] Usuário do robô da ODTech: só Matrículas, de 2027.1 em diante
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/usuario-robo-odtech
+- Arquivos alterados:
+  - `core/permissions.js`: cargo `robo` ("Robô (ODTech)") com Meu Espaço + Matrículas.
+  - `core/layout.js`: `robo` entra em CARGOS_SEM_CARTAO (sem Cartão FATEC).
+  - `src/middlewares/auth.js`: lê `users.matriculasSemestreMinimo` para `req.user` (com cache) e define os níveis padrão do cargo `robo` (matrículas 3, todo o resto 1).
+  - `src/rotas/matriculas.js`: `travaSemestre` entra junto do `checkPermission` em todas as rotas. Barra (403) semestre pedido/gravado abaixo do mínimo (query, body, origem/destino da virada) e aluno de semestre anterior nas rotas `/alunos/:id`. O seletor de semestres, o comparativo e a lista de indicados só trazem semestres liberados. Usuário sem o campo não muda nada.
+- Firestore: `roles/robo` ({ name: "Robô (ODTech)" }), `config/permissions.robo` = { matriculas: 3 }.
+- Usuário: `roboodtech@orbita.com.br`, `role: 'robo'`, `matriculasSemestreMinimo: '2027.1'`, senha inicial com troca obrigatória.
+- Tipo: Novo cargo / permissões
+- Como testar: entrar com o robô — menu mostra só Meu Espaço e Matrículas; o seletor de semestre só lista 2027.1 em diante; chamar `/api/matriculas/alunos?modulo=fatec&semestre=2026.2` responde 403.
+- Como reverter: reverter o commit e apagar `roles/robo`, `config/permissions.robo` e o usuário.
+
 ### [2026-10-15] Novo setor EAD (cargo `ead`), com Correção de Provas de todos os cursos
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/setor-ead

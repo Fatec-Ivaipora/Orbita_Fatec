@@ -331,6 +331,13 @@ export const ROLE_PERMISSIONS = {
     label: "EAD",
     modules: ["dashboard", "fidelidade", "correcao-provas"]
   },
+  // Robô da ODTech (16/10/2026) — faz processos de matrícula pra ajudar a
+  // Secretaria. Só Matrículas, e só de 2027.1 em diante (trava no backend
+  // por users.matriculasSemestreMinimo, src/rotas/matriculas.js).
+  robo: {
+    label: "Robô (ODTech)",
+    modules: ["dashboard", "matriculas"]
+  },
   visitante: {
     label: "Visitante",
     modules: ["dashboard", "fidelidade", "agenda-espacos"]
