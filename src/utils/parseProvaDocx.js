@@ -43,6 +43,7 @@
 //   modelo real), a linha é quebrada em várias antes de aplicar a regra
 //   acima.
 const mammoth = require('mammoth');
+const JSZip = require('jszip');
 const WordExtractor = require('word-extractor');
 
 const LETRAS_ALTERNATIVA = ['A', 'B', 'C', 'D', 'E'];
@@ -56,7 +57,7 @@ function ehDocxZip(buffer) {
 
 async function extrairParagrafosDoArquivo(buffer) {
     if (ehDocxZip(buffer)) {
-        const { value: html } = await mammoth.convertToHtml({ buffer });
+        const { value: html } = await mammoth.convertToHtml({ buffer: await escreverNumeracaoAutomatica(buffer) });
         return extrairParagrafosHtml(html);
     }
     const extractor = new WordExtractor();
@@ -64,9 +65,101 @@ async function extrairParagrafosDoArquivo(buffer) {
     return doc.getBody().split('\n').map(l => l.replace(/\t+/g, ' ').trim()).filter(Boolean);
 }
 
+// Lista numerada automática do Word (o professor numera as questões com o
+// botão de numeração, 1 - 2 - 3...): o número não faz parte do texto, fica
+// em numbering.xml, e o mammoth devolve só o conteúdo do item. Sem número,
+// nenhuma questão era encontrada (16/10/2026). Aqui o número de cada
+// parágrafo de lista DECIMAL é calculado e escrito no começo do próprio
+// texto ("1 - ..."), antes do mammoth ler. Listas de letra (a, b, c) ficam
+// como estão: a letra da alternativa já vem da posição.
+const FORMATOS_DECIMAIS = new Set(['decimal', 'decimalZero']);
+
+function lerAtributo(xml, tag, atributo) {
+    const m = new RegExp(`<w:${tag}\\b[^>]*\\bw:${atributo}="([^"]*)"`).exec(xml);
+    return m ? m[1] : null;
+}
+
+async function escreverNumeracaoAutomatica(buffer) {
+    try {
+        const zip = await JSZip.loadAsync(buffer);
+        const arqDocumento = zip.file('word/document.xml');
+        const arqNumeracao = zip.file('word/numbering.xml');
+        if (!arqDocumento || !arqNumeracao) return buffer;
+        const [documento, numeracao] = await Promise.all([arqDocumento.async('string'), arqNumeracao.async('string')]);
+        const estilos = zip.file('word/styles.xml') ? await zip.file('word/styles.xml').async('string') : '';
+
+        // abstractNumId -> ilvl -> { formato, inicio }
+        const abstratos = {};
+        for (const [, id, corpo] of numeracao.matchAll(/<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g)) {
+            abstratos[id] = {};
+            for (const [, ilvl, lvl] of corpo.matchAll(/<w:lvl\b[^>]*w:ilvl="(\d+)"[^>]*>([\s\S]*?)<\/w:lvl>/g)) {
+                abstratos[id][ilvl] = { formato: lerAtributo(lvl, 'numFmt', 'val'), inicio: parseInt(lerAtributo(lvl, 'start', 'val') || '1', 10) };
+            }
+        }
+        // numId -> { abstrato, reinicios: { ilvl: inicio } }
+        const nums = {};
+        for (const [, numId, corpo] of numeracao.matchAll(/<w:num\b[^>]*w:numId="(\d+)"[^>]*>([\s\S]*?)<\/w:num>/g)) {
+            const reinicios = {};
+            for (const [, ilvl, ov] of corpo.matchAll(/<w:lvlOverride\b[^>]*w:ilvl="(\d+)"[^>]*>([\s\S]*?)<\/w:lvlOverride>/g)) {
+                const inicio = lerAtributo(ov, 'startOverride', 'val');
+                if (inicio !== null) reinicios[ilvl] = parseInt(inicio, 10);
+            }
+            nums[numId] = { abstrato: lerAtributo(corpo, 'abstractNumId', 'val'), reinicios };
+        }
+        // Estilo de parágrafo com numeração própria (ex.: "Lista Numerada")
+        const numeracaoDoEstilo = {};
+        for (const [, estiloId, corpo] of estilos.matchAll(/<w:style\b[^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g)) {
+            const numId = lerAtributo(corpo, 'numId', 'val');
+            if (numId) numeracaoDoEstilo[estiloId] = { numId, ilvl: lerAtributo(corpo, 'ilvl', 'val') || '0' };
+        }
+
+        const contadores = {}; // abstrato -> ilvl -> último número
+        const numIdsVistos = new Set();
+        let mudou = false;
+        const novoDocumento = documento.replace(/<w:p\b(?!Pr)[^>]*>[\s\S]*?<\/w:p>/g, (paragrafo) => {
+            const pPr = (/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(paragrafo) || [''])[0];
+            let numId = lerAtributo(pPr, 'numId', 'val');
+            let ilvl = lerAtributo(pPr, 'ilvl', 'val');
+            if (!numId) {
+                const doEstilo = numeracaoDoEstilo[lerAtributo(pPr, 'pStyle', 'val')];
+                if (doEstilo) { numId = doEstilo.numId; ilvl = ilvl || doEstilo.ilvl; }
+            }
+            ilvl = ilvl || '0';
+            const num = nums[numId];
+            if (!numId || numId === '0' || !num || !abstratos[num.abstrato]) return paragrafo;
+            const nivel = abstratos[num.abstrato][ilvl];
+            if (!nivel) return paragrafo;
+
+            const cont = contadores[num.abstrato] = contadores[num.abstrato] || {};
+            if (!numIdsVistos.has(numId) && num.reinicios[ilvl] !== undefined) {
+                cont[ilvl] = num.reinicios[ilvl] - 1;
+            }
+            numIdsVistos.add(numId);
+            cont[ilvl] = (cont[ilvl] === undefined ? nivel.inicio - 1 : cont[ilvl]) + 1;
+            // Subníveis recomeçam quando o nível de cima avança
+            for (const k of Object.keys(cont)) if (parseInt(k, 10) > parseInt(ilvl, 10)) delete cont[k];
+
+            if (!FORMATOS_DECIMAIS.has(nivel.formato)) return paragrafo;
+            mudou = true;
+            const run = `<w:r><w:t xml:space="preserve">${cont[ilvl]} - </w:t></w:r>`;
+            return pPr ? paragrafo.replace(pPr, pPr + run) : paragrafo.replace(/^<w:p\b[^>]*>/, (abre) => abre + run);
+        });
+        if (!mudou) return buffer;
+        zip.file('word/document.xml', novoDocumento);
+        return await zip.generateAsync({ type: 'nodebuffer' });
+    } catch (e) {
+        console.error('[parseProvaDocx] numeração automática:', e.message);
+        return buffer;
+    }
+}
+
 function extrairParagrafosHtml(html) {
     const paragrafos = [];
-    const regex = /<p[^>]*>([\s\S]*?)<\/p>|<li[^>]*>([\s\S]*?)<\/li>/g;
+    // Item de lista termina no próximo item ou numa sublista: em lista de
+    // vários níveis (questão no nível 1, alternativas a/b/c no nível 2) o
+    // mammoth põe a sublista DENTRO do item da questão, e ler até o </li>
+    // juntava a questão com a 1ª alternativa (16/10/2026).
+    const regex = /<p[^>]*>([\s\S]*?)<\/p>|<li[^>]*>([\s\S]*?)(?=<\/?(?:li|ol|ul)\b)/g;
     let m;
     while ((m = regex.exec(html))) {
         const bruto = m[1] !== undefined ? m[1] : m[2];
@@ -144,7 +237,10 @@ function marcadorPorNumeroSolto(linha, proximoEsperado) {
     // ("01  02  03  04...") também bateria com o padrão. A checagem de
     // sequência (só aceita o PRÓXIMO número esperado) cobre o resto dos
     // falsos positivos.
-    const m = /^(\d{1,3})\s*(?:[\.\)]\s*|\s+)(?=[A-Za-zÀ-ÿ])/.exec(linha);
+    // Também "1 - Texto", "2- Texto" e "3 – Texto" (traço ou travessão, o
+    // jeito como vários professores numeram — 16/10/2026). Depois do
+    // marcador pode vir aspas ou parêntese ("1 - (ENEM) ...").
+    const m = /^(\d{1,3})\s*(?:[\.\)\-–—]\s*|\s+)(?=[A-Za-zÀ-ÿ"“(])/.exec(linha);
     if (!m) return null;
     const numero = parseInt(m[1], 10);
     return numero === proximoEsperado ? numero : null;
@@ -153,7 +249,7 @@ function marcadorPorNumeroSolto(linha, proximoEsperado) {
 function limparInicioBloco(linhas) {
     const semNumero = linhas[0]
         .replace(/^Quest(ã|a)o\s*0*\d+\s*[:\-]?\s*/i, '')
-        .replace(/^\d{1,3}\s*(?:[\.\)]\s*|\s+)/, '')
+        .replace(/^\d{1,3}\s*(?:[\.\)\-–—]\s*|\s+)/, '')
         .trim();
     return [semNumero, ...linhas.slice(1)].filter(Boolean);
 }
