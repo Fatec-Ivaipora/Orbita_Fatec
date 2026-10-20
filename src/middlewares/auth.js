@@ -232,7 +232,8 @@ const requireModulePermission = (moduleName) => {
                 'aula-experimental': 3,
                 auloes: 3,
                 palestras: 3,
-                'agenda-espacos': 3
+                'agenda-espacos': 3,
+                'trilha-ead': 3
             },
             ti: {
                 emprestimo: 3,
@@ -342,7 +343,8 @@ const requireModulePermission = (moduleName) => {
                 'aula-experimental': 1,
                 auloes: 1,
                 palestras: 1,
-                'agenda-espacos': 2
+                'agenda-espacos': 2,
+                'trilha-ead': 2
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
@@ -468,7 +470,8 @@ const requireModulePermission = (moduleName) => {
                 auloes: 1,
                 palestras: 1,
                 'correcao-provas': 3,
-                'agenda-espacos': 1
+                'agenda-espacos': 1,
+                'trilha-ead': 3
             },
             // Robô da ODTech (16/10/2026) — só Matrículas, e só de 2027.1 em
             // diante (users.matriculasSemestreMinimo, ver src/rotas/matriculas.js).

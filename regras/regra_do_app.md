@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-20] Novo módulo Trilha EAD (Docência): participação nas UAs do AVA, ranking e arquivo pro Edubox
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/trilha-ead
+- Arquivos alterados: novos `docencia/trilha-ead/` (index.html, app.js, trilha.css), `src/rotas/trilha-ead.js` (`/api/trilha-ead`), `src/utils/livroNotasAva.js` (leitura do livro de notas do Open LMS), `src/utils/trilhaDiarios.js` (casa a turma do AVA com os diários do Edubox pelos dados do CADD); `api/index.js` (rota montada); `core/permissions.js` (módulo `trilha-ead` na categoria Docência; nas listas de adm_l1, adm_l2, coordenador e ead); `src/middlewares/auth.js` (níveis padrão: adm_l2 3, coordenador 2, ead 3).
+- Tipo: Novo módulo
+- Motivo: O EAD digitava no Edubox, aluno por aluno, a nota das unidades de aprendizagem (SAGAH) feitas no AVA — e precisava lembrar de pôr 0 em quem não fez. Também não havia ranking de participação por curso.
+- Impacto: O tutor importa o livro de notas exportado do AVA (um arquivo por disciplina/turma; reimportar atualiza). Regra da nota: cada unidade com 100% de participação vale 0,5; abaixo disso ou "-" vale 0; UA 01–06 = 1º bimestre, UA 07–12 = 2º; nota do bimestre de 0 a 3,0 (item "TRILHA EAD" do diário). O sistema casa a turma com o(s) diário(s) do Edubox (cad_turmas do CADD): turmas que estudam juntas no AVA saem num arquivo por diário; aluno do AVA fora do diário é classificado (DP/adaptação → onde lançar; saiu → consulta Matrículas; nome social → casamento pelos dois últimos sobrenomes, só se a pessoa for única); a conta "Professor Fatec" é ignorada. Gera CSV `Nome;Nota` (com ponto) por diário e bimestre — **não grava nada no Edubox**. Participação e ranking contam só os alunos ativos do diário; curso = média das disciplinas; geral = média dos cursos; filtro de bimestre no topo; comparativo 1º × 2º (subiu/caiu). Impressão no padrão FATEC (modelo do relatório de desempenho antigo; um bimestre ou os dois juntos; ranking de alunos com aviso LGPD). O tutor pode marcar uma unidade como concluída à mão (fica em `manuais` e é reaplicada a cada reimportação). Acesso: tutor do EAD vê e mexe só nas turmas que importou; o coordenador do EAD (ead + `users.chefeDeSetor`) vê e mexe em todas; coordenador de curso só vê os cursos de `users.cursos`, sem os arquivos do Edubox; ADM tudo. Coleção nova `trilha_ead_disciplinas`; lê `cad_turmas`, `matriculas_alunos` (só os nomes que faltaram) e `users`.
+- Como testar: Docência → Trilha EAD → "Importar livro de notas" → arquivo do AVA (ex.: "TEO HIST ARQ URB III - 7602 Notas.xlsx") → confere a prévia (diário encontrado, curso sugerido) → Importar → abrir a turma, baixar o arquivo do Edubox do bimestre, aba Ranking, imprimir.
+- Como reverter: reverter o commit e apagar a coleção `trilha_ead_disciplinas` (e as chaves `trilha-ead` de `config/permissions`, se gravadas).
+
 ### [2026-10-16] Contratos: ordenar pela data de assinatura
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main

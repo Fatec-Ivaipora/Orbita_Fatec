@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trilha EAD - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/docencia/trilha-ead/trilha.css?v=11">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header te-header">
+                    <div>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15l4-4 3 3 5-6"/><circle cx="18" cy="8" r="1.4"/></svg></span>Trilha EAD</h1>
+                        <p class="page-subtitle">Participação nas unidades de aprendizagem do AVA e nota da Trilha EAD de cada bimestre.</p>
+                    </div>
+                    <button type="button" class="btn-primary hidden" id="te-btn-importar">Importar livro de notas</button>
+                </div>
+
+                <div class="te-filtros" role="group" aria-label="Filtros">
+                    <label>Semestre
+                        <select id="te-semestre" class="select-filter"></select>
+                    </label>
+                    <label>Curso
+                        <select id="te-curso" class="select-filter"><option value="">Todos os cursos</option></select>
+                    </label>
+                    <label>Bimestre
+                        <select id="te-bimestre" class="select-filter">
+                            <option value="1">1º bimestre</option>
+                            <option value="2">2º bimestre</option>
+                        </select>
+                    </label>
+                    <div class="abas" role="tablist">
+                        <button type="button" class="aba ativa" role="tab" data-aba="turmas" aria-selected="true">Turmas</button>
+                        <button type="button" class="aba" role="tab" data-aba="ranking" aria-selected="false">Ranking</button>
+                    </div>
+                </div>
+
+                <div id="te-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Importar livro de notas -->
+    <div id="te-modal" class="te-modal hidden" role="dialog" aria-modal="true" aria-labelledby="te-modal-titulo">
+        <div class="te-modal-caixa">
+            <h2 id="te-modal-titulo">Importar livro de notas</h2>
+            <p class="te-ajuda">No AVA, abra o curso → <b>Notas</b> → <b>Exportar</b> → Excel ou CSV. Importar de novo a mesma turma atualiza as notas.</p>
+            <div id="te-modal-erro"></div>
+            <label class="te-arquivo" id="te-arquivo-zona">
+                <input type="file" id="te-arquivo" accept=".xlsx,.xls,.csv">
+                <span id="te-arquivo-txt">Escolha o arquivo do livro de notas</span>
+            </label>
+            <div id="te-previa"></div>
+            <div class="te-campos">
+                <label class="te-campo-largo">Disciplina
+                    <input type="text" id="te-disciplina" placeholder="Vem do nome do arquivo">
+                </label>
+                <label>Curso
+                    <select id="te-curso-import" class="select-filter"><option value="">Escolha...</option></select>
+                </label>
+                <label>Turma
+                    <input type="text" id="te-turma" placeholder="Ex.: T.1">
+                </label>
+                <label>Semestre
+                    <select id="te-semestre-import" class="select-filter"></select>
+                </label>
+            </div>
+            <div class="te-modal-acoes">
+                <button type="button" class="btn-secondary" id="te-cancelar">Cancelar</button>
+                <button type="button" class="btn-primary" id="te-confirmar" disabled>Importar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="te-toast" class="te-toast hidden" role="status"></div>
+
+    <script type="module" src="/docencia/trilha-ead/app.js?v=11"></script>
+</body>
+</html>

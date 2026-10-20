@@ -176,6 +176,15 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><circle cx="9" cy="14.5" r="1.6"/><path d="M13 9h4M13 14.5h4"/></svg>`,
     url: "/correcao-provas/index.html"
   },
+  // Trilha EAD (19/10/2026) — livro de notas do AVA (unidades SAGAH): participação, ranking por curso
+  // e arquivo Nome;Nota da Trilha EAD (0 a 3.0) pro EAD lançar no Edubox. EAD importa; coordenador só vê o curso dele.
+  "trilha-ead": {
+    id: "trilha-ead",
+    category: "docencia",
+    title: "Trilha EAD",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 15l4-4 3 3 5-6"/><circle cx="18" cy="8" r="1.4"/></svg>`,
+    url: "/docencia/trilha-ead/index.html"
+  },
   "banco-provas": {
     id: "banco-provas",
     category: "docencia",
@@ -246,11 +255,11 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead"]
   },
   ti: {
     label: "T.I.",
@@ -269,7 +278,7 @@ export const ROLE_PERMISSIONS = {
   // licitação em andamento e uma nova sendo montada.
   coordenador: {
     label: "Coordenador",
-    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas"]
+    modules: ["dashboard", "fidelidade", "avaliacao-docente", "banco-provas", "confirmacao-evento", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead"]
   },
   // O cargo "Secretaria" foi cadastrado na tela de Usuários com id `sec`
   // (não `secretaria`) — a chave aqui precisa bater com o id real da
@@ -308,7 +317,7 @@ export const ROLE_PERMISSIONS = {
   // cursos da graduação (escopo em src/rotas/cpa.js escopoDe). Sem nada da Secretaria.
   ead: {
     label: "EAD",
-    modules: ["dashboard", "fidelidade", "correcao-provas"]
+    modules: ["dashboard", "fidelidade", "correcao-provas", "trilha-ead"]
   },
   // Robô da ODTech (16/10/2026) — faz processos de matrícula pra ajudar a
   // Secretaria. Só Matrículas, e só de 2027.1 em diante (trava no backend
