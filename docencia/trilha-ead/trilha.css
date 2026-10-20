@@ -1,0 +1,187 @@
+/* ==========================================================================
+   Trilha EAD (Docência) — segue o padrão visual do Órbita v2 (DESIGN.md):
+   faixa marinho, cartões com borda e sem sombra, número em Archivo,
+   cor só com significado (verde = feito, vermelho/âmbar = faltou).
+   Usa os tokens --orb-* de core/orbita.css (carregado depois deste arquivo).
+   ========================================================================== */
+
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.layout-content { padding: 1.25rem 1.5rem 3rem; }
+
+/* cabeçalho */
+.te-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.page-title { display: flex; align-items: center; margin: 0; }
+.cm-titulo-icone { display: inline-flex; align-items: center; justify-content: center; }
+.page-subtitle { margin: 0; }
+
+.btn-primary, .btn-secondary { padding: 0 1rem; font-size: 0.88rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+
+/* filtros + abas: o filtro do topo manda em tudo da tela */
+.te-filtros {
+  display: flex; align-items: flex-end; gap: 0.9rem; flex-wrap: wrap;
+  background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card);
+  padding: 0.75rem 1rem; margin-bottom: 1rem;
+}
+.te-filtros label, .te-campos label, .te-inline { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: var(--orb-tinta2); }
+.te-inline { flex-direction: row; align-items: center; gap: 0.5rem; }
+.select-filter { min-width: 190px; padding: 0 0.7rem; font-size: 0.88rem; }
+.te-filtros .abas { margin-left: auto; display: inline-flex; }
+.abas .aba { padding: 0.5rem 1.1rem; font-size: 0.85rem; cursor: pointer; min-height: 36px; }
+
+/* indicadores */
+.te-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1rem; }
+.te-kpi {
+  position: relative; overflow: hidden;
+  background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card);
+  padding: 14px 14px 13px 18px; display: flex; flex-direction: column; gap: 2px;
+}
+.te-kpi::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--orb-kpi, var(--orb-azul)); }
+.te-kpi-rot { font-size: 0.8rem; font-weight: 600; color: var(--orb-tinta2); }
+.te-kpi-num { font-family: var(--orb-display); font-size: 1.75rem; font-weight: 800; color: var(--orb-tinta); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.te-kpi small { font-size: 0.76rem; color: var(--orb-mudo); line-height: 1.35; }
+
+/* cartões */
+.te-card {
+  background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card);
+  padding: 1rem 1.1rem; margin-bottom: 1rem;
+}
+.te-card-topo { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.te-card-titulo { font-family: var(--orb-display); font-size: 1.02rem; font-weight: 700; margin: 0 0 0.6rem; color: var(--orb-tinta); }
+.te-card-topo .te-card-titulo { margin: 0; }
+.te-sub { font-family: var(--orb-display); font-size: 0.9rem; font-weight: 700; margin: 1rem 0 0.4rem; color: var(--orb-tinta2); }
+.te-conta { font-size: 0.8rem; color: var(--orb-mudo); margin: 0.35rem 0 0.7rem; max-width: 80ch; }
+.te-botoes { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.te-mudo { color: var(--orb-mudo); font-size: 0.78rem; }
+td .te-mudo, .te-aluno .te-mudo { display: block; }
+
+/* tabelas */
+.te-tabela-wrap { overflow-x: auto; }
+.te-tabela { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.te-tabela th {
+  text-align: left; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--orb-mudo); padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--orb-linha); white-space: nowrap;
+}
+.te-tabela td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--orb-linha2); vertical-align: middle; }
+.te-tabela tbody tr:hover { background: var(--orb-sup2); }
+.te-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.te-acoes { white-space: nowrap; text-align: right; }
+.te-btn-p { min-height: 32px !important; padding: 0 0.7rem; font-size: 0.8rem; }
+.te-btn-perigo:hover { border-color: var(--orb-crit) !important; color: var(--orb-crit) !important; }
+.te-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--orb-azul); cursor: pointer; text-align: left; }
+.te-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* barra de participação (azul = dado neutro) */
+.te-part { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 170px; }
+.te-barra { flex: 1; height: 8px; background: var(--orb-sup2); border-radius: 999px; overflow: hidden; min-width: 90px; }
+.te-barra span { display: block; height: 100%; background: var(--orb-azul); border-radius: 999px; }
+
+/* detalhe da turma */
+.te-detalhe-topo { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.te-detalhe-titulo { font-family: var(--orb-display); font-size: 1.35rem; font-weight: 800; margin: 0; color: var(--orb-tinta); }
+.te-tabela-notas th, .te-tabela-notas td { text-align: center; }
+.te-tabela-notas th:first-child, .te-tabela-notas .te-aluno { text-align: left; }
+.te-th-bim { border-left: 1px solid var(--orb-linha); }
+.te-ua-cab { font-size: 0.7rem; cursor: help; }
+.te-ua-fechada { opacity: 0.45; }
+.te-aluno { min-width: 220px; font-weight: 600; }
+.te-ua { width: 2.4rem; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.te-ua-ok { color: var(--orb-bom); background: var(--orb-bom-suave); }
+.te-ua-parcial { color: var(--orb-alerta); background: var(--orb-alerta-suave); font-weight: 600; }
+.te-ua-nao { color: var(--orb-mudo); }
+.te-ua svg { vertical-align: middle; }
+.te-nota { font-family: var(--orb-display); font-weight: 800; font-size: 0.95rem; color: var(--orb-marca); }
+.te-legenda { font-size: 0.78rem; color: var(--orb-mudo); margin: 0.7rem 0 0; }
+.te-leg { display: inline-block; min-width: 1.6rem; text-align: center; border-radius: 4px; padding: 0 0.25rem; }
+
+/* vazio / mensagens */
+.te-vazio {
+  background: var(--orb-sup); border: 1px dashed var(--orb-linha); border-radius: var(--orb-raio-card);
+  padding: 2.5rem 1.5rem; text-align: center; color: var(--orb-tinta2);
+}
+.te-vazio p { margin: 0.4rem auto 0; max-width: 60ch; font-size: 0.86rem; color: var(--orb-mudo); }
+.te-erro { background: var(--orb-crit-suave); border-left: 4px solid var(--orb-crit); border-radius: 8px; padding: 0.65rem 0.9rem; font-size: 0.84rem; color: #7f1d1d; margin-bottom: 0.8rem; }
+.te-previa { background: var(--orb-marca-suave); border-radius: 8px; padding: 0.65rem 0.9rem; font-size: 0.84rem; color: var(--orb-tinta); margin-bottom: 0.8rem; line-height: 1.5; }
+
+/* modal de importação */
+.te-modal { position: fixed; inset: 0; background: rgba(13, 27, 51, 0.45); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1000; }
+.te-modal-caixa { background: var(--orb-sup); border-radius: var(--orb-raio-card); width: min(560px, 100%); max-height: 92vh; overflow-y: auto; padding: 1.3rem 1.4rem; }
+.te-modal-caixa h2 { font-family: var(--orb-display); font-size: 1.15rem; margin: 0 0 0.3rem; }
+.te-ajuda { font-size: 0.82rem; color: var(--orb-mudo); margin: 0 0 1rem; }
+.te-arquivo {
+  display: block; border: 1px dashed var(--orb-linha); border-radius: var(--orb-raio-ctrl); background: var(--orb-sup2);
+  padding: 1rem; text-align: center; font-size: 0.86rem; font-weight: 600; color: var(--orb-tinta2); cursor: pointer; margin-bottom: 0.8rem;
+}
+.te-arquivo:hover, .te-arquivo:focus-within { border-color: var(--orb-azul); color: var(--orb-azul); }
+.te-arquivo.tem-arquivo { border-style: solid; border-color: var(--orb-marca); color: var(--orb-marca); }
+.te-arquivo input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.te-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.te-campos .te-campo-largo { grid-column: 1 / -1; }
+.te-campos input[type="text"], .te-campos .select-filter { width: 100%; min-width: 0; padding: 0 0.7rem; font-size: 0.88rem; box-sizing: border-box; }
+.te-modal-acoes { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.1rem; }
+
+/* aviso rápido */
+.te-toast { position: fixed; right: 1.25rem; bottom: 1.25rem; background: var(--orb-tinta); color: #fff; border-radius: 8px; padding: 0.7rem 1rem; font-size: 0.86rem; z-index: 1100; max-width: 380px; }
+.te-toast.ok { background: var(--orb-bom); }
+.te-toast.erro { background: var(--orb-crit); }
+
+@media (max-width: 720px) {
+  .layout-content { padding: 1rem 1rem 3rem; }
+  .te-filtros .abas { margin-left: 0; }
+  .select-filter { min-width: 0; width: 100%; }
+  .te-filtros label { flex: 1 1 140px; }
+  .te-campos { grid-template-columns: 1fr; }
+  .te-detalhe-topo { flex-direction: column; }
+  .btn-primary, .btn-secondary { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+/* diários do Edubox (turmas juntas no AVA = um diário por período) */
+.te-diarios { display: flex; flex-direction: column; gap: 0.5rem; }
+.te-diario-linha { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; border: 1px solid var(--orb-linha); border-radius: 8px; padding: 0.6rem 0.8rem; }
+.te-diario-linha small { display: block; margin-top: 2px; }
+.te-diario { white-space: nowrap; font-size: 0.82rem; }
+.te-diario small { display: block; }
+.te-aviso { background: var(--orb-alerta-suave); border-left: 4px solid var(--orb-alerta); border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.82rem; color: #6b3f06; margin-top: 0.7rem; }
+.te-etiqueta { display: inline-block; border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.72rem; font-weight: 600; }
+.te-etiqueta-alerta { background: var(--orb-alerta-suave); color: var(--orb-alerta); }
+
+.te-onde { white-space: normal; max-width: 260px; margin-top: 2px; }
+.te-onde-lista { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.te-onde-lista li { margin: 0.2rem 0; }
+
+.te-onde-grupo { margin: 0.6rem 0 0.1rem; font-weight: 700; color: #6b3f06; }
+.te-linha-fora td { opacity: 0.6; }
+.te-linha-fora:hover td { opacity: 1; }
+
+.te-social { display: block; font-size: 0.76rem; color: var(--orb-azul); font-weight: 600; }
+li .te-social { display: inline; }
+
+/* subiu / caiu entre bimestres (verde = ganho, vermelho = perda) */
+.te-var { font-weight: 700; white-space: nowrap; font-size: 0.82rem; }
+.te-var-sobe { color: var(--orb-bom); }
+.te-var-cai { color: var(--orb-crit); }
+.te-var-igual { color: var(--orb-mudo); }
+
+/* unidade concluída à mão: mesmo verde, com contorno tracejado pra diferenciar do AVA */
+.te-ua-manual { color: var(--orb-bom); background: #fff; box-shadow: inset 0 0 0 1.5px var(--orb-bom); }
+.te-tabela-notas td.te-ua-manual { outline-offset: -3px; }
+.te-ua-manual.te-leg { box-shadow: inset 0 0 0 1.5px var(--orb-bom); }
+.te-ua-clicavel { cursor: pointer; }
+.te-ua-clicavel:hover { box-shadow: inset 0 0 0 2px var(--orb-azul); }
+.te-ua-salvando { opacity: 0.4; pointer-events: none; }
+
+/* separação dos bimestres na tabela de alunos (UA 07 = começo do 2º bimestre) */
+.te-tabela-notas .te-sep { border-left: 2px solid var(--orb-marca); }
+.te-tabela-notas .te-sep-leve { border-left: 1px solid var(--orb-linha); }
+.te-tabela-notas .te-bim-par { background: var(--orb-sup2); }
+.te-tabela-notas td.te-ua-ok.te-bim-par { background: var(--orb-bom-suave); }
+.te-tabela-notas td.te-ua-parcial.te-bim-par { background: var(--orb-alerta-suave); }
+.te-tabela-notas td.te-ua-manual.te-bim-par { background: #fff; }
+.te-th-bim { color: var(--orb-tinta) !important; }
+.te-th-faixa { display: block; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--orb-mudo); font-size: 0.68rem; }
+.te-th-nota { vertical-align: bottom; }
