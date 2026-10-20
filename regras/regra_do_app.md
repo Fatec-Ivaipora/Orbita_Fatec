@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-20] Trilha EAD: livro de notas com outro formato de cabeçalho das UAs importava sem nenhuma unidade
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/trilha-ead-cabecalho-ua
+- Arquivos alterados: `src/utils/livroNotasAva.js` (`numeroDaUnidade`/`tituloDaUnidade`; montagem da lista de unidades; recusa a importação sem unidade).
+- Tipo: Correção
+- Motivo: Caso real do coordenador do EAD (FIS.APLI.AGRO. - 7551): importou 55 alunos e nenhuma unidade, então nada aparecia como feito. O leitor usava uma regra tolerante pra achar a linha do cabeçalho e outra rígida (só "Ferramenta externa: UA 01") pra montar as unidades.
+- Impacto: Uma regra só pras duas coisas, aceitando "UA 01", "UA-01", "UA.01", "UA01", "Unidade de Aprendizagem 01", com ou sem "Ferramenta externa:"/"Ferramenta externa -" na frente. Se a mesma UA vier em mais de uma coluna (Real, Porcentagem, Letra), usa uma só e nunca a de letra. Arquivo sem nenhuma coluna de unidade agora é recusado com mensagem clara, em vez de salvar a turma vazia. O formato que já funcionava continua igual. Turma já salva vazia se corrige reimportando o mesmo arquivo.
+- Como testar: Trilha EAD → Importar livro de notas → arquivo do AVA → a prévia mostra as 12 unidades; um arquivo sem colunas de UA mostra o erro.
+- Como reverter: reverter o commit.
+
 ### [2026-10-20] Novo módulo Trilha EAD (Docência): participação nas UAs do AVA, ranking e arquivo pro Edubox
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/trilha-ead
