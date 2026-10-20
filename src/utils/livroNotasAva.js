@@ -81,10 +81,29 @@ function disciplinaDoArquivo(nomeArquivo) {
 /**
  * @returns {{ disciplina, codigoAva, unidades: {n, titulo}[], alunos: {nome, email, notas: (number|null)[]}[] }}
  */
+// Número da unidade num cabeçalho de coluna, com a MESMA regra pra achar a
+// linha do cabeçalho e pra montar a lista de unidades. Tolera "UA 01",
+// "UA-01", "UA.01", "UA01", "Unidade de Aprendizagem 01", com ou sem
+// "Ferramenta externa:" / "Ferramenta externa -" na frente. Antes eram duas
+// regras: uma tolerante (achava o cabeçalho) e outra rígida (só "Ferramenta
+// externa: UA 01") — um arquivo com outro formato importava os alunos e
+// nenhuma unidade (caso real 20/10/2026, FIS.APLI.AGRO. - 7551).
+function numeroDaUnidade(cabecalho) {
+    const m = chave(cabecalho).match(/(?:^|\s)(?:ua|unidade de aprendizagem)\s*0*(\d{1,2})(?:\s|$)/);
+    return m ? Number(m[1]) : null;
+}
+
+function tituloDaUnidade(cabecalho) {
+    return txt(cabecalho)
+        .replace(/^.*?\b(?:UA|Unidade de Aprendizagem)\s*[.\-–_:]?\s*0*\d{1,2}\b\s*[-–:.]?\s*/i, '')
+        .replace(/\s*\((real|porcentagem|percentage|letra|letter)\)\s*$/i, '')
+        .trim();
+}
+
 function lerLivroDeNotas(buffer, nomeArquivo) {
     const grade = lerGrade(buffer, nomeArquivo).map(l => (l || []).map(txt));
 
-    const idxCab = grade.findIndex(l => l.some(c => /^ua\s*0*\d{1,2}\b/.test(chave(c).replace(/^ferramenta externa\s*/, ''))));
+    const idxCab = grade.findIndex(l => l.some(c => numeroDaUnidade(c) !== null));
     if (idxCab === -1) {
         throw new ErroLivroNotas(
             'Não encontrei as colunas das unidades (UA 01, UA 02...). Confira se o arquivo é o ' +
@@ -98,15 +117,23 @@ function lerLivroDeNotas(buffer, nomeArquivo) {
     const idxEmail = k.findIndex(c => c.includes('e mail') || c === 'email');
     if (idxNome === -1) throw new ErroLivroNotas('Não encontrei a coluna "Nome" no arquivo.');
 
-    const unidades = [];
+    // Uma coluna por unidade. O AVA pode exportar a mesma UA mais de uma vez
+    // (Real, Porcentagem, Letra): fica a primeira que tem número, nunca a de letra.
+    const porNumero = new Map();
     cab.forEach((h, i) => {
-        const limpo = txt(h).replace(/^ferramenta externa:\s*/i, '');
-        const m = limpo.match(/^UA\s*0*(\d{1,2})\b\s*[-–:]?\s*(.*)$/i);
-        if (!m) return;
-        const titulo = m[2].replace(/\s*\((real|porcentagem|percentage|letra)\)\s*$/i, '').trim();
-        unidades.push({ n: Number(m[1]), titulo, coluna: i });
+        const n = numeroDaUnidade(h);
+        if (n === null) return;
+        const letra = /\((letra|letter)\)\s*$/i.test(txt(h));
+        const atual = porNumero.get(n);
+        if (!atual || (atual.letra && !letra)) porNumero.set(n, { n, titulo: tituloDaUnidade(h), coluna: i, letra });
     });
-    unidades.sort((a, b) => a.n - b.n);
+    const unidades = [...porNumero.values()].sort((a, b) => a.n - b.n);
+    if (!unidades.length) {
+        throw new ErroLivroNotas(
+            'Encontrei os alunos, mas nenhuma coluna de unidade (UA 01, UA 02...). Confira se o arquivo é o ' +
+            'livro de notas exportado do curso no AVA (Notas → Exportar → Excel ou CSV), com as colunas das unidades.'
+        );
+    }
 
     const alunos = [];
     for (const linha of grade.slice(idxCab + 1)) {
