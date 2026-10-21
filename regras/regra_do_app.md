@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-21] Banco de Provas liberado pro setor EAD: vê tudo dos cursos, edita só o que criou
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/ead-banco-provas
+- Arquivos alterados: `core/permissions.js` (ead ganha `banco-provas`), `src/middlewares/auth.js` (padrão ead 3), `src/rotas/banco-provas.js` (`cursosDoCoordenador` com escopo do EAD; `erroDeDono` em editar/excluir disciplina, questão, gabarito, lote importado e prova; fila de revisão só com os lotes do próprio perfil), `src/rotas/correcao-provas.js` (EAD puxa gabarito do Banco de Provas de todos os cursos, menos Medicina), `docencia/banco-provas/app.js` (`podeAlterar`: esconde Editar/Excluir e trava o gabarito na pré-visualização do que não é dele).
+- Tipo: Permissão / Melhoria
+- Motivo: O EAD precisa montar provas no Banco de Questões. Pedido: "eles precisam ver tudo dos cursos eles podem ver e editar, porém o editar só do que eles mesmos fizeram pelos seus perfis".
+- Impacto: Cargo ead vê disciplinas, questões e provas de todos os cursos da graduação (Medicina fora, mesmo escopo da CPA) e pode criar disciplina, questão, importar Word e montar prova. Editar/excluir só o que tem `createdBy` = o próprio uid (o servidor recusa com 403; a tela nem mostra os botões). Questões de Conhecimentos Gerais seguem só ADM editando. Coordenadores e ADM sem mudança. Depende de `config/permissions` → ead `banco-provas` = 3 no Firestore.
+- Como testar: entrar com um tutor do EAD → Docência → Banco de Provas → escolher um curso → vê tudo, sem Editar/Excluir no que é dos outros → cadastrar uma disciplina/questão → nela aparecem Editar/Excluir.
+- Como reverter: reverter o commit e voltar `config/permissions` ead `banco-provas` pra 1.
+
 ### [2026-10-20] Trilha EAD: livro de notas com outro formato de cabeçalho das UAs importava sem nenhuma unidade
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/trilha-ead-cabecalho-ua

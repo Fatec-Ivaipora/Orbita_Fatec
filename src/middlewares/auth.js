@@ -447,7 +447,7 @@ const requireModulePermission = (moduleName) => {
                 palestras: 3,
                 'agenda-espacos': 2
             },
-            // Setor EAD (15/10/2026) — só a Correção de Provas.
+            // Setor EAD (15/10/2026) — Correção de Provas; 21/10 também o Banco de Provas.
             ead: {
                 emprestimo: 1,
                 usuarios: 1,
@@ -463,7 +463,7 @@ const requireModulePermission = (moduleName) => {
                 cobranca: 1,
                 'banco-med-fatec': 1,
                 'relatorio-desempenho': 1,
-                'banco-provas': 1,
+                'banco-provas': 3, // 21/10/2026: vê tudo dos cursos, edita só o que criou
                 'confirmacao-evento': 1,
                 contratos: 1,
                 'aula-experimental': 1,

@@ -17,6 +17,12 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 
 let currentUser = null;
 let currentRole = null;
+
+// EAD (21/10/2026): vê tudo dos cursos, mas só edita/exclui o que criou pelo
+// próprio perfil — o servidor confere igual (erroDeDono em src/rotas/banco-provas.js).
+function podeAlterar(item) {
+  return currentRole !== 'ead' || !!(item && currentUser && item.createdBy === currentUser.uid);
+}
 let appInitialized = false;
 let initializedRole = null;
 
@@ -259,9 +265,9 @@ function renderDisciplinas() {
         <tr>
           <td>${esc(d.nome)}${d.nomeBreve ? ` <span style="color:var(--text-secondary);">(${esc(d.nomeBreve)})</span>` : ''}</td>
           <td style="text-align:right;">${questoes.filter(q => q.disciplinaId === d.id).length || '—'}</td>
-          <td class="acoes-col">
+          <td class="acoes-col">${podeAlterar(d) ? `
             <button type="button" class="bp-acao action-execute" data-editar-disciplina="${d.id}" title="Editar a disciplina"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Editar</span></button>
-            <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-disciplina="${d.id}" title="Excluir a disciplina" aria-label="Excluir a disciplina"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+            <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-disciplina="${d.id}" title="Excluir a disciplina" aria-label="Excluir a disciplina"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
           </td>
         </tr>`).join('');
     return header + linhas;
@@ -389,9 +395,9 @@ function renderQuestoes() {
         <div class="bp-q-row-titulo">${esc(q.enunciadoHtml).slice(0, 220)}${q.enunciadoHtml.length > 220 ? '…' : ''}</div>
         <div class="bp-q-row-meta">${esc(nomeDisciplina(q.disciplinaId))}${q.professorNome ? ` · por ${esc(q.professorNome)}` : ''}</div>
       </div>
-      <div class="bp-q-row-actions">
+      <div class="bp-q-row-actions">${podeAlterar(q) ? `
         <button type="button" class="bp-acao action-execute" data-editar-questao="${q.id}" title="Editar a questão"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Editar</span></button>
-        <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-questao="${q.id}" title="Excluir a questão" aria-label="Excluir a questão"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+        <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-questao="${q.id}" title="Excluir a questão" aria-label="Excluir a questão"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
       </div>
     </div>`).join('');
 
@@ -998,8 +1004,8 @@ function renderProvas() {
           <button type="button" class="bp-acao action-execute" data-exportar-prova="${p.id}" title="Baixar a prova em Word (.docx) para imprimir">${ico('baixar')}<span>Prova</span></button>
           <button type="button" class="bp-acao action-execute" data-exportar-gabarito="${p.id}" title="Baixar o gabarito (.docx) — uso interno, não entregar ao aluno">${ico('gabarito')}<span>Gabarito</span></button>
           <a class="bp-acao bp-acao-destaque action-execute" href="/correcao-provas/index.html#nova/bp:${encodeURIComponent(p.id)}" title="Gerar as folhas de resposta (uma por aluno) e corrigir pelo celular">${ico('folhas')}<span>Folhas de resposta</span></a>
-          <span class="bp-acoes-sep" aria-hidden="true"></span>
-          <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-prova="${p.id}" title="Excluir esta prova" aria-label="Excluir a prova ${esc(p.nome)}">${ico('lixo')}</button>
+          ${podeAlterar(p) ? `<span class="bp-acoes-sep" aria-hidden="true"></span>
+          <button type="button" class="bp-acao bp-acao-perigo action-execute" data-excluir-prova="${p.id}" title="Excluir esta prova" aria-label="Excluir a prova ${esc(p.nome)}">${ico('lixo')}</button>` : ''}
         </div>
       </td>
     </tr>`).join('');
@@ -1053,6 +1059,10 @@ function bindGabaritoEditavelPreview() {
   const conteudo = document.getElementById('preview-prova-conteudo');
   conteudo.querySelectorAll('.bp-prev-questao[data-questao-id]').forEach(bloco => {
     const questaoId = bloco.dataset.questaoId;
+    if (!podeAlterar(questoes.find(x => x.id === questaoId))) {
+      bloco.querySelectorAll('.bp-prev-alt-btn').forEach(btn => { btn.disabled = true; });
+      return;
+    }
     // Editar a questão aqui mesmo (14/10/2026): enunciado, alternativas e a correta. Trocar a correta
     // muda o gabarito da prova e, se a prova já virou avaliação, a Correção de Provas (e as notas).
     const editar = document.createElement('button');

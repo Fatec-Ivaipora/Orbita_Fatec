@@ -313,11 +313,11 @@ export const ROLE_PERMISSIONS = {
     label: "Comercial",
     modules: ["dashboard", "fidelidade", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos"]
   },
-  // Setor EAD (15/10/2026) — líder: Carlos Durlo. Só a Correção de Provas (Docência), de todos os
+  // Setor EAD (15/10/2026) — líder: Carlos Durlo. Correção de Provas, Trilha EAD e (21/10) Banco de Provas, de todos os
   // cursos da graduação (escopo em src/rotas/cpa.js escopoDe). Sem nada da Secretaria.
   ead: {
     label: "EAD",
-    modules: ["dashboard", "fidelidade", "correcao-provas", "trilha-ead"]
+    modules: ["dashboard", "fidelidade", "correcao-provas", "trilha-ead", "banco-provas"]
   },
   // Robô da ODTech (16/10/2026) — faz processos de matrícula pra ajudar a
   // Secretaria. Só Matrículas, e só de 2027.1 em diante (trava no backend
