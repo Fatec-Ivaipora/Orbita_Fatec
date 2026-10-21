@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
-import { opcaoEscolhida, imprimirRelatorio } from '../comercial-comum.js';
+import { criarOficio, oficioNaLinha, opcaoEscolhida, imprimirRelatorio } from '../comercial-comum.js';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -31,7 +31,8 @@ let initializedRole = null;
 let itens = [];
 let periodoAtual = '';
 let emEdicaoId = null;
-let equipe = null; // [{uid, nome}] do Comercial
+let equipe = null;
+let oficioUi = null; // seção "Ofício" do formulário (comercial-comum.js) // [{uid, nome}] do Comercial
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -222,6 +223,10 @@ function wireEventos() {
   document.getElementById('btn-cancelar-modal').addEventListener('click', () => fecharModal());
   document.getElementById('form-aulao').addEventListener('submit', salvar);
   document.getElementById('btn-excluir').addEventListener('click', () => excluir(emEdicaoId));
+  oficioUi = criarOficio({
+    base: '/auloes', apiFetch, showToast, esc,
+    aoMudar: (id, oficio) => { const i = itens.find(x => x.id === id); if (i) { i.oficio = oficio; renderTudo(); } }
+  });
   document.getElementById('btn-copiar-agenda').addEventListener('click', copiarAgenda);
   // Colégio já visitado: puxa a cidade sozinho.
   document.getElementById('f-colegio').addEventListener('change', (e) => {
@@ -237,6 +242,7 @@ function wireEventos() {
     const { id, acao } = btn.dataset;
     if (acao === 'editar') abrirModal(id);
     else if (acao === 'excluir') excluir(id);
+    else if (acao === 'oficio') oficioUi.ver(id);
     else mudarStatus(id, acao);
   });
 }
@@ -276,7 +282,7 @@ function passa(i, f, ignorar = '') {
   if (f.tipo && i.tipo !== f.tipo) return false;
   if (f.turno && i.turno !== f.turno) return false;
   if (ignorar !== 'status' && f.status && i.status !== f.status) return false;
-  if (f.busca && !`${i.colegio} ${i.turma} ${i.responsavel} ${i.palestrante} ${i.observacoes} ${i.contatoColegio}`.toLowerCase().includes(f.busca)) return false;
+  if (f.busca && !`${i.colegio} ${i.turma} ${i.responsavel} ${i.palestrante} ${i.observacoes} ${i.contatoColegio} ${i.solicitacaoTexto || ''}`.toLowerCase().includes(f.busca)) return false;
   return true;
 }
 
@@ -375,7 +381,7 @@ function renderTabela(lista) {
         <tr class="${passado && i.status !== 'agendado' ? 'linha-passada' : ''}">
           <td><div class="ae-dia">${fmtData(i.data)}${i.data === h ? '<span class="ae-hoje">HOJE</span>' : ''}</div><div class="ct-sub">${DIAS[dataLocal(i.data).getDay()]}${i.horario ? ' · ' + i.horario : ''}</div></td>
           <td>${i.turno ? `<span class="turno-badge ${turnoClasse(i.turno)}">${esc(i.turno)}</span>` : '<span class="ct-vazio">—</span>'}</td>
-          <td><span class="ct-nome">${esc(i.colegio)}</span>${extras ? `<div class="ct-sub">${esc(extras)}</div>` : ''}${i.observacoes ? `<div class="ct-sub" title="${esc(i.observacoes)}">📝 ${esc(i.observacoes.length > 50 ? i.observacoes.slice(0, 50) + '…' : i.observacoes)}</div>` : ''}</td>
+          <td><span class="ct-nome">${esc(i.colegio)}</span>${extras ? `<div class="ct-sub">${esc(extras)}</div>` : ''}${i.observacoes ? `<div class="ct-sub" title="${esc(i.observacoes)}">📝 ${esc(i.observacoes.length > 50 ? i.observacoes.slice(0, 50) + '…' : i.observacoes)}</div>` : ''}${oficioNaLinha(i, esc, fmtData)}</td>
           <td>${esc(i.cidade)}</td>
           <td>${i.tipo ? `<span class="tipo-badge">${esc(i.tipo)}</span>` : '<span class="ct-vazio">—</span>'}</td>
           <td>${esc(nomeProprio(i.responsavel)) || '<span class="ct-vazio">—</span>'}${i.atividadeId ? '<div class="ae-agenda-ok" title="Está na agenda do Meu Espaço">📅 na agenda</div>' : ''}</td>
@@ -443,6 +449,7 @@ async function abrirModal(id) {
   set('f-status', i?.status || 'agendado');
   set('f-obs', i?.observacoes);
   document.getElementById('grupo-status').classList.toggle('hidden', !i);
+  oficioUi.preencher(i);
   document.getElementById('btn-excluir').classList.toggle('hidden', !i);
   document.getElementById('modal-aulao').classList.remove('hidden');
   document.getElementById('f-data').focus();
@@ -459,20 +466,33 @@ async function salvar(e) {
   const body = {
     data: v('f-data'), turno: v('f-turno'), horario: v('f-horario'), colegio: v('f-colegio'), cidade: v('f-cidade'),
     tipo: v('f-tipo'), turma: v('f-turma'), responsaveisUids: uidsSelecionados(), palestrante: v('f-palestrante'),
-    contatoColegio: v('f-contato-colegio'), publicoEstimado: v('f-publico'), status: v('f-status'), observacoes: v('f-obs')
+    contatoColegio: v('f-contato-colegio'), publicoEstimado: v('f-publico'), status: v('f-status'), observacoes: v('f-obs'),
+    ...oficioUi.campos()
   };
   btn.disabled = true;
   try {
+    const arquivo = await oficioUi.prepararArquivo();
     const salvo = emEdicaoId
       ? await apiFetch(`/auloes/${emEdicaoId}`, { method: 'PUT', body: JSON.stringify(body) })
       : await apiFetch('/auloes', { method: 'POST', body: JSON.stringify(body) });
     substituir(salvo);
     fecharModal();
     showToast(emEdicaoId ? 'Alterações salvas.' : 'Aulão agendado.');
+    if (arquivo) await enviarOficio(salvo.id, arquivo);
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
     btn.disabled = false;
+  }
+}
+
+// O agendamento já foi salvo: se o ofício falhar, avisa sem desfazer o resto.
+async function enviarOficio(id, arquivo) {
+  try {
+    await oficioUi.enviar(id, arquivo);
+    showToast('Ofício anexado.');
+  } catch (err) {
+    showToast(`Agendamento salvo, mas o ofício não foi anexado: ${err.message}`, 'error');
   }
 }
 

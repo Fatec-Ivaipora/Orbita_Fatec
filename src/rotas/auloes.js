@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const agenda = require('./comercial-agenda');
+const oficio = require('./comercial-oficio');
 
 // ==========================================
 // AULÕES / REDAÇÕES (Comercial) — agenda de visitas aos colégios (aulão de
@@ -40,7 +41,8 @@ function camposDoBody(body) {
         palestrante: texto(body.palestrante, 120),
         contatoColegio: texto(body.contatoColegio, 120),
         publicoEstimado: Number.isFinite(Number(body.publicoEstimado)) && body.publicoEstimado !== '' ? Math.max(0, Math.round(Number(body.publicoEstimado))) : null,
-        observacoes: texto(body.observacoes, 2000)
+        observacoes: texto(body.observacoes, 2000),
+        ...oficio.camposSolicitacao(body)
     };
 }
 
@@ -157,9 +159,12 @@ router.delete('/:id', verifyToken, checkPermission, async (req, res) => {
         const ref = db.collection(COL).doc(req.params.id);
         const snap = await ref.get();
         if (snap.exists) await agenda.removerAtividade(snap.data().atividadeId);
+        if (snap.exists) await oficio.apagarArquivo(snap.data().oficio);
         await ref.delete();
         res.json({ message: 'Agendamento removido.' });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+oficio.montarRotas(router, { col: COL, verifyToken, checkPermission });
 
 module.exports = router;

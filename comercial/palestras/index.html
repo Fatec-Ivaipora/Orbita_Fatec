@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/auloes/auloes.css?v=1">
     <link rel="stylesheet" href="/comercial/palestras/palestras.css?v=1">
-    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
+    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=3">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -207,6 +207,24 @@
                         </select>
                     </div>
                 </div>
+                <fieldset class="cm-oficio">
+                    <legend>Ofício da instituição</legend>
+                    <div class="cm-oficio-atual hidden" id="oficio-atual"></div>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="f-sol-data">Solicitado em</label>
+                            <input type="date" id="f-sol-data">
+                        </div>
+                        <div class="form-group">
+                            <label for="f-oficio">Arquivo do ofício (PDF ou foto, até 20 MB)</label>
+                            <input type="file" id="f-oficio" accept="application/pdf,image/*">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="f-sol-texto">O que foi solicitado</label>
+                        <textarea id="f-sol-texto" rows="2" maxlength="1000" placeholder="Ex.: aulão de matemática para os 3ºs anos, manhã, 40 alunos"></textarea>
+                    </div>
+                </fieldset>
                 <div class="form-group">
                     <label for="f-obs">Observações</label>
                     <textarea id="f-obs" rows="3" maxlength="2000"></textarea>

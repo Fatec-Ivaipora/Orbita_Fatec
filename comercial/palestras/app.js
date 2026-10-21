@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
-import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
+import { criarOficio, oficioNaLinha, opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -33,6 +33,7 @@ let itens = [];
 let periodoAtual = '';
 let emEdicaoId = null;
 let equipe = null;
+let oficioUi = null; // seção "Ofício" do formulário (comercial-comum.js)
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -227,6 +228,10 @@ function wireEventos() {
   document.getElementById('btn-cancelar-modal').addEventListener('click', fecharModal);
   document.getElementById('form-palestra').addEventListener('submit', salvar);
   document.getElementById('btn-excluir').addEventListener('click', () => excluir(emEdicaoId));
+  oficioUi = criarOficio({
+    base: '/palestras', apiFetch, showToast, esc,
+    aoMudar: (id, oficio) => { const i = itens.find(x => x.id === id); if (i) { i.oficio = oficio; renderTudo(); } }
+  });
   document.getElementById('btn-copiar-agenda').addEventListener('click', copiarAgenda);
   document.getElementById('btn-imprimir').addEventListener('click', () => imprimirRelatorio([
     `Período: ${opcaoEscolhida('sel-periodo')}`,
@@ -253,6 +258,7 @@ function wireEventos() {
     const { id, acao } = btn.dataset;
     if (acao === 'editar') abrirModal(id);
     else if (acao === 'excluir') excluir(id);
+    else if (acao === 'oficio') oficioUi.ver(id);
     else mudarStatus(id, acao);
   });
 }
@@ -288,7 +294,7 @@ function passa(i, f, ignorar = '') {
   if (f.palestrante && chave(i.palestrante) !== chave(f.palestrante)) return false;
   if (f.transporte && i.transporte !== f.transporte) return false;
   if (ignorar !== 'status' && f.status && i.status !== f.status) return false;
-  if (f.busca && !`${i.local} ${i.tema} ${i.palestrante} ${i.motorista} ${(i.envolvidos || []).map(p => p.nome).join(' ')} ${i.observacoes} ${i.contatoLocal}`.toLowerCase().includes(f.busca)) return false;
+  if (f.busca && !`${i.local} ${i.tema} ${i.palestrante} ${i.motorista} ${(i.envolvidos || []).map(p => p.nome).join(' ')} ${i.observacoes} ${i.contatoLocal} ${i.solicitacaoTexto || ''}`.toLowerCase().includes(f.busca)) return false;
   return true;
 }
 
@@ -406,7 +412,7 @@ function renderTabela(lista) {
       return `
         <tr class="${passado && i.status !== 'agendada' ? 'linha-passada' : ''}">
           <td>${quando}</td>
-          <td><div class="pl-local">${esc(i.local)}</div><div class="ct-sub">📍 ${esc(i.cidade)}</div>${i.observacoes ? `<div class="ct-sub" title="${esc(i.observacoes)}">📝 ${esc(i.observacoes.length > 45 ? i.observacoes.slice(0, 45) + '…' : i.observacoes)}</div>` : ''}</td>
+          <td><div class="pl-local">${esc(i.local)}</div><div class="ct-sub">📍 ${esc(i.cidade)}</div>${i.observacoes ? `<div class="ct-sub" title="${esc(i.observacoes)}">📝 ${esc(i.observacoes.length > 45 ? i.observacoes.slice(0, 45) + '…' : i.observacoes)}</div>` : ''}${oficioNaLinha(i, esc, fmtData)}</td>
           <td><span class="cm-pessoa" style="min-width:0">${avatar(i.palestrante)}<span><span class="pl-palestrante">${esc(i.palestrante) || '—'}</span>${i.tema ? `<div class="pl-tema">${esc(i.tema)}</div>` : ''}${(i.envolvidos || []).length ? `<div class="ct-sub">👥 Comercial: ${esc(i.envolvidos.map(p => nomeProprio(p.nome)).join(', '))}</div>` : ''}</span></span></td>
           <td>${quemLevaHtml(i)}</td>
           <td><span class="status-badge st-${i.status}">${STATUS_LABEL[i.status] || i.status}</span>${esqueceu ? '<div class="ae-atencao" title="Data já passou — marque se foi realizada">aconteceu?</div>' : ''}</td>
@@ -486,6 +492,7 @@ async function abrirModal(id) {
   atualizarTransporte();
   atualizarSemData();
   document.getElementById('grupo-status').classList.toggle('hidden', !i);
+  oficioUi.preencher(i);
   document.getElementById('btn-excluir').classList.toggle('hidden', !i);
   document.getElementById('modal-palestra').classList.remove('hidden');
   document.getElementById('f-local').focus();
@@ -510,21 +517,34 @@ async function salvar(e) {
     transporte, responsaveisUids,
     envolvidosUids: [...document.querySelectorAll('#f-envolvidos input:checked')].map(x => x.value),
     motorista: v('f-motorista'), pagarDeslocamento: document.getElementById('f-pagar').checked,
-    contatoLocal: v('f-contato'), status: v('f-status'), observacoes: v('f-obs')
+    contatoLocal: v('f-contato'), status: v('f-status'), observacoes: v('f-obs'),
+    ...oficioUi.campos()
   };
   const btn = document.getElementById('btn-salvar');
   btn.disabled = true;
   try {
+    const arquivo = await oficioUi.prepararArquivo();
     const salvo = emEdicaoId
       ? await apiFetch(`/palestras/${emEdicaoId}`, { method: 'PUT', body: JSON.stringify(body) })
       : await apiFetch('/palestras', { method: 'POST', body: JSON.stringify(body) });
     substituir(salvo);
     fecharModal();
     showToast(emEdicaoId ? 'Alterações salvas.' : 'Palestra agendada.');
+    if (arquivo) await enviarOficio(salvo.id, arquivo);
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
     btn.disabled = false;
+  }
+}
+
+// A palestra já foi salva: se o ofício falhar, avisa sem desfazer o resto.
+async function enviarOficio(id, arquivo) {
+  try {
+    await oficioUi.enviar(id, arquivo);
+    showToast('Ofício anexado.');
+  } catch (err) {
+    showToast(`Palestra salva, mas o ofício não foi anexado: ${err.message}`, 'error');
   }
 }
 
