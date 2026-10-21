@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-21] Comercial: ofício anexado aos Aulões e Palestras (o que foi solicitado e quando)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/comercial-oficio
+- Arquivos alterados: `src/rotas/comercial-oficio.js` (novo: POST `/:id/oficio/envio`, GET/PUT/DELETE `/:id/oficio`, `camposSolicitacao`, `apagarArquivo`), `src/rotas/auloes.js` e `src/rotas/palestras.js` (campos da solicitação, rotas do ofício, exclusão apaga o arquivo), `comercial/comercial-comum.js` (`criarOficio`, `oficioNaLinha`), `comercial/auloes/*` e `comercial/palestras/*` (seção "Ofício" no formulário e "📎 Ofício" na tabela), `comercial/comercial-tema.css`.
+- Tipo: Melhoria
+- Motivo: Pedido do Comercial (ex.: aulão de matemática no Érico Veríssimo): anexar o ofício do colégio ao agendamento pra ver o que foi pedido e quando.
+- Impacto: Formulário ganha "Solicitado em", "O que foi solicitado" e o arquivo (PDF ou foto, até 20 MB; foto é reduzida no navegador). Primeiro uso do Firebase Storage no Órbita (bucket `orbita-fatecivp.firebasestorage.app`, US-EAST1, criado em 21/10/2026 em modo produção — ninguém acessa direto): o navegador sobe o arquivo por link assinado de 10 min gerado pelo servidor (não passa pelo limite de ~4,5 MB do Vercel) e confirma; "Ver" abre por link assinado de 5 min. Pasta `comercial/<coleção>/<id>/`. O bucket precisa de CORS liberando PUT/GET (feito em 21/10). No agendamento só o resumo `oficio` (nome, tipo, tamanho, caminho, quem/quando anexou), então a listagem não pesa. Excluir o agendamento ou trocar o arquivo apaga o arquivo antigo do Storage. A busca também procura no "O que foi solicitado".
+- Como testar: Comercial → Aulões - Redações (ou Palestras) → Agendar/Editar → seção "Ofício" → escolher um PDF → Salvar → aparece "📎 Ofício" na linha → clicar abre o arquivo; Remover tira o anexo.
+- Como reverter: reverter o commit (os campos novos ficam ignorados nos registros que já tiverem).
+
 ### [2026-10-21] Banco de Provas liberado pro setor EAD: vê tudo dos cursos, edita só o que criou
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/ead-banco-provas

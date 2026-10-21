@@ -210,3 +210,20 @@
   .status-badge, .turno-badge, .ct-menor, .ae-hoje { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .mes-linha td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Ofício do agendamento (Aulões e Palestras, 21/10/2026) */
+.cm-oficio { border: 1px solid #dbe4f3; border-radius: 12px; padding: 0.4rem 1rem 0.2rem; margin: 0 0 1rem; background: #f8fafe; }
+.cm-oficio legend { font-weight: 700; font-size: 0.85rem; color: var(--cm-azul-escuro); padding: 0 0.4rem; }
+.cm-oficio-atual { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.75rem; border-radius: 10px; background: #fff; border: 1px solid #dbe4f3; }
+.cm-oficio-atual.hidden { display: none; }
+.cm-oficio-nome { font-weight: 600; overflow-wrap: anywhere; }
+.cm-oficio-botoes { display: inline-flex; gap: 0.4rem; margin-left: auto; }
+.cm-oficio-troca { flex-basis: 100%; }
+.cm-oficio-btn { border: 1px solid #cfdcf2; background: #fff; color: var(--cm-azul); border-radius: 8px; padding: 0.3rem 0.75rem; font-weight: 600; cursor: pointer; }
+.cm-oficio-btn:hover { background: var(--cm-azul-claro); }
+.cm-oficio-btn-perigo { color: #b91c1c; border-color: #f3caca; }
+.cm-oficio-btn-perigo:hover { background: #fdeeee; }
+.cm-oficio-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.cm-oficio-link { border: 1px solid #cfdcf2; background: var(--cm-azul-claro); color: var(--cm-azul-escuro); border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+.cm-oficio-link:hover { background: #dbe7fb; }
+@media print { .cm-oficio-link { border: none; background: none; padding: 0; } }
