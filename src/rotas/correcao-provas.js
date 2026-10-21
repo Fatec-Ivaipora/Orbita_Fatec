@@ -162,10 +162,12 @@ router.get('/dp/:codcur', verifyToken, checkPermission, async (req, res) => {
 // Banco de Provas (graduação): cursos por id ("agronomia"…); coordenador só os do cadastro.
 async function cursosBP(req) {
     if (ADM.includes(req.user.role)) return null;
+    if (req.user.role === 'ead') return null; // 21/10/2026: EAD vê o Banco de Provas de todos os cursos da graduação (Medicina fora, ver foraDoEad)
     const u = await db.collection('users').doc(req.user.uid).get();
     const d = u.exists ? u.data() : {};
     return Array.isArray(d.cursos) && d.cursos.length ? d.cursos : (d.curso ? [d.curso] : []);
 }
+const foraDoEad = (req, curso) => req.user.role === 'ead' && curso === 'medicina';
 const podeMed = (req) => ['adm_l1', 'adm_l2', 'coord_medicina'].includes(req.user.role);
 
 // GET /api/correcao/bancos/provas — provas montadas nos bancos que a pessoa pode usar
@@ -176,7 +178,7 @@ router.get('/bancos/provas', verifyToken, checkPermission, async (req, res) => {
         if (meus === null || meus.length) {
             const snap = meus === null ? await db.collection('docencia_bp_provas').get()
                 : await db.collection('docencia_bp_provas').where('curso', 'in', meus.slice(0, 10)).get();
-            snap.forEach(d => { const p = d.data(); lista.push({ origem: 'bp', id: d.id, nome: p.nome, tipo: p.tipo, curso: p.curso, n: (p.questoesIds || []).length, em: p.createdAt }); });
+            snap.forEach(d => { const p = d.data(); if (foraDoEad(req, p.curso)) return; lista.push({ origem: 'bp', id: d.id, nome: p.nome, tipo: p.tipo, curso: p.curso, n: (p.questoesIds || []).length, em: p.createdAt }); });
         }
         if (podeMed(req)) {
             const snap = await db.collection('banco_med_provas').get();
@@ -199,7 +201,7 @@ router.get('/bancos/:origem/:id', verifyToken, checkPermission, async (req, res)
             if (!s.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
             const prova = { id: s.id, ...s.data() };
             const meus = await cursosBP(req);
-            if (meus !== null && !meus.includes(prova.curso)) return res.status(403).json({ error: 'Você não tem vínculo com esse curso.' });
+            if ((meus !== null && !meus.includes(prova.curso)) || foraDoEad(req, prova.curso)) return res.status(403).json({ error: 'Você não tem vínculo com esse curso.' });
             const [qs, ds] = await Promise.all([
                 Promise.all((prova.questoesIds || []).map(q => db.collection('docencia_bp_questoes').doc(q).get())),
                 db.collection('docencia_bp_disciplinas').where('curso', '==', prova.curso).get()

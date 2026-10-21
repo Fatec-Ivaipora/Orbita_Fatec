@@ -70,7 +70,10 @@ function validarTexto(v, max = 150) {
 // Coordenador pode estar vinculado a mais de um curso (users.cursos) — mesmo
 // modelo já usado em Avaliação Docente. ADM N1/N2 não têm essa restrição
 // (enxergam/mexem em qualquer curso).
-async function cursosDoCoordenador(uid) {
+async function cursosDoCoordenador(uid, role) {
+    // EAD (21/10/2026): as disciplinas a distância passam por todos os cursos
+    // da graduação — vê tudo deles, Medicina fica de fora (mesmo escopo da CPA).
+    if (role === 'ead') return CURSOS.filter(c => c.id !== 'medicina').map(c => c.id);
     const snap = await db.collection('users').doc(uid).get();
     if (!snap.exists) return [];
     const data = snap.data();
@@ -84,12 +87,19 @@ function ehAdmin(role) {
     return role === 'adm_l1' || role === 'adm_l2';
 }
 
+// EAD (21/10/2026): vê tudo dos cursos, mas só edita/exclui o que foi criado
+// pelo próprio perfil (createdBy). Os outros cargos seguem só pelo curso.
+function erroDeDono(req, doc) {
+    if (req.user.role !== 'ead') return null;
+    return doc && doc.createdBy === req.user.uid ? null : 'Você só pode alterar o que foi criado pelo seu perfil.';
+}
+
 // Confere se o usuário pode operar no curso informado — ADM sempre pode;
 // coordenador só nos cursos vinculados a ele. Retorna null se pode, ou uma
 // mensagem de erro pra responder 403.
 async function checarAcessoCurso(req, cursoId) {
     if (ehAdmin(req.user.role)) return null;
-    const meus = await cursosDoCoordenador(req.user.uid);
+    const meus = await cursosDoCoordenador(req.user.uid, req.user.role);
     if (!meus.includes(cursoId)) return 'Você não tem vínculo com esse curso.';
     return null;
 }
@@ -104,7 +114,7 @@ router.get('/cursos', verifyToken, checkPermission, async (req, res) => {
 // lista inteira, já que não tem restrição).
 router.get('/meus-cursos', verifyToken, checkPermission, async (req, res) => {
     if (ehAdmin(req.user.role)) return res.json(CURSOS);
-    const ids = await cursosDoCoordenador(req.user.uid);
+    const ids = await cursosDoCoordenador(req.user.uid, req.user.role);
     res.json(CURSOS.filter(c => ids.includes(c.id)));
 });
 
@@ -167,6 +177,8 @@ router.put('/disciplinas/:id', verifyToken, checkPermission, async (req, res) =>
 
         const erroAcesso = await checarAcessoCurso(req, snap.data().curso);
         if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const erroDono = erroDeDono(req, snap.data());
+        if (erroDono) return res.status(403).json({ error: erroDono });
 
         const nome = normalizarTexto(req.body.nome);
         const periodo = parseInt(req.body.periodo, 10);
@@ -190,6 +202,8 @@ router.delete('/disciplinas/:id', verifyToken, checkPermission, async (req, res)
 
         const erroAcesso = await checarAcessoCurso(req, snap.data().curso);
         if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const erroDono = erroDeDono(req, snap.data());
+        if (erroDono) return res.status(403).json({ error: erroDono });
 
         const temQuestoes = await db.collection(COL_QUESTOES).where('disciplinaId', '==', req.params.id).limit(1).get();
         if (!temQuestoes.empty) return res.status(400).json({ error: 'Essa disciplina já tem questões no banco — exclua as questões primeiro.' });
@@ -380,7 +394,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
 
-        const atual = snap.data();
+        const atual = snap.data();
+
         { const disc = req.body.disciplinaId !== undefined ? normalizarTexto(req.body.disciplinaId) : atual.disciplinaId; const sem = req.body.semestre !== undefined ? req.body.semestre : atual.semestre; const e2 = erroSemestreGeral(disc, sem); if (e2) return res.status(400).json({ error: e2 }); }
         if (atual.curso) {
             const erroAcesso = await checarAcessoCurso(req, atual.curso);
@@ -390,6 +405,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
             // não um coordenador de um curso alterar o pool usado por todos.
             return res.status(403).json({ error: 'Só o administrador pode editar questões de Conhecimentos Gerais.' });
         }
+        const erroDono = erroDeDono(req, atual);
+        if (erroDono) return res.status(403).json({ error: erroDono });
 
         const erro = validarQuestao(req.body);
         if (erro) return res.status(400).json({ error: erro });
@@ -436,6 +453,8 @@ router.put('/questoes/:id/gabarito', verifyToken, checkPermission, async (req, r
         } else if (!ehAdmin(req.user.role)) {
             return res.status(403).json({ error: 'Só o administrador pode editar questões de Conhecimentos Gerais.' });
         }
+        const erroDono = erroDeDono(req, atual);
+        if (erroDono) return res.status(403).json({ error: erroDono });
         if (atual.tipo !== 'objetiva') return res.status(400).json({ error: 'Só questões objetivas têm gabarito.' });
 
         const letrasValidas = LETRAS_VALIDAS.slice(0, (atual.alternativas || []).length);
@@ -462,6 +481,8 @@ router.delete('/questoes/:id', verifyToken, checkPermission, async (req, res) =>
         } else if (!ehAdmin(req.user.role)) {
             return res.status(403).json({ error: 'Só o administrador pode excluir questões de Conhecimentos Gerais.' });
         }
+        const erroDono = erroDeDono(req, atual);
+        if (erroDono) return res.status(403).json({ error: erroDono });
 
         await ref.delete();
         res.json({ message: 'Questão excluída.' });
@@ -576,7 +597,7 @@ router.get('/questoes/revisao', verifyToken, checkPermission, async (req, res) =
             .where('curso', '==', curso)
             .where('status', '==', 'revisao_importacao')
             .get();
-        const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const questoes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(q => !erroDeDono(req, q));
         questoes.sort((a, b) => (a.numeroOriginal || 0) - (b.numeroOriginal || 0));
         res.json(questoes);
     } catch (err) {
@@ -613,6 +634,8 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
 
         const snap = await query.get();
         if (snap.empty) return res.status(404).json({ error: 'Grupo de importação não encontrado (ou já resolvido).' });
+        const alheia = snap.docs.find(doc => erroDeDono(req, doc.data()));
+        if (alheia) return res.status(403).json({ error: erroDeDono(req, alheia.data()) });
 
         const bimestre = req.body.bimestre ? parseInt(req.body.bimestre, 10) : null;
         const chamada = normalizarChamada(req.body.chamada);
@@ -641,6 +664,8 @@ router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req
             .where('status', '==', 'revisao_importacao');
         if (req.query.categoriaSugeridaTexto !== undefined) query = query.where('categoriaSugeridaTexto', '==', req.query.categoriaSugeridaTexto);
         const snap = await query.get();
+        const alheia = snap.docs.find(doc => erroDeDono(req, doc.data()));
+        if (alheia) return res.status(403).json({ error: erroDeDono(req, alheia.data()) });
         const batch = db.batch();
         snap.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
@@ -779,6 +804,8 @@ router.delete('/provas/:id', verifyToken, checkPermission, async (req, res) => {
         if (!snap.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
         const erroAcesso = await checarAcessoCurso(req, snap.data().curso);
         if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const erroDono = erroDeDono(req, snap.data());
+        if (erroDono) return res.status(403).json({ error: erroDono });
         await ref.delete();
         res.json({ message: 'Prova excluída.' });
     } catch (err) {
