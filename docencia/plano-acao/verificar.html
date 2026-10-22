@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificar documento - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <style>
+        /* Página PÚBLICA (sem login): confere um documento do Plano de Ação
+           assinado no Órbita pelo código de verificação do rodapé. */
+        body { margin: 0; min-height: 100vh; background: var(--orb-plano); font-family: var(--orb-texto); color: var(--orb-tinta); display: flex; justify-content: center; padding: 2rem 1rem; box-sizing: border-box; }
+        main { width: min(640px, 100%); }
+        header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; }
+        header img { height: 46px; }
+        h1 { font-family: var(--orb-display); font-size: 1.3rem; margin: 0; }
+        .card { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 1.2rem 1.3rem; margin-bottom: 1rem; }
+        form { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        label { width: 100%; font-size: 0.85rem; font-weight: 600; color: var(--orb-tinta2); }
+        input { flex: 1; min-width: 180px; font: inherit; font-size: 1.05rem; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); padding: 0.6rem 0.8rem; }
+        button { font: inherit; font-weight: 600; background: var(--orb-marca); color: #fff; border: 0; border-radius: var(--orb-raio-ctrl); padding: 0 1.2rem; cursor: pointer; min-height: 44px; }
+        .ok { border-left: 4px solid var(--orb-bom); }
+        .ruim { border-left: 4px solid var(--orb-crit); }
+        .selo { display: inline-block; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.85rem; margin-bottom: 0.6rem; }
+        .selo.ok { background: var(--orb-bom-suave); color: var(--orb-bom); border: 0; }
+        .selo.ruim { background: var(--orb-crit-suave); color: var(--orb-crit); border: 0; }
+        dl { display: grid; grid-template-columns: 140px 1fr; gap: 0.45rem 1rem; margin: 0; font-size: 0.92rem; }
+        dt { color: var(--orb-mudo); }
+        dd { margin: 0; }
+        .hash { font-size: 0.75rem; color: var(--orb-mudo); word-break: break-all; }
+        @media (max-width: 520px) { dl { grid-template-columns: 1fr; } dt { margin-top: 0.4rem; } }
+    </style>
+</head>
+<body>
+<main>
+    <header><img src="/docencia/plano-acao/img/logo-fatec-ivp.png" alt="FATEC Ivaiporã"><h1>Verificar documento assinado</h1></header>
+    <section class="card">
+        <form id="f">
+            <label for="c">Código de verificação (está no rodapé do documento)</label>
+            <input id="c" name="c" autocomplete="off" placeholder="XXXXX-XXXXX" maxlength="11" required>
+            <button type="submit">Verificar</button>
+        </form>
+    </section>
+    <section id="r" aria-live="polite"></section>
+</main>
+<script>
+const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? `http://${location.hostname}:3000/api` : '/api';
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+async function verificar(codigo) {
+    const r = document.getElementById('r');
+    r.innerHTML = '<p>Verificando...</p>';
+    try {
+        const res = await fetch(`${API}/plano-acao/documentos/verificar/${encodeURIComponent(codigo.trim().toUpperCase())}`);
+        const d = await res.json();
+        if (!res.ok) { r.innerHTML = `<div class="card ruim"><span class="selo ruim">Não encontrado</span><p>${esc(d.error || 'Código inválido.')}</p></div>`; return; }
+        const valido = d.status === 'assinado' && d.integro;
+        r.innerHTML = `<div class="card ${valido ? 'ok' : 'ruim'}">
+            <span class="selo ${valido ? 'ok' : 'ruim'}">${valido ? 'Documento válido e assinado' : d.status === 'assinado' ? 'Documento alterado depois da assinatura' : 'Documento ainda não assinado pelo responsável'}</span>
+            <dl>
+                <dt>Documento</dt><dd>${esc(d.titulo)}</dd>
+                <dt>Semestre</dt><dd>${esc(d.semestre)}</dd>
+                <dt>Data</dt><dd>${esc(d.data.split('-').reverse().join('/'))}</dd>
+                ${d.direcao ? `<dt>Direção</dt><dd>${esc(d.direcao.nome)} — ${esc(d.direcao.cargo)}<br><small>assinado em ${quando(d.direcao.em)}</small></dd>` : ''}
+                ${d.responsavel ? `<dt>Responsável</dt><dd>${esc(d.responsavel.nome)} — ${esc(d.responsavel.cargo)}<br><small>assinado em ${quando(d.responsavel.em)}</small></dd>` : ''}
+                <dt>Código</dt><dd>${esc(d.codigo)}</dd>
+            </dl>
+            ${d.hash ? `<p class="hash">Hash SHA-256: ${esc(d.hash)}</p>` : ''}
+        </div>`;
+    } catch (e) { r.innerHTML = `<div class="card ruim">Não foi possível verificar agora: ${esc(e.message)}</div>`; }
+}
+document.getElementById('f').addEventListener('submit', (ev) => { ev.preventDefault(); verificar(document.getElementById('c').value); });
+const c = new URLSearchParams(location.search).get('c');
+if (c) { document.getElementById('c').value = c; verificar(c); }
+</script>
+</body>
+</html>

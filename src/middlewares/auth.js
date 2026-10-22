@@ -233,7 +233,8 @@ const requireModulePermission = (moduleName) => {
                 auloes: 3,
                 palestras: 3,
                 'agenda-espacos': 3,
-                'trilha-ead': 3
+                'trilha-ead': 3,
+                'plano-acao': 3
             },
             ti: {
                 emprestimo: 3,
@@ -344,7 +345,8 @@ const requireModulePermission = (moduleName) => {
                 auloes: 1,
                 palestras: 1,
                 'agenda-espacos': 2,
-                'trilha-ead': 2
+                'trilha-ead': 2,
+                'plano-acao': 3
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
