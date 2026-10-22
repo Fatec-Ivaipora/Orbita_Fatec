@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano de Ação - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/docencia/plano-acao/plano-acao.css?v=21">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header pa-header">
+                    <div>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8l1.5 1.5L12 7"/><path d="M8 14l1.5 1.5L12 13"/><path d="M14.5 8.5H17M14.5 14.5H17"/></svg></span>Plano de Ação</h1>
+                        <p class="page-subtitle" id="pa-subtitulo">Atividades da coordenação de curso</p>
+                    </div>
+                    <label class="pa-semestre">Semestre
+                        <select id="pa-semestre" class="select-filter"></select>
+                    </label>
+                </div>
+
+                <div class="abas pa-abas hidden" role="tablist" id="pa-abas">
+                    <button type="button" class="aba ativa" role="tab" data-aba="painel" aria-selected="true">Acompanhamento</button>
+                    <button type="button" class="aba" role="tab" data-aba="atividades" aria-selected="false">Atividades e prazos</button>
+                    <button type="button" class="aba" role="tab" data-aba="calendario" aria-selected="false">Calendário</button>
+                    <button type="button" class="aba" role="tab" data-aba="documentos" aria-selected="false">Documentos</button>
+                    <button type="button" class="aba" role="tab" data-aba="assinaturas" aria-selected="false">Assinaturas</button>
+                </div>
+
+                <div id="pa-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- observação ao marcar / editar atividade (Direção) -->
+    <div id="pa-modal" class="pa-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pa-modal-titulo">
+        <div class="pa-modal-caixa">
+            <h2 id="pa-modal-titulo"></h2>
+            <div id="pa-modal-corpo"></div>
+            <div class="pa-modal-acoes">
+                <button type="button" class="btn-secondary" id="pa-modal-cancelar">Cancelar</button>
+                <button type="button" class="btn-primary" id="pa-modal-ok">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pa-toast" class="pa-toast hidden" role="status"></div>
+
+    <script type="module" src="/docencia/plano-acao/app.js?v=17"></script>
+</body>
+</html>
