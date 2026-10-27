@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-27] Matrículas: "Não Assinou" aparece como "Rematrícula Não Assinada"
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/matriculas-rematricula-nao-assinada
+- Arquivos alterados: `financeiro/matriculas/app.js` (rótulo `rotuloSit()` na lista, filtro, cadastro, Virada, tabela situação × curso, detalhe dos cartões e fórmulas), `financeiro/matriculas/relatorio.html` (cartão e dicas), `financeiro/matriculas/virar-semestre.html` (texto), versão do app.js nas páginas.
+- Tipo: Ajuste de texto
+- Motivo: Pedido da Lisa — ter sempre o par assinada / não assinada: Matrícula Nova / Matrícula Nova - Assinada, Rematrícula Assinada / **Rematrícula Não Assinada**, Retorno / Retorno Assinada. "Não assinou" sozinho não dizia que era da rematrícula.
+- Impacto: Só o nome na tela. O valor gravado continua "Não Assinou" (contas do relatório, histórico, importações e o robô da ODTech usam esse valor); o filtro e o cadastro mandam o mesmo valor de antes.
+- Como testar: Matrículas → lista, filtro de situação e cadastro do aluno; Relatório → cartão "Rematrícula Não Assinada" e tabela situação × curso.
+- Como reverter: reverter o commit.
+
 ### [2026-10-26] Novo módulo TI → Automação AVA: disciplinas EAD do semestre e criação das novas (etapas, pagamento, relatório)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/automacao-ava

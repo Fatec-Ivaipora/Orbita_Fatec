@@ -30,6 +30,11 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 // que resolve a pendência e a situação muda (pedido 02/10/2026). Continua em
 // Ativos (não é perda), numa linha própria.
 const VETERANOS_SITS = ['Rematrícula Assinada', 'Não Assinou', 'Formando', 'Reprovado'];
+// Nome que aparece na tela (pedido da Lisa, 27/10/2026): "Não Assinou" é a rematrícula não assinada,
+// como já existe "Rematrícula Assinada". O valor gravado continua "Não Assinou" (contas, histórico e
+// o robô da ODTech usam esse valor) — só o rótulo muda.
+const ROTULO_SITUACAO = { 'Não Assinou': 'Rematrícula Não Assinada' };
+const rotuloSit = (s) => ROTULO_SITUACAO[s] || s;
 const PENDENCIA_SITS = ['Pendência Financeira'];
 const CALOUROS_SITS = [
   'Matrícula Nova', 'Matrícula Nova - Assinada',
@@ -427,7 +432,7 @@ function popularSelectsOpcoes() {
   selectSituacaoAluno?.addEventListener('change', acertarDesistente);
   document.getElementById('aluno-periodo')?.addEventListener('change', acertarDesistente);
   if (selectSituacaoAluno) {
-    selectSituacaoAluno.innerHTML = opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    selectSituacaoAluno.innerHTML = opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(rotuloSit(s))}</option>`).join('');
   }
   const selectPlanoAluno = document.getElementById('aluno-plano');
   if (selectPlanoAluno) {
@@ -521,7 +526,7 @@ function montarSituacaoMultiSelect() {
   opcoesEl.innerHTML = display.map(s => `
     <label>
       <input type="checkbox" class="situacao-checkbox" value="${esc(s)}" ${situacoesDesmarcadas.has(s) ? '' : 'checked'}>
-      ${esc(s)}
+      ${esc(rotuloSit(s))}
     </label>
   `).join('');
   atualizarBotaoSituacao();
@@ -671,7 +676,7 @@ function renderTabelaAlunos(lista) {
       <td>${esc(a.curso)}</td>
       <td>${esc(a.periodo)}</td>
       <td>${esc(a.cidade)}</td>
-      <td><span class="status-badge ${situacaoBadgeClasse(a.situacao)}">${esc(a.situacao)}</span></td>
+      <td><span class="status-badge ${situacaoBadgeClasse(a.situacao)}">${esc(rotuloSit(a.situacao))}</span></td>
       <td>${esc(a.planoConfissao)}</td>
       <td>${esc(a.telefone)}</td>
       <td class="acoes-col">
@@ -1039,7 +1044,7 @@ function somaSituacoes(porSituacaoTotal, ...nomes) {
 const LINHAS_COMPARATIVO = [
   { secao: 'O que somou (captação)' },
   { chave: 'veteranos', rotulo: 'Veteranos (rematrícula)',
-    formula: 'Rematrícula Assinada + Não Assinou + Formando + Reprovado. Pendência Financeira NÃO entra — só vira rematrícula quando resolver a pendência e a situação mudar.' },
+    formula: 'Rematrícula Assinada + Rematrícula Não Assinada + Formando + Reprovado. Pendência Financeira NÃO entra — só vira rematrícula quando resolver a pendência e a situação mudar.' },
   { chave: 'calouros', rotulo: 'Calouros (matrícula nova)',
     formula: 'Matrícula Nova + Matrícula Nova - Assinada + Retorno + Matrícula Nova - Transferência (calouros ainda ativos)' },
   { chave: 'totalCalouros', rotulo: 'Total de Calouros captados', destaque: true, detalhavel: true,
@@ -1081,12 +1086,12 @@ const LINHAS_COMPARATIVO = [
   { secao: 'Total geral' },
   { chave: 'pendenciaFinanceira', rotulo: 'Pendência financeira',
     formula: 'Situação = Pendência Financeira — ainda não conta como veterano/rematrícula; continua Ativo (não é perda). Quando resolver, a situação muda e passa a contar em Veteranos.' },
-  { chave: 'naoAssinou', rotulo: 'Não assinou',
-    formula: 'Situação = Não Assinou — continua Ativo, só falta assinar. Não é perda.' },
+  { chave: 'naoAssinou', rotulo: 'Rematrícula não assinada',
+    formula: 'Situação = Rematrícula Não Assinada — continua Ativo, só falta assinar. Não é perda.' },
   { chave: 'mudancaDeCurso', rotulo: 'Mudança de curso', ocultarSeZerado: true,
     formula: 'Situação = Mudança de Curso — trocou de curso dentro da faculdade. Não é perda (continua estudando) e não conta como ativo no curso antigo. Ativos + Perdas + Mudança de curso = Total de alunos.' },
   { chave: 'ativos', rotulo: 'Ativos', destaque: true, detalhavel: true,
-    formula: 'Veteranos + Pendência financeira + Calouros (Rematrícula Assinada + Não Assinou + Formando + Reprovado + Pendência Financeira + Matrícula Nova + Assinada + Retorno + Transferência de entrada). Ativos + Total de perdas + Mudança de curso = Total de alunos.' },
+    formula: 'Veteranos + Pendência financeira + Calouros (Rematrícula Assinada + Rematrícula Não Assinada + Formando + Reprovado + Pendência Financeira + Matrícula Nova + Assinada + Retorno + Transferência de entrada). Ativos + Total de perdas + Mudança de curso = Total de alunos.' },
   { chave: 'total', rotulo: 'Total de alunos', destaque: true, detalhavel: true,
     formula: 'Todo mundo que matriculou nesse semestre — inclui quem cancelou, trancou ou evadiu depois. Não é reduzido com o tempo.' },
   { chave: 'perdaCaptacao', rotulo: '% de perda de captação', percentual: true,
@@ -1230,7 +1235,7 @@ function montarDetalhe(chave, ps, linha) {
     const rows = sits.map(s => [s, ps[s] || 0]).filter(([, q]) => q > 0);
     const sub = rows.reduce((a, [, q]) => a + q, 0);
     itens.push({ secao: titulo, tipo: `header-${cor}` });
-    if (rows.length) rows.forEach(([nome, qtd]) => itens.push({ nome, qtd, tipo: cor }));
+    if (rows.length) rows.forEach(([nome, qtd]) => itens.push({ nome: rotuloSit(nome), qtd, tipo: cor }));
     else itens.push({ nome: '(nenhum)', qtd: 0, tipo: cor });
     itens.push({ nome: rotuloSubtotal, qtd: sub, tipo: cor, subtotal: true });
     return sub;
@@ -1265,7 +1270,7 @@ function montarDetalhe(chave, ps, linha) {
   } else if (chave === 'totalCalouros') {
     COMPONENTES_TOTAL.totalCalouros.forEach(situacao => {
       const qtd = ps[situacao] || 0;
-      if (qtd > 0) itens.push([situacao, qtd]);
+      if (qtd > 0) itens.push([rotuloSit(situacao), qtd]);
     });
     if (linha.cancelouCalouro) itens.push(['Cancelou (calouro)', linha.cancelouCalouro]);
     if (linha.desistenteCalouro) itens.push(['Desistente (calouro)', linha.desistenteCalouro]);
@@ -1685,7 +1690,7 @@ function renderRelatorio(dados) {
       .map(sit => {
         const linhaTotal = porSituacaoTotal[sit] || 0;
         return `<tr>
-          <td><span class="status-badge ${situacaoBadgeClasse(sit)}">${esc(sit)}</span></td>
+          <td><span class="status-badge ${situacaoBadgeClasse(sit)}">${esc(rotuloSit(sit))}</span></td>
           ${cursos.map(c => `<td>${(porCursoSituacao[c] && porCursoSituacao[c][sit]) || 0}</td>`).join('')}
           <td><strong>${linhaTotal}</strong></td>
         </tr>`;
@@ -1836,7 +1841,7 @@ async function initPaginaVirarSemestre() {
   const situacaoFiltro = document.getElementById('vs-situacao-filtro');
   if (situacaoFiltro) {
     situacaoFiltro.innerHTML = '<option value="">Todas as situações</option>' +
-      opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+      opcoes.situacoes.map(s => `<option value="${esc(s)}">${esc(rotuloSit(s))}</option>`).join('');
   }
 
   await popularSelectSemestres(document.getElementById('vs-origem-select'));
@@ -1930,7 +1935,7 @@ function vsAlunosFiltrados() {
 }
 
 function vsSituacaoOptionsHtml(selecionada) {
-  return opcoes.situacoes.map(s => `<option value="${esc(s)}" ${s === selecionada ? 'selected' : ''}>${esc(s)}</option>`).join('');
+  return opcoes.situacoes.map(s => `<option value="${esc(s)}" ${s === selecionada ? 'selected' : ''}>${esc(rotuloSit(s))}</option>`).join('');
 }
 
 function vsRenderTabela() {
@@ -1949,7 +1954,7 @@ function vsRenderTabela() {
         <td>${esc(a.curso)}</td>
         <td>${esc(a.periodo)}</td>
         <td><input type="text" data-vs-periodo="${a.id}" value="${esc(a._periodoNovo)}" style="width: 4.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;"></td>
-        <td><span class="status-badge ${situacaoBadgeClasse(a.situacao)}">${esc(a.situacao)}</span></td>
+        <td><span class="status-badge ${situacaoBadgeClasse(a.situacao)}">${esc(rotuloSit(a.situacao))}</span></td>
         <td><select data-vs-situacao="${a.id}" style="padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;">${vsSituacaoOptionsHtml(a._situacaoNova)}</select></td>
       </tr>`).join('');
   }
