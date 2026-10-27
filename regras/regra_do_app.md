@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-27] Matrículas: "Não Assinou" aparece como "Rematrícula Não Assinada"
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/matriculas-rematricula-nao-assinada
+- Arquivos alterados: `financeiro/matriculas/app.js` (rótulo `rotuloSit()` na lista, filtro, cadastro, Virada, tabela situação × curso, detalhe dos cartões e fórmulas), `financeiro/matriculas/relatorio.html` (cartão e dicas), `financeiro/matriculas/virar-semestre.html` (texto), versão do app.js nas páginas.
+- Tipo: Ajuste de texto
+- Motivo: Pedido da Lisa — ter sempre o par assinada / não assinada: Matrícula Nova / Matrícula Nova - Assinada, Rematrícula Assinada / **Rematrícula Não Assinada**, Retorno / Retorno Assinada. "Não assinou" sozinho não dizia que era da rematrícula.
+- Impacto: Só o nome na tela. O valor gravado continua "Não Assinou" (contas do relatório, histórico, importações e o robô da ODTech usam esse valor); o filtro e o cadastro mandam o mesmo valor de antes.
+- Como testar: Matrículas → lista, filtro de situação e cadastro do aluno; Relatório → cartão "Rematrícula Não Assinada" e tabela situação × curso.
+- Como reverter: reverter o commit.
+
+### [2026-10-26] Novo módulo TI → Automação AVA: disciplinas EAD do semestre e criação das novas (etapas, pagamento, relatório)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/automacao-ava
+- Arquivos alterados: `src/rotas/automacao-ava.js` (novo), `ti/automacao-ava/` (index.html, app.js, automacao-ava.css), `regras/relay/orbita-automacao-ava.js` + `regras/relay/instalar-automacao-ava.sh` (rota nova do relay), `api/index.js`, `core/permissions.js` (módulo `automacao-ava`, categoria TI; menu de ADM N1/N2, TI, coordenador e EAD), `src/middlewares/auth.js` (padrão: ti/adm_l2/coordenador/ead 3, demais 1).
+- Tipo: Novo módulo
+- Motivo: A TI cria no AVA todas as disciplinas EAD de cada semestre. Pedido: ver quais EAD acontecem, separar o que se replica do semestre anterior do que é criado do zero, e acompanhar a criação (professor que cria, titulação/valor a pagar, etapas e avaliações entregues), com relatório padrão FATEC.
+- Impacto: Lista vem do Edubox pelo relay que já existe (`/matrizes/dados`, mesma consulta do Matrizes): EAD = disciplina do tipo "A Distância" **com carga EAD > 0 e sem carga síncrona** (síncrona tem formato de presencial), lançada nas turmas do semestre (turmas que estudam juntas viram uma linha). Sugestão automática: já existe no AVA neste semestre, replicar (mesmo código ou nome no curso, nos 8 semestres anteriores do Edubox ou numa sala do AVA), replicar de outro curso, criar do zero (a mesma disciplina nova em 2 cursos/turmas conta como uma criação); a TI confirma. O AVA (Open LMS, fatecivaipora.mrooms.net) não tem web service ligado: as salas que casam com as EAD foram lidas em UNESVI > Graduação e guardadas em `ava_criacao_config/ava` (refazer a cada semestre). Titulação do professor vem do Edubox (`tac_professor.titpro`, a mais recente dos últimos 4 semestres; no mesmo semestre, a maior) pela rota nova do relay `GET /automacao-ava/titulacoes?semestres=` (token ORBITA_TOKEN, JOIN até tac_curso; instalar com `regras/relay/instalar-automacao-ava.sh`, backup `server.mjs.bak-automacao-ava`) e já escolhe a titulação na ficha; sem a rota, a lista de nomes cai pra `/confirmacao/professores-ativos`. Criação: 1 treinamento, 2 seleção das unidades, 4 criada no AVA, 5 AVA validado (TI) e 3 unidades validadas (coordenador do curso); avaliações 1º/2º bim. 1ª/2ª chamada, exame e simulado com recebimento do coordenador do curso e da coordenação EAD. Cada um marca a sua parte (ADM N1 tudo); quem marcou e quando fica gravado. Valor por titulação: Especialista R$ 800, Mestre R$ 900, Doutor R$ 1.000; marca de pago. Relatório "Criação de disciplinas EAD" em PDF A4 paisagem (cabeçalho institucional e marca d'água do Plano de Ação). Coleção `ava_criacao/{AAAA.S}__{cursoId}__{coddis}`. Coordenador vê só os cursos dele. Próxima etapa (aba "Arquivos do Conduit"): gerar auth/course/enroll e o CSV de cópia (templatecourse do "Carregar cursos") — shortname = `tac_disciplina.noadis` + " - " + coddtu (confirmado no banco); precisa de rota nova no relay pra salas/alunos/professores.
+- Como testar: TI/ADM → Gestão de T.I. → Automação AVA → semestre 2027.1 → "Criar do zero" → abrir uma disciplina → professor + titulação → marcar etapas; coordenador do curso marca "unidades validadas" e o recebimento das avaliações; Carlos (EAD) o recebimento dele; aba Relatório → Abrir PDF.
+- Como reverter: reverter o commit; a coleção `ava_criacao` pode ser apagada.
+
 ### [2026-10-21] Plano de Ação — Parte 2: documentos da Direção com assinatura eletrônica
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/plano-acao
