@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-27] Contratos (Comercial): Rota de coleta de assinatura
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/contratos-rota-coleta
+- Arquivos alterados: `comercial/contratos/rota.js` (novo), `comercial/contratos/index.html` (botão "Rota de coleta" e modal), `comercial/contratos/app.js`, `comercial/contratos/contratos.css`, `src/rotas/contratos.js` (POST `/api/contratos/rota/montar`, PUT `/api/contratos/:id/localizacao`), `src/utils/rota-coleta.js` (novo), `.env_exemplo` (GOOGLE_MAPS_API_KEY), `regras/relay/orbita-comercial-enderecos.js` + `regras/relay/instalar-comercial-enderecos.sh` (rota nova do relay).
+- Tipo: Novo recurso
+- Motivo: A equipe vai à casa do aluno coletar a assinatura do contrato. Pedido: definir antes de sair da faculdade o dia e a cidade, baixar a rota e abrir cada casa no mapa do celular, funcionando sem internet.
+- Impacto: Em Contratos › Rota de coleta escolhe-se dia + cidade; aparecem os alunos sem assinatura da cidade (os com coleta no dia já marcados), até 25 por rota. "Montar rota" traz o endereço do Edubox pela rota nova do relay `GET /comercial/enderecos?semestres=&nomes=` (ORBITA_TOKEN, JOIN até tac_curso; devolve SÓ os alunos pedidos — nome, rua, número, bairro, cidade, UF, CEP; o Órbita só chama com o relay em https). O nome do Contratos é comparado ao do Edubox sem acento/pontuação; nome repetido no semestre fica sem endereço. **Melhor ordem de visita pelo Google Routes API** (`GOOGLE_MAPS_API_KEY`, chave restrita à Routes API; decisão do usuário: vai só o endereço — rua, número, bairro, cidade — ou o ponto do GPS, nunca o nome do aluno): `optimizeWaypointOrder`, saindo da Fatec e voltando, até 25 alunos, com km/min de cada trecho e o total. Sem a chave (ou se o Google falhar), ordem local: GPS pela distância, depois cidade, bairro, rua e número. "Salvar localização daqui" grava o GPS da porta do aluno no contrato (`geo`) e passa a valer no lugar do endereço. Links do Google Maps por aluno e por trechos de 4 paradas. "Baixar rota" gera um HTML que abre sem internet (ligar, WhatsApp, Google Maps, marcar "visitado"); a navegação sem internet depende do mapa da região baixado no Google Maps.
+- Como testar: instalar a rota do relay (`regras/relay/instalar-comercial-enderecos.sh`, backup `server.mjs.bak-comercial`; fica antes do bloco da Automação AVA, os dois instaladores podem ser rodados de novo); Comercial › Contratos › semestre 2027.1 › Rota de coleta › dia + cidade › Montar rota › Baixar rota.
+- Como reverter: reverter o commit; a rota `/comercial/*` do relay fica sem uso (ou restaurar `server.mjs.bak-comercial`).
+
 ### [2026-10-27] Matrículas: "Não Assinou" aparece como "Rematrícula Não Assinada"
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/matriculas-rematricula-nao-assinada
