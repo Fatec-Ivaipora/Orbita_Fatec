@@ -4,6 +4,7 @@ import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
 import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
+import { iniciarRotaColeta } from './rota.js?v=2';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -213,6 +214,7 @@ function wireEventos() {
     semestreAtual = e.target.value;
     document.getElementById('btn-novo').disabled = !semestreAtual;
     document.getElementById('btn-imprimir').classList.toggle('hidden', !semestreAtual);
+    document.getElementById('btn-rota').classList.toggle('hidden', !semestreAtual);
     if (semestreAtual) carregar();
     else {
       document.getElementById('conteudo').classList.add('hidden');
@@ -256,6 +258,11 @@ function wireEventos() {
   });
 
   document.getElementById('btn-novo').addEventListener('click', () => abrirModalAluno(null));
+  iniciarRotaColeta({
+    apiFetch, esc, fmtData, linkWhatsapp, toast: showToast, hoje: hojeLocal,
+    getSemestre: () => semestreAtual, getRegistros: () => registros,
+    onGeoSalvo: (id, geo) => { const r = registros.find(x => x.id === id); if (r) r.geo = geo; }
+  });
   document.getElementById('btn-imprimir').addEventListener('click', () => imprimirRelatorio([
     `Semestre ${semestreAtual}`,
     STATUS_LABEL[abaAtual],
