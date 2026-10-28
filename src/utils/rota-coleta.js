@@ -41,7 +41,12 @@ async function enderecosDosAlunos(semestre, nomes) {
 const enderecoTexto = (a) => [[a.rua, a.numero].filter(Boolean).join(', '), a.bairro, [a.cidade, a.uf].filter(Boolean).join(' - '), a.cep && `CEP ${a.cep}`].filter(Boolean).join(' · ');
 // Texto que o Google Maps do celular procura (decisão do usuário, 27/10: o Órbita NÃO manda endereço pra
 // serviço de mapa nenhum — quem procura é o próprio celular, na hora de navegar).
-const enderecoBusca = (a) => `${[a.rua, a.numero].filter(Boolean).join(', ')}${a.bairro ? ' - ' + a.bairro : ''}, ${a.cidade}${a.uf ? ' - ' + a.uf : ''}${a.cep ? ', ' + a.cep : ''}`;
+// Formato que o Google entende melhor: "RUA X, 123 - BAIRRO, CIDADE - PR, 86870-000, Brasil".
+// Número com letra ("S/N", "123A") fica só com os dígitos; sem dígito nenhum, sai sem número.
+const enderecoBusca = (a) => {
+    const num = String(a.numero || '').replace(/\D+/g, ' ').trim().split(' ')[0] || '';
+    return `${[a.rua, num].filter(Boolean).join(', ')}${a.bairro ? ' - ' + a.bairro : ''}, ${a.cidade}${a.uf ? ' - ' + a.uf : ''}${a.cep ? ', ' + a.cep : ''}, Brasil`;
+};
 
 // distância aproximada em km
 function km(a, b) {
@@ -82,7 +87,7 @@ async function ordenarGoogle(paradas) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json', 'X-Goog-Api-Key': chave,
-            'X-Goog-FieldMask': 'routes.optimizedIntermediateWaypointIndex,routes.legs.distanceMeters,routes.legs.duration,routes.distanceMeters,routes.duration'
+            'X-Goog-FieldMask': 'routes.optimizedIntermediateWaypointIndex,routes.legs.distanceMeters,routes.legs.duration,routes.legs.endLocation,routes.distanceMeters,routes.duration'
         },
         body: JSON.stringify({ origin: saida, destination: saida, intermediates: vao.map(pontoGoogle), travelMode: 'DRIVE', optimizeWaypointOrder: true, languageCode: 'pt-BR', regionCode: 'BR' }),
         signal: AbortSignal.timeout(20000)
@@ -96,7 +101,10 @@ async function ordenarGoogle(paradas) {
         ? rota.optimizedIntermediateWaypointIndex : vao.map((_, i) => i);
     const seg = (d) => Math.round(parseInt(String(d || '0').replace('s', ''), 10) / 60);
     const legs = rota.legs || [];
-    const ordem = idx.map((i, n) => ({ ...vao[i], kmAnterior: legs[n] ? Math.round(legs[n].distanceMeters / 100) / 10 : null, minAnterior: legs[n] ? seg(legs[n].duration) : null }));
+    // ponto que o Google achou pra cada casa (fim de cada trecho): os links do celular usam ele em vez do texto
+    // do endereço, que o app do Google Maps às vezes não encontra. Não é guardado (só vale pra esta rota).
+    const pontoDe = (leg) => { const l = leg && leg.endLocation && leg.endLocation.latLng; return l ? { lat: l.latitude, lng: l.longitude } : null; };
+    const ordem = idx.map((i, n) => ({ ...vao[i], ponto: vao[i].geo ? null : pontoDe(legs[n]), kmAnterior: legs[n] ? Math.round(legs[n].distanceMeters / 100) / 10 : null, minAnterior: legs[n] ? seg(legs[n].duration) : null }));
     const volta = legs[vao.length];
     return {
         paradas: [...ordem, ...ficam],

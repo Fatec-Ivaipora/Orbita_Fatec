@@ -4,7 +4,7 @@ import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
 import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
-import { iniciarRotaColeta } from './rota.js?v=2';
+import { iniciarRotaColeta } from './rota.js?v=3';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
