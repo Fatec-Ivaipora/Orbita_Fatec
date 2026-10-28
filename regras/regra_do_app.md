@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-28] Contratos › Rota de coleta: "Ir no Google Maps" abre pelo ponto, não pelo texto
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/rota-coleta-maps-ponto
+- Arquivos alterados: `src/utils/rota-coleta.js`, `comercial/contratos/rota.js`, `comercial/contratos/app.js`, `comercial/contratos/index.html` (versão).
+- Tipo: Correção
+- Motivo: Ao tocar no aluno/trecho, o app do Google Maps dizia "não encontramos este lugar" (procurava pelo endereço escrito do Edubox).
+- Impacto: O link usa o ponto salvo pelo GPS; senão, o ponto que o Google achou ao calcular a rota (`legs.endLocation` da Routes API — não é guardado, vale só pra rota montada); o endereço escrito fica de último recurso, agora no formato "RUA, número - BAIRRO, CIDADE - UF, CEP, Brasil" (número só com dígitos: "S/N"/"123A" não atrapalham). Vale também no arquivo "Baixar rota".
+- Como testar: Contratos › Rota de coleta › Montar rota › Ir no Google Maps.
+- Como reverter: reverter o commit.
+
 ### [2026-10-27] Contratos (Comercial): Rota de coleta de assinatura
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/contratos-rota-coleta

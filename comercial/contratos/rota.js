@@ -15,15 +15,17 @@ let resultado = null; // { data, cidade, saida, paradas }
 const $ = (id) => document.getElementById(id);
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
+// Ponto salvo pelo GPS > ponto que o Google achou ao calcular a rota > endereço escrito (último recurso)
 function destinoMaps(p) {
-  return p.geo ? `${p.geo.lat},${p.geo.lng}` : p.busca;
+  const pt = p.geo || p.ponto;
+  return pt ? `${pt.lat},${pt.lng}` : p.busca;
 }
 function linkMaps(p) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destinoMaps(p))}&travelmode=driving`;
 }
 // Trechos de até 4 paradas, cada um num link (saindo de onde o celular está)
 function linksTrechos(paradas) {
-  const ok = paradas.filter(p => p.geo || p.busca);
+  const ok = paradas.filter(p => p.geo || p.ponto || p.busca);
   const trechos = [];
   for (let i = 0; i < ok.length; i += POR_TRECHO) {
     const g = ok.slice(i, i + POR_TRECHO);
@@ -117,7 +119,7 @@ function cartao(p, i, { offline = false } = {}) {
       ${p.obs ? `<div class="rt-obs">${e(p.obs)}</div>` : ''}
       ${p.kmAnterior != null || p.geo ? `<div class="rt-info">${p.kmAnterior != null ? `🚗 ${String(p.kmAnterior).replace('.', ',')} km${p.minAnterior != null ? ` · ${p.minAnterior} min` : ''} ${i ? 'da parada anterior' : 'da Fatec'}` : ''}${p.geo ? `${p.kmAnterior != null ? ' · ' : ''}📍 local salvo pelo GPS` : ''}</div>` : ''}
       <div class="rt-acoes">
-        ${p.geo || p.busca ? `<a class="rt-btn rt-btn-maps" href="${e(linkMaps(p))}" target="_blank" rel="noopener">Ir no Google Maps</a>` : ''}
+        ${p.geo || p.ponto || p.busca ? `<a class="rt-btn rt-btn-maps" href="${e(linkMaps(p))}" target="_blank" rel="noopener">Ir no Google Maps</a>` : ''}
         ${tel ? `<a class="rt-btn" href="${tel}">Ligar</a>` : ''}
         ${wa ? `<a class="rt-btn" href="${e(wa)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
         ${offline ? `<label class="rt-btn rt-visitado"><input type="checkbox" data-visitado="${e(p.id)}"> Visitado</label>`
