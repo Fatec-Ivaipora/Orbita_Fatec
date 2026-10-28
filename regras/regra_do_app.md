@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-28] Usuários: e-mail de redefinição de senha volta para o Órbita atual
+- Autor: Claude Code (a pedido do usuário)
+- Branch: main
+- Arquivos alterados: `usuarios/app.js` (`enviarResetSenha`), `usuarios/index.html` (versão do script).
+- Tipo: Correção
+- Motivo: O link de volta do e-mail estava fixo em `orbita-fatecivp.web.app` (hospedagem antiga do Firebase), e não no Vercel (`orbita-fatec-ti.vercel.app`).
+- Impacto: O link de volta passa a ser o endereço em que o Órbita está aberto (`window.location.origin` + `/auth/login.html`). Se esse domínio não estiver em Firebase Auth → Domínios autorizados, o e-mail sai mesmo assim, só sem o botão de voltar. **Configuração no console do Firebase (não é código):** em Authentication → Templates → Redefinição de senha → "Personalizar URL de ação", usar `https://orbita-fatec-ti.vercel.app/auth/redefinir-senha.html` para o link do e-mail abrir a tela do próprio Órbita (ela já trata `mode=resetPassword` e `oobCode`); e manter `orbita-fatec-ti.vercel.app` em Domínios autorizados.
+- Como testar: Usuários → editar um usuário → "Enviar E-mail" → abrir o link → trocar a senha → voltar ao login do Vercel.
+- Como reverter: reverter o commit.
+
 ### [2026-10-28] Contratos › Rota de coleta: "Ir no Google Maps" abre pelo ponto, não pelo texto
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/rota-coleta-maps-ponto
@@ -208,7 +218,6 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Impacto: O tutor importa o livro de notas exportado do AVA (um arquivo por disciplina/turma; reimportar atualiza). Regra da nota: cada unidade com 100% de participação vale 0,5; abaixo disso ou "-" vale 0; UA 01–06 = 1º bimestre, UA 07–12 = 2º; nota do bimestre de 0 a 3,0 (item "TRILHA EAD" do diário). O sistema casa a turma com o(s) diário(s) do Edubox (cad_turmas do CADD): turmas que estudam juntas no AVA saem num arquivo por diário; aluno do AVA fora do diário é classificado (DP/adaptação → onde lançar; saiu → consulta Matrículas; nome social → casamento pelos dois últimos sobrenomes, só se a pessoa for única); a conta "Professor Fatec" é ignorada. Gera CSV `Nome;Nota` (com ponto) por diário e bimestre — **não grava nada no Edubox**. Participação e ranking contam só os alunos ativos do diário; curso = média das disciplinas; geral = média dos cursos; filtro de bimestre no topo; comparativo 1º × 2º (subiu/caiu). Impressão no padrão FATEC (modelo do relatório de desempenho antigo; um bimestre ou os dois juntos; ranking de alunos com aviso LGPD). O tutor pode marcar uma unidade como concluída à mão (fica em `manuais` e é reaplicada a cada reimportação). Acesso: tutor do EAD vê e mexe só nas turmas que importou; o coordenador do EAD (ead + `users.chefeDeSetor`) vê e mexe em todas; coordenador de curso só vê os cursos de `users.cursos`, sem os arquivos do Edubox; ADM tudo. Coleção nova `trilha_ead_disciplinas`; lê `cad_turmas`, `matriculas_alunos` (só os nomes que faltaram) e `users`.
 - Como testar: Docência → Trilha EAD → "Importar livro de notas" → arquivo do AVA (ex.: "TEO HIST ARQ URB III - 7602 Notas.xlsx") → confere a prévia (diário encontrado, curso sugerido) → Importar → abrir a turma, baixar o arquivo do Edubox do bimestre, aba Ranking, imprimir.
 - Como reverter: reverter o commit e apagar a coleção `trilha_ead_disciplinas` (e as chaves `trilha-ead` de `config/permissions`, se gravadas).
-
 ### [2026-10-16] Contratos: ordenar pela data de assinatura
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main
