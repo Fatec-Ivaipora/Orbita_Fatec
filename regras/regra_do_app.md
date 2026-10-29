@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-29] Banco de Provas: importação com semestre/bimestre/chamada uma vez só, "Confirmar todos" e ordem das disciplinas no Simulado
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/banco-provas-importar-config
+- Arquivos alterados: `src/rotas/banco-provas.js` (`/questoes/importar-docx` aceita `padrao: {semestre, bimestre, chamada}`; `/questoes/analisar-docx` pula questão vazia com aviso), `src/utils/parseProvaDocx.js`, `docencia/banco-provas/index.html`, `docencia/banco-provas/app.js`, `docencia/banco-provas/banco-provas.css`.
+- Tipo: Melhoria
+- Motivo: Arquivo com várias disciplinas (ex.: 40 questões de 5 disciplinas) obrigava a escolher semestre, bimestre e chamada de novo em cada bloco na revisão; e no Simulado não dava pra escolher a ordem das disciplinas na prova.
+- Impacto: Na importação, semestre/bimestre/chamada são escolhidos uma vez e gravados nas questões em revisão; a revisão já vem preenchida com eles e com a disciplina sugerida pelo título do bloco, e "Confirmar todos" publica todos os blocos de uma vez (confere tudo antes; se faltar algo, diz qual bloco e não publica nada). No Simulado, setas ↑ ↓ em cada disciplina definem a ordem na prova (a prova sai na ordem da lista; mudar a ordem pede pra montar de novo). Leitor do Word (Simulado de Direito da professora não era reconhecido): questão só com o número ("Questão 01" sem texto — as de Conhecimentos Gerais, que já estão no banco) é pulada com aviso em vez de travar o arquivo; título de disciplina com traço ou vírgula ("DIREITO CIVIL - PESSOAS E BENS", "ÉTICA, BIOÉTICA, CULTURA E SOCIEDADE") é reconhecido (exige 2+ palavras de 3+ letras, pra "V, F, V, F" não virar título); letra colada no número ("Questão 08l") não vai pro enunciado. Numeração original mantida (6 a 40). Conferido: os outros 28 modelos de prova dos Downloads saem iguais ao leitor antigo.
+- Como testar: Banco de Provas › Importar Word com 2+ disciplinas, escolhendo semestre/bimestre/chamada › marcar gabarito › Revisão › Confirmar todos. Provas › Simulado › mover Conhecimentos Gerais pro fim › Montar prova.
+- Como reverter: reverter o commit.
+
 ### [2026-10-28] Nome social do aluno em todo o Órbita
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/auxiliar-coordenacao-e-nome-social

@@ -6,7 +6,7 @@
     <title>Banco de Provas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=15">
+    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=16">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -117,6 +117,10 @@
                     <!-- ============ VIEW: REVISÃO DE IMPORTAÇÃO ============ -->
                     <section id="bp-view-revisao" class="bp-view hidden">
                         <p class="form-hint" style="margin-bottom:1rem;">Questões importadas do Word ficam aqui até você confirmar a disciplina certa de cada grupo — só depois disso elas entram no banco.</p>
+                        <div class="bp-revisao-todos hidden" id="bp-revisao-todos">
+                            <span id="bp-revisao-todos-texto"></span>
+                            <button type="button" class="btn-primary" id="bp-revisao-btn-todos">Confirmar todos</button>
+                        </div>
                         <div id="bp-revisao-lista"></div>
                         <p id="bp-revisao-vazio" class="tabela-msg hidden">Nada pendente de revisão no momento.</p>
                     </section>
@@ -299,6 +303,30 @@
                             <input type="text" id="importar-professor" maxlength="120" placeholder="Quem elaborou">
                         </div>
                     </div>
+                    <p class="form-hint" style="margin:0.2rem 0 0.4rem;"><strong>Valem pra todas as questões do arquivo</strong> (todas as disciplinas). Depois, na revisão, é só conferir a disciplina de cada bloco e clicar em <em>Confirmar todos</em>.</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Semestre</label>
+                            <input type="text" id="importar-semestre" maxlength="6" placeholder="Ex.: 2026.2" pattern="\d{4}\.[12]">
+                        </div>
+                        <div class="form-group">
+                            <label>Bimestre</label>
+                            <select id="importar-bimestre">
+                                <option value="">—</option>
+                                <option value="1">1º Bimestre</option>
+                                <option value="2">2º Bimestre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Chamada</label>
+                            <select id="importar-chamada">
+                                <option value="">—</option>
+                                <option value="1">1ª Chamada</option>
+                                <option value="2">2ª Chamada</option>
+                                <option value="exame">Exame</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="modal-actions">
                         <button type="button" class="btn-secondary" id="btn-cancelar-importar">Cancelar</button>
                         <button type="submit" class="btn-primary" id="btn-analisar-importar">Analisar arquivo</button>
@@ -373,7 +401,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Quantidade de questões por disciplina (0 = não entra)</label>
+                    <label>Quantidade de questões por disciplina (0 = não entra) — use ↑ ↓ pra definir a ordem das disciplinas na prova</label>
                     <div id="prova-cotas-lista"></div>
                 </div>
                 <button type="button" class="btn-secondary" id="btn-sortear-prova">Montar prova com essas quantidades</button>
@@ -451,6 +479,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/docencia/banco-provas/app.js?v=24"></script>
+    <script type="module" src="/docencia/banco-provas/app.js?v=25"></script>
 </body>
 </html>
