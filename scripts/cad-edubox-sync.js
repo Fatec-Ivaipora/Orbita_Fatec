@@ -35,7 +35,9 @@ const RAIZ = path.join(__dirname, '..');
 require('dotenv').config({ path: path.join(RAIZ, '.env') });
 const edubox = require(path.join(RAIZ, 'src', 'db-edubox'));
 
-const q = (sql, p) => edubox.query(sql, p).then(r => r.rows);
+// nome social (src/utils/nome-social.js): o aluno que usa nome social já sai com ele do Edubox
+const nomeSocialUtil = require(path.join(RAIZ, 'src', 'utils', 'nome-social'));
+const q = (sql, p) => edubox.query(sql, p).then(r => nomeSocialUtil.aplicarNasLinhas(r.rows));
 const limpa = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const r2 = (v) => Math.round(v * 100) / 100;
 

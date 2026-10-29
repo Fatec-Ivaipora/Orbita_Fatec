@@ -43,14 +43,14 @@ function soDirecao(req, res) {
 }
 
 // Quem pode ser o responsável que assina: coordenadores de curso e a
-// coordenação do EAD (Equipe Multidisciplinar).
+// coordenação do EAD (Equipe Multidisciplinar). Auxiliar de coordenação (auxiliarDe) não assina.
 async function signatarios() {
     const [coord, ead] = await Promise.all([
         db.collection('users').where('role', '==', 'coordenador').get(),
         db.collection('users').where('role', '==', 'ead').where('chefeDeSetor', '==', true).get()
     ]);
     return [...coord.docs, ...ead.docs].map(d => ({ uid: d.id, ...d.data() }))
-        .filter(u => u.ativo !== false && !/teste/i.test(u.name || '') && (u.role === 'ead' || (u.cursos || []).length || u.curso))
+        .filter(u => u.ativo !== false && !u.auxiliarDe && !/teste/i.test(u.name || '') && (u.role === 'ead' || (u.cursos || []).length || u.curso))
         .map(u => ({ uid: u.uid, nome: u.name || u.email, cursos: u.cursos || (u.curso ? [u.curso] : []), ead: u.role === 'ead' }))
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }

@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-28] Nome social do aluno em todo o Órbita
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/auxiliar-coordenacao-e-nome-social
+- Arquivos alterados: `src/utils/nome-social.js` (novo), `scripts/cad-edubox-sync.js` e `scripts/cobranca-edubox-sync.js` (função `q`), `src/utils/rota-coleta.js`.
+- Tipo: Novo recurso / ajuste
+- Motivo: Aluno de Direito usa nome social; o Edubox só tem o nome de registro, que aparecia no CADD, Cobrança, Correção de Provas e Matrículas.
+- Impacto: Lista em `config/nomes_sociais.alunos` = `[{ ra, curso, nomeRegistro, nomeSocial, em, por }]` (por enquanto sem tela — a TI cadastra). Os robôs do CADD e da Cobrança (servidor) trocam o nome de registro pelo social em tudo que copiam do Edubox (comparação sem acento, nome completo); a rota de coleta busca o endereço no Edubox pelo nome de registro e mostra o social. Os registros que já existiam foram trocados à mão em 28/10 (cad_alunos, cad_turmas, cobranca_edubox_alunos, correcao_avaliacoes, financeiro_cobranca_acoes/parcelas, matriculas_alunos — 12 trocas, com cópia antes). **Depois do merge, atualizar os robôs no servidor** (`cd /opt/orbita-sync && sudo -u orbita git pull && systemctl restart orbita-cad-agente orbita-cobranca-agente`); até lá, a próxima atualização do CADD/Cobrança volta o nome de registro.
+- Como testar: CADD/Correção de Provas/Matrículas da turma de Direito: aparece o nome social.
+- Como reverter: reverter o commit e tirar o aluno de `config/nomes_sociais`.
+
+### [2026-10-28] Plano de Ação: auxiliar de coordenação não entra como coordenador
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/auxiliar-coordenacao-e-nome-social
+- Arquivos alterados: `src/rotas/plano-acao.js` (`coordenadores()`), `src/rotas/plano-acao-documentos.js` (`signatarios()`).
+- Tipo: Ajuste
+- Motivo: Luciana é auxiliar da coordenadora Patricia: precisa dos mesmos acessos (mesmos módulos e cursos — Banco/Correção de Provas etc.), mas não deve receber atividade do Roni nem documento pra assinar.
+- Impacto: Usuário com `auxiliarDe` (uid do coordenador) e `auxiliarDeNome` continua com cargo `coordenador` e os cursos dele, mas fica fora da lista de coordenadores do Plano de Ação e dos signatários dos documentos. No Plano de Ação ele vê só o que criar pra si.
+- Como testar: entrar como Direção → Plano de Ação → nova atividade / novo documento: a Luciana não aparece; entrar como Luciana → Banco de Provas / Correção de Provas dos cursos da Patricia.
+- Como reverter: reverter o commit.
+
 ### [2026-10-28] Usuários: e-mail de redefinição de senha volta para o Órbita atual
 - Autor: Claude Code (a pedido do usuário)
 - Branch: main

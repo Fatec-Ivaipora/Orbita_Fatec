@@ -80,7 +80,9 @@ const MESES_HISTORICO = 24; // visão mensal: do mês atual até 23 meses atrás
 const FAIXAS = [[1, 30, '1-30'], [31, 60, '31-60'], [61, 90, '61-90'], [91, Infinity, '90+']];
 const SEM_CURSO = 'Sem curso vinculado';
 
-const q = async (sql, params) => (await edubox.query(sql, params)).rows;
+// nome social (src/utils/nome-social.js): o aluno que usa nome social já sai com ele do Edubox
+const nomeSocialUtil = require(path.join(RAIZ, 'src', 'utils', 'nome-social'));
+const q = async (sql, params) => nomeSocialUtil.aplicarNasLinhas((await edubox.query(sql, params)).rows);
 
 function normalizarSemestre(s) {
     const m = (s || '').trim().match(/^(\d{4})\s*[-/.]\s*(\d)$/);
