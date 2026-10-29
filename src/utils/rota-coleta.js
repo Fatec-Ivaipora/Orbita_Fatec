@@ -8,6 +8,7 @@
 // Sem GOOGLE_MAPS_API_KEY no .env, cai pra ordem local (GPS pela distância, depois bairro/rua).
 // ==========================================
 const { relay } = require('./edubox-relay');
+const nomesSociais = require('./nome-social');
 
 // Saída da rota: Fatec Ivaiporã (centro de Ivaiporã-PR).
 const SAIDA = { lat: -24.2475, lng: -51.6847, nome: 'Fatec Ivaiporã' };
@@ -27,12 +28,14 @@ async function enderecosDosAlunos(semestre, nomes) {
         const e = new Error('O endereço do aluno só vem do Edubox com o relay em HTTPS (EDUBOX_RELAY_URL).');
         e.status = 503; throw e;
     }
-    const lista = [...new Set(nomes.map(norm).filter(n => n.length >= 3))].slice(0, 40);
+    // quem usa nome social está no Órbita com ele; no Edubox só existe o nome de registro
+    await nomesSociais.carregarNomesSociais();
+    const lista = [...new Set(nomes.map(n => norm(nomesSociais.nomeRegistro(n))).filter(n => n.length >= 3))].slice(0, 40);
     const porNome = new Map();
     if (!lista.length) return porNome;
     const r = await relay(`/comercial/enderecos?semestres=${encodeURIComponent(formatoEdubox(semestre).join(','))}&nomes=${encodeURIComponent(lista.join('|'))}`, { timeoutMs: 45000 });
     (r.alunos || []).forEach(a => {
-        const k = norm(a.nome);
+        const k = norm(nomesSociais.nomeSocial(a.nome));
         porNome.set(k, porNome.has(k) ? null : a); // dois alunos com o mesmo nome: não dá pra saber qual — fica sem endereço
     });
     return porNome;

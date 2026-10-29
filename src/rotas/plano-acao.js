@@ -52,10 +52,12 @@ function soDirecao(req, res) {
 
 // Coordenadores de curso = cargo coordenador ativo e com curso vinculado
 // (fica de fora o usuário de teste e o da licitação, sem curso).
+// Auxiliar de coordenação (users.auxiliarDe = uid do coordenador, 28/10/2026) tem o cargo de
+// coordenador pra usar os mesmos módulos e cursos, mas não entra aqui: não recebe atividade nem plano.
 async function coordenadores() {
     const snap = await db.collection('users').where('role', '==', 'coordenador').get();
     return snap.docs.map(d => ({ uid: d.id, ...d.data() }))
-        .filter(u => u.ativo !== false)
+        .filter(u => u.ativo !== false && !u.auxiliarDe)
         .map(u => ({ uid: u.uid, nome: u.name || u.email, cursos: Array.isArray(u.cursos) && u.cursos.length ? u.cursos : (u.curso ? [u.curso] : []) }))
         .filter(u => u.cursos.length && !/teste/i.test(u.nome))
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
