@@ -603,8 +603,17 @@ function renderRevisao() {
     grupos.get(chave).itens.push(q);
   });
 
-  lista.innerHTML = [...grupos.values()].map((g, i) => {
+  const grupoLista = [...grupos.values()];
+  const faixa = document.getElementById('bp-revisao-todos');
+  if (faixa) {
+    faixa.classList.toggle('hidden', grupoLista.length < 2);
+    document.getElementById('bp-revisao-todos-texto').textContent = `${grupoLista.length} blocos · ${revisaoQuestoes.length} questões — confira a disciplina de cada bloco e publique tudo de uma vez.`;
+  }
+  const sel = (v, atual) => String(v) === String(atual ?? '') ? 'selected' : '';
+
+  lista.innerHTML = grupoLista.map((g, i) => {
     const sugestao = sugerirDisciplina(g.categoriaSugeridaTexto);
+    const base = g.itens[0] || {}; // semestre/bimestre/chamada escolhidos na importação (iguais no lote)
     const opcoes = '<option value="">Selecione a disciplina</option><option value="geral">Conhecimentos Gerais</option>' +
       disciplinas.map(d => `<option value="${d.id}" ${sugestao && sugestao.id === d.id ? 'selected' : ''}>${ordinal(d.periodo)} · ${esc(d.nome)}</option>`).join('');
     return `
@@ -618,16 +627,16 @@ function renderRevisao() {
             <select class="select-filter bp-revisao-select-disciplina">${opcoes}</select>
             <select class="select-filter bp-revisao-select-bimestre">
               <option value="">Bimestre —</option>
-              <option value="1">1º Bimestre</option>
-              <option value="2">2º Bimestre</option>
+              <option value="1" ${sel(1, base.bimestre)}>1º Bimestre</option>
+              <option value="2" ${sel(2, base.bimestre)}>2º Bimestre</option>
             </select>
             <select class="select-filter bp-revisao-select-chamada">
               <option value="">Chamada —</option>
-              <option value="1">1ª Chamada</option>
-              <option value="2">2ª Chamada</option>
-              <option value="exame">Exame</option>
+              <option value="1" ${sel(1, base.chamada)}>1ª Chamada</option>
+              <option value="2" ${sel(2, base.chamada)}>2ª Chamada</option>
+              <option value="exame" ${sel('exame', base.chamada)}>Exame</option>
             </select>
-            <input type="text" class="select-filter bp-revisao-input-semestre" placeholder="Semestre (ex.: 2026.2)" style="min-width:150px;">
+            <input type="text" class="select-filter bp-revisao-input-semestre" placeholder="Semestre (ex.: 2026.2)" style="min-width:150px;" value="${esc(base.semestre || '')}">
             <button type="button" class="btn-primary bp-revisao-btn-confirmar">Confirmar</button>
             <button type="button" class="btn-secondary bp-revisao-btn-descartar">Descartar</button>
           </div>
@@ -635,16 +644,42 @@ function renderRevisao() {
       </div>`;
   }).join('');
 
-  [...grupos.values()].forEach((g, i) => {
+  const dadosDoCard = (card) => ({
+    disciplinaId: card.querySelector('.bp-revisao-select-disciplina').value,
+    bimestre: card.querySelector('.bp-revisao-select-bimestre').value,
+    chamada: card.querySelector('.bp-revisao-select-chamada').value,
+    semestre: card.querySelector('.bp-revisao-input-semestre').value.trim()
+  });
+  grupoLista.forEach((g, i) => {
     const card = lista.querySelector(`[data-grupo-index="${i}"]`);
-    card.querySelector('.bp-revisao-btn-confirmar').addEventListener('click', () => resolverGrupoRevisao(g, {
-      disciplinaId: card.querySelector('.bp-revisao-select-disciplina').value,
-      bimestre: card.querySelector('.bp-revisao-select-bimestre').value,
-      chamada: card.querySelector('.bp-revisao-select-chamada').value,
-      semestre: card.querySelector('.bp-revisao-input-semestre').value.trim()
-    }));
+    card.querySelector('.bp-revisao-btn-confirmar').addEventListener('click', () => resolverGrupoRevisao(g, dadosDoCard(card)));
     card.querySelector('.bp-revisao-btn-descartar').addEventListener('click', () => descartarGrupoRevisao(g));
   });
+  const btnTodos = document.getElementById('bp-revisao-btn-todos');
+  if (btnTodos) btnTodos.onclick = () => confirmarTodosRevisao(grupoLista.map((g, i) => ({ g, dados: dadosDoCard(lista.querySelector(`[data-grupo-index="${i}"]`)) })));
+}
+
+// "Confirmar todos" (29/10/2026): publica todos os blocos de uma vez. Confere tudo antes de gravar
+// qualquer coisa — se faltar disciplina/bimestre/chamada em algum bloco, avisa qual e não publica nada.
+async function confirmarTodosRevisao(itens) {
+  const faltando = itens.filter(({ dados }) => !dados.disciplinaId || !dados.chamada || (dados.chamada !== 'exame' && !dados.bimestre))
+    .map(({ g }) => g.categoriaSugeridaTexto || '(sem seção detectada)');
+  if (faltando.length) { showToast(`Falta disciplina, bimestre ou chamada em: ${faltando.join(', ')}.`, 'error'); return; }
+  const btn = document.getElementById('bp-revisao-btn-todos');
+  btn.disabled = true; btn.textContent = 'Publicando...';
+  let ok = 0, total = 0;
+  try {
+    for (const { g, dados } of itens) {
+      await apiFetch(`/banco-provas/questoes/lote/${g.loteId}/resolver`, { method: 'PUT', body: JSON.stringify({ ...dados, categoriaSugeridaTexto: g.categoriaSugeridaTexto }) });
+      ok++; total += g.itens.length;
+    }
+    showToast(`${total} questões publicadas (${ok} blocos).`);
+  } catch (err) {
+    showToast(`${ok} de ${itens.length} blocos publicados. Parou em um bloco: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirmar todos';
+    await carregarTudoDoCurso();
+  }
 }
 
 async function resolverGrupoRevisao(grupo, dados) {
@@ -697,10 +732,25 @@ function salvarRascunhoImportacao() {
       curso: importarCursoSelecionado,
       alternativasPorQuestao: importarAlternativasPorQuestao,
       professorNome: document.getElementById('importar-professor').value.trim(),
+      padrao: padraoImportacao(),
       questoes: importarQuestoesAnalisadas,
       salvoEm: new Date().toISOString()
     }));
   } catch (err) { /* localStorage indisponível (modo privado etc.) — segue sem rascunho */ }
+}
+
+// Semestre / bimestre / chamada escolhidos uma vez na importação (valem pro arquivo inteiro)
+function padraoImportacao() {
+  return {
+    semestre: (document.getElementById('importar-semestre').value || '').trim(),
+    bimestre: document.getElementById('importar-bimestre').value,
+    chamada: document.getElementById('importar-chamada').value
+  };
+}
+function aplicarPadraoImportacao(p) {
+  document.getElementById('importar-semestre').value = (p && p.semestre) || '';
+  document.getElementById('importar-bimestre').value = (p && p.bimestre) || '';
+  document.getElementById('importar-chamada').value = (p && p.chamada) || '';
 }
 
 function lerRascunhoImportacao() {
@@ -738,6 +788,7 @@ function abrirModalImportar() {
     importarAlternativasPorQuestao = rascunho.alternativasPorQuestao || 5;
     importarQuestoesAnalisadas = rascunho.questoes;
     document.getElementById('importar-professor').value = rascunho.professorNome || '';
+    aplicarPadraoImportacao(rascunho.padrao);
     document.getElementById('importar-etapa-arquivo').classList.add('hidden');
     document.getElementById('importar-etapa-gabarito').classList.remove('hidden');
     document.getElementById('importar-rascunho-aviso').classList.remove('hidden');
@@ -789,6 +840,9 @@ async function analisarImportacao(e) {
     showToast('Selecione o curso antes de analisar o arquivo.', 'error');
     return;
   }
+  const padrao = padraoImportacao();
+  if (padrao.semestre && !/^\d{4}\.[12]$/.test(padrao.semestre)) { showToast('Semestre no formato 2026.2.', 'error'); return; }
+  if (padrao.chamada === 'exame') document.getElementById('importar-bimestre').value = '';
   const btn = document.getElementById('btn-analisar-importar');
   btn.disabled = true;
   btn.textContent = 'Analisando...';
@@ -800,6 +854,7 @@ async function analisarImportacao(e) {
       body: JSON.stringify({ arquivoBase64, alternativasPorQuestao: importarAlternativasPorQuestao })
     });
     importarQuestoesAnalisadas = resp.questoes.map(q => ({ ...q, gabarito: null }));
+    if (resp.aviso) showToast(resp.aviso);
     document.getElementById('importar-etapa-arquivo').classList.add('hidden');
     document.getElementById('importar-etapa-gabarito').classList.remove('hidden');
     document.getElementById('importar-rascunho-aviso').classList.remove('hidden');
@@ -935,6 +990,7 @@ async function confirmarImportacao() {
         curso: importarCursoSelecionado,
         alternativasPorQuestao: importarAlternativasPorQuestao,
         professorNome: document.getElementById('importar-professor').value.trim(),
+        padrao: padraoImportacao(),
         questoes: importarQuestoesAnalisadas
       })
     });
@@ -1267,11 +1323,38 @@ function popularCotasSimulado() {
     { id: DISCIPLINA_GERAL_ID, label: `Conhecimentos Gerais${document.getElementById('prova-semestre').value ? ` (as de ${document.getElementById('prova-semestre').value}, iguais para todos os cursos)` : ' (escolha o semestre da prova)'}` },
     ...doPeriodo.map(d => ({ id: d.id, label: `${ordinal(d.periodo)} · ${d.nome}` }))
   ];
+  // Ordem das disciplinas na prova (29/10/2026): as setas mudam a ordem das linhas, e a prova sai na
+  // ordem da lista (Conhecimentos Gerais pode ir pro fim, por exemplo). Quantidades digitadas continuam.
   lista.innerHTML = linhas.map(l => `
-    <div class="prova-cota-row">
-      <span>${esc(l.label)}</span>
+    <div class="prova-cota-row" data-disciplina-id="${l.id}">
+      <span class="prova-cota-ordem">
+        <button type="button" class="prova-cota-mover" data-mover="-1" title="Subir na ordem da prova" aria-label="Subir ${esc(l.label)}">↑</button>
+        <button type="button" class="prova-cota-mover" data-mover="1" title="Descer na ordem da prova" aria-label="Descer ${esc(l.label)}">↓</button>
+      </span>
+      <span><b class="prova-cota-num"></b>${esc(l.label)}</span>
       <input type="number" min="0" value="0" class="prova-cota-qtd" data-disciplina-id="${l.id}">
     </div>`).join('');
+  numerarCotasSimulado();
+}
+
+function numerarCotasSimulado() {
+  const rows = [...document.querySelectorAll('#prova-cotas-lista .prova-cota-row')];
+  rows.forEach((row, i) => {
+    row.querySelector('.prova-cota-num').textContent = `${i + 1}º · `;
+    row.querySelector('[data-mover="-1"]').disabled = i === 0;
+    row.querySelector('[data-mover="1"]').disabled = i === rows.length - 1;
+  });
+}
+
+function moverCotaSimulado(btn) {
+  const row = btn.closest('.prova-cota-row');
+  const lista = row.parentElement;
+  if (btn.dataset.mover === '-1' && row.previousElementSibling) lista.insertBefore(row, row.previousElementSibling);
+  if (btn.dataset.mover === '1' && row.nextElementSibling) lista.insertBefore(row.nextElementSibling, row);
+  numerarCotasSimulado();
+  btn.focus();
+  // a pré-visualização montada antes ficou com a ordem antiga
+  if (sorteioAtual) { sorteioAtual = null; renderPreviewSorteio(); showToast('Ordem mudada — clique em "Montar prova com essas quantidades" de novo.'); }
 }
 
 async function sortearProvaSimulado() {
@@ -1563,6 +1646,7 @@ function bindEventos() {
   });
 
   document.getElementById('bp-btn-importar-docx').addEventListener('click', abrirModalImportar);
+  document.getElementById('prova-cotas-lista').addEventListener('click', (e) => { const b = e.target.closest('.prova-cota-mover'); if (b && !b.disabled) moverCotaSimulado(b); });
   document.getElementById('btn-cancelar-importar').addEventListener('click', fecharModalImportar);
   document.getElementById('form-importar').addEventListener('submit', analisarImportacao);
   document.getElementById('btn-voltar-importar').addEventListener('click', voltarEtapaArquivo);
