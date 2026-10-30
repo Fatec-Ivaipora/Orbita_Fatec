@@ -6,7 +6,7 @@
     <title>Contratos - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=7">
+    <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=8">
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
@@ -39,6 +39,10 @@
                         <button class="btn-secondary hidden" id="btn-imprimir" title="Imprime o que está filtrado na tela, com o logo">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                             Imprimir relatório
+                        </button>
+                        <button class="btn-secondary hidden" id="btn-rota" title="Montar a rota do dia pra coletar assinatura na casa dos alunos">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                            Rota de coleta
                         </button>
                         <button class="btn-primary action-execute" id="btn-novo" disabled>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -248,11 +252,43 @@
         </div>
     </div>
 
+    <!-- Modal: rota de coleta de assinatura (27/10/2026) -->
+    <div id="modal-rota" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg rt-modal">
+            <div id="rt-passo-escolher">
+                <h2>Rota de coleta</h2>
+                <p class="modal-subtitle">Escolha o dia e a cidade e marque quem visitar (até 25). Os alunos com coleta marcada no dia já vêm marcados. O endereço vem do Edubox.</p>
+                <div class="rt-filtros">
+                    <label>Dia <input type="date" id="rt-data" class="select-filter"></label>
+                    <label>Cidade <select id="rt-cidade" class="select-filter"></select></label>
+                </div>
+                <div class="rt-marcar"><span id="rt-contagem"></span><button type="button" class="btn-link" id="rt-todos">Marcar todos</button><button type="button" class="btn-link" id="rt-nenhum">Desmarcar</button></div>
+                <div class="rt-lista" id="rt-lista"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="rt-fechar">Fechar</button>
+                    <button type="button" class="btn-primary" id="rt-montar" disabled>Montar rota</button>
+                </div>
+            </div>
+            <div id="rt-passo-rota" class="hidden">
+                <h2 id="rt-titulo-rota">Rota</h2>
+                <p class="modal-subtitle">Siga a ordem dos números: é o melhor caminho calculado pelo Google, saindo da Fatec. <b>Sem internet:</b> baixe antes o mapa da região no Google Maps (foto do perfil › Mapas off-line) e use "Baixar rota".</p>
+                <div id="rt-avisos"></div>
+                <div class="rt-trechos" id="rt-trechos"></div>
+                <ol class="rt-paradas" id="rt-paradas"></ol>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="rt-voltar">Voltar</button>
+                    <button type="button" class="btn-secondary" id="rt-fechar-2">Fechar</button>
+                    <button type="button" class="btn-primary" id="rt-baixar">Baixar rota (abre sem internet)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <datalist id="lista-cursos"></datalist>
     <datalist id="lista-cidades"></datalist>
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=10"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=13"></script>
 </body>
 </html>

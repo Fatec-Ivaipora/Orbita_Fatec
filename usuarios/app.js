@@ -1096,14 +1096,19 @@ async function enviarResetSenha() {
   try {
     auth.languageCode = 'pt-br'; // Forçar idioma para Português
     
-    // Configurações para redirecionar para nossa tela customizada
-    const actionCodeSettings = {
-      // Usando o link oficial para evitar erros de domínio não autorizado
-      url: 'https://orbita-fatecivp.web.app/auth/redefinir-senha.html',
-      handleCodeInApp: true,
-    };
-
-    await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    // Depois de trocar a senha, a pessoa volta para o login do próprio Órbita
+    // no endereço em que ele está aberto (hoje o Vercel). Antes estava fixo em
+    // orbita-fatecivp.web.app (hospedagem antiga do Firebase).
+    // O domínio precisa estar em Firebase Auth → Domínios autorizados; se não
+    // estiver, o Firebase recusa e o e-mail sai sem o botão de voltar.
+    const actionCodeSettings = { url: `${window.location.origin}/auth/login.html` };
+    try {
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    } catch (err) {
+      if (err.code !== 'auth/unauthorized-continue-uri') throw err;
+      console.warn('Domínio não autorizado no Firebase Auth para o link de volta:', window.location.origin);
+      await sendPasswordResetEmail(auth, email);
+    }
     showToast(`✅ Link de redefinição enviado para ${email}`, 'success');
   } catch (err) {
     showToast(`❌ Erro: ${err.message}`, 'error');

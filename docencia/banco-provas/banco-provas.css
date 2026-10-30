@@ -175,8 +175,12 @@
 
 /* Cotas do Simulado (quantidade por disciplina) */
 .prova-cota-row {
-  display: grid; grid-template-columns: 1fr 110px; gap: 0.75rem; align-items: center; margin-bottom: 0.5rem;
+  display: grid; grid-template-columns: auto 1fr 110px; gap: 0.75rem; align-items: center; margin-bottom: 0.5rem;
 }
+.prova-cota-ordem { display: inline-flex; gap: 2px; }
+.prova-cota-mover { width: 28px; height: 28px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card, #fff); color: var(--primary-blue); font-weight: 700; cursor: pointer; line-height: 1; }
+.prova-cota-mover:disabled { opacity: .35; cursor: default; }
+.prova-cota-num { color: var(--primary-blue); }
 .prova-cota-row input { width: 100%; }
 
 /* Períodos da prova: o coordenador marca quais fazem a mesma prova */
@@ -397,3 +401,7 @@ body.orb-v2 .modal-actions { border-top: 1px solid var(--orb-linha2, #EEF2F7); p
   body.orb-v2 .data-table .grupo-header { padding: 8px 12px 0; background: var(--orb-sup2, #F6F8FB); }
   body.orb-v2 .tabela-wrap { overflow-x: visible; }
 }
+
+/* Revisão: publicar todos os blocos de uma vez (29/10/2026) */
+.bp-revisao-todos { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: .9rem; }
+.bp-revisao-todos.hidden { display: none; }

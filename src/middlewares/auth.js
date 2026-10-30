@@ -208,6 +208,7 @@ const requireModulePermission = (moduleName) => {
         // Fallback de segurança para permissões padrão
         const defaultPermissions = {
             adm_l2: {
+                'automacao-ava': 3,
                 cad: 3,
                 'correcao-provas': 3,
                 cpa: 3,
@@ -233,9 +234,11 @@ const requireModulePermission = (moduleName) => {
                 auloes: 3,
                 palestras: 3,
                 'agenda-espacos': 3,
-                'trilha-ead': 3
+                'trilha-ead': 3,
+                'plano-acao': 3
             },
             ti: {
+                'automacao-ava': 3,
                 emprestimo: 3,
                 usuarios: 1,
                 ferida: 1,
@@ -259,6 +262,7 @@ const requireModulePermission = (moduleName) => {
                 'agenda-espacos': 2
             },
             rh: {
+                'automacao-ava': 1,
                 matrizes: 3,
                 emprestimo: 1,
                 usuarios: 1,
@@ -283,6 +287,7 @@ const requireModulePermission = (moduleName) => {
                 'agenda-espacos': 2
             },
             financeiro: {
+                'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,
@@ -313,6 +318,7 @@ const requireModulePermission = (moduleName) => {
             // avaliações que ele mesmo criou — ver `apenasProprias` em
             // src/rotas/avaliacao-docente.js).
             coordenador: {
+                'automacao-ava': 3,
                 cad: 3,
                 'correcao-provas': 3,
                 cpa: 2,
@@ -344,11 +350,13 @@ const requireModulePermission = (moduleName) => {
                 auloes: 1,
                 palestras: 1,
                 'agenda-espacos': 2,
-                'trilha-ead': 2
+                'trilha-ead': 2,
+                'plano-acao': 3
             },
             // Cargo "Secretaria" foi criado na tela de Usuários com id `sec`
             // (não `secretaria`) — chave aqui tem que bater com o id real.
             sec: {
+                'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,
@@ -374,6 +382,7 @@ const requireModulePermission = (moduleName) => {
             // Coordenação da Medicina — só o Banco de Questões (nível 3, pode
             // criar/editar questões e provas); nenhum outro módulo.
             coord_medicina: {
+                'automacao-ava': 1,
                 cad: 3,
                 'correcao-provas': 3,
                 cpa: 2,
@@ -401,6 +410,7 @@ const requireModulePermission = (moduleName) => {
             },
             // Professor da Medicina — mesmo nível de acesso do coord_medicina.
             professor_medicina: {
+                'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,
@@ -425,6 +435,7 @@ const requireModulePermission = (moduleName) => {
             },
             // Setor Comercial — por enquanto só Meu Espaço, nenhum módulo.
             comercial: {
+                'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,
@@ -449,6 +460,7 @@ const requireModulePermission = (moduleName) => {
             },
             // Setor EAD (15/10/2026) — Correção de Provas; 21/10 também o Banco de Provas.
             ead: {
+                'automacao-ava': 3,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,

@@ -1,0 +1,138 @@
+/* ==========================================================================
+   Automação AVA (TI) — padrão Órbita v2: faixa marinho, cartões com borda,
+   cor só com significado (verde feito, âmbar pendente, azul replicar).
+   O relatório imita os documentos da FATEC (mesmo cabeçalho do Plano de Ação).
+   ========================================================================== */
+.hidden { display: none !important; }
+.layout-content { padding: 1.25rem 1.5rem 3rem; }
+.av-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.page-title { display: flex; align-items: center; gap: 0.6rem; margin: 0; }
+.cm-titulo-icone { display: inline-flex; }
+.page-subtitle { margin: 0; }
+.av-semestre { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
+.select-filter { min-width: 120px; padding: 0 0.7rem; font-size: 0.88rem; min-height: 38px; }
+.av-abas { display: inline-flex; margin-bottom: 1rem; }
+.abas .aba { padding: 0.5rem 1.1rem; font-size: 0.85rem; cursor: pointer; min-height: 36px; }
+.abas .aba:disabled { opacity: 0.5; cursor: default; }
+.btn-primary, .btn-secondary { min-height: 40px; padding: 0 1rem; font-size: 0.86rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; border-radius: var(--orb-raio-ctrl); }
+
+.av-vazio { color: var(--orb-mudo); padding: 1.5rem 1rem; margin: 0; text-align: center; }
+.av-card { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 1rem 1.1rem; margin-bottom: 1rem; }
+.av-erro { color: var(--orb-crit); }
+.av-legenda { font-size: 0.78rem; color: var(--orb-mudo); max-width: 100ch; }
+.av-sub { display: block; font-size: 0.76rem; color: var(--orb-mudo); margin-top: 0.15rem; line-height: 1.35; }
+.av-alerta { color: var(--orb-alerta); font-weight: 600; }
+.av-ok { color: var(--orb-bom); }
+
+/* resumo */
+.av-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.av-num { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.1rem; }
+.av-num b { font-family: var(--orb-display); font-size: 1.45rem; color: var(--orb-tinta); font-variant-numeric: tabular-nums; }
+.av-num span { font-size: 0.78rem; color: var(--orb-tinta2); }
+
+/* filtros */
+.av-filtros { display: flex; align-items: center; gap: 0.75rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.av-filtro-curso { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--orb-tinta2); }
+.av-filtro-curso .select-filter { min-width: 260px; }
+.av-pilulas { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.av-pilula { border: 1px solid var(--orb-linha); background: var(--orb-sup); color: var(--orb-tinta2); border-radius: var(--orb-raio-pilula); padding: 0.4rem 0.85rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.av-pilula span { color: var(--orb-mudo); font-weight: 500; margin-left: 0.15rem; font-variant-numeric: tabular-nums; }
+.av-pilula.ativo { background: var(--orb-marca); border-color: var(--orb-marca); color: #fff; }
+.av-pilula.ativo span { color: rgba(255, 255, 255, 0.75); }
+.av-pdf { margin-left: auto; }
+
+/* tabela */
+.av-card-tabela { padding: 0.4rem; }
+.av-tabela-wrap { overflow-x: auto; }
+.av-tabela { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.av-tabela th { text-align: left; font-size: 0.78rem; font-weight: 600; color: var(--orb-tinta2); padding: 0.65rem 0.8rem; background: var(--orb-sup2); border-bottom: 1px solid var(--orb-linha); white-space: nowrap; }
+.av-tabela td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--orb-linha2); vertical-align: top; }
+.av-linha { cursor: pointer; }
+.av-linha:hover, .av-linha:focus-visible { background: #fafbfd; }
+.av-titulo { font-weight: 600; color: var(--orb-tinta); }
+.av-tag { display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: var(--orb-raio-pilula); background: var(--orb-sup2); border: 1px solid var(--orb-linha); font-size: 0.7rem; color: var(--orb-tinta2); vertical-align: 1px; }
+.av-tag-alerta { background: var(--orb-alerta-suave); color: var(--orb-alerta); border-color: transparent; }
+.av-origem { display: inline-block; white-space: nowrap; font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.6rem; border-radius: var(--orb-raio-pilula); }
+.av-origem-criar { background: var(--orb-alerta-suave); color: var(--orb-alerta); }
+.av-origem-replicar, .av-origem-replicar-outro { background: #e3eef8; color: #123f66; }
+.av-origem-ja-existe { background: var(--orb-bom-suave); color: var(--orb-bom); }
+.av-passos { display: flex; gap: 4px; margin-bottom: 0.2rem; }
+.av-tabela td:last-child { min-width: 190px; }
+.av-passo { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.7rem; font-weight: 700; background: var(--orb-sup2); border: 1px solid var(--orb-linha); color: var(--orb-mudo); }
+.av-passo.feito { background: var(--orb-bom); border-color: var(--orb-bom); color: #fff; }
+.av-sit { font-weight: 600; }
+.av-sit-concluida { color: var(--orb-bom); }
+.av-sit-avaliacoes { color: #1f6fb2; }
+.av-sit-andamento { color: var(--orb-tinta2); }
+.av-sit-nova { color: var(--orb-alerta); }
+
+/* ficha (modal) */
+.av-modal { position: fixed; inset: 0; background: rgba(13, 27, 51, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 3vh 1rem; z-index: 1000; overflow-y: auto; }
+.av-modal-caixa { background: var(--orb-sup); border-radius: var(--orb-raio-card); width: min(860px, 100%); padding: 1.2rem 1.4rem 1.4rem; }
+.av-modal-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.av-modal-topo h2 { font-family: var(--orb-display); font-size: 1.2rem; margin: 0; color: var(--orb-tinta); }
+.av-fechar { border: 0; background: none; font-size: 1.6rem; line-height: 1; cursor: pointer; color: var(--orb-mudo); }
+.av-ficha-meta { margin: 0.3rem 0 1rem; }
+.av-modal-caixa section { margin-bottom: 1.1rem; }
+.av-modal-caixa h3 { font-size: 0.9rem; font-weight: 700; color: var(--orb-tinta); margin: 0 0 0.5rem; }
+.av-modal-caixa h3 .av-sub { display: inline; font-weight: 400; }
+.av-ficha-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem; }
+.av-modal-caixa input[type=text], .av-modal-caixa textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.9rem; border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); padding: 0.5rem 0.65rem; color: var(--orb-tinta); }
+.av-modal-caixa .select-filter { width: 100%; }
+.av-linha-campos { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+.av-linha-campos .select-filter { flex: 1; }
+.av-valor { font-family: var(--orb-display); font-size: 1.15rem; color: var(--orb-tinta); white-space: nowrap; }
+.av-check-linha { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; font-size: 0.86rem; color: var(--orb-tinta2); }
+.av-quem { display: block; font-size: 0.72rem; color: var(--orb-mudo); }
+.av-check-linha .av-quem { display: inline; }
+.av-etapas { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.av-etapas li { display: flex; align-items: flex-start; gap: 0.7rem; padding: 0.5rem 0.6rem; border: 1px solid var(--orb-linha2); border-radius: var(--orb-raio-ctrl); }
+.av-etapas li.feito { background: #f6fbf8; border-color: #cfe9db; }
+.av-etapas li > div span:first-child { font-weight: 600; color: var(--orb-tinta); font-size: 0.88rem; }
+.av-check { flex: none; width: 24px; height: 24px; border-radius: 7px; border: 2px solid #b9c3d3; background: var(--orb-sup); cursor: pointer; position: relative; padding: 0; margin-top: 1px; }
+.av-check.on { background: var(--orb-bom); border-color: var(--orb-bom); }
+.av-check.on::after { content: ''; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.av-check:disabled { cursor: not-allowed; opacity: 0.45; }
+.av-tab-aval td { vertical-align: middle; }
+.av-tab-aval td:not(:first-child) { white-space: nowrap; }
+.av-tab-aval .av-check { vertical-align: middle; margin-right: 0.5rem; }
+.av-tab-aval .av-quem { display: inline-block; vertical-align: middle; }
+.av-modal-acoes { display: flex; justify-content: flex-end; }
+
+/* relatório (papel FATEC, A4 paisagem) */
+.av-papel-wrap { overflow-x: auto; padding-bottom: 1rem; }
+.av-papel { width: 297mm; margin: 0 auto; background: #fff; color: #111; padding: 12mm 15mm; border: 1px solid var(--orb-linha); box-shadow: 0 8px 28px rgba(13, 27, 51, 0.10); position: relative; isolation: isolate; font-size: 9.5pt; }
+.av-papel::before { content: ''; position: absolute; z-index: -1; inset: 12mm 0; background-image: url('/docencia/plano-acao/img/marca-f.svg'); background-size: 125mm 140mm; background-repeat: no-repeat space; background-position: center top; opacity: 0.045; }
+.av-papel-pdf { width: 277mm; padding: 0; border: 0; box-shadow: none; margin: 0; }
+.av-papel-pdf::before { display: none; }
+.av-pdf-fora { position: fixed; left: -10000px; top: 0; width: 277mm; background: #fff; }
+.av-cab { display: grid; grid-template-columns: 24% 1fr; column-gap: 4mm; align-items: center; padding-bottom: 2.5mm; margin-bottom: 5mm; border-bottom: 3px double #000080; }
+.av-logo { width: 100%; max-width: 56mm; height: auto; }
+.av-cab-inst { display: flex; flex-direction: column; gap: 0.5mm; }
+.av-cab-inst span, .av-rodape-inst span { font-family: "Bookman Old Style", "Bookman", Georgia, serif !important; font-weight: 700; font-size: 8pt; }
+.av-cab-inst span { color: #2f5496; }
+.av-rel-titulo { text-align: center; font-size: 12.5pt; margin: 0 0 1mm; color: #111; }
+.av-rel-sub { text-align: center; font-size: 9pt; color: #555; margin: 0 0 5mm; }
+.av-rel-tab { width: 100%; border-collapse: collapse; margin-bottom: 5mm; font-size: 8.5pt; }
+.av-rel-tab th, .av-rel-tab td { border: 1px solid #555; padding: 1.4mm 2mm; text-align: left; vertical-align: top; }
+.av-rel-tab thead th { background: rgba(233, 238, 246, 0.85); font-weight: 700; }
+.av-rel-tab th.av-rel-tab-titulo { background: #12294d; color: #fff; text-align: center; text-transform: uppercase; font-size: 9.5pt; }
+.av-rel-tab .num { text-align: right; white-space: nowrap; }
+.av-rel-tab .c { text-align: center; }
+.av-rel-tot td { font-weight: 700; background: rgba(244, 246, 250, 0.8); }
+.av-rel-resumo { width: 70%; }
+.av-rel-legenda { font-size: 7.5pt; color: #555; margin: 2mm 0 6mm; }
+.av-rel-vazio { text-align: center; color: #555; padding: 8mm 0; }
+.av-rodape-inst { display: flex; flex-direction: column; text-align: center; }
+.av-rodape-inst span { color: #000080; border-top: 0.5pt solid #000080; padding-top: 0.5mm; }
+
+.av-toast { position: fixed; right: 1.2rem; bottom: 1.2rem; background: var(--orb-marca); color: #fff; padding: 0.7rem 1rem; border-radius: var(--orb-raio-ctrl); font-size: 0.88rem; z-index: 1100; max-width: 420px; }
+.av-toast.erro { background: var(--orb-crit); }
+
+@media (max-width: 760px) {
+  .layout-content { padding: 1rem 1rem 2.5rem; }
+  .av-ficha-grade { grid-template-columns: 1fr; }
+  .av-filtro-curso .select-filter { min-width: 0; width: 100%; }
+}
+.av-rel-fixa { table-layout: fixed; }
+.av-rel-fixa td, .av-rel-fixa th { overflow-wrap: anywhere; }

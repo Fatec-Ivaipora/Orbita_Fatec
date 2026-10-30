@@ -192,10 +192,16 @@ function expandirLinhaConcatenada(linha) {
 // senão um conectivo sozinho em caixa alta dentro da própria questão
 // (ex.: "PORQUE", comum em questão de asserção/razão) derruba o bloco no
 // meio, perdendo o resto da questão.
+// Aceita também título com traço ou vírgula separando as partes ("DIREITO CIVIL - PESSOAS E BENS", 29/10/2026):
+// traço com espaço dos dois lados, entre palavras em caixa alta. Linha de alternativa/fonte continua
+// de fora porque tem parêntese, vírgula ou número ("FGV - 2025 DPE-RO Analista (Superior)").
 function pareceCabecalhoDeSecao(linha) {
     if (/^Quest(ã|a)o\b/i.test(linha)) return false;
     if (linha.length < 3 || linha.length > 80) return false;
-    if (!/^[A-ZÀ-Ú\s]+$/.test(linha)) return false;
+    // palavras em caixa alta separadas por espaço, ' - ' ou ', ' ("ÉTICA, BIOÉTICA, CULTURA E SOCIEDADE")
+    if (!/^[A-ZÀ-Ú]+(?:\s+[A-ZÀ-Ú]+|\s+[-–—]\s+[A-ZÀ-Ú]+|,\s*[A-ZÀ-Ú]+)*$/.test(linha.trim())) return false;
+    // alternativa do tipo "V, F, V, F" não é título: precisa de 2+ palavras de 3+ letras
+    if (linha.trim().split(/[\s,–—-]+/).filter(w => w.length >= 3).length < 2) return false;
     if (FRASES_IGNORADAS_COMO_SECAO.has(linha.trim())) return false;
     return linha.trim().split(/\s+/).length >= 2;
 }
@@ -247,10 +253,12 @@ function marcadorPorNumeroSolto(linha, proximoEsperado) {
 }
 
 function limparInicioBloco(linhas) {
-    const semNumero = linhas[0]
+    let semNumero = linhas[0]
         .replace(/^Quest(ã|a)o\s*0*\d+\s*[:\-]?\s*/i, '')
         .replace(/^\d{1,3}\s*(?:[\.\)\-–—]\s*|\s+)/, '')
         .trim();
+    // Sobra de digitação colada no número ("Questão 08l") não vira começo do enunciado.
+    if (semNumero.length <= 1) semNumero = '';
     return [semNumero, ...linhas.slice(1)].filter(Boolean);
 }
 
@@ -279,6 +287,13 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
     function fecharBloco() {
         if (!blocoAtual || !blocoAtual.linhas.length) return;
         const linhas = limparInicioBloco(blocoAtual.linhas);
+
+        // Questão só com o número ("Questão 01" sem texto — ex.: as de Conhecimentos Gerais num
+        // Simulado, que vêm do banco geral): não é erro, só não tem o que importar (29/10/2026).
+        if (!linhas.length) {
+            questoes.push({ numero: blocoAtual.numero, tipo: blocoAtual.modo, categoriaSugeridaTexto: disciplinaAtual, vazia: true });
+            return;
+        }
 
         // Dissertativa: sem alternativas pra separar — o bloco inteiro
         // (enunciado, e eventuais itens A/B/C discursivos que façam parte

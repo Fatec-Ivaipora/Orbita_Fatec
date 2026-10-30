@@ -522,8 +522,13 @@ router.post('/questoes/analisar-docx', verifyToken, checkPermission, async (req,
         if (comErroDeLeitura.length) {
             return res.status(400).json({ error: comErroDeLeitura.map(q => q.erro).join(' ') });
         }
+        // questão só com o número (sem texto) fica de fora, com aviso
+        const vazias = brutas.filter(q => q.vazia);
+        const questoes = brutas.filter(q => !q.vazia);
+        if (!questoes.length) return res.status(400).json({ error: 'As questões desse arquivo estão sem texto (só o número).' });
+        const aviso = vazias.length ? `${vazias.length} questão(ões) sem texto no arquivo ficaram de fora (nº ${vazias.map(q => q.numero).join(', ')}${vazias[0].categoriaSugeridaTexto ? ` — ${vazias[0].categoriaSugeridaTexto}` : ''}).` : '';
 
-        res.json({ questoes: brutas, alternativasPorQuestao });
+        res.json({ questoes, alternativasPorQuestao, aviso });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -553,13 +558,21 @@ router.post('/questoes/importar-docx', verifyToken, checkPermission, async (req,
             return res.status(400).json({ error: `Marque o gabarito de todas as questões antes de confirmar — faltou a nº ${semGabarito.join(', ')}.` });
         }
 
+        // Semestre / bimestre / chamada escolhidos UMA vez na importação valem pra todas as questões do
+        // arquivo (pedido 29/10/2026: "fica muito repetitivo ... o certo seria mandar o arquivo já com as
+        // configurações"). Ficam nas questões em revisão e a tela de revisão já vem preenchida com eles.
+        const padrao = req.body.padrao || {};
+        const padraoChamada = normalizarChamada(padrao.chamada);
+        const padraoBimestre = padraoChamada === 'exame' ? null : ([1, 2].includes(parseInt(padrao.bimestre, 10)) ? parseInt(padrao.bimestre, 10) : null);
+        const padraoSemestre = /^\d{4}\.[12]$/.test(normalizarTexto(padrao.semestre) || '') ? normalizarTexto(padrao.semestre) : null;
+
         const loteId = db.collection(COL_QUESTOES).doc().id;
         const batch = db.batch();
         questoes.forEach(q => {
             const dissertativa = q.tipo === 'dissertativa';
             const ref = db.collection(COL_QUESTOES).doc();
             batch.set(ref, {
-                curso, disciplinaId: null, periodo: null, bimestre: null, chamada: null, semestre: null,
+                curso, disciplinaId: null, periodo: null, bimestre: padraoBimestre, chamada: padraoChamada, semestre: padraoSemestre,
                 tipo: dissertativa ? 'dissertativa' : 'objetiva',
                 enunciadoHtml: q.enunciado,
                 alternativas: dissertativa ? null : (q.alternativas || []).map((texto, i) => ({ letra: LETRAS_VALIDAS[i], texto })),

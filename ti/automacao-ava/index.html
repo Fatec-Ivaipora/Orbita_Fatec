@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automação AVA - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/ti/automacao-ava/automacao-ava.css?v=3">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header av-header">
+                    <div>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M8 10l2.5 2.5L16 7"/></svg></span>Automação AVA</h1>
+                        <p class="page-subtitle" id="av-subtitulo">Disciplinas EAD do semestre e criação das disciplinas novas</p>
+                    </div>
+                    <label class="av-semestre">Semestre
+                        <select id="av-semestre" class="select-filter"></select>
+                    </label>
+                </div>
+
+                <div class="abas av-abas" role="tablist" id="av-abas">
+                    <button type="button" class="aba ativa" role="tab" data-aba="criacao" aria-selected="true">Disciplinas EAD</button>
+                    <button type="button" class="aba" role="tab" data-aba="relatorio" aria-selected="false">Relatório</button>
+                    <button type="button" class="aba" role="tab" data-aba="conduit" aria-selected="false">Arquivos do Conduit</button>
+                </div>
+
+                <div id="av-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="av-modal" class="av-modal hidden" role="dialog" aria-modal="true" aria-labelledby="av-modal-titulo">
+        <div class="av-modal-caixa">
+            <div class="av-modal-topo">
+                <h2 id="av-modal-titulo"></h2>
+                <button type="button" class="av-fechar" id="av-modal-fechar" aria-label="Fechar">×</button>
+            </div>
+            <div id="av-modal-corpo"></div>
+        </div>
+    </div>
+
+    <div id="av-toast" class="av-toast hidden" role="status"></div>
+    <datalist id="av-professores"></datalist>
+
+    <script type="module" src="/ti/automacao-ava/app.js?v=6"></script>
+</body>
+</html>

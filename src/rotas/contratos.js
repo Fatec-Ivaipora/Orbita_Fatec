@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const agenda = require('./comercial-agenda');
+const rota = require('../utils/rota-coleta');
 
 // ==========================================
 // CONTRATOS (Comercial) — controle de assinatura de contrato dos alunos
@@ -112,6 +113,53 @@ router.post('/semestres', verifyToken, checkPermission, async (req, res) => {
         const semestres = [...atuais, semestre].sort((a, b) => b.localeCompare(a));
         await DOC_SEMESTRES.set({ semestres, updatedAt: new Date().toISOString(), updatedBy: quemFez(req) }, { merge: true });
         res.status(201).json(semestres);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ------------------------------ Rota de coleta (27/10/2026) ------------------------------
+// POST /rota/montar { semestre, ids } — endereço (Edubox) e ordem de visita dos alunos escolhidos.
+// A ordem vem do Google (melhor caminho saindo da Fatec, com km/min de cada trecho — vai só o endereço
+// ou o ponto do GPS, sem nome); sem a chave do Google, ordem local (GPS pela distância, depois bairro/rua).
+router.post('/rota/montar', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = texto(req.body.semestre, 6);
+        if (!semestreValido(semestre)) return res.status(400).json({ error: 'Escolha o semestre.' });
+        const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(i => texto(i, 60)).filter(Boolean))];
+        if (!ids.length) return res.status(400).json({ error: 'Marque pelo menos um aluno.' });
+        if (ids.length > rota.MAX_GOOGLE) return res.status(400).json({ error: `No máximo ${rota.MAX_GOOGLE} alunos por rota.` });
+        const snaps = (await db.getAll(...ids.map(id => db.collection(COL).doc(id)))).filter(s => s.exists);
+        const porNome = await rota.enderecosDosAlunos(semestre, snaps.map(s => s.data().nome));
+        const paradas = snaps.map(s => {
+            const d = s.data();
+            const a = porNome.get(rota.norm(d.nome)) || null;
+            const geo = d.geo && d.geo.lat != null ? { lat: d.geo.lat, lng: d.geo.lng, em: d.geo.em || '', por: d.geo.por || '' } : null;
+            return {
+                id: s.id, nome: d.nome, curso: d.curso || '', cidade: d.cidade || '', contato: d.contato || '', menor18: !!d.menor18,
+                status: d.status, obs: String(d.observacoes || '').split('\n')[0].slice(0, 200),
+                coleta: d.coletaData ? { data: d.coletaData, hora: d.coletaHora || '', local: d.coletaLocal || '', responsavel: d.coletaResponsavel ? d.coletaResponsavel.nome : '' } : null,
+                endereco: a ? rota.enderecoTexto(a) : '', busca: a ? rota.enderecoBusca(a) : '',
+                local: a ? { cidade: a.cidade, bairro: a.bairro, rua: a.rua, numero: a.numero } : { cidade: d.cidade || '' },
+                semEndereco: !a, geo
+            };
+        });
+        let google = null, avisoOrdem = '';
+        try { google = await rota.ordenarGoogle(paradas); }
+        catch (e) { avisoOrdem = `O Google não calculou a ordem (${e.message}). Ficou por bairro e rua.`; }
+        if (!google && !avisoOrdem && !process.env.GOOGLE_MAPS_API_KEY) avisoOrdem = 'Ordem por bairro e rua (a chave do Google Maps ainda não foi configurada).';
+        res.json({ saida: rota.SAIDA, paradas: google ? google.paradas : rota.ordenar(paradas), totais: google ? google.totais : null, ordemGoogle: !!google, avisoOrdem });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// PUT /:id/localizacao { lat, lng } — "Salvar localização daqui": o GPS do celular na porta do aluno.
+router.put('/:id/localizacao', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const lat = Number(req.body.lat), lng = Number(req.body.lng);
+        if (!(lat >= -34 && lat <= 6 && lng >= -74 && lng <= -28)) return res.status(400).json({ error: 'Localização inválida.' });
+        const ref = db.collection(COL).doc(String(req.params.id));
+        if (!(await ref.get()).exists) return res.status(404).json({ error: 'Aluno não encontrado.' });
+        const geo = { lat, lng, fonte: 'gps', por: quemFez(req), em: new Date().toISOString() };
+        await ref.update({ geo, updatedAt: geo.em, updatedBy: geo.por });
+        res.json({ geo });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
