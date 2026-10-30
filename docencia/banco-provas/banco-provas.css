@@ -179,6 +179,18 @@
 }
 .prova-cota-row input { width: 100%; }
 
+/* Períodos da prova: o coordenador marca quais fazem a mesma prova */
+.prova-periodos { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.prova-periodos label { display: flex; align-items: center; gap: 0.35rem; font-weight: 400; cursor: pointer; }
+.prova-periodos .tabela-msg { margin: 0; }
+
+/* Simulado: escolher quais questões do banco entram */
+.prova-preview-item { cursor: pointer; }
+.prova-preview-item input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; }
+.prova-preview-item.selecionada { border-color: var(--primary-blue); }
+.prova-preview-contagem { font-weight: 400; margin-left: 0.4rem; }
+.prova-preview-contagem.diferente { color: #b45309; }
+
 /* Preview do sorteio / lista de seleção manual */
 .prova-preview-grupo { margin-bottom: 1rem; }
 .prova-preview-grupo-titulo { font-weight: 700; color: var(--primary-blue); font-size: 0.85rem; margin-bottom: 0.4rem; }

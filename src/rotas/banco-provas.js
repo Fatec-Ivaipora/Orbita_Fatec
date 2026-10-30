@@ -215,12 +215,13 @@ router.delete('/disciplinas/:id', verifyToken, checkPermission, async (req, res)
     }
 });
 
-// Conhecimentos Gerais (14/10/2026): é UM conjunto por semestre, igual para todos os cursos (mesmas
-// questões, na mesma ordem, mesmo gabarito no simulado de todo mundo) — por isso a questão precisa dizer
-// de qual semestre é, e o simulado só puxa as do semestre dele.
+// Conhecimentos Gerais (30/10/2026): cada curso cadastra as SUAS — antes (14/10) era um conjunto só por
+// semestre pra todos os cursos, e o simulado de um curso saía com as questões de outro (todos importam
+// numeradas 1..5, a ordem sequencial misturava os lotes). A questão continua precisando do semestre, e o
+// simulado só puxa as do curso e do semestre dele. As antigas sem curso: scripts/conhecimentos-gerais-por-curso.js.
 const SEMESTRE_VALIDO = /^\d{4}\.[12]$/;
 const erroSemestreGeral = (disciplinaId, semestre) => (disciplinaId === DISCIPLINA_GERAL_ID && !SEMESTRE_VALIDO.test(normalizarTexto(semestre) || '')
-    ? 'Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): ela vale para todos os cursos naquele semestre.' : null);
+    ? 'Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): o simulado usa as do semestre dele.' : null);
 
 function validarQuestao(body) {
     if (!TIPOS_VALIDOS.includes(body.tipo)) return 'Selecione o tipo da questão (objetiva ou dissertativa).';
@@ -272,13 +273,16 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
-// GET /questoes-gerais — pool de Conhecimentos Gerais, compartilhado entre
-// todos os cursos (não passa por checarAcessoCurso — qualquer coordenador
-// com acesso ao módulo pode usar essas questões nos próprios simulados).
+// GET /questoes-gerais?curso=X — Conhecimentos Gerais do curso (cada curso tem as suas, 30/10/2026).
 router.get('/questoes-gerais', verifyToken, checkPermission, async (req, res) => {
     try {
+        const curso = normalizarTexto(req.query.curso);
+        if (!curso) return res.status(400).json({ error: 'Informe o curso.' });
+        const erroAcesso = await checarAcessoCurso(req, curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
         let q = db.collection(COL_QUESTOES)
             .where('disciplinaId', '==', DISCIPLINA_GERAL_ID)
+            .where('curso', '==', curso)
             .where('status', '==', 'publicada');
         if (req.query.semestre) q = q.where('semestre', '==', normalizarTexto(req.query.semestre));
         const snap = await q.get();
@@ -291,7 +295,7 @@ router.get('/questoes-gerais', verifyToken, checkPermission, async (req, res) =>
 });
 
 // GET /questoes/semestres?curso=X — semestres DISTINTOS já usados em
-// questões desse curso (+ pool de Conhecimentos Gerais), pra popular filtro
+// questões desse curso (inclui as de Conhecimentos Gerais dele), pra popular filtro
 // e o campo "Semestre" da prova como select — pedido explícito (18/09):
 // "somente o que tem no banco para não ter erros" (texto livre gerava
 // "2026.2" vs "2026-2" não batendo no filtro por igualdade exata).
@@ -302,12 +306,9 @@ router.get('/questoes/semestres', verifyToken, checkPermission, async (req, res)
         const erroAcesso = await checarAcessoCurso(req, curso);
         if (erroAcesso) return res.status(403).json({ error: erroAcesso });
 
-        const [doCurso, geral] = await Promise.all([
-            db.collection(COL_QUESTOES).where('curso', '==', curso).get(),
-            db.collection(COL_QUESTOES).where('disciplinaId', '==', DISCIPLINA_GERAL_ID).where('status', '==', 'publicada').get()
-        ]);
+        const doCurso = await db.collection(COL_QUESTOES).where('curso', '==', curso).get();
         const semestres = new Set();
-        [...doCurso.docs, ...geral.docs].forEach(d => {
+        doCurso.docs.forEach(d => {
             const s = d.data().semestre;
             if (s) semestres.add(s);
         });
@@ -355,12 +356,10 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         const geral = disciplinaId === DISCIPLINA_GERAL_ID;
         const erroSem = erroSemestreGeral(disciplinaId, req.body.semestre);
         if (erroSem) return res.status(400).json({ error: erroSem });
-        const curso = geral ? null : normalizarTexto(req.body.curso);
-        if (!geral && !curso) return res.status(400).json({ error: 'Informe o curso (ou marque como Conhecimentos Gerais).' });
-        if (!geral) {
-            const erroAcesso = await checarAcessoCurso(req, curso);
-            if (erroAcesso) return res.status(403).json({ error: erroAcesso });
-        }
+        const curso = normalizarTexto(req.body.curso);
+        if (!curso) return res.status(400).json({ error: 'Informe o curso.' });
+        const erroAcesso = await checarAcessoCurso(req, curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
 
         const periodo = geral ? null : await periodoDaDisciplina(disciplinaId);
         const bimestre = req.body.bimestre ? parseInt(req.body.bimestre, 10) : null;
@@ -401,8 +400,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
             const erroAcesso = await checarAcessoCurso(req, atual.curso);
             if (erroAcesso) return res.status(403).json({ error: erroAcesso });
         } else if (!ehAdmin(req.user.role)) {
-            // Questão de Conhecimentos Gerais (sem curso) — só ADM edita, pra
-            // não um coordenador de um curso alterar o pool usado por todos.
+            // Conhecimentos Gerais antiga, de antes de cada curso ter as suas
+            // (sem curso) — só ADM edita, era o pool usado por todos.
             return res.status(403).json({ error: 'Só o administrador pode editar questões de Conhecimentos Gerais.' });
         }
         const erroDono = erroDeDono(req, atual);
@@ -644,7 +643,6 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         const batch = db.batch();
         snap.docs.forEach(doc => batch.update(doc.ref, {
             disciplinaId, periodo, bimestre, chamada, semestre,
-            curso: geral ? null : doc.data().curso,
             status: 'publicada', updatedAt: new Date().toISOString()
         }));
         await batch.commit();
@@ -726,17 +724,16 @@ router.post('/provas/simular', verifyToken, checkPermission, async (req, res) =>
 
         const cotas = Array.isArray(req.body.cotas) ? req.body.cotas : [];
         if (cotas.some(c => c.disciplinaId === DISCIPLINA_GERAL_ID && c.quantidade > 0) && !semestre) {
-            return res.status(400).json({ error: 'Escolha o semestre do simulado: as questões de Conhecimentos Gerais são as do semestre (iguais para todos os cursos).' });
+            return res.status(400).json({ error: 'Escolha o semestre do simulado: as questões de Conhecimentos Gerais são as do semestre.' });
         }
         const resultado = [];
         for (const cota of cotas) {
             const geral = cota.disciplinaId === DISCIPLINA_GERAL_ID;
-            let query = db.collection(COL_QUESTOES).where('status', '==', 'publicada').where('disciplinaId', '==', cota.disciplinaId);
+            let query = db.collection(COL_QUESTOES).where('status', '==', 'publicada').where('disciplinaId', '==', cota.disciplinaId)
+                .where('curso', '==', curso);
             if (!geral) {
-                query = query.where('curso', '==', curso);
-                // Conhecimentos Gerais não é organizado por bimestre/chamada
-                // (pool genérico, reaproveitado em qualquer simulado) — só
-                // filtra por isso nas disciplinas do curso mesmo.
+                // Conhecimentos Gerais não é organizado por bimestre/chamada,
+                // só por semestre — só filtra por isso nas disciplinas.
                 if (bimestre) query = query.where('bimestre', '==', bimestre);
                 if (chamada) query = query.where('chamada', '==', chamada);
             } else {
@@ -745,11 +742,14 @@ router.post('/provas/simular', verifyToken, checkPermission, async (req, res) =>
             const snap = await query.get();
             const disponiveis = ordenarSequencial(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             const selecionadas = disponiveis.slice(0, cota.quantidade);
+            // `disponiveis` vai junto (30/10/2026): o coordenador troca na tela quais entram — as
+            // `questoes` (as primeiras N em sequência) são só a sugestão inicial.
             resultado.push({
                 disciplinaId: cota.disciplinaId,
                 quantidadePedida: cota.quantidade,
                 quantidadeDisponivel: disponiveis.length,
-                questoes: selecionadas
+                questoes: selecionadas,
+                disponiveis: disponiveis.map(q => ({ id: q.id, enunciadoHtml: q.enunciadoHtml, gabarito: q.gabarito, numeroOriginal: q.numeroOriginal ?? null }))
             });
         }
         res.json(resultado);

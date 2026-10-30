@@ -359,11 +359,8 @@ async function carregarQuestoes() {
   if (semestre) params.set('semestre', semestre);
 
   try {
-    const [doCurso, gerais] = await Promise.all([
-      apiFetch(`/banco-provas/questoes?${params.toString()}`),
-      disciplinaId && disciplinaId !== DISCIPLINA_GERAL_ID ? Promise.resolve([]) : apiFetch(`/banco-provas/questoes-gerais${semestre ? `?semestre=${encodeURIComponent(semestre)}` : ''}`)
-    ]);
-    questoes = disciplinaId === DISCIPLINA_GERAL_ID ? gerais : [...doCurso, ...gerais];
+    // Conhecimentos Gerais agora são do curso (30/10/2026): já vêm na mesma busca.
+    questoes = await apiFetch(`/banco-provas/questoes?${params.toString()}`);
   } catch (err) {
     showToast(err.message, 'error');
     questoes = [];
@@ -498,13 +495,13 @@ async function salvarQuestao(e) {
   const tipo = document.getElementById('questao-tipo').value;
   const disciplinaId = document.getElementById('questao-disciplina').value;
   if (disciplinaId === DISCIPLINA_GERAL_ID && !/^\d{4}\.[12]$/.test(document.getElementById('questao-semestre').value.trim())) {
-    showToast('Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): ela vale para todos os cursos naquele semestre.', 'error');
+    showToast('Questão de Conhecimentos Gerais precisa do semestre (ex.: 2026.2): o simulado usa as do semestre dele.', 'error');
     document.getElementById('questao-semestre').focus();
     return;
   }
 
   const payload = {
-    curso: disciplinaId === DISCIPLINA_GERAL_ID ? undefined : cursoAtivo,
+    curso: cursoAtivo,
     disciplinaId,
     bimestre: document.getElementById('questao-bimestre').value,
     chamada: document.getElementById('questao-chamada').value,
@@ -1210,48 +1207,34 @@ function selecionarTipoProva(tipo) {
 // não tem por que escolher período; aparecem todas as disciplinas do curso.
 const TECNOLOGOS = ['agronegocio', 'gestao-comercial', 'gestao-financeira', 'logistica', 'rh'];
 const ehTecnologo = () => TECNOLOGOS.includes(cursoAtivo);
-const periodosJuntos = {};   // curso -> [[1,2],[3,4]...] (CADD/Edubox)
-async function carregarPeriodosJuntos() {
-  const curso = cursoAtivo;
-  try { periodosJuntos[curso] = (await apiFetch(`/banco-provas/periodos-juntos?curso=${encodeURIComponent(curso)}`)).grupos || []; }
-  catch (e) { periodosJuntos[curso] = []; }
-  if (curso === cursoAtivo && !document.getElementById('modal-prova').classList.contains('hidden')) {
-    popularSelectPeriodoProva();
-  }
+
+// 30/10/2026: o coordenador marca os períodos que fazem a prova — antes os pares "estudam juntos"
+// vinham fixos do CADD/Edubox e, quando não batiam com a turma real (questões lançadas no 2º, prova
+// do 2º com o 3º), o período escolhido não mostrava disciplina nenhuma. Nada vem marcado sozinho.
+function periodosEscolhidosProva() {
+  return [...document.querySelectorAll('#prova-periodo input[type="checkbox"]:checked')].map(i => Number(i.value)).filter(Boolean);
 }
+const temPeriodoProva = () => ehTecnologo() || periodosEscolhidosProva().length > 0;
 
 function popularSelectPeriodoProva() {
-  const select = document.getElementById('prova-periodo');
-  const dica = select.parentElement.querySelector('.form-hint');
+  const caixa = document.getElementById('prova-periodo');
+  const dica = caixa.parentElement.querySelector('.form-hint');
   if (ehTecnologo()) {
-    select.innerHTML = '<option value="todos">Todos os períodos (matriz rotativa)</option>';
-    select.value = 'todos'; select.disabled = true;
+    caixa.innerHTML = '<p class="tabela-msg">Todos os períodos (matriz rotativa)</p>';
     if (dica) dica.textContent = 'Curso tecnólogo: todos os períodos estudam juntos e fazem a mesma prova. Aparecem todas as disciplinas — deixe em 0 as que não são deste semestre.';
     return;
   }
-  select.disabled = false;
-  if (dica) dica.textContent = 'Períodos que estudam juntos (Edubox) aparecem juntos: a prova é uma só e mostra as disciplinas dos dois.';
-  // períodos que estudam juntos (vem do CADD/Edubox); o que não estiver em grupo aparece sozinho
-  const usados = [...new Set(disciplinas.map(d => d.periodo))].sort((a, b) => a - b);
-  const grupos = (periodosJuntos[cursoAtivo] || []).map(g => g.filter(p => usados.includes(p))).filter(g => g.length > 1);
-  const emGrupo = new Set(grupos.flat());
-  const opcoes = [...grupos.map(g => ({ v: g.join(','), rot: `${g.map(p => `${p}º`).join(g.length > 2 ? ', ' : ' e ').replace(/, (\d+º)$/, ' e $1')} períodos (estudam juntos)`, p: g[0] })),
-    ...usados.filter(p => !emGrupo.has(p)).map(p => ({ v: String(p), rot: `${ordinal(p)} Período`, p }))].sort((a, b) => a.p - b.p);
-  const atual = select.value;
-  select.innerHTML = '<option value="">Selecione o período</option>' + opcoes.map(o => `<option value="${o.v}">${esc(o.rot)}</option>`).join('');
-  select.value = opcoes.some(o => o.v === atual) ? atual : '';
-  if (!periodosJuntos[cursoAtivo]) carregarPeriodosJuntos();
-  return;
-  const periodosUsados = [...new Set(disciplinas.map(d => d.periodo))].sort((a, b) => a - b);
-  const valorAtual = select.value;
-  select.innerHTML = '<option value="">Selecione o período</option>' +
-    periodosUsados.map(p => `<option value="${p}">${ordinal(p)} Período</option>`).join('');
-  select.value = periodosUsados.includes(parseInt(valorAtual, 10)) ? valorAtual : '';
+  if (dica) dica.textContent = 'Marque os períodos que vão fazer essa prova — se dois períodos estudam juntos, marque os dois. Aparecem as disciplinas de todos os marcados.';
+  const usados = [...new Set(disciplinas.map(d => d.periodo))].filter(Boolean).sort((a, b) => a - b);
+  const marcados = new Set(periodosEscolhidosProva());
+  caixa.innerHTML = usados.length
+    ? usados.map(p => `<label><input type="checkbox" value="${p}"${marcados.has(p) ? ' checked' : ''}> ${ordinal(p)} Período</label>`).join('')
+    : '<p class="tabela-msg">Nenhuma disciplina cadastrada neste curso.</p>';
 }
 
 function disciplinasDoPeriodoProva() {
   if (ehTecnologo()) return disciplinas.slice().sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome, 'pt-BR'));
-  const periodos = String(document.getElementById('prova-periodo').value || '').split(',').map(Number).filter(Boolean);
+  const periodos = periodosEscolhidosProva();
   if (!periodos.length) return [];
   return disciplinas.filter(d => periodos.includes(d.periodo)).sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
@@ -1260,11 +1243,11 @@ function popularCotasSimulado() {
   const lista = document.getElementById('prova-cotas-lista');
   const doPeriodo = disciplinasDoPeriodoProva();
   if (!doPeriodo.length) {
-    lista.innerHTML = '<p class="tabela-msg">Selecione o período acima pra ver as disciplinas.</p>';
+    lista.innerHTML = '<p class="tabela-msg">Marque o(s) período(s) acima pra ver as disciplinas.</p>';
     return;
   }
   const linhas = [
-    { id: DISCIPLINA_GERAL_ID, label: `Conhecimentos Gerais${document.getElementById('prova-semestre').value ? ` (as de ${document.getElementById('prova-semestre').value}, iguais para todos os cursos)` : ' (escolha o semestre da prova)'}` },
+    { id: DISCIPLINA_GERAL_ID, label: `Conhecimentos Gerais${document.getElementById('prova-semestre').value ? ` (as do curso em ${document.getElementById('prova-semestre').value})` : ' (escolha o semestre da prova)'}` },
     ...doPeriodo.map(d => ({ id: d.id, label: `${ordinal(d.periodo)} · ${d.nome}` }))
   ];
   lista.innerHTML = linhas.map(l => `
@@ -1275,8 +1258,8 @@ function popularCotasSimulado() {
 }
 
 async function sortearProvaSimulado() {
-  if (!document.getElementById('prova-periodo').value) {
-    showToast('Selecione o período/série antes de montar a prova.', 'error');
+  if (!temPeriodoProva()) {
+    showToast('Marque o(s) período(s) antes de montar a prova.', 'error');
     return;
   }
   const cotas = [...document.querySelectorAll('.prova-cota-qtd')]
@@ -1285,7 +1268,7 @@ async function sortearProvaSimulado() {
   if (!cotas.length) { showToast('Defina a quantidade de pelo menos uma disciplina.', 'error'); return; }
   const semestreSim = document.getElementById('prova-semestre').value.trim();
   if (cotas.some(c => c.disciplinaId === DISCIPLINA_GERAL_ID) && !semestreSim) {
-    showToast('Escolha o semestre da prova: as questões de Conhecimentos Gerais são as do semestre (iguais para todos os cursos).', 'error');
+    showToast('Escolha o semestre da prova: as questões de Conhecimentos Gerais são as do semestre.', 'error');
     document.getElementById('prova-semestre').focus();
     return;
   }
@@ -1305,22 +1288,43 @@ async function sortearProvaSimulado() {
   }
 }
 
+// 30/10/2026: mostra TODAS as questões disponíveis de cada disciplina, com as primeiras N (a
+// quantidade pedida) já marcadas — o coordenador troca quais entram. Antes pegava só as N
+// primeiras: pediu 9 e o banco tinha 15, não tinha como escolher as outras 6.
 function renderPreviewSorteio() {
   const preview = document.getElementById('prova-preview');
   if (!sorteioAtual) { preview.innerHTML = ''; return; }
 
-  preview.innerHTML = sorteioAtual.map(grupo => {
+  preview.innerHTML = sorteioAtual.map((grupo, gi) => {
     const nome = grupo.disciplinaId === DISCIPLINA_GERAL_ID ? 'Conhecimentos Gerais' : nomeDisciplina(grupo.disciplinaId);
+    const marcadas = new Set(grupo.questoes.map(q => q.id));
+    const disponiveis = grupo.disponiveis || grupo.questoes;
     const aviso = grupo.quantidadeDisponivel < grupo.quantidadePedida
       ? ` — só ${grupo.quantidadeDisponivel} disponível(is) no banco (pediu ${grupo.quantidadePedida})`
       : '';
+    const contagem = `<span class="prova-preview-contagem${marcadas.size !== grupo.quantidadePedida ? ' diferente' : ''}">· ${marcadas.size} de ${disponiveis.length} marcada(s), pediu ${grupo.quantidadePedida}</span>`;
     return `
       <div class="prova-preview-grupo">
-        <div class="prova-preview-grupo-titulo">${esc(nome)}${aviso}</div>
-        ${grupo.questoes.map(q => `<div class="prova-preview-item">${esc(q.enunciadoHtml).slice(0, 140)}${q.enunciadoHtml.length > 140 ? '…' : ''}</div>`).join('') || '<div class="prova-preview-item">Nenhuma questão disponível.</div>'}
+        <div class="prova-preview-grupo-titulo">${esc(nome)}${aviso} ${contagem}</div>
+        ${disponiveis.map(q => `
+          <label class="prova-preview-item${marcadas.has(q.id) ? ' selecionada' : ''}">
+            <input type="checkbox" class="prova-preview-check" data-grupo="${gi}" data-questao-id="${esc(q.id)}"${marcadas.has(q.id) ? ' checked' : ''}>
+            <span>${q.numeroOriginal != null ? `<strong>${q.numeroOriginal}.</strong> ` : ''}${esc(q.enunciadoHtml).slice(0, 140)}${q.enunciadoHtml.length > 140 ? '…' : ''}</span>
+          </label>`).join('') || '<div class="prova-preview-item">Nenhuma questão disponível.</div>'}
       </div>`;
   }).join('');
 }
+
+// Marcar/desmarcar uma questão do simulado: mantém a ordem do banco (sequência), não a do clique.
+document.getElementById('prova-preview').addEventListener('change', (e) => {
+  const check = e.target.closest('.prova-preview-check');
+  if (!check || !sorteioAtual) return;
+  const grupo = sorteioAtual[Number(check.dataset.grupo)];
+  const marcadas = new Set(grupo.questoes.map(q => q.id));
+  if (check.checked) marcadas.add(check.dataset.questaoId); else marcadas.delete(check.dataset.questaoId);
+  grupo.questoes = (grupo.disponiveis || grupo.questoes).filter(q => marcadas.has(q.id));
+  renderPreviewSorteio();
+});
 
 function popularSelectManualDisciplina() {
   const select = document.getElementById('prova-manual-disciplina');
@@ -1450,7 +1454,7 @@ function abrirModalProva() {
   document.getElementById('prova-curso-nome').textContent = nomeCursoAtivo;
   document.getElementById('prova-nome').value = '';
   popularSelectSemestreProva();
-  document.getElementById('prova-periodo').value = '';
+  document.querySelectorAll('#prova-periodo input[type="checkbox"]').forEach(i => { i.checked = false; });
   document.getElementById('prova-simulado-bimestre').value = '';
   document.getElementById('prova-simulado-chamada').value = '';
   document.getElementById('prova-manual-bimestre').value = '';
@@ -1608,8 +1612,8 @@ function bindEventos() {
   });
 }
 
-// Conhecimentos Gerais: semestre obrigatório e aviso de quantas o semestre já tem (é um conjunto só,
-// usado por todos os cursos — não precisa cada coordenador cadastrar as suas).
+// Conhecimentos Gerais: semestre obrigatório e aviso de quantas o curso já tem no semestre (cada
+// curso cadastra as suas desde 30/10/2026).
 async function avisoGeral() {
   const geral = document.getElementById('questao-disciplina').value === DISCIPLINA_GERAL_ID;
   const sem = document.getElementById('questao-semestre').value.trim();
@@ -1617,12 +1621,12 @@ async function avisoGeral() {
   document.getElementById('questao-semestre-rotulo').textContent = geral ? 'Semestre (obrigatório)' : 'Semestre (opcional)';
   if (!geral) { aviso.classList.add('hidden'); return; }
   aviso.classList.remove('hidden');
-  if (!/^\d{4}\.[12]$/.test(sem)) { aviso.textContent = 'Conhecimentos Gerais valem para todos os cursos no semestre: informe qual (ex.: 2026.2).'; return; }
+  if (!/^\d{4}\.[12]$/.test(sem)) { aviso.textContent = 'Conhecimentos Gerais entram no simulado do semestre: informe qual (ex.: 2026.2).'; return; }
   try {
-    const lista = await apiFetch(`/banco-provas/questoes-gerais?semestre=${encodeURIComponent(sem)}`);
+    const lista = await apiFetch(`/banco-provas/questoes-gerais?curso=${encodeURIComponent(cursoAtivo)}&semestre=${encodeURIComponent(sem)}`);
     aviso.textContent = lista.length
-      ? `${sem} já tem ${lista.length} ${lista.length === 1 ? 'questão' : 'questões'} de Conhecimentos Gerais, usadas por todos os cursos. Só cadastre se faltar.`
-      : `Ainda não há questão de Conhecimentos Gerais em ${sem}.`;
+      ? `Este curso já tem ${lista.length} ${lista.length === 1 ? 'questão' : 'questões'} de Conhecimentos Gerais em ${sem}.`
+      : `Este curso ainda não tem questão de Conhecimentos Gerais em ${sem}.`;
   } catch (e) { aviso.textContent = ''; }
 }
 document.getElementById('questao-disciplina').addEventListener('change', avisoGeral);
