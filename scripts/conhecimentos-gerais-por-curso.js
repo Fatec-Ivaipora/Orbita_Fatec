@@ -6,7 +6,9 @@
  * De onde vem o curso de cada questão antiga:
  *   1. importada do Word: o curso das outras questões do MESMO lote (loteId) — é o curso da importação;
  *   2. cadastrada na mão: o curso de quem cadastrou (users/{createdBy}), se for um curso só;
- *   3. sem como saber: fica listada no fim pra resolver na mão.
+ *   3. quem cadastrou tem vários cursos (ex.: Luciana, que ajuda a Patricia nos tecnólogos +
+ *      Contábeis): o curso de TODAS as outras questões que essa pessoa cadastrou, se for um só;
+ *   4. sem como saber: fica listada no fim pra resolver na mão.
  *
  * Uso:
  *   node scripts/conhecimentos-gerais-por-curso.js            (só mostra o que faria)
@@ -55,6 +57,16 @@ async function main() {
       }
       curso = cursoDoUsuario[q.createdBy];
       origem = 'quem cadastrou';
+    }
+    if (!curso && q.createdBy) {
+      const chave = `questoes:${q.createdBy}`;
+      if (!(chave in cursoDoUsuario)) {
+        const dela = await db.collection('docencia_bp_questoes').where('createdBy', '==', q.createdBy).get();
+        const cursos = [...new Set(dela.docs.map(d => d.data().curso).filter(Boolean))];
+        cursoDoUsuario[chave] = cursos.length === 1 ? cursos[0] : null;
+      }
+      curso = cursoDoUsuario[chave];
+      origem = 'outras questões de quem cadastrou';
     }
     (curso ? resolvidas : pendentes).push({ ref: doc.ref, id: doc.id, curso, origem, q });
   }
