@@ -322,13 +322,10 @@ function numerarQuestoesObjetivas(prova, questoes, opts) {
             if (!porDisciplina.has(chave)) porDisciplina.set(chave, []);
             porDisciplina.get(chave).push(q);
         });
-        // Pedido explícito (17/09): Conhecimentos Gerais vem PRIMEIRO no
-        // Simulado, as disciplinas do curso vêm depois.
-        const chaves = [...porDisciplina.keys()].sort((a, b) => {
-            if (a === DISCIPLINA_GERAL_ID) return -1;
-            if (b === DISCIPLINA_GERAL_ID) return 1;
-            return 0;
-        });
+        // Ordem das disciplinas = a ordem gravada na prova (questoesIds), que é a da lista do Simulado
+        // com as setas ↑ ↓ (29/10/2026). Antes Conhecimentos Gerais era forçado em PRIMEIRO (pedido de
+        // 17/09); como a lista já começa com ele, quem não mexe nas setas continua igual.
+        const chaves = [...porDisciplina.keys()];
         const numeradas = [];
         chaves.forEach(chave => {
             porDisciplina.get(chave).forEach(q => numeradas.push({
