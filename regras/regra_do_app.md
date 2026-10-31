@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-10-29] Simulado: Conhecimentos Gerais respeita a ordem escolhida com as setas
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/simulado-ordem-conhecimentos-gerais
+- Arquivos alterados: `src/utils/gerarProvaDocx.js` (`numerarQuestoesObjetivas`).
+- Tipo: Correção
+- Motivo: Com as setas ↑ ↓ (PR #149) dava pra mandar Conhecimentos Gerais pro fim do Simulado, mas a numeração da prova (Word, visualização, gabarito e folha de resposta da Correção de Provas) ainda forçava Conhecimentos Gerais em primeiro (regra de 17/09). Achado ao montar o tutorial dos coordenadores.
+- Impacto: A numeração segue a ordem gravada na prova (a da lista do Simulado). Prova, gabarito e folha de resposta continuam iguais entre si. Os simulados já existentes não mudam (todos têm Conhecimentos Gerais no começo da ordem gravada — conferido em 29/10).
+- Como testar: Banco de Provas › Nova Prova › Simulado › mover Conhecimentos Gerais pro fim › Criar › Visualizar (CG por último) › Folhas de resposta (composição com CG nas últimas questões).
+- Como reverter: reverter o commit.
+
 ### [2026-10-29] Banco de Provas: importação com semestre/bimestre/chamada uma vez só, "Confirmar todos" e ordem das disciplinas no Simulado
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/banco-provas-importar-config
