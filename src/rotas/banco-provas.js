@@ -523,8 +523,10 @@ router.post('/questoes/analisar-docx', verifyToken, checkPermission, async (req,
             return res.status(400).json({ error: comErroDeLeitura.map(q => q.erro).join(' ') });
         }
         // questão só com o número (sem texto) fica de fora, com aviso
-        const vazias = brutas.filter(q => q.vazia);
         const questoes = brutas.filter(q => !q.vazia);
+        // "Questão 32" escrito duas vezes seguidas no Word não é questão perdida: a 32 veio no 2º marcador
+        const numerosLidos = new Set(questoes.map(q => `${q.tipo}:${q.numero}`));
+        const vazias = brutas.filter(q => q.vazia && !numerosLidos.has(`${q.tipo}:${q.numero}`));
         if (!questoes.length) return res.status(400).json({ error: 'As questões desse arquivo estão sem texto (só o número).' });
         const aviso = vazias.length ? `${vazias.length} questão(ões) sem texto no arquivo ficaram de fora (nº ${vazias.map(q => q.numero).join(', ')}${vazias[0].categoriaSugeridaTexto ? ` — ${vazias[0].categoriaSugeridaTexto}` : ''}).` : '';
 
@@ -661,6 +663,34 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         await batch.commit();
 
         res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /questoes/revisao/mover-bloco — passa questões ainda em revisão pra outro bloco do mesmo
+// lote (03/11/2026): quando o título da disciplina no Word ficou no lugar errado e uma questão
+// entrou no bloco de cima/de baixo, o professor corrige antes de confirmar.
+router.put('/questoes/revisao/mover-bloco', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ids = Array.isArray(req.body.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 200) : [];
+        const destino = req.body.categoriaSugeridaTexto;
+        if (!ids.length || typeof destino !== 'string') return res.status(400).json({ error: 'Informe as questões e o bloco de destino.' });
+        const docs = await Promise.all(ids.map(id => db.collection(COL_QUESTOES).doc(id).get()));
+        const lotes = new Set();
+        for (const d of docs) {
+            if (!d.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+            const q = d.data();
+            if (q.status !== 'revisao_importacao') return res.status(400).json({ error: 'Só dá pra mover questão que ainda está na revisão.' });
+            const erro = erroDeDono(req, q);
+            if (erro) return res.status(403).json({ error: erro });
+            lotes.add(q.loteId);
+        }
+        if (lotes.size !== 1) return res.status(400).json({ error: 'As questões precisam ser do mesmo arquivo importado.' });
+        const batch = db.batch();
+        docs.forEach(d => batch.update(d.ref, { categoriaSugeridaTexto: destino, updatedAt: new Date().toISOString() }));
+        await batch.commit();
+        res.json({ message: 'Questões movidas.', movidas: docs.length });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
