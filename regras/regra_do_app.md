@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-03] Banco de Provas: título de uma palavra só, disciplina só escolhida com certeza e mover questão entre blocos na revisão
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/import-disciplina-sugestao
+- Arquivos alterados: `src/utils/parseProvaDocx.js` (`tituloDeUmaPalavra`), `docencia/banco-provas/app.js` (`sugerirDisciplina`, card da revisão), `docencia/banco-provas/banco-provas.css`, `src/rotas/banco-provas.js` (aviso de questão sem texto; nova rota `PUT /questoes/revisao/mover-bloco`).
+- Tipo: Correção
+- Motivo: No "Simulado_AGRO 03 E 04 PERÍODO" o título "FITOPATOLOGIA" (uma palavra só) não era reconhecido, então as questões 15–21 entravam junto com Agrometeorologia. E na revisão a sugestão pegava a primeira disciplina com 1 palavra em comum ("Projeto Integrador Extensionista em Fitopatologia", 5º) em vez da "Fitopatologia" do 4º.
+- Impacto: Título de uma palavra em caixa alta vale quando a linha seguinte é "Questão N" (um "PORQUE" solto dentro da questão continua não sendo título). Disciplina na revisão só vem escolhida quando há certeza (nome igual ao título do Word, ou "CONHECIMENTOS GERAIS"); se não, fica em "Selecione a disciplina" com aviso em laranja e as parecidas no topo da lista — o professor decide (pedido do usuário). Cada bloco tem "Ver questões / mover para outro bloco": lista as questões (número + começo do texto) e deixa passar uma questão para outro bloco do mesmo arquivo ou separar num bloco novo, antes de confirmar (só questão ainda em revisão e do próprio dono). "Questão 32" escrito duas vezes seguidas não gera mais o aviso de questão sem texto. Conferido contra 63 arquivos .docx: só mudaram o AGRO 3/4 e o Simulado de Logística (EMPREENDEDORISMO, mesmo problema).
+- Como testar: Importar Word com o Simulado_AGRO 03 E 04 PERÍODO (Agronomia) › 6 blocos, Fitopatologia separada e escolhida "4º · FITOPATOLOGIA"; Agrometeorologia fica em "Selecione a disciplina"; em Fertilidade, "Ver questões" › Questão 07 › "Mover para: AGROMETEOROLOGIA..." (6 e 8 questões). Testado no local em 03/11.
+- Como reverter: reverter o commit.
+
 ### [2026-10-29] Simulado: Conhecimentos Gerais respeita a ordem escolhida com as setas
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/simulado-ordem-conhecimentos-gerais

@@ -558,22 +558,26 @@ async function carregarRevisao() {
   }
 }
 
-// Sugere a disciplina cadastrada cujo NOME tem mais palavras em comum com o
-// texto da seção detectada no Word (ex.: "GESTÃO DE PESSOAS" → disciplina
-// "Gestão de Pessoas"). Mesma ideia do Banco MED-FATEC — exige 1+ palavra em
-// comum, sem arriscar palpite quando não bate nada.
+// Sugestão de disciplina pro bloco importado (03/11/2026): só escolhe sozinha quando tem CERTEZA —
+// nome igual ao título do Word (sem acento/caixa) ou "Conhecimentos Gerais". Se não, deixa em
+// "Selecione a disciplina" pro professor decidir e só põe as parecidas (palavras em comum) no topo
+// da lista. Antes bastava 1 palavra em comum e "FITOPATOLOGIA" caía no "Projeto Integrador ... em
+// Fitopatologia" de outro período.
 function sugerirDisciplina(categoriaSugeridaTexto) {
-  if (!categoriaSugeridaTexto) return null;
+  const vazio = { certa: null, parecidas: [] };
+  if (!categoriaSugeridaTexto) return vazio;
   const semAcento = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const limpo = x => semAcento(x).replace(/[^A-Z0-9]+/g, ' ').trim();
+  if (limpo(categoriaSugeridaTexto) === 'CONHECIMENTOS GERAIS') return { certa: { id: 'geral', nome: 'Conhecimentos Gerais' }, parecidas: [] };
+  const igual = disciplinas.find(d => limpo(d.nome) === limpo(categoriaSugeridaTexto));
+  if (igual) return { certa: igual, parecidas: [] };
   const tokensAlvo = new Set(semAcento(categoriaSugeridaTexto).split(/[^A-Z0-9]+/).filter(w => w.length >= 3));
-  if (!tokensAlvo.size) return null;
-  let melhor = null, melhorScore = 0;
-  disciplinas.forEach(d => {
+  const parecidas = disciplinas.map(d => {
     const tokensNome = semAcento(d.nome).split(/[^A-Z0-9]+/).filter(w => w.length >= 3);
     const bateram = tokensNome.filter(t => tokensAlvo.has(t)).length;
-    if (bateram > 0 && bateram > melhorScore) { melhorScore = bateram; melhor = d; }
-  });
-  return melhor;
+    return { d, bateram, sobra: tokensNome.length - bateram };
+  }).filter(x => x.bateram > 0).sort((a, b) => b.bateram - a.bateram || a.sobra - b.sobra).slice(0, 5).map(x => x.d);
+  return { certa: null, parecidas };
 }
 
 function renderRevisao() {
@@ -609,16 +613,22 @@ function renderRevisao() {
   const sel = (v, atual) => String(v) === String(atual ?? '') ? 'selected' : '';
 
   lista.innerHTML = grupoLista.map((g, i) => {
-    const sugestao = sugerirDisciplina(g.categoriaSugeridaTexto);
     const base = g.itens[0] || {}; // semestre/bimestre/chamada escolhidos na importação (iguais no lote)
-    const opcoes = '<option value="">Selecione a disciplina</option><option value="geral">Conhecimentos Gerais</option>' +
-      disciplinas.map(d => `<option value="${d.id}" ${sugestao && sugestao.id === d.id ? 'selected' : ''}>${ordinal(d.periodo)} · ${esc(d.nome)}</option>`).join('');
+    const { certa, parecidas } = sugerirDisciplina(g.categoriaSugeridaTexto);
+    const opt = d => `<option value="${d.id}" ${certa && certa.id === d.id ? 'selected' : ''}>${ordinal(d.periodo)} · ${esc(d.nome)}</option>`;
+    const idsParecidas = new Set(parecidas.map(d => d.id));
+    const opcoes = `<option value="">Selecione a disciplina</option>` +
+      (parecidas.length ? `<optgroup label="Parecidas com o título do Word">${parecidas.map(opt).join('')}</optgroup><optgroup label="Todas">` : '') +
+      `<option value="geral" ${certa && certa.id === 'geral' ? 'selected' : ''}>Conhecimentos Gerais</option>` +
+      disciplinas.filter(d => !idsParecidas.has(d.id)).map(opt).join('') + (parecidas.length ? '</optgroup>' : '');
+    const nota = certa ? ` · disciplina: ${esc(certa.nome)}`
+      : ` · <span class="bp-revisao-incerta">não achei disciplina com esse nome — escolha qual é${parecidas.length ? ' (as parecidas estão no topo da lista)' : ''}</span>`;
     return `
-      <div class="bp-revisao-card" data-grupo-index="${i}">
+      <div class="bp-revisao-card" data-grupo-index="${i}" data-chave="${esc(`${g.loteId}::${g.categoriaSugeridaTexto || ''}`)}">
         <div class="bp-revisao-card-topo">
           <div>
             <div class="bp-revisao-card-titulo">${esc(g.categoriaSugeridaTexto || '(sem seção detectada)')}</div>
-            <div class="bp-revisao-card-qtd">${g.itens.length} questão(ões)${sugestao ? ` · sugestão: ${esc(sugestao.nome)}` : ''}</div>
+            <div class="bp-revisao-card-qtd">${g.itens.length} questão(ões)${nota}</div>
           </div>
           <div class="bp-revisao-card-acoes">
             <select class="select-filter bp-revisao-select-disciplina">${opcoes}</select>
@@ -638,6 +648,21 @@ function renderRevisao() {
             <button type="button" class="btn-secondary bp-revisao-btn-descartar">Descartar</button>
           </div>
         </div>
+        <details class="bp-revisao-questoes">
+          <summary>Ver questões / mover para outro bloco</summary>
+          ${g.itens.map(q => {
+            const outros = grupoLista.filter(o => o.loteId === g.loteId && o !== g);
+            return `<div class="bp-revisao-questao">
+              <span class="bp-revisao-questao-num">${q.numeroOriginal != null ? 'Questão ' + String(q.numeroOriginal).padStart(2, '0') : '—'}</span>
+              <span class="bp-revisao-questao-texto">${(() => { const txt = (q.enunciadoHtml || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(); return esc(txt.slice(0, 140)) + (txt.length > 140 ? '…' : ''); })()}</span>
+              <select class="select-filter bp-revisao-mover" data-id="${q.id}">
+                <option value="">Fica neste bloco</option>
+                ${outros.map(o => `<option value="${esc(o.categoriaSugeridaTexto || '')}">Mover para: ${esc(o.categoriaSugeridaTexto || '(sem seção detectada)')}</option>`).join('')}
+                ${outros.some(o => o.categoriaSugeridaTexto === `${g.categoriaSugeridaTexto || 'SEM SEÇÃO'} (separadas)`) ? '' : `<option value="${esc(`${g.categoriaSugeridaTexto || 'SEM SEÇÃO'} (separadas)`)}">Separar num bloco novo</option>`}
+              </select>
+            </div>`;
+          }).join('')}
+        </details>
       </div>`;
   }).join('');
 
@@ -651,6 +676,24 @@ function renderRevisao() {
     const card = lista.querySelector(`[data-grupo-index="${i}"]`);
     card.querySelector('.bp-revisao-btn-confirmar').addEventListener('click', () => resolverGrupoRevisao(g, dadosDoCard(card)));
     card.querySelector('.bp-revisao-btn-descartar').addEventListener('click', () => descartarGrupoRevisao(g));
+    card.querySelectorAll('.bp-revisao-mover').forEach(selMover => selMover.addEventListener('change', async () => {
+      if (selMover.selectedIndex === 0) return;
+      selMover.disabled = true;
+      try {
+        await apiFetch('/banco-provas/questoes/revisao/mover-bloco', { method: 'PUT', body: JSON.stringify({ ids: [selMover.dataset.id], categoriaSugeridaTexto: selMover.value }) });
+        showToast(`Questão movida para ${selMover.value || '(sem seção detectada)'}.`);
+        // guarda o que já foi escolhido nos blocos (disciplina, bimestre...) pra não perder ao redesenhar
+        const escolhas = new Map(grupoLista.map((o, j) => [`${o.loteId}::${o.categoriaSugeridaTexto || ''}`, dadosDoCard(lista.querySelector(`[data-grupo-index="${j}"]`))]));
+        await carregarRevisao(); renderRevisao();
+        lista.querySelectorAll('.bp-revisao-card').forEach(c => {
+          const e = escolhas.get(c.dataset.chave); if (!e) return;
+          c.querySelector('.bp-revisao-select-disciplina').value = e.disciplinaId;
+          c.querySelector('.bp-revisao-select-bimestre').value = e.bimestre;
+          c.querySelector('.bp-revisao-select-chamada').value = e.chamada;
+          c.querySelector('.bp-revisao-input-semestre').value = e.semestre;
+        });
+      } catch (err) { showToast(err.message, 'error'); selMover.disabled = false; selMover.selectedIndex = 0; }
+    }));
   });
   const btnTodos = document.getElementById('bp-revisao-btn-todos');
   if (btnTodos) btnTodos.onclick = () => confirmarTodosRevisao(grupoLista.map((g, i) => ({ g, dados: dadosDoCard(lista.querySelector(`[data-grupo-index="${i}"]`)) })));

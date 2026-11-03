@@ -170,6 +170,13 @@
 .bp-revisao-card-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .bp-revisao-card-titulo { font-weight: 700; color: var(--text-main); }
 .bp-revisao-card-qtd { font-size: 0.8rem; color: var(--text-secondary); }
+.bp-revisao-incerta { color: #b45309; font-weight: 600; }
+.bp-revisao-questoes { margin-top: 12px; border-top: 1px solid var(--border-color, #e2e8f0); padding-top: 10px; }
+.bp-revisao-questoes summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--primary, #1d4ed8); }
+.bp-revisao-questao { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--border-color, #e2e8f0); font-size: 0.85rem; }
+.bp-revisao-questao-num { font-weight: 700; white-space: nowrap; }
+.bp-revisao-questao-texto { flex: 1 1 320px; color: var(--text-secondary); }
+.bp-revisao-mover { min-width: 220px; }
 .bp-revisao-card-acoes { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .bp-revisao-card-acoes select { min-width: 220px; }
 

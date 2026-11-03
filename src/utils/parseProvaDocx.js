@@ -206,6 +206,14 @@ function pareceCabecalhoDeSecao(linha) {
     return linha.trim().split(/\s+/).length >= 2;
 }
 
+// Título de disciplina com UMA palavra só ("FITOPATOLOGIA", "BOTÂNICA", 03/11/2026): só vale quando a
+// linha seguinte já é o "Questão N" — um "PORQUE" solto no meio da questão nunca vem antes de um marcador.
+function tituloDeUmaPalavra(linha, proxima) {
+    const t = (linha || '').trim();
+    if (!/^[A-ZÀ-Ú]{4,40}$/.test(t) || FRASES_IGNORADAS_COMO_SECAO.has(t)) return false;
+    return marcadorPorPalavra((proxima || '').trim()) !== null;
+}
+
 // Remove um prefixo de letra decorativo ("A)", "a.", "A -") do INÍCIO da
 // linha, se existir — a letra de verdade vem da posição, não desse prefixo.
 const PREFIXO_LETRA_REGEX = /^([A-Ea-e])\s*[\)\.\-]\s*/;
@@ -344,7 +352,8 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
         });
     }
 
-    for (const linha of linhasBrutas) {
+    for (let i = 0; i < linhasBrutas.length; i++) {
+        const linha = linhasBrutas[i];
         if (pareceInicioDissertativas(linha)) {
             fecharBloco();
             blocoAtual = null;
@@ -359,11 +368,12 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
             proximoEsperado = numeroMarcador + 1;
             continue;
         }
-        if (!blocoAtual && pareceCabecalhoDeSecao(linha)) {
+        const ehTitulo = pareceCabecalhoDeSecao(linha) || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]);
+        if (!blocoAtual && ehTitulo) {
             disciplinaAtual = linha;
             continue;
         }
-        if (blocoAtual && pareceCabecalhoDeSecao(linha)) {
+        if (blocoAtual && ehTitulo) {
             fecharBloco();
             blocoAtual = null;
             disciplinaAtual = linha;
