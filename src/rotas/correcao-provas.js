@@ -73,7 +73,17 @@ function resultado(av, respostasOuLeitura) {
 
 async function escopo(req) { return escopoDe(req); }
 function podeAvaliacao(esc, av) { return esc === null || (av.codcurs || []).some(c => podeVer(esc, c)); }
-const souDono = (req, av) => ADM.includes(req.user.role) || av.criadoPorUid === req.user.uid;
+// Pode alterar/excluir a avaliação: a direção, quem criou, ou a coordenação de TODOS os cursos dela
+// (03/11/2026, pedido explícito do usuário — "ela é coordenadora, pode tudo relativo ao curso dela":
+// a coord. de Direito era barrada nas provas do curso criadas pelo EAD).
+const COORDENACAO = ['coordenador', 'coord_medicina'];
+async function podeAlterar(req, av) {
+    if (ADM.includes(req.user.role) || av.criadoPorUid === req.user.uid) return true;
+    if (!COORDENACAO.includes(req.user.role)) return false;
+    const esc = await escopo(req);
+    const cursos = av.codcurs || [];
+    return cursos.length > 0 && cursos.every(c => podeVer(esc, c));
+}
 
 // GET /api/correcao/turmas — turmas do semestre atual (graduação e medicina) que a pessoa pode ver
 router.get('/turmas', verifyToken, checkPermission, async (req, res) => {
@@ -387,7 +397,7 @@ router.get('/avaliacoes/:id', verifyToken, checkPermission, async (req, res) => 
         const ls = await db.collection(COL_LEIT).where('avaliacaoId', '==', av.id).get();
         const leituras = {};
         ls.forEach(d => { const l = d.data(); leituras[l.i] = { ...l, ...resultado(av, l) }; });
-        res.json({ avaliacao: av, leituras, podeEditar: souDono(req, av) });
+        res.json({ avaliacao: av, leituras, podeEditar: await podeAlterar(req, av) });
     } catch (err) {
         console.error('[correcao] abrir:', err);
         res.status(500).json({ error: err.message });
@@ -399,7 +409,7 @@ router.put('/avaliacoes/:id', verifyToken, checkPermission, async (req, res) => 
     try {
         const { av, erro } = await carregar(req, req.params.id);
         if (erro) return res.status(erro[0]).json({ error: erro[1] });
-        if (!souDono(req, av)) return res.status(403).json({ error: 'Só quem criou (ou a direção) pode alterar a avaliação.' });
+        if (!(await podeAlterar(req, av))) return res.status(403).json({ error: 'Só quem criou, a coordenação do curso ou a direção pode alterar a avaliação.' });
         const mud = { editadoEm: new Date().toISOString(), editadoPor: req.user.name || req.user.email || '' };
         if (req.body.nome !== undefined) { mud.nome = texto(req.body.nome, 120); if (!mud.nome) return res.status(400).json({ error: 'Informe o nome.' }); }
         if (req.body.data !== undefined) mud.data = /^\d{4}-\d{2}-\d{2}$/.test(req.body.data || '') ? req.body.data : null;
@@ -427,7 +437,7 @@ router.delete('/avaliacoes/:id', verifyToken, checkPermission, async (req, res) 
     try {
         const { av, erro } = await carregar(req, req.params.id);
         if (erro) return res.status(erro[0]).json({ error: erro[1] });
-        if (!souDono(req, av)) return res.status(403).json({ error: 'Só quem criou (ou a direção) pode excluir a avaliação.' });
+        if (!(await podeAlterar(req, av))) return res.status(403).json({ error: 'Só quem criou, a coordenação do curso ou a direção pode excluir a avaliação.' });
         const ls = await db.collection(COL_LEIT).where('avaliacaoId', '==', av.id).get();
         for (let i = 0; i < ls.docs.length; i += 400) {
             const b = db.batch(); ls.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit();

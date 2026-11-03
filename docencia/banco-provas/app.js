@@ -868,6 +868,35 @@ function arquivoParaBase64(arquivo) {
   });
 }
 
+// Fontes embutidas no Word ("Incorporar fontes no arquivo") (03/11/2026, caso real: prova de
+// Direito de 3,8 MB, sendo ~0,3 MB de texto e o resto fonte) — passavam do limite de envio da
+// hospedagem (~4,5 MB) e a importação dava "Erro na API: 403" sem explicação. A leitura das
+// questões não usa as fontes, então elas saem antes de enviar. Se algo falhar, vai o original.
+async function semFontesEmbutidas(arquivo) {
+  if (!window.JSZip || !/\.docx$/i.test(arquivo.name)) return arquivo;
+  try {
+    const zip = await window.JSZip.loadAsync(arquivo);
+    const fontes = Object.keys(zip.files).filter(n => n.startsWith('word/fonts/'));
+    if (!fontes.length) return arquivo;
+    fontes.forEach(n => zip.remove(n));
+    const limpar = async (nome, regex) => {
+      const f = zip.file(nome);
+      if (f) zip.file(nome, (await f.async('string')).replace(regex, ''));
+    };
+    await limpar('word/fontTable.xml', /<w:embed(Regular|Bold|Italic|BoldItalic)\b[^>]*\/>/g);
+    await limpar('word/_rels/fontTable.xml.rels', /<Relationship\b[^>]*fonts\/[^>]*\/>/g);
+    await limpar('word/settings.xml', /<w:(embedTrueTypeFonts|saveSubsetFonts|embedSystemFonts)\b[^>]*\/>/g);
+    await limpar('[Content_Types].xml', /<Default Extension="odttf"[^>]*\/>/g);
+    return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  } catch (err) {
+    console.warn('[banco-provas] não consegui tirar as fontes do .docx:', err);
+    return arquivo;
+  }
+}
+
+// Limite de envio da hospedagem (~4,5 MB); o base64 fica ~1/3 maior que o arquivo.
+const LIMITE_ENVIO_BASE64 = 4.2 * 1024 * 1024;
+
 const LETRAS_GABARITO = ['A', 'B', 'C', 'D', 'E'];
 
 // ETAPA 1 -> 2: só lê o arquivo, nada é gravado ainda.
@@ -887,7 +916,11 @@ async function analisarImportacao(e) {
   btn.disabled = true;
   btn.textContent = 'Analisando...';
   try {
-    const arquivoBase64 = await arquivoParaBase64(arquivo);
+    const arquivoBase64 = await arquivoParaBase64(await semFontesEmbutidas(arquivo));
+    if (arquivoBase64.length > LIMITE_ENVIO_BASE64) {
+      throw new Error('O arquivo é grande demais para importar (passa de ~3 MB). Normalmente são imagens pesadas: '
+        + 'diminua as imagens ou divida a prova em dois arquivos e importe um de cada vez.');
+    }
     importarAlternativasPorQuestao = parseInt(document.getElementById('importar-alternativas').value, 10);
     const resp = await apiFetch('/banco-provas/questoes/analisar-docx', {
       method: 'POST',

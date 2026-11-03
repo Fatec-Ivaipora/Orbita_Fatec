@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-03] Importação do Banco de Provas sem fontes embutidas + coordenação edita as avaliações do próprio curso na Correção
+- Autor: Claude Code (a pedido do usuário)
+- Branch: `fix/coordenador-edita-avaliacoes-curso`
+- Arquivos alterados: `docencia/banco-provas/app.js`, `docencia/banco-provas/index.html`, `src/rotas/correcao-provas.js`
+- Tipo: correção
+- Motivo: a coordenadora de Direito recebia "Erro na API: 403" ao importar uma prova (.docx). O conteúdo estava certo (40 questões lidas sem erro), mas o Word tinha as fontes embutidas ("Incorporar fontes no arquivo"): 3,8 MB de arquivo, ~4,8 MB em base64, acima do limite de envio da Vercel (~4,5 MB) — a hospedagem barrava antes de chegar ao Órbita, por isso o 403 sem mensagem. Junto, pedido do usuário: "ela é coordenadora, pode tudo relativo ao curso dela" — a Correção de Provas só deixava alterar/excluir avaliação quem criou ou a direção, e as provas de Direito criadas pelo EAD ficavam travadas pra coordenação.
+- Impacto:
+  - Banco de Provas → Importar: antes de enviar, o navegador tira as fontes embutidas do .docx (JSZip 3.10.1, mesma versão do CPA, via jsDelivr) e limpa as referências a elas (fontTable, rels, settings, Content_Types). A leitura das questões não usa as fontes. Se falhar, envia o original. Se ainda passar de ~4,2 MB em base64, mostra mensagem clara (imagens pesadas: diminuir ou dividir o arquivo) em vez do 403. Caso real: 4,84 MB → 0,06 MB, 40 questões lidas iguais.
+  - Correção de Provas: alterar/excluir a avaliação passa a valer para a direção, quem criou, OU a coordenação (`coordenador`, `coord_medicina`) que tem TODOS os cursos da avaliação no escopo. Avaliação que mistura um curso que não é dela continua travada. EAD continua só no que criou. `podeEditar` da tela segue a mesma regra.
+- Como testar: importar um .docx com fontes embutidas (Word → Opções → Salvar → "Incorporar fontes") e conferir que analisa normalmente; com a coordenadora de Direito, editar uma avaliação de Direito criada pelo EAD.
+- Como reverter: reverter o commit (volta `souDono` na Correção e o envio direto do arquivo no Banco de Provas).
+
 ### [2026-11-03] Banco de Provas: título de uma palavra só, disciplina só escolhida com certeza e mover questão entre blocos na revisão
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/import-disciplina-sugestao
