@@ -29,6 +29,17 @@ let semestres = []; // lista cadastrada (config/comercial_contratos), mais novo 
 let equipe = null;  // [{uid, nome}] do Comercial, pra "quem vai coletar"
 let equipePromise = null;
 let abaAtual = 'sem_assinatura';
+let tipoAtual = ''; // '' | 'calouro' | 'outros' | 'sem' (tipo de matrícula = período de ingresso)
+
+// O período de ingresso vem SÓ do Relatório de Matrículas (o que o Financeiro lança é o correto).
+// calouro = entra no 1º período; outros = entra direto em outro período (transferência, 2ª graduação...);
+// sem = contrato sem matrícula vinculada (sobra de cadastro manual antigo: conferir com o Financeiro).
+const TIPO_LABEL = { calouro: 'Calouro · 1º período', outros: 'Outros períodos', sem: 'Sem matrícula' };
+function tipoMatricula(r) {
+  if (!r.matriculaId || r.matriculaRemovida) return 'sem';
+  const p = parseInt(String(r.matriculaPeriodo || ''), 10);
+  return !p || p === 1 ? 'calouro' : 'outros';
+}
 let emEdicaoId = null;
 let contatoId = null;
 
@@ -212,7 +223,6 @@ function wireEventos() {
   // Só busca depois que a pessoa escolhe o semestre (economia de leitura).
   document.getElementById('sel-semestre').addEventListener('change', (e) => {
     semestreAtual = e.target.value;
-    document.getElementById('btn-novo').disabled = !semestreAtual;
     document.getElementById('btn-imprimir').classList.toggle('hidden', !semestreAtual);
     document.getElementById('btn-rota').classList.toggle('hidden', !semestreAtual);
     if (semestreAtual) carregar();
@@ -248,16 +258,23 @@ function wireEventos() {
     renderTudo();
   });
 
+  document.getElementById('tipo-bar').addEventListener('click', (e) => {
+    const chip = e.target.closest('.tipo-chip');
+    if (!chip) return;
+    tipoAtual = chip.dataset.tipo;
+    renderTudo();
+  });
+
   document.getElementById('btn-limpar-filtros').addEventListener('click', () => {
     document.getElementById('busca').value = '';
     document.getElementById('filtro-curso').value = '';
     document.getElementById('filtro-cidade').value = '';
     document.getElementById('filtro-menor').checked = false;
     document.getElementById('filtro-assinado').value = '';
+    tipoAtual = '';
     renderTudo();
   });
 
-  document.getElementById('btn-novo').addEventListener('click', () => abrirModalAluno(null));
   iniciarRotaColeta({
     apiFetch, esc, fmtData, linkWhatsapp, toast: showToast, hoje: hojeLocal,
     getSemestre: () => semestreAtual, getRegistros: () => registros,
@@ -266,6 +283,7 @@ function wireEventos() {
   document.getElementById('btn-imprimir').addEventListener('click', () => imprimirRelatorio([
     `Semestre ${semestreAtual}`,
     STATUS_LABEL[abaAtual],
+    tipoAtual && `Tipo: ${TIPO_LABEL[tipoAtual]}`,
     opcaoEscolhida('filtro-curso') && `Curso: ${opcaoEscolhida('filtro-curso')}`,
     opcaoEscolhida('filtro-cidade') && `Cidade: ${opcaoEscolhida('filtro-cidade')}`,
     document.getElementById('filtro-menor').checked && 'Só menores de 18',
@@ -275,7 +293,6 @@ function wireEventos() {
   ], currentUser.displayName || currentUser.email));
   document.getElementById('btn-cancelar-aluno').addEventListener('click', () => fecharModal('modal-aluno'));
   document.getElementById('form-aluno').addEventListener('submit', salvarAluno);
-  document.getElementById('btn-excluir').addEventListener('click', () => excluirAluno(emEdicaoId));
   document.getElementById('f-status').addEventListener('change', atualizarGrupoAssinado);
 
   document.getElementById('btn-cancelar-contato').addEventListener('click', () => fecharModal('modal-contato'));
@@ -289,7 +306,6 @@ function wireEventos() {
     const id = btn.dataset.id;
     const acao = btn.dataset.acao;
     if (acao === 'editar') abrirModalAluno(id);
-    else if (acao === 'excluir') excluirAluno(id);
     else if (acao === 'contato') abrirModalContato(id);
     else mudarStatus(id, acao);
   });
@@ -335,11 +351,13 @@ function lerFiltros() {
     cidade: document.getElementById('filtro-cidade').value,
     soMenor: document.getElementById('filtro-menor').checked,
     // não esconde ninguém: só reordena a tabela pela data de assinatura (ver ordenarPorAssinatura)
-    assinadoDesde: document.getElementById('filtro-assinado').value
+    assinadoDesde: document.getElementById('filtro-assinado').value,
+    tipo: tipoAtual
   };
 }
 
 function passaFiltros(r, f, ignorar = '') {
+  if (ignorar !== 'tipo' && f.tipo && tipoMatricula(r) !== f.tipo) return false;
   if (ignorar !== 'curso' && f.curso && (r.curso || '').trim() !== f.curso) return false;
   if (f.cidade && (r.cidade || '').trim() !== f.cidade) return false;
   if (f.soMenor && !r.menor18) return false;
@@ -373,6 +391,21 @@ function renderCursos(f) {
   });
 }
 
+function renderTipos(f) {
+  // Contagem por tipo dentro da aba atual, respeitando os outros filtros.
+  const daAba = registros.filter(r => r.status === abaAtual && passaFiltros(r, f, 'tipo'));
+  const n = { calouro: 0, outros: 0, sem: 0 };
+  daAba.forEach(r => { n[tipoMatricula(r)]++; });
+  const chip = (valor, rotulo, qtd, dica) =>
+    `<button type="button" class="tipo-chip ${valor ? 'tipo-' + valor : ''} ${f.tipo === valor ? 'ativo' : ''}" data-tipo="${valor}" title="${dica}">${rotulo} <span class="curso-chip-qtd">${qtd}</span></button>`;
+  document.getElementById('tipo-bar').innerHTML =
+    '<span class="tipo-bar-rotulo">Tipo de matrícula</span>' +
+    chip('', 'Todos', daAba.length, 'Todos os matriculados') +
+    chip('calouro', TIPO_LABEL.calouro, n.calouro, 'Entram no 1º período (pelo Relatório de Matrículas)') +
+    chip('outros', TIPO_LABEL.outros, n.outros, 'Entram direto em outro período: transferência, 2ª graduação etc. (pelo Relatório de Matrículas)') +
+    (n.sem || f.tipo === 'sem' ? chip('sem', TIPO_LABEL.sem, n.sem, 'Contrato sem matrícula no Relatório de Matrículas: conferir com o Financeiro') : '');
+}
+
 function renderTudo() {
   const f = lerFiltros();
   const base = registros.filter(r => passaFiltros(r, f));
@@ -387,16 +420,23 @@ function renderTudo() {
   document.getElementById('kpi-des').textContent = des;
   const ativos = sem + ass;
   document.getElementById('kpi-ass-pct').textContent = ativos ? `${Math.round(ass / ativos * 100)}% dos matriculados ativos` : '';
+  const ativosBase = base.filter(r => r.status !== 'desistente');
+  const nTipo = (t) => ativosBase.filter(r => tipoMatricula(r) === t).length;
+  const nCal = nTipo('calouro'), nOut = nTipo('outros'), nSem = nTipo('sem');
+  document.getElementById('kpi-tipo').textContent = ativos
+    ? [`${nCal} calouro${nCal === 1 ? '' : 's'} 1º per.`, `${nOut} outros per.`, nSem && `${nSem} sem matrícula`].filter(Boolean).join(' · ')
+    : '';
   document.getElementById('kpi-menor').textContent = base.filter(r => r.status === 'sem_assinatura' && r.menor18).length;
   document.getElementById('qtd-sem').textContent = sem;
   document.getElementById('qtd-ass').textContent = ass;
   document.getElementById('qtd-des').textContent = des;
 
+  renderTipos(f);
   renderCursos(f);
 
-  const filtrando = !!(f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
+  const filtrando = !!(f.tipo || f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
   document.getElementById('btn-limpar-filtros').classList.toggle('hidden', !filtrando);
-  const partes = [f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
+  const partes = [f.tipo && TIPO_LABEL[f.tipo], f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
   const naAba = qtd(abaAtual);
   const totalAba = registros.filter(r => r.status === abaAtual).length;
   document.getElementById('filtro-resumo').innerHTML = filtrando
@@ -426,7 +466,7 @@ function renderTabela(base, f = {}) {
   let lista = base.filter(r => r.status === abaAtual);
   if (f.assinadoDesde) lista = ordenarPorAssinatura(lista, f.assinadoDesde);
   if (!lista.length) {
-    corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno cadastrado nesse semestre ainda. Use "Novo aluno".'}</td></tr>`;
+    corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno nesse semestre ainda. Os alunos entram aqui automaticamente quando o Financeiro lança a matrícula.'}</td></tr>`;
     return;
   }
   // separador quando muda o dia de assinatura (classe mes-linha: a impressão já não conta essas linhas)
@@ -455,19 +495,19 @@ function renderTabela(base, f = {}) {
     let acoes = `<button class="btn-acao" data-acao="contato" data-id="${r.id}" title="Ver histórico e registrar contato">🕘 Histórico</button>`;
     if (r.status === 'sem_assinatura') {
       acoes += `<button class="btn-acao ok" data-acao="assinado" data-id="${r.id}">✓ Assinou</button>`;
-      acoes += `<button class="btn-acao desistir" data-acao="desistente" data-id="${r.id}">Desistiu</button>`;
-    } else if (r.status === 'desistente') {
-      acoes += `<button class="btn-acao" data-acao="sem_assinatura" data-id="${r.id}">Reativar</button>`;
     }
     acoes += `<button class="btn-acao" data-acao="editar" data-id="${r.id}">Editar</button>`;
-    acoes += `<button class="btn-acao desistir" data-acao="excluir" data-id="${r.id}" title="Excluir aluno da lista">🗑</button>`;
     // Veio do Relatório de Matrículas (cadastro da Secretaria/Financeiro): linha em outra cor + etiqueta
     const daMatricula = r.matriculaId
       ? `<span class="ct-matricula ${r.matriculaRemovida ? 'removida' : ''}" title="${r.matriculaRemovida ? 'A matrícula foi excluída no Relatório de Matrículas' : `Vem do Relatório de Matrículas · situação: ${esc(r.matriculaSituacao || '—')}`}">${r.matriculaRemovida ? 'matrícula excluída' : 'Matrículas'}</span>` : '';
+    const tipo = tipoMatricula(r);
+    const tipoTag = tipo === 'outros'
+      ? `<span class="ct-periodo" title="Entra direto no ${esc(r.matriculaPeriodo)} período (Relatório de Matrículas)">${esc(r.matriculaPeriodo)} período</span>`
+      : tipo === 'sem' ? '<span class="ct-periodo sem" title="Sem matrícula no Relatório de Matrículas: conferir com o Financeiro">sem matrícula</span>' : '';
     return `
       <tr class="${r.matriculaId ? 'ct-linha-matricula' : ''}">
         <td class="ct-sub">${i + 1}</td>
-        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
+        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${tipoTag}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
         <td>${fmtData(r.dataMatricula) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.curso) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.cidade) || '<span class="ct-vazio">—</span>'}</td>
@@ -561,12 +601,14 @@ function abrirModalAluno(id) {
     document.getElementById('f-coleta-equipe').innerHTML = '<span class="ct-sub">Carregando equipe...</span>';
     carregarEquipe().then(() => { if (emEdicaoId === id) renderColetaEquipe(coletor); });
   }
-  document.getElementById('btn-excluir').classList.toggle('hidden', !r);
   // Mudar de semestre só faz sentido pra aluno já cadastrado.
   const selSem = document.getElementById('f-semestre');
   selSem.innerHTML = semestres.map(s => `<option value="${s}">${s}</option>`).join('');
   selSem.value = r?.semestre || semestreAtual;
-  document.getElementById('grupo-semestre').classList.toggle('hidden', !r || semestres.length < 2);
+  document.getElementById('grupo-semestre').classList.add('hidden'); // semestre segue a matrícula
+  const opDes = document.querySelector('#f-status option[value="desistente"]');
+  opDes.disabled = r?.status !== 'desistente'; // desistência vem do Relatório de Matrículas
+  document.getElementById('f-status').disabled = r?.status === 'desistente';
   atualizarGrupoAssinado();
   abrirModal('modal-aluno');
   document.getElementById('f-nome').focus();
@@ -577,7 +619,6 @@ async function salvarAluno(e) {
   const btn = document.getElementById('btn-salvar-aluno');
   const status = document.getElementById('f-status').value;
   const body = {
-    semestre: emEdicaoId ? (document.getElementById('f-semestre').value || semestreAtual) : semestreAtual,
     nome: document.getElementById('f-nome').value,
     dataMatricula: document.getElementById('f-matricula').value,
     curso: document.getElementById('f-curso').value,
