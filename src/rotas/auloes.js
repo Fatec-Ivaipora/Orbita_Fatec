@@ -62,7 +62,7 @@ async function sincronizar(req, id, doc) {
         doc.palestrante && `Com: ${doc.palestrante}`,
         doc.contatoColegio && `Contato no colégio: ${doc.contatoColegio}`,
         doc.observacoes && `Obs.: ${doc.observacoes}`,
-        'Agendado em Comercial › Aulões - Redações'
+        'Agendado em Comercial › Aulões - Palestras'
     ].filter(Boolean);
     const atividadeId = await agenda.sincronizarAtividade({
         atividadeId: doc.atividadeId || null,

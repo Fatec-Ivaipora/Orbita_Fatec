@@ -14,3 +14,30 @@
 .st-cancelado { background: #f1f5f9; color: var(--text-secondary); text-decoration: line-through; }
 tr.linha-passada td { opacity: 0.75; }
 .ae-atencao { display: inline-block; margin-left: 0.35rem; font-size: 0.68rem; font-weight: 800; color: var(--red); }
+
+/* Aulões - Palestras (04/11/2026): agenda única. Mesmo visual do Comercial (orbita.css orb-v2 +
+   comercial-tema.css): azul-marinho da marca, pílulas de borda fina, avatar de iniciais nas pessoas. */
+.ap-tipo { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.76rem; font-weight: 700; white-space: nowrap; border: 1px solid transparent; }
+.ap-aulao { background: var(--orb-marca-suave, #e7ecf5); color: var(--orb-marca, #12294d); border-color: #d3dceb; }
+.ap-palestra { background: #f3effc; color: #5b21b6; border-color: #e2d8f8; }
+.ap-tipo + div { margin-top: 0.35rem; }
+.ap-detalhes { font-size: 0.82rem; color: var(--orb-tinta, #0d1b33); line-height: 1.5; }
+.ap-vai { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.3rem; }
+.ap-pessoa { display: inline-flex; align-items: center; font-size: 0.82rem; font-weight: 600; color: var(--orb-tinta, #0d1b33); white-space: nowrap; }
+.ap-pessoa .cm-avatar { width: 24px; height: 24px; font-size: 0.62rem; margin-right: 0.4rem; background: var(--orb-marca-suave, #e7ecf5); color: var(--orb-marca, #12294d); }
+.ap-pessoas-rotulo { font-size: 0.78rem; font-weight: 600; color: var(--orb-mudo, #5b6a80); margin: 0 0 0.4rem 0.15rem; }
+.ap-chip-pessoa { display: inline-flex; align-items: center; }
+.ap-chip-pessoa .cm-avatar { width: 20px; height: 20px; font-size: 0.56rem; margin-right: 0.35rem; }
+.ap-chip-pessoa.ativo .cm-avatar { background: rgba(255,255,255,.18); color: #fff; }
+.ap-ninguem { align-self: center; font-size: 0.78rem; color: var(--orb-alerta, #a8650b); font-weight: 700; margin-left: 0.25rem; }
+.ap-tipo-escolha { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--orb-linha, #e3e8f0); }
+.ap-tipo-escolha .equipe-chip { font-size: 0.92rem; font-weight: 700; padding: 0.5rem 1rem; }
+.ap-tipo-escolha .equipe-chip:has(input:checked) { background: var(--orb-marca, #12294d); border-color: var(--orb-marca, #12294d); color: #fff; }
+.ap-tipo-escolha label:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
+/* larguras: o local é o que mais precisa de espaço; o tipo é curto */
+.ap-col-oque { width: 1%; white-space: nowrap; }
+.ap-col-onde { min-width: 240px; }
+.ap-col-onde .pl-local { line-height: 1.35; }
+.ap-col-vai { min-width: 170px; }
+.ap-detalhes { min-width: 200px; max-width: 280px; }
+@media print { .ap-pessoa .cm-avatar, .ap-tipo { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

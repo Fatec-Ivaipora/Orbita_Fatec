@@ -111,7 +111,8 @@ export function criarOficio({ base, apiFetch, showToast, esc, aoMudar }) {
 
   el('oficio-atual').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-oficio]');
-    if (!btn) return;
+    // sem item aberto nesta seção, não faz nada (Aulões - Palestras tem duas seções de ofício na mesma página)
+    if (!btn || !itemId) return;
     if (btn.dataset.oficio === 'ver') ver(itemId);
     else remover();
   });

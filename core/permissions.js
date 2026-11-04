@@ -228,21 +228,23 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>`,
     url: "/comercial/aula-experimental/index.html"
   },
-  // Agenda de aulões/redações/palestras nos colégios (aba "AULÕES - REDAÇÃO"
-  // da planilha CONNECT 2026).
+  // Agenda única de aulões/redações e palestras (04/11/2026 — antes eram dois
+  // módulos). A tela junta comercial_auloes e comercial_palestras.
   auloes: {
     id: "auloes",
     category: "comercial",
-    title: "Aulões - Redações",
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+    title: "Aulões - Palestras",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
     url: "/comercial/auloes/index.html"
   },
-  // Palestras da Fatec em colégios/empresas e quem leva o palestrante (aba
-  // 2026.2 da planilha PALESTRAS FATEC).
+  // Palestras: desde 04/11/2026 ficam na tela "Aulões - Palestras". O módulo
+  // continua existindo pra permissão da rota /api/palestras, mas não aparece no
+  // menu (menu: false) e o endereço antigo redireciona.
   palestras: {
     id: "palestras",
     category: "comercial",
-    title: "Palestras",
+    menu: false,
+    title: "Palestras (na agenda Aulões - Palestras)",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
     url: "/comercial/palestras/index.html"
   },
