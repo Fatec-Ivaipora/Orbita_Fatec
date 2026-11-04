@@ -23,6 +23,11 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 const MODULO = 'cobranca';
 const POR_PAGINA = 100;
 const AGENTE_OFF_MIN = 15; // sem sinal do agente (servidor) há mais que isso = fora do ar
+// Ao vivo (04/11/2026): com o agente no servidor do relay, ao abrir a tela os dados são buscados de novo
+// no Edubox se tiverem mais que isso (~20 s). Os horários fixos seguem nos bastidores (foto do começo da
+// semana do Fechamento semanal e dados em dia mesmo sem ninguém abrir).
+const AO_VIVO_MIN = 10;
+let autoAtualizou = false;
 const FAIXAS = [['1-30', 'Até 30 dias', '#edc24e'], ['31-60', '31 a 60 dias', '#e79a39'], ['61-90', '61 a 90 dias', '#d8542e'], ['90+', 'Mais de 90 dias', '#b12f28']];
 const TIPOS = {
   whatsapp: ['💬', 'WhatsApp'], ligacao: ['📞', 'Ligação'], email: ['✉️', 'E-mail'], contato: ['🙋', 'Contato / atendimento'],
@@ -240,6 +245,8 @@ async function carregarPainel() {
     painel = await apiFetch('/cobranca/edubox/painel');
     consultoria = null;   // recarrega a visão consultoria junto (depois do "Atualizar agora")
     renderStatus(painel.status || {});
+    atualizarSeVelho(painel.status || {});
+    carregarConferencia();
     if (painel.vazio) {
       document.getElementById('faixas').innerHTML = '<div class="tabela-msg">Ainda não houve atualização do Edubox. Clique em "Atualizar agora".</div>';
       return;
@@ -337,19 +344,32 @@ function renderStatus(st) {
   } else partes.push('Ainda sem atualização do Edubox');
   const vivo = st.agenteVivoEm && (Date.now() - new Date(st.agenteVivoEm).getTime()) < AGENTE_OFF_MIN * 60000;
   partes.push(vivo
-    ? `<span class="cb-pill ok">PC de atualização ligado</span>`
+    ? `<span class="cb-pill ok" title="O serviço que busca no Edubox roda no servidor do relay (DigitalOcean). Ao abrir a tela, se os dados tiverem mais de ${AO_VIVO_MIN} min, ele busca de novo sozinho.">🟢 Ao vivo com o Edubox</span>`
     : `<span class="cb-pill off" title="O serviço que busca no Edubox roda no servidor do relay (DigitalOcean). Fora do ar, não há atualização automática nem pelo botão.">Atualização automática fora do ar${st.agenteVivoEm ? ` desde ${fmtDataHora(st.agenteVivoEm)}` : ''}</span>`);
   if (st.status === 'erro' && st.erro) partes.push(`<span class="cb-pill off">Última tentativa falhou: ${esc(st.erro)}</span>`);
   el.innerHTML = partes.join(' · ');
 }
 
-async function atualizarAgora() {
+// Uma vez por abertura da tela: dados com mais de AO_VIVO_MIN minutos e serviço no ar -> busca de novo.
+// Se alguém já está atualizando, só acompanha (não pede de novo).
+async function atualizarSeVelho(st) {
+  if (autoAtualizou || aguardando) return;
+  const velho = st.status === 'rodando' || !st.ultimaAtualizacao || (Date.now() - new Date(st.ultimaAtualizacao).getTime()) > AO_VIVO_MIN * 60000;
+  if (!velho) return;           // em dia: nem pergunta ao servidor
+  autoAtualizou = true;
+  try {
+    const r = await apiFetch('/cobranca/edubox/ao-vivo');   // o servidor decide se busca de novo
+    if (r.acompanhar) atualizarAgora({ auto: true, jaRodando: r.acompanhar });
+  } catch (e) { /* sem ao vivo agora: a tela segue com os dados que já tem */ }
+}
+
+async function atualizarAgora(opcoes = {}) {
   const btn = document.getElementById('btn-atualizar');
   if (aguardando) return;
   btn.disabled = true;
   document.getElementById('btn-atualizar-texto').textContent = 'Atualizando...';
   try {
-    const { pedidoEm } = await apiFetch('/cobranca/edubox/atualizar', { method: 'POST' });
+    const { pedidoEm } = opcoes.jaRodando ? { pedidoEm: opcoes.jaRodando } : await apiFetch('/cobranca/edubox/atualizar', { method: 'POST' });
     renderStatus({ ...(painel?.status || {}), status: 'rodando' });
     const limite = Date.now() + 120000;
     const fim = (msg, tipo) => {
@@ -362,7 +382,7 @@ async function atualizarAgora() {
       try {
         const st = await apiFetch('/cobranca/edubox/status');
         if (st.ultimaAtualizacao && st.ultimaAtualizacao > pedidoEm && st.status !== 'rodando') {
-          fim('Atualizado com os dados do Edubox.');
+          fim(opcoes.auto ? 'Dados atualizados agora com o Edubox.' : 'Atualizado com os dados do Edubox.');
           Object.keys(listas).forEach(k => delete listas[k]);
           semanaDados = null;
           semanasDados = null;
@@ -383,6 +403,63 @@ async function atualizarAgora() {
     document.getElementById('btn-atualizar-texto').textContent = 'Atualizar agora';
     showToast(err.message, 'error');
   }
+}
+
+// ---------- CONFERÊNCIA AUTOMÁTICA COM O EDUBOX ----------
+// Depois de cada atualização o servidor compara a lista da Cobrança com o Edubox (pelo relay) e guarda o
+// resultado. Aqui só mostramos o selo (✅ bate / ⚠️ N diferenças) e, ao clicar, o que difere.
+let conferencia = null;
+async function carregarConferencia() {
+  const el = document.getElementById('cb-conf');
+  try {
+    conferencia = await apiFetch('/cobranca/edubox/conferencia');
+  } catch (e) {
+    el.classList.remove('hidden');
+    const m = String(e.message || '');
+    const motivo = /não configurad/i.test(m) ? 'falta configurar o acesso ao relay neste servidor'
+      : /rota|404|não autorizado|nao autorizado/i.test(m) ? 'a consulta de conferência ainda não está instalada no relay'
+      : /relay|502|tempo|timeout|abort/i.test(m) ? 'o relay do Edubox não respondeu agora — tenta de novo na próxima atualização'
+      : m;
+    el.innerHTML = `<span class="cb-pill off" title="${esc(m)}">Conferência com o Edubox indisponível: ${esc(motivo)}</span>`;
+    return;
+  }
+  renderConferencia();
+}
+function renderConferencia() {
+  const el = document.getElementById('cb-conf');
+  const c = conferencia;
+  if (!c || c.semDados || !c.conferidoEm) {
+    el.classList.toggle('hidden', !(c && c.aguardando));
+    el.innerHTML = c && c.aguardando ? '<span class="cb-sub">Conferência com o Edubox: na próxima atualização.</span>' : '';
+    return;
+  }
+  el.classList.remove('hidden');
+  const quando = fmtDataHora(c.conferidoEm);
+  const antiga = c.aguardando ? ' <span class="cb-sub">(da atualização anterior)</span>' : '';
+  el.innerHTML = c.ok
+    ? `<span class="cb-conf-ok" title="Conferido aluno por aluno: nº de parcelas vencidas, total em aberto, parte do advogado e parte para enviar ao advogado">✅ Conferido com o Edubox em ${quando} — bate: ${c.totais.edubox.alunos} alunos, ${c.totais.edubox.parcelas} parcelas, ${brl(c.totais.edubox.total)}</span>${antiga}`
+    : `<button type="button" class="cb-conf-dif" id="btn-conf">⚠️ ${plural(c.nDiferencas, 'aluno diferente', 'alunos diferentes')} do Edubox (conferido em ${quando}) — ver</button>${antiga}`;
+}
+function abrirConferencia() {
+  const c = conferencia;
+  if (!c || !c.conferidoEm) return;
+  const t = c.totais;
+  document.getElementById('conf-sub').textContent = `Atualização de ${fmtDataHora(c.atualizacao)} · parcelas vencidas até ${fmtData(c.ate)} (exclusive) · conferido em ${fmtDataHora(c.conferidoEm)}`;
+  const linha = (rot, o, e) => `<div><span>${rot}</span><b>Órbita ${o}</b><b>Edubox ${e}</b></div>`;
+  document.getElementById('conf-totais').innerHTML =
+    linha('Alunos', t.orbita.alunos, t.edubox.alunos) + linha('Parcelas', t.orbita.parcelas, t.edubox.parcelas) + linha('Em aberto (original)', brl(t.orbita.total), brl(t.edubox.total));
+  const TIPO = { so_edubox: 'Está no Edubox e não na lista', so_orbita: 'Está na lista e não no Edubox (pago/baixado depois?)', valor: 'Valores diferentes' };
+  const par = (o, e) => `${o ?? '—'} · ${e ?? '—'}`;
+  document.getElementById('conf-corpo').innerHTML = (c.diferencas || []).map(d => `
+    <tr>
+      <td>${d.nome ? esc(d.nome) : '<span class="cb-sub">aluno ainda não aparece na lista (chega na próxima atualização)</span>'}<div class="cb-sub">${d.grupo === 'medicina' ? 'Medicina' : 'Graduação'}${d.codcli ? ` · cliente ${d.codcli}` : ''}</div></td>
+      <td>${TIPO[d.tipo] || d.tipo}</td>
+      <td class="num">${par(d.orbita?.n, d.edubox?.n)}</td>
+      <td class="num">${par(d.orbita ? brl(d.orbita.t) : null, d.edubox ? brl(d.edubox.t) : null)}</td>
+      <td class="num">${par(d.orbita ? `${brl(d.orbita.j)} / ${brl(d.orbita.e)}` : null, d.edubox ? `${brl(d.edubox.j)} / ${brl(d.edubox.e)}` : null)}</td>
+    </tr>`).join('') + (c.nDiferencas > (c.diferencas || []).length ? `<tr><td colspan="5" class="tabela-msg">… e mais ${c.nDiferencas - c.diferencas.length}</td></tr>` : '')
+    || '<tr><td colspan="5" class="tabela-msg">Nenhuma diferença.</td></tr>';
+  document.getElementById('modal-conf').classList.remove('hidden');
 }
 
 // ---------- PAINEL ----------
@@ -1555,6 +1632,10 @@ function recortarAluno(a, modo, f) {
   return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, apVis: Math.round(totalAP * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: ehModoSemCobranca(modo), modoEnviar: modo === 'enviar' };
 }
 
+function bloqueioDe(a) {
+  return listas[grupo]?.bloqueios?.[a.chave] || null;
+}
+
 function situacaoCobranca(a) {
   const c = listas[grupo]?.controle?.[a.chave];
   const semana = c && c.em >= inicioSemanaISO();
@@ -1594,6 +1675,10 @@ function filtrarLista() {
     if (busca && !a.nome.toLowerCase().includes(busca) && !(buscaDig.length >= 3 && a.cpf.includes(buscaDig))) continue;
     const { c, semana } = situacaoCobranca(a);
     if (adv) { filtrados.push(a); continue; }
+    const bloq = !!bloqueioDe(a);
+    if (ctl === 'bloqueado' && !bloq) continue;
+    // quem está como "Não cobrar" não entra nas listas de quem falta cobrar
+    if (bloq && ['nao-semana', 'nao-15', 'nao-30', 'nunca'].includes(ctl)) continue;
     if (ctl === 'nao-semana' && semana) continue;
     if (ctl === 'sim-semana' && !semana) continue;
     if (ctl === 'nunca' && c) continue;
@@ -1608,6 +1693,7 @@ function filtrarLista() {
   const total = filtrados.reduce((s, a) => s + a.apVis, 0);
   const totalOrig = filtrados.reduce((s, a) => s + a.totalVis, 0);
   const cobradosSemana = filtrados.filter(a => situacaoCobranca(a).semana).length;
+  const bloqueadosN = filtrados.filter(a => bloqueioDe(a) && !situacaoCobranca(a).semana).length;
   if (lado === 'enviar') {
     document.getElementById('l-contadores').innerHTML = `
       <span>📤 <b>${filtrados.length}</b> alunos desistentes/trancados/cancelados · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)})</small></span>
@@ -1629,7 +1715,8 @@ function filtrarLista() {
   document.getElementById('l-contadores').innerHTML = `
     <span><b>${filtrados.length}</b> alunos com atraso · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)} + juros e multa)</small></span>
     <span>✅ Cobrados nesta semana: <b>${cobradosSemana}</b></span>
-    <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana}</b></span>
+    <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana - bloqueadosN}</b></span>
+    ${filtrados.some(a => bloqueioDe(a)) ? `<span class="cb-bloq-cont" title="Marcados pelo Financeiro como quem não pode ser cobrado">🚫 Não cobrar: <b>${filtrados.filter(a => bloqueioDe(a)).length}</b></span>` : ''}
     ${filtrados.some(a => !a.celular) ? `<span class="cb-sem-cel-aviso" title="Só cobramos no celular do próprio aluno — atualize o cadastro no Edubox">📵 ${filtrados.filter(a => !a.celular).length} sem celular no Edubox</span>` : ''}
     <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
   renderLista(agoraISO);
@@ -1648,7 +1735,11 @@ function badgeCobranca(a) {
   if (a.modoEnviar) return `<span class="cb-pagto nao">📤 ${esc((a.situacoes || []).filter(s => !['Ativo', 'Concluído', 'Pendente'].includes(s)).join(', ') || 'sem matrícula')}</span><div class="cb-sub">enviar ao advogado</div>`;
   if (a.modoAdv) return badgePagamento(a);
   const { c } = situacaoCobranca(a);
-  let html;
+  const bl = bloqueioDe(a);
+  let html = bl
+    ? `<span class="cb-bloq-selo" title="${esc(`Marcado por ${bl.por || '—'} em ${fmtDataHora(bl.em)}`)}">🚫 NÃO COBRAR</span><div class="cb-sub cb-bloq-motivo">${esc(bl.motivo || '')}</div>`
+    : '';
+  if (bl) return html;
   if (!c) html = '<span class="cb-cobrado nunca">Não cobrado</span>';
   else {
     const d = diasDesde(c.em);
@@ -1678,7 +1769,7 @@ function renderLista() {
   }
   const classeF = { '1-30': 'f1', '31-60': 'f2', '61-90': 'f3', '90+': 'f4' };
   tb.innerHTML = filtrados.slice(0, mostrando).map((a, i) => `
-    <tr class="${a.celular ? '' : 'cb-sem-cel'}">
+    <tr class="${a.celular ? '' : 'cb-sem-cel'} ${!a.modoAdv && bloqueioDe(a) ? 'cb-bloqueado' : ''}">
       <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.modoEnviar ? '<span class="cb-tag-jur">PARA O ADVOGADO — NÃO COBRAR</span>' : a.modoAdv ? `<span class="cb-tag-jur">${a.tipoAdvogado === 'advogado' ? 'ACORDO COM ADVOGADO' : 'DÉBITO JUDICIAL'} — NÃO COBRAR</span>` : a.comAdvogado ? `<span class="cb-tag-acordo" title="${esc((a.planosAdvogado || []).join(', '))} — essas parcelas são do advogado; as da lista são normais">também tem acordo c/ advogado</span>` : ''}
         <div class="cb-sub">${esc(a.cursos.map(nomeCurso).join(' / '))} · ${esc(a.fone || 'sem celular no Edubox')}</div></td>
       <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}" title="dias desde a parcela mais antiga">${a.diasVis} dias de atraso</span>
@@ -1687,7 +1778,7 @@ function renderLista() {
       <td class="num"><b>${brl(a.apVis)}</b><small class="cb-orig">original ${brl(a.totalVis)}</small></td>
       <td>${badgeCobranca(a)}</td>
       <td class="acoes-col">
-        ${podeEditar && !a.modoAdv ? (a.celular
+        ${podeEditar && !a.modoAdv && bloqueioDe(a) ? '<span class="cb-bloq-aviso" title="Abra os Detalhes para liberar a cobrança">🚫 Não cobrar</span>' : podeEditar && !a.modoAdv ? (a.celular
           ? `<button type="button" class="btn-acao zap" data-zap="${i}" title="Enviar pelo WhatsApp pro celular do aluno (cadastro do Edubox)">💬 WhatsApp</button>`
           : '<span class="cb-sem-cel-aviso" title="Só usamos o celular do próprio aluno no Edubox — nunca de pais/responsáveis">📵 Sem celular no Edubox — atualizar o cadastro</span>') : ''}
         <button type="button" class="btn-acao" data-abrir="${i}" title="Parcelas, histórico e registrar ligação/negociação/promessa">📋 Detalhes</button>
@@ -1731,7 +1822,7 @@ function modeloSugerido(a) {
 
 async function abrirZap(i) {
   const a = filtrados[i];
-  if (!a || a.modoAdv || !a.celular) return; // só o celular do próprio aluno (Edubox)
+  if (!a || a.modoAdv || !a.celular || bloqueioDe(a)) return; // só o celular do próprio aluno (Edubox); "Não cobrar" não recebe
   try { await garantirModelos(); } catch (e) { showToast(e.message, 'error'); return; }
   alunoAberto = { ...a, idx: i };
   document.getElementById('zap-sub').innerHTML = `<b>${esc(a.nome)}</b> · ${plural(a.parcelasVis.length, 'parcela', 'parcelas')} · a pagar ${brl(a.apVis)} (original ${brl(a.totalVis)}) · ${a.diasVis} dias de atraso`;
@@ -1780,7 +1871,7 @@ async function enviarZap() {
 
 function proximoNaoCobrado(depoisDe) {
   for (let i = depoisDe + 1; i < filtrados.length; i++) {
-    if (filtrados[i].celular && !filtrados[i].modoAdv && !situacaoCobranca(filtrados[i]).semana) return i;
+    if (filtrados[i].celular && !filtrados[i].modoAdv && !bloqueioDe(filtrados[i]) && !situacaoCobranca(filtrados[i]).semana) return i;
   }
   return -1;
 }
@@ -2076,13 +2167,57 @@ async function abrirAluno(i) {
     `<div><span>${fmtData(p.v)} <small class="cb-sub">(${esc(p.s)})</small>${p.j ? '<span class="cb-tag-jur">JUR</span>' : ''}<small class="cb-plano">${esc(nomesPl[p.pl] || '')}</small></span><b>${brl(aPagarParcela(p.valor, p.v))}<small class="cb-orig">original ${brl(p.valor)}</small></b></div>`).join('') +
     `<div class="total"><span>Total a pagar</span><span>${brl(a.apVis)}<small class="cb-orig">original ${brl(a.totalVis)}</small></span></div>`;
   document.getElementById('form-acao').classList.toggle('hidden', !podeEditar);
-  document.getElementById('ac-tipo').value = 'ligacao';
+  renderBloqueioAluno(a);
+  document.getElementById('ac-tipo').value = bloqueioDe(a) ? 'outro' : 'ligacao';
   document.getElementById('ac-promessa').classList.add('hidden');
   document.getElementById('ac-obs').value = '';
   document.getElementById('ac-data').value = '';
   document.getElementById('ac-valor').value = '';
   document.getElementById('modal-aluno').classList.remove('hidden');
   carregarHistorico(a);
+}
+
+// Caixa "Não cobrar" nos Detalhes do aluno: marcar (com motivo) ou liberar a cobrança.
+function renderBloqueioAluno(a) {
+  const box = document.getElementById('al-bloqueio');
+  if (a.modoAdv) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const bl = bloqueioDe(a);
+  box.classList.toggle('ativo', !!bl);
+  if (bl) {
+    box.innerHTML = `<div class="cb-bloq-titulo">🚫 NÃO COBRAR</div>
+      <div><b>Motivo:</b> ${esc(bl.motivo || '—')}</div>
+      <div class="cb-sub">Marcado por ${esc(bl.por || '—')} em ${fmtDataHora(bl.em)}</div>
+      ${podeEditar ? '<button type="button" class="btn-primary" id="bl-liberar">✅ Liberar cobrança</button>' : ''}`;
+  } else if (podeEditar) {
+    box.innerHTML = `<div class="cb-bloq-linha">
+        <input type="text" id="bl-motivo" maxlength="300" placeholder="Motivo para não cobrar (ex.: negociando com a direção, bolsa em análise...)">
+        <button type="button" class="btn-perigo-suave" id="bl-marcar">🚫 Marcar como não cobrar</button>
+      </div>`;
+  } else box.innerHTML = '';
+}
+
+async function alterarBloqueio(bloquear) {
+  const a = alunoAberto;
+  if (!a) return;
+  const motivo = bloquear ? (document.getElementById('bl-motivo')?.value || '').trim() : '';
+  if (bloquear && !motivo) { showToast('Informe o motivo de não cobrar.', 'error'); document.getElementById('bl-motivo')?.focus(); return; }
+  try {
+    const r = await apiFetch(`/cobranca/edubox/bloqueio/${encodeURIComponent(a.chave)}`, {
+      method: 'PUT', body: JSON.stringify({ bloquear, motivo, nomeAluno: a.nome, grupo })
+    });
+    // vale por CPF: atualiza as duas listas carregadas (Graduação e Medicina)
+    Object.values(listas).forEach(L => {
+      if (!L) return;
+      L.bloqueios = L.bloqueios || {};
+      if (r.bloqueio) L.bloqueios[a.chave] = r.bloqueio; else delete L.bloqueios[a.chave];
+    });
+    renderBloqueioAluno(a);
+    document.getElementById('ac-tipo').value = bloquear ? 'outro' : 'ligacao';
+    carregarHistorico(a);
+    filtrarLista();
+    showToast(bloquear ? 'Marcado como NÃO COBRAR.' : 'Liberado: o aluno volta a poder ser cobrado.');
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 async function carregarHistorico(a) {
@@ -2142,6 +2277,7 @@ async function excluirAcao(id) {
     // recarrega o controle (o "cobrado em" pode ter mudado)
     const L = await apiFetch(`/cobranca/edubox/alunos?grupo=${grupo}`);
     listas[grupo].controle = L.controle;
+    listas[grupo].bloqueios = L.bloqueios || {};
     carregarHistorico(alunoAberto);
     filtrarLista();
     showToast('Ação excluída.');
@@ -2222,7 +2358,7 @@ async function renderSemana() {
   const avisos = [];
   if (iniSemana) { /* conta completa pelo resumo semanal: sem aviso */ }
   else if (!sem.fotoInicio) avisos.push('Não há registro do vencido no começo desta semana (o controle começou a ser gravado em 30/09/2026 ou a atualização automática estava fora do ar). Os recebimentos estão completos.');
-  else if (fotoAtrasada) avisos.push(`O primeiro registro do vencido nesta semana é de ${fmtDataHora(sem.fotoInicio.geradoEm)} (o PC de atualização não rodou antes disso). A conta abaixo parte desse momento; o "Recebido total na semana" e as tabelas mostram a semana inteira.`);
+  else if (fotoAtrasada) avisos.push(`O primeiro registro do vencido nesta semana é de ${fmtDataHora(sem.fotoInicio.geradoEm)} (a atualização automática não rodou antes disso). A conta abaixo parte desse momento; o "Recebido total na semana" e as tabelas mostram a semana inteira.`);
   document.getElementById('s-aviso').innerHTML = avisos.map(t => `<div class="cb-aviso">${esc(t)}</div>`).join('');
 
   const lados = [['financeiro', '💼 Financeiro'], ['juridico', '⚖️ Advogado + Débito judicial']];
@@ -2510,7 +2646,7 @@ function wireEventos() {
     abrirDetalheCobranca(b.dataset.verConta, b.dataset.verExtra);
   });
   document.getElementById('btn-fechar-detalhe-total').addEventListener('click', () => document.getElementById('modal-detalhe-total').classList.add('hidden'));
-  document.getElementById('btn-atualizar').addEventListener('click', atualizarAgora);
+  document.getElementById('btn-atualizar').addEventListener('click', () => atualizarAgora());
   document.getElementById('tb-semestres').addEventListener('click', (e) => {
     const tr = e.target.closest('[data-sem]');
     if (!tr) return;
@@ -2536,6 +2672,13 @@ function wireEventos() {
   let tp;
   document.getElementById('l-plano').addEventListener('input', () => { clearTimeout(tp); tp = setTimeout(() => { mostrando = POR_PAGINA; filtrarLista(); }, 300); });
   document.getElementById('l-mais').addEventListener('click', () => { mostrando += POR_PAGINA; renderLista(); });
+  document.getElementById('al-bloqueio').addEventListener('click', (e) => {
+    if (e.target.closest('#bl-marcar')) alterarBloqueio(true);
+    else if (e.target.closest('#bl-liberar')) alterarBloqueio(false);
+  });
+  document.getElementById('al-bloqueio').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'bl-motivo') { e.preventDefault(); alterarBloqueio(true); }
+  });
   document.getElementById('tb-alunos').addEventListener('click', (e) => {
     const fi = e.target.closest('[data-ficha]');
     if (fi) { const x = filtrados[Number(fi.dataset.ficha)]; if (x) { alunoAberto = { ...x, idx: Number(fi.dataset.ficha) }; imprimirFicha(); } return; }
@@ -2561,6 +2704,8 @@ function wireEventos() {
 
   // detalhe do aluno
   document.getElementById('al-fechar').addEventListener('click', () => document.getElementById('modal-aluno').classList.add('hidden'));
+  document.getElementById('cb-conf').addEventListener('click', (e) => { if (e.target.closest('#btn-conf')) abrirConferencia(); });
+  document.getElementById('conf-fechar').addEventListener('click', () => document.getElementById('modal-conf').classList.add('hidden'));
   document.getElementById('al-imprimir').addEventListener('click', imprimirFicha);
   document.getElementById('ac-tipo').addEventListener('change', (e) => {
     document.getElementById('ac-promessa').classList.toggle('hidden', e.target.value !== 'promessa_pagamento');

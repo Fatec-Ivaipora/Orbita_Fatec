@@ -474,3 +474,206 @@ body.cb-rel .cb-rank-link:hover > span { color: var(--rel-azul); text-decoration
 .cb-pan-div .barra i.apagada { opacity: 0.25; }
 .cb-pan-div .foco { margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px dashed #e2e8f0; font-size: 0.82rem; color: #475569; }
 .cb-pan-div .foco b { color: #1B3A4B; }
+
+/* "Não cobrar" (04/11/2026): aluno que o Financeiro marcou para não ser cobrado */
+.cb-lista tr.cb-bloqueado td { background: #fee2e2; border-bottom-color: #fca5a5; }
+.cb-lista tr.cb-bloqueado:hover td { background: #fecaca; }
+.cb-lista tr.cb-bloqueado .cb-aluno-nome { color: #b91c1c; font-weight: 800; }
+.cb-lista tr.cb-bloqueado td:first-child { box-shadow: inset 6px 0 0 #dc2626; }
+.cb-bloq-selo { display: inline-block; background: #dc2626; color: #fff; border-radius: 6px; padding: 0.15rem 0.55rem; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; }
+.cb-bloq-motivo { max-width: 220px; white-space: normal; color: #991b1b; }
+.cb-bloq-aviso { display: inline-block; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 8px; padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 700; }
+.cb-bloq-cont { color: #b91c1c; }
+.cb-bloq-box { border: 1px dashed #cbd5e1; border-radius: 10px; padding: 0.6rem 0.8rem; margin: 0.25rem 0 0.9rem; }
+.cb-bloq-box.ativo { border: 2px solid #dc2626; background: #fef2f2; display: flex; flex-direction: column; gap: 0.25rem; }
+.cb-bloq-box.ativo .btn-primary { align-self: flex-start; margin-top: 0.35rem; }
+.cb-bloq-titulo { color: #b91c1c; font-weight: 800; font-size: 1rem; }
+.cb-bloq-linha { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cb-bloq-linha input { flex: 1 1 260px; padding: 0.45rem 0.6rem; border: 1px solid #d5dce6; border-radius: 8px; font: inherit; }
+.btn-perigo-suave { background: #fff; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 8px; padding: 0.45rem 0.8rem; font-weight: 700; cursor: pointer; }
+.btn-perigo-suave:hover { background: #fee2e2; }
+
+/* Conferência automática com o Edubox (04/11/2026) */
+.cb-conf { margin: -0.25rem 0 0.75rem; font-size: 0.82rem; }
+.cb-conf-ok { display: inline-block; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 8px; padding: 0.25rem 0.6rem; font-weight: 700; }
+.cb-conf-dif { background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 8px; padding: 0.3rem 0.7rem; font-weight: 800; cursor: pointer; font: inherit; font-size: 0.82rem; }
+.cb-conf-dif:hover { background: #ffedd5; }
+.cb-conf-totais { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.cb-conf-totais > div { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.1rem; }
+.cb-conf-totais span { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); }
+.cb-conf-tabela td.num, .cb-conf-tabela th.num { text-align: right; white-space: nowrap; }
+
+/* ==========================================================================
+   Lista de cobrança — visual (04/11/2026). Fila de trabalho do Financeiro no padrão
+   relatório (Fiasini): trilho de atraso à esquerda de cada aluno (amarelo → vinho),
+   valor a pagar como número principal, WhatsApp como ação principal. Só CSS/estrutura.
+   ========================================================================== */
+body.cb-rel #visao-lista {
+  --lc-f1: #e3b21c; --lc-f2: #e8791e; --lc-f3: #c8392f; --lc-f4: #7a1a22;
+  --lc-zap: #128a46; --lc-zap-escuro: #0d6e37;
+}
+
+/* filtros: um painel, duas linhas */
+body.cb-rel #visao-lista .cb-filtros {
+  display: flex; flex-direction: column; gap: 0.6rem; align-items: stretch;
+  background: var(--rel-sup); border: 1px solid var(--rel-linha); border-radius: 14px;
+  padding: 0.85rem 1rem; box-shadow: var(--rel-sombra); margin-bottom: 0.9rem;
+}
+body.cb-rel #visao-lista .cb-filtros-linha { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; }
+body.cb-rel #visao-lista .cb-filtros-principal .search-wrap { flex: 1 1 260px; min-width: 0; }
+body.cb-rel #visao-lista .cb-filtros-principal .search-input { width: 100%; height: 40px; font-size: 0.95rem; border-radius: 10px; border-color: var(--rel-linha); }
+body.cb-rel #visao-lista .cb-filtros-principal .select-filter { height: 40px; border-radius: 10px; border-color: var(--rel-linha); font-weight: 600; color: var(--rel-tinta); font-family: var(--rel-texto); }
+body.cb-rel #visao-lista .cb-filtros-refinar { padding-top: 0.6rem; border-top: 1px dashed var(--rel-linha); }
+body.cb-rel #visao-lista .cb-filtros-refinar .select-filter,
+body.cb-rel #visao-lista .cb-filtros-refinar .cb-filtro-data { font-size: 0.8rem; color: var(--rel-tinta2); }
+body.cb-rel #visao-lista .cb-filtros-refinar .select-filter { height: 34px; border-radius: 8px; border-color: var(--rel-linha); background: var(--rel-sup2); font-family: var(--rel-texto); }
+body.cb-rel #visao-lista .cb-filtro-data { display: inline-flex; align-items: center; gap: 0.35rem; }
+body.cb-rel #visao-lista .select-filter:focus-visible, body.cb-rel #visao-lista .search-input:focus-visible {
+  outline: 2px solid var(--rel-azul); outline-offset: 1px;
+}
+
+/* resumo da fila: o primeiro (alunos + a pagar) manda; o resto é apoio */
+body.cb-rel #visao-lista .cb-contadores { align-items: center; gap: 0.45rem 0.6rem; margin: 0 0 0.9rem; }
+body.cb-rel #visao-lista .cb-contadores span { background: var(--rel-sup); border: 1px solid var(--rel-linha); border-radius: 999px; padding: 0.3rem 0.8rem; color: var(--rel-tinta2); font-size: 0.82rem; }
+body.cb-rel #visao-lista .cb-contadores span:first-child {
+  background: var(--rel-marca); border-color: var(--rel-marca); color: #c9d4e6; border-radius: 12px; padding: 0.55rem 1rem; font-size: 0.85rem;
+}
+body.cb-rel #visao-lista .cb-contadores span:first-child b { color: #fff; font-family: var(--rel-display); font-size: 1.15rem; font-weight: 800; }
+body.cb-rel #visao-lista .cb-contadores span:first-child small { color: #9fb0cb; }
+body.cb-rel #visao-lista .cb-contadores span.cb-sub { background: transparent; border: none; padding-left: 0; margin-left: auto; color: var(--rel-mudo); }
+
+/* tabela */
+body.cb-rel #visao-lista .cb-lista-card { border-radius: 14px; box-shadow: var(--rel-sombra); border: 1px solid var(--rel-linha); overflow: hidden; }
+body.cb-rel #visao-lista .cb-lista td { padding-top: 0.8rem; padding-bottom: 0.8rem; }
+body.cb-rel #visao-lista .cb-lista td:first-child { padding-left: 1.1rem; box-shadow: inset 4px 0 0 var(--rel-linha); }
+/* trilho de atraso: cor da faixa da parcela mais antiga */
+body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f1) td:first-child { box-shadow: inset 4px 0 0 var(--lc-f1); }
+body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f2) td:first-child { box-shadow: inset 4px 0 0 var(--lc-f2); }
+body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f3) td:first-child { box-shadow: inset 4px 0 0 var(--lc-f3); }
+body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f4) td:first-child { box-shadow: inset 4px 0 0 var(--lc-f4); }
+/* "Não cobrar" continua mandando (mais grosso e vermelho) */
+body.cb-rel #visao-lista .cb-lista tr.cb-bloqueado td:first-child,
+body.cb-rel #visao-lista .cb-lista tr.cb-bloqueado:has(.cb-atraso) td:first-child { box-shadow: inset 6px 0 0 #dc2626; }
+
+body.cb-rel #visao-lista .cb-aluno-nome { font-family: var(--rel-display); font-size: 0.98rem; font-weight: 700; color: var(--rel-marca); letter-spacing: -0.005em; }
+body.cb-rel #visao-lista .cb-aluno-nome:hover { color: var(--rel-azul); }
+body.cb-rel #visao-lista .cb-lista .cb-sub { color: var(--rel-mudo); margin-top: 0.15rem; }
+body.cb-rel #visao-lista .cb-atraso { border-radius: 999px; padding: 0.08rem 0.55rem; font-weight: 700; }
+body.cb-rel #visao-lista .cb-atraso.f1 { background: #fdf3cf; color: #7a5a00; }
+body.cb-rel #visao-lista .cb-atraso.f2 { background: #fde6d2; color: #9a4a08; }
+body.cb-rel #visao-lista .cb-atraso.f3 { background: var(--rel-crit-suave); color: #9b2a21; }
+body.cb-rel #visao-lista .cb-atraso.f4 { background: var(--lc-f4); color: #fff; }
+body.cb-rel #visao-lista .cb-plano { display: block; margin-top: 0.2rem; font-size: 0.72rem; color: var(--rel-tinta2); }
+
+/* valor a pagar: o número principal da linha */
+body.cb-rel #visao-lista .cb-lista td.num b { display: block; font-family: var(--rel-display); font-size: 1.12rem; font-weight: 800; color: var(--rel-tinta); }
+body.cb-rel #visao-lista .cb-lista td.num .cb-orig { display: block; font-size: 0.72rem; color: var(--rel-mudo); font-weight: 500; }
+
+/* ações: WhatsApp é a principal; o resto, discreto */
+body.cb-rel #visao-lista .acoes-col { white-space: nowrap; }
+body.cb-rel #visao-lista .acoes-col .btn-acao { border-radius: 8px; border-color: var(--rel-linha); color: var(--rel-tinta2); font-family: var(--rel-texto); font-weight: 600; }
+body.cb-rel #visao-lista .acoes-col .btn-acao:hover { border-color: var(--rel-marca); color: var(--rel-marca); background: var(--rel-marca-suave); }
+body.cb-rel #visao-lista .acoes-col .btn-acao.zap { background: var(--lc-zap); border-color: var(--lc-zap); color: #fff; font-weight: 700; }
+body.cb-rel #visao-lista .acoes-col .btn-acao.zap:hover { background: var(--lc-zap-escuro); border-color: var(--lc-zap-escuro); color: #fff; }
+body.cb-rel #visao-lista .acoes-col .btn-acao:focus-visible { outline: 2px solid var(--rel-azul); outline-offset: 2px; }
+body.cb-rel #visao-lista .cb-mais .btn-secondary { border-radius: 10px; font-weight: 700; color: var(--rel-marca); border-color: var(--rel-linha); }
+
+/* celular: cada aluno vira um cartão */
+@media (max-width: 760px) {
+  body.cb-rel #visao-lista .cb-filtros-principal .select-filter,
+  body.cb-rel #visao-lista .cb-filtros-refinar .select-filter,
+  body.cb-rel #visao-lista .cb-filtro-data { flex: 1 1 100%; width: 100%; }
+  body.cb-rel #visao-lista .cb-filtro-data input { flex: 1; min-width: 0; }
+  body.cb-rel #visao-lista .cb-contadores span.cb-sub { margin-left: 0; }
+  body.cb-rel #visao-lista .cb-lista-card { background: transparent; border: none; box-shadow: none; overflow: visible; }
+  body.cb-rel #visao-lista .cb-lista, body.cb-rel #visao-lista .cb-lista tbody { display: block; }
+  body.cb-rel #visao-lista .cb-lista thead { display: none; }
+  body.cb-rel #visao-lista .cb-lista tr {
+    display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 0.75rem; margin-bottom: 0.7rem;
+    background: var(--rel-sup); border: 1px solid var(--rel-linha); border-radius: 12px; box-shadow: var(--rel-sombra);
+    padding: 0.8rem 0.9rem 0.8rem 1.1rem; position: relative; overflow: hidden;
+  }
+  body.cb-rel #visao-lista .cb-lista td { display: block; border: none; padding: 0; box-shadow: none !important; background: transparent !important; }
+  body.cb-rel #visao-lista .cb-lista td:nth-child(1) { grid-column: 1; }
+  body.cb-rel #visao-lista .cb-lista td:nth-child(3) { grid-column: 2; grid-row: 1; text-align: right; }
+  body.cb-rel #visao-lista .cb-lista td:nth-child(2), body.cb-rel #visao-lista .cb-lista td:nth-child(4), body.cb-rel #visao-lista .cb-lista td:nth-child(5) { grid-column: 1 / -1; }
+  body.cb-rel #visao-lista .cb-lista td.acoes-col { white-space: normal; display: flex; flex-wrap: wrap; gap: 0.4rem; padding-top: 0.35rem; }
+  body.cb-rel #visao-lista .cb-lista td.acoes-col .btn-acao.zap { flex: 1 1 100%; justify-content: center; padding: 0.55rem; }
+  /* trilho de atraso na lateral do cartão */
+  body.cb-rel #visao-lista .cb-lista tr::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--rel-linha); }
+  body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f1)::before { background: var(--lc-f1); }
+  body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f2)::before { background: var(--lc-f2); }
+  body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f3)::before { background: var(--lc-f3); }
+  body.cb-rel #visao-lista .cb-lista tr:has(.cb-atraso.f4)::before { background: var(--lc-f4); }
+  body.cb-rel #visao-lista .cb-lista tr.cb-bloqueado { background: #fee2e2; border-color: #fca5a5; }
+  body.cb-rel #visao-lista .cb-lista tr.cb-bloqueado::before,
+  body.cb-rel #visao-lista .cb-lista tr.cb-bloqueado:has(.cb-atraso)::before { width: 6px; background: #dc2626; }
+  body.cb-rel #visao-lista .cb-lista tr:has(.tabela-msg) { display: block; padding: 1rem; }
+  body.cb-rel #visao-lista .cb-lista tr:has(.tabela-msg)::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { body.cb-rel #visao-lista * { transition: none !important; } }
+
+/* ==========================================================================
+   Janelas da Cobrança e barra de status — visual (04/11/2026), mesmo padrão relatório.
+   Só CSS: Detalhes do aluno, WhatsApp, Conferência e demais modais desta tela.
+   ========================================================================== */
+body.cb-rel .modal-content {
+  border-radius: 16px; border: 1px solid var(--rel-linha); box-shadow: 0 20px 60px rgba(13,27,51,.25);
+  font-family: var(--rel-texto); color: var(--rel-tinta);
+}
+body.cb-rel .modal-content h2 { font-family: var(--rel-display); color: var(--rel-marca); font-size: 1.3rem; margin-bottom: 0.2rem; }
+body.cb-rel .modal-subtitle { color: var(--rel-tinta2); font-size: 0.85rem; line-height: 1.5; }
+body.cb-rel .modal-content label { font-weight: 600; color: var(--rel-tinta2); font-size: 0.8rem; }
+body.cb-rel .modal-content input, body.cb-rel .modal-content select, body.cb-rel .modal-content textarea {
+  border-radius: 9px; border-color: var(--rel-linha); font-family: var(--rel-texto); color: var(--rel-tinta);
+}
+body.cb-rel .modal-content input:focus-visible, body.cb-rel .modal-content select:focus-visible, body.cb-rel .modal-content textarea:focus-visible {
+  outline: 2px solid var(--rel-azul); outline-offset: 1px; border-color: var(--rel-azul);
+}
+body.cb-rel .modal-content #zap-texto { line-height: 1.5; background: var(--rel-sup2); }
+/* ações: a principal em cor da marca, a do WhatsApp em verde cheio, secundárias discretas */
+body.cb-rel .modal-content .btn-primary {
+  background: var(--rel-marca); border-color: var(--rel-marca); color: #fff; border-radius: 10px; font-weight: 700; box-shadow: none;
+}
+body.cb-rel .modal-content .btn-primary:hover { background: #0b1d38; }
+body.cb-rel .modal-content .btn-primary.cb-btn-zap { background: #128a46 !important; border-color: #128a46 !important; padding-left: 1.2rem; padding-right: 1.2rem; }
+body.cb-rel .modal-content .btn-primary.cb-btn-zap:hover { background: #0d6e37 !important; }
+body.cb-rel .modal-content .btn-secondary { border-radius: 10px; border-color: var(--rel-linha); color: var(--rel-tinta2); font-weight: 600; }
+body.cb-rel .modal-content .btn-secondary:hover { border-color: var(--rel-marca); color: var(--rel-marca); }
+body.cb-rel .modal-content button:focus-visible { outline: 2px solid var(--rel-azul); outline-offset: 2px; }
+/* Detalhes: parcelas e histórico como blocos separados */
+body.cb-rel .cb-parcelas, body.cb-rel .cb-historico { border: 1px solid var(--rel-linha); border-radius: 12px; background: var(--rel-sup); }
+body.cb-rel .cb-historico { padding: 0 0.8rem; }
+body.cb-rel .cb-parcelas div { border-bottom-color: var(--rel-linha2); }
+body.cb-rel .cb-parcelas b { font-family: var(--rel-display); font-variant-numeric: tabular-nums; }
+body.cb-rel .cb-parcelas .total { background: var(--rel-marca); color: #fff; }
+body.cb-rel .cb-parcelas .total .cb-orig { color: #c9d4e6; }
+body.cb-rel .cb-zap-ok { background: #e7f6ee; color: #0d6e37; border: 1px solid #b4e2c6; }
+/* barra de status e selo da conferência */
+body.cb-rel .cb-status { border-color: var(--rel-linha); border-radius: 12px; box-shadow: var(--rel-sombra); color: var(--rel-tinta2); font-family: var(--rel-texto); }
+body.cb-rel .cb-status strong { color: var(--rel-tinta); }
+body.cb-rel .cb-conf-ok, body.cb-rel .cb-conf-dif { border-radius: 10px; }
+@media (max-width: 760px) {
+  body.cb-rel .modal-content { border-radius: 14px; }
+  body.cb-rel .modal-actions-split { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  body.cb-rel .modal-actions-split > div { margin-left: 0 !important; flex-wrap: wrap; }
+  body.cb-rel .modal-actions-split .btn-primary { flex: 1 1 100%; }
+}
+
+/* ajustes da revisão (04/11/2026): texto dos filtros cortado e página mais larga que o celular */
+body.cb-rel #visao-lista .cb-filtros .select-filter { padding-top: 0; padding-bottom: 0; line-height: 1.2; }
+body.cb-rel #visao-lista .cb-filtros .search-input { padding-top: 0; padding-bottom: 0; }
+@media (max-width: 760px) {
+  body.cb-rel .layout-content { min-width: 0; overflow-x: clip; }
+  body.cb-rel .cb-visoes { display: flex; flex-wrap: wrap; max-width: 100%; }
+  body.cb-rel .cb-visoes button { flex: 1 1 auto; }
+  body.cb-rel .cb-barra .select-filter, body.cb-rel #visao-lista .select-filter { min-width: 0; }
+  body.cb-rel .search-wrap { min-width: 0; }
+  body.cb-rel .page-header p { overflow-wrap: anywhere; }
+  body.cb-rel #visao-lista .cb-filtro-data { flex-wrap: wrap; }
+  body.cb-rel #visao-lista .cb-lista tr { grid-template-columns: minmax(0, 1fr) auto; }
+  body.cb-rel #visao-lista .cb-lista td { min-width: 0; overflow-wrap: anywhere; }
+  body.cb-rel .cb-conf-ok { display: block; }
+  body.cb-rel #visao-lista .cb-lista-card, body.cb-rel #visao-lista .cb-lista-card .tabela-wrap { padding: 0; margin: 0; overflow: visible; }
+  body.cb-rel #visao-lista .cb-lista td:first-child { padding-left: 0; }
+}

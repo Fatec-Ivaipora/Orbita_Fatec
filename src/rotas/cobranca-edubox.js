@@ -9,6 +9,8 @@ const express = require('express');
 const router = express.Router();
 const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
+const { relay } = require('../utils/edubox-relay');
+const crypto = require('crypto');
 
 const checkPermission = verifyToken.requireModulePermission('cobranca');
 
@@ -131,11 +133,111 @@ router.get('/consultoria', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// "Ao vivo" (04/11/2026): a tela chama ao abrir. Quem só visualiza (nível 2) também pode — o servidor é
+// que decide: só pede nova busca no Edubox se os dados tiverem mais de AO_VIVO_MIN, se não houver
+// atualização rodando e se ninguém pediu no último minuto (várias pessoas abrindo = 1 busca só).
+const AO_VIVO_MIN = 10;
+router.get('/ao-vivo', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const st = (await DOC_SYNC.get()).data() || {};
+        const agora = Date.now();
+        const idade = (iso) => iso ? agora - new Date(iso).getTime() : Infinity;
+        if (st.status === 'rodando' && idade(st.rodandoDesde) < 5 * 60000) return res.json({ acompanhar: st.rodandoDesde });
+        if (idade(st.pedidoEm) < 60000) return res.json({ acompanhar: st.pedidoEm });
+        if (idade(st.agenteVivoEm) > 15 * 60000) return res.json({ foraDoAr: true });
+        if (idade(st.ultimaAtualizacao) <= AO_VIVO_MIN * 60000) return res.json({ emDia: true });
+        const pedidoEm = new Date().toISOString();
+        await DOC_SYNC.set({ pedidoEm, pedidoPor: req.user.uid, pedidoPorNome: `${nomeUsuario(req)} (ao abrir a tela)` }, { merge: true });
+        res.json({ acompanhar: pedidoEm });
+    } catch (err) {
+        console.error('[cobranca-edubox] ao-vivo:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ---------- CONFERÊNCIA AUTOMÁTICA COM O EDUBOX (04/11/2026) ----------
+// Compara a lista da Cobrança (gravada pelo agente) com o Edubox AGORA, pelo relay
+// (/cobranca-conferencia/vencidas): por aluno (CPF, via md5) e grupo, nº de parcelas vencidas, total em aberto,
+// parte jurídica e parte "para enviar ao advogado". Só roda logo depois de uma atualização (dados com até
+// CONF_JANELA_MIN); o resultado fica em cobranca_edubox/conferencia, ligado à atualização conferida —
+// a mesma atualização não é conferida duas vezes (abrir a tela de novo só lê o resultado guardado).
+const DOC_CONFERENCIA = db.collection('cobranca_edubox').doc('conferencia');
+const CONF_JANELA_MIN = 15;
+const dataBrasilia = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // AAAA-MM-DD
+
+function somarLista(alunos, grupo) {
+    const mapa = {};
+    for (const a of alunos || []) {
+        // mesma chave do relay: md5 da chave do aluno (CPF ou "cli<código>")
+        const k = `${crypto.createHash('md5').update(String(a.chave)).digest('hex')}|${grupo === 'medicina' ? 1 : 0}`;
+        const x = (mapa[k] = mapa[k] || { codcli: a.codcli, grupo, nome: a.nome, n: 0, t: 0, j: 0, e: 0 });
+        for (const p of a.parcelas || []) {
+            x.n += 1; x.t += p.valor;
+            if (p.j) x.j += p.valor;
+            if (p.e) x.e += p.valor;
+        }
+    }
+    return mapa;
+}
+
+async function conferir(st) {
+    const ate = dataBrasilia(st.ultimaAtualizacao);
+    const [r, gSnap, mSnap] = await Promise.all([
+        relay(`/cobranca-conferencia/vencidas?ate=${ate}`, { timeoutMs: 45000 }),
+        db.collection('cobranca_edubox_alunos').doc('graduacao').get(),
+        db.collection('cobranca_edubox_alunos').doc('medicina').get()
+    ]);
+    const nossa = { ...somarLista(gSnap.exists ? gSnap.data().alunos : [], 'graduacao'), ...somarLista(mSnap.exists ? mSnap.data().alunos : [], 'medicina') };
+    const edubox = {};
+    for (const c of r.clientes || []) edubox[`${c.c}|${c.m ? 1 : 0}`] = c;
+    const dif = [];
+    const tot = { edubox: { alunos: 0, parcelas: 0, total: 0 }, orbita: { alunos: 0, parcelas: 0, total: 0 } };
+    const cent = (v) => Math.round((Number(v) || 0) * 100);
+    for (const k of new Set([...Object.keys(nossa), ...Object.keys(edubox)])) {
+        const o = nossa[k], e = edubox[k];
+        if (e) { tot.edubox.alunos++; tot.edubox.parcelas += e.n; tot.edubox.total += e.t; }
+        if (o) { tot.orbita.alunos++; tot.orbita.parcelas += o.n; tot.orbita.total += o.t; }
+        const iguais = o && e && o.n === e.n && cent(o.t) === cent(e.t) && cent(o.j) === cent(e.j) && cent(o.e) === cent(e.e);
+        if (iguais) continue;
+        dif.push({
+            codcli: o ? o.codcli : null, grupo: k.endsWith('|1') ? 'medicina' : 'graduacao', nome: o ? o.nome : '',
+            tipo: !o ? 'so_edubox' : !e ? 'so_orbita' : 'valor',
+            orbita: o ? { n: o.n, t: Math.round(o.t * 100) / 100, j: Math.round(o.j * 100) / 100, e: Math.round(o.e * 100) / 100 } : null,
+            edubox: e ? { n: e.n, t: e.t, j: e.j, e: e.e } : null
+        });
+    }
+    tot.edubox.total = Math.round(tot.edubox.total * 100) / 100;
+    tot.orbita.total = Math.round(tot.orbita.total * 100) / 100;
+    dif.sort((x, y) => Math.abs((y.edubox?.t || 0) - (y.orbita?.t || 0)) - Math.abs((x.edubox?.t || 0) - (x.orbita?.t || 0)));
+    const resultado = {
+        conferidoEm: new Date().toISOString(), atualizacao: st.ultimaAtualizacao, ate,
+        ok: dif.length === 0, totais: tot, diferencas: dif.slice(0, 200), nDiferencas: dif.length
+    };
+    await DOC_CONFERENCIA.set(resultado);
+    return resultado;
+}
+
+let conferenciaEmAndamento = null;   // várias pessoas abrindo juntas = 1 conferência só
+router.get('/conferencia', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const [st, salvo] = await Promise.all([DOC_SYNC.get().then(d => d.data() || {}), DOC_CONFERENCIA.get().then(d => d.exists ? d.data() : null)]);
+        if (!st.ultimaAtualizacao) return res.json({ semDados: true });
+        if (salvo && salvo.atualizacao === st.ultimaAtualizacao) return res.json(salvo);           // já conferida
+        const idadeMin = (Date.now() - new Date(st.ultimaAtualizacao).getTime()) / 60000;
+        if (st.status === 'rodando' || idadeMin > CONF_JANELA_MIN) return res.json({ ...(salvo || {}), aguardando: true }); // confere na próxima atualização
+        if (!conferenciaEmAndamento) conferenciaEmAndamento = conferir(st).finally(() => { conferenciaEmAndamento = null; });
+        res.json(await conferenciaEmAndamento);
+    } catch (err) {
+        console.error('[cobranca-edubox] conferência:', err);
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
 // ---------- LISTA DE COBRANÇA ----------
 // Primeiro acesso: monta o controle a partir do histórico que já existia.
-async function lerControle() {
+async function lerControle(comBloqueios = false) {
     const d = await DOC_CONTROLE.get();
-    if (d.exists) return d.data().alunos || {};
+    if (d.exists) return comBloqueios ? { alunos: d.data().alunos || {}, bloqueios: d.data().bloqueios || {} } : (d.data().alunos || {});
     const snap = await db.collection(COL_ACOES).get();
     const alunos = {};
     snap.docs.forEach(doc => {
@@ -149,21 +251,30 @@ async function lerControle() {
         alunos[chave] = atual;
     });
     await DOC_CONTROLE.set({ alunos });
-    return alunos;
+    return comBloqueios ? { alunos, bloqueios: {} } : alunos;
+}
+
+// "Não cobrar" (04/11/2026): o Financeiro marca o aluno que NÃO pode ser cobrado (com motivo) e desmarca
+// quando a situação muda — aí ele volta a poder ser cobrado. Fica em `bloqueios.<chave>` do mesmo doc do
+// controle (campo separado: o recálculo do "cobrado" ao excluir ação não mexe nele). Vale por CPF.
+async function bloqueioDe(chave) {
+    const d = await DOC_CONTROLE.get();
+    return (d.exists && (d.data().bloqueios || {})[chave]) || null;
 }
 
 router.get('/alunos', verifyToken, checkPermission, async (req, res) => {
     try {
         const grupo = req.query.grupo === 'medicina' ? 'medicina' : 'graduacao';
-        const [lista, controle] = await Promise.all([
+        const [lista, ctl] = await Promise.all([
             db.collection('cobranca_edubox_alunos').doc(grupo).get(),
-            lerControle()
+            lerControle(true)
         ]);
         res.json({
             geradoEm: lista.exists ? lista.data().geradoEm : null,
             alunos: lista.exists ? lista.data().alunos : [],
             planos: lista.exists ? (lista.data().planos || []) : [],
-            controle
+            controle: ctl.alunos,
+            bloqueios: ctl.bloqueios
         });
     } catch (err) {
         console.error('[cobranca-edubox] alunos:', err);
@@ -195,6 +306,10 @@ router.post('/acoes', verifyToken, checkPermission, async (req, res) => {
         if (!TIPOS_VALIDOS.includes(tipo)) return res.status(400).json({ error: 'Tipo de ação inválido.' });
         if (tipo === 'promessa_pagamento' && !/^\d{4}-\d{2}-\d{2}$/.test(promessaData || '')) {
             return res.status(400).json({ error: 'Informe a data prometida.' });
+        }
+        if (TIPOS_COBRANCA.includes(tipo)) {
+            const bl = await bloqueioDe(chave);
+            if (bl) return res.status(409).json({ error: `Este aluno está marcado como NÃO COBRAR${bl.motivo ? ` (${bl.motivo})` : ''}. Libere a cobrança antes de registrar.` });
         }
         const agora = new Date().toISOString();
         const doc = {
@@ -231,6 +346,35 @@ router.post('/acoes', verifyToken, checkPermission, async (req, res) => {
         res.status(201).json({ id: ref.id, ...doc, criadoEm: agora });
     } catch (err) {
         console.error('[cobranca-edubox] registrar ação:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Marcar / liberar "Não cobrar". Registra também no histórico do aluno (tipo "outro", não conta como cobrança).
+router.put('/bloqueio/:chave', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const chave = req.params.chave;
+        if (!/^(\d{11}|cli\d+)$/.test(chave)) return res.status(400).json({ error: 'Aluno inválido.' });
+        const bloquear = req.body.bloquear === true;
+        const motivo = (req.body.motivo || '').toString().trim().slice(0, 300);
+        if (bloquear && !motivo) return res.status(400).json({ error: 'Informe o motivo de não cobrar.' });
+        await lerControle(); // garante que o doc existe
+        const agora = new Date().toISOString();
+        const bloqueio = bloquear ? { motivo, por: nomeUsuario(req), porUid: req.user.uid, em: agora } : null;
+        await DOC_CONTROLE.update({ [`bloqueios.${chave}`]: bloquear ? bloqueio : admin.firestore.FieldValue.delete() });
+        await db.collection(COL_ACOES).add({
+            chave, cpf: /^\d{11}$/.test(chave) ? chave : '',
+            nomeAluno: (req.body.nomeAluno || '').toString().trim(),
+            grupo: req.body.grupo === 'medicina' ? 'medicina' : 'graduacao',
+            tipo: 'outro', escritorio: '',
+            observacoes: bloquear ? `🚫 Marcado como NÃO COBRAR. Motivo: ${motivo}` : '✅ Liberado para cobrança (saiu do "Não cobrar").',
+            mensagem: '', promessaData: null, promessaValor: null, origem: 'edubox',
+            criadoPor: req.user.uid, criadoPorNome: nomeUsuario(req),
+            criadoEm: admin.firestore.FieldValue.serverTimestamp()
+        });
+        res.json({ chave, bloqueio });
+    } catch (err) {
+        console.error('[cobranca-edubox] bloqueio:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -418,3 +562,4 @@ router.put('/modelos', verifyToken, checkPermission, async (req, res) => {
 });
 
 module.exports = router;
+module.exports._interno = { conferir };
