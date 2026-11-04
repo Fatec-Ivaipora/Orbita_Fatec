@@ -315,3 +315,23 @@
 .rt-btn:disabled { opacity: .6; cursor: default; }
 .rt-btn-maps { background: #1a73e8; border-color: #1a73e8; color: #fff; }
 @media (max-width: 640px) { .rt-filtros select { min-width: 0; width: 100%; } .rt-filtros label { flex: 1 1 100%; } }
+
+/* Tipo de matrícula (período de ingresso, vem do Relatório de Matrículas): cartões clicáveis */
+.tipo-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; margin-bottom: 0.9rem; }
+.tipo-card { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; text-align: left; background: white; border: 2px solid #e2e8f0; border-left-width: 5px; border-radius: 10px; padding: 0.7rem 0.95rem; cursor: pointer; font: inherit; color: var(--text-primary, #1f2937); transition: border-color .15s, box-shadow .15s; }
+.tipo-card:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); }
+.tipo-card-rotulo { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-secondary); }
+.tipo-card-total { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.tipo-card-det { font-size: 0.82rem; color: var(--text-secondary); }
+.tipo-card-det .ok { color: #15803d; }
+.tipo-card-det .falta { color: #b45309; }
+.tipo-card.tipo-total { border-left-color: var(--primary-blue); }
+.tipo-card.tipo-calouro { border-left-color: #0ea5e9; }
+.tipo-card.tipo-outros { border-left-color: #7c3aed; }
+.tipo-card.tipo-sem { border-left-color: #f59e0b; }
+.tipo-card.ativo { border-color: var(--primary-blue); background: #eff6ff; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+.ct-situacao { display: inline-block; padding: 0.05rem 0.45rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; margin-bottom: 0.15rem; }
+.ct-situacao.sem_assinatura { background: #fef3c7; color: #92400e; }
+.ct-situacao.desistente { background: #fee2e2; color: #991b1b; }
+.ct-periodo { display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 6px; font-size: 0.72rem; font-weight: 700; background: #ede9fe; color: #5b21b6; vertical-align: middle; }
+.ct-periodo.sem { background: #fef3c7; color: #92400e; }

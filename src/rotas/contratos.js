@@ -174,7 +174,11 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Cadastro manual desativado (04/11/2026): todo aluno entra pelo Relatório de Matrículas (Financeiro),
+// via sincronizarDaMatricula. O Comercial só acompanha assinatura/coleta/observações.
 router.post('/', verifyToken, checkPermission, async (req, res) => {
+    return res.status(403).json({ error: 'O aluno entra nos Contratos automaticamente quando o Financeiro lança a matrícula. Não há cadastro manual.' });
+    // eslint-disable-next-line no-unreachable
     try {
         const { semestre } = req.body;
         if (!semestreValido(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
@@ -209,11 +213,7 @@ router.put('/:id', verifyToken, checkPermission, async (req, res) => {
         const upd = { ...campos, ...(await coletaDoBody(req.body)), updatedAt: new Date().toISOString(), updatedBy: quemFez(req) };
         // veio das Matrículas: nome/curso/cidade/telefone/data/vencimento são de lá (não sobrescreve)
         if (snap.data().matriculaId && !snap.data().matriculaRemovida) ['nome', 'curso', 'cidade', 'contato', 'dataMatricula', 'vencimentoBoleto'].forEach(k => { upd[k] = snap.data()[k] ?? upd[k]; });
-        // Mudar o aluno de semestre (ex.: matrícula passou pro semestre seguinte).
-        if (req.body.semestre && req.body.semestre !== snap.data().semestre) {
-            if (!(await listaSemestres()).includes(req.body.semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
-            upd.semestre = req.body.semestre;
-        }
+        // Semestre segue a matrícula (sincronizarDaMatricula); o Comercial não muda mais (04/11/2026).
         await ref.update(upd);
         const doc = { ...snap.data(), ...upd };
         doc.atividadeId = await sincronizarColeta(req, ref.id, doc);
@@ -231,6 +231,8 @@ router.patch('/:id/status', verifyToken, checkPermission, async (req, res) => {
         const ref = db.collection(COL).doc(req.params.id);
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ error: 'Registro não encontrado.' });
+        // Comercial só marca/desmarca assinatura; desistência vem do Relatório de Matrículas (04/11/2026)
+        if (status === 'desistente' || snap.data().status === 'desistente') return res.status(403).json({ error: 'Desistência vem do Relatório de Matrículas (Financeiro).' });
         const upd = { status, updatedAt: new Date().toISOString(), updatedBy: quemFez(req) };
         if (status === 'assinado' && !snap.data().assinadoEm) {
             upd.assinadoPor = quemFez(req);
@@ -265,6 +267,9 @@ router.post('/:id/contato', verifyToken, checkPermission, async (req, res) => {
 });
 
 router.delete('/:id', verifyToken, checkPermission, async (req, res) => {
+    // 04/11/2026: o Comercial não exclui — o aluno sai quando a matrícula sai (Financeiro).
+    return res.status(403).json({ error: 'Exclusão desativada: o aluno segue o Relatório de Matrículas.' });
+    // eslint-disable-next-line no-unreachable
     try {
         const ref = db.collection(COL).doc(req.params.id);
         const snap = await ref.get();
@@ -356,7 +361,7 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
         ...(m.cidade ? { cidade: maiusculo(m.cidade, 80) } : {}),
         ...(m.telefone ? { contato: texto(m.telefone, 60) } : {}),
         ...(m.vencimentoBoleto ? { vencimentoBoleto: data(m.vencimentoBoleto) } : {}),
-        matriculaId: String(matriculaId), matriculaSituacao: m.situacao || '', matriculaRemovida: false
+        matriculaId: String(matriculaId), matriculaSituacao: m.situacao || '', matriculaPeriodo: m.periodo || '', matriculaRemovida: false
     };
     if (!ref) {
         const status = statusDaMatricula(m.situacao, null);

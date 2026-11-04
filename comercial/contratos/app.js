@@ -18,6 +18,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 const NIVEL_PADRAO = { adm_l2: 3, comercial: 3 };
 
 const STATUS_LABEL = { sem_assinatura: 'Sem assinatura', assinado: 'Assinado', desistente: 'Desistente' };
+const ABA_LABEL = { todos: 'Todos', ...STATUS_LABEL };
 
 let currentUser = null;
 let appInitialized = false;
@@ -28,7 +29,19 @@ let semestreAtual = '';
 let semestres = []; // lista cadastrada (config/comercial_contratos), mais novo primeiro
 let equipe = null;  // [{uid, nome}] do Comercial, pra "quem vai coletar"
 let equipePromise = null;
-let abaAtual = 'sem_assinatura';
+let abaAtual = 'todos';
+const naAba = (r) => abaAtual === 'todos' || r.status === abaAtual;
+let tipoAtual = ''; // '' | 'calouro' | 'outros' | 'sem' (tipo de matrícula = período de ingresso)
+
+// O período de ingresso vem SÓ do Relatório de Matrículas (o que o Financeiro lança é o correto).
+// calouro = entra no 1º período; outros = entra direto em outro período (transferência, 2ª graduação...);
+// sem = contrato sem matrícula vinculada (sobra de cadastro manual antigo: conferir com o Financeiro).
+const TIPO_LABEL = { calouro: 'Calouro · 1º período', outros: 'Outros períodos', sem: 'Sem matrícula' };
+function tipoMatricula(r) {
+  if (!r.matriculaId || r.matriculaRemovida) return 'sem';
+  const p = parseInt(String(r.matriculaPeriodo || ''), 10);
+  return !p || p === 1 ? 'calouro' : 'outros';
+}
 let emEdicaoId = null;
 let contatoId = null;
 
@@ -212,7 +225,6 @@ function wireEventos() {
   // Só busca depois que a pessoa escolhe o semestre (economia de leitura).
   document.getElementById('sel-semestre').addEventListener('change', (e) => {
     semestreAtual = e.target.value;
-    document.getElementById('btn-novo').disabled = !semestreAtual;
     document.getElementById('btn-imprimir').classList.toggle('hidden', !semestreAtual);
     document.getElementById('btn-rota').classList.toggle('hidden', !semestreAtual);
     if (semestreAtual) carregar();
@@ -248,16 +260,23 @@ function wireEventos() {
     renderTudo();
   });
 
+  document.getElementById('tipo-bar').addEventListener('click', (e) => {
+    const chip = e.target.closest('.tipo-card');
+    if (!chip) return;
+    tipoAtual = chip.dataset.tipo;
+    renderTudo();
+  });
+
   document.getElementById('btn-limpar-filtros').addEventListener('click', () => {
     document.getElementById('busca').value = '';
     document.getElementById('filtro-curso').value = '';
     document.getElementById('filtro-cidade').value = '';
     document.getElementById('filtro-menor').checked = false;
     document.getElementById('filtro-assinado').value = '';
+    tipoAtual = '';
     renderTudo();
   });
 
-  document.getElementById('btn-novo').addEventListener('click', () => abrirModalAluno(null));
   iniciarRotaColeta({
     apiFetch, esc, fmtData, linkWhatsapp, toast: showToast, hoje: hojeLocal,
     getSemestre: () => semestreAtual, getRegistros: () => registros,
@@ -265,7 +284,8 @@ function wireEventos() {
   });
   document.getElementById('btn-imprimir').addEventListener('click', () => imprimirRelatorio([
     `Semestre ${semestreAtual}`,
-    STATUS_LABEL[abaAtual],
+    ABA_LABEL[abaAtual],
+    tipoAtual && `Tipo: ${TIPO_LABEL[tipoAtual]}`,
     opcaoEscolhida('filtro-curso') && `Curso: ${opcaoEscolhida('filtro-curso')}`,
     opcaoEscolhida('filtro-cidade') && `Cidade: ${opcaoEscolhida('filtro-cidade')}`,
     document.getElementById('filtro-menor').checked && 'Só menores de 18',
@@ -275,7 +295,6 @@ function wireEventos() {
   ], currentUser.displayName || currentUser.email));
   document.getElementById('btn-cancelar-aluno').addEventListener('click', () => fecharModal('modal-aluno'));
   document.getElementById('form-aluno').addEventListener('submit', salvarAluno);
-  document.getElementById('btn-excluir').addEventListener('click', () => excluirAluno(emEdicaoId));
   document.getElementById('f-status').addEventListener('change', atualizarGrupoAssinado);
 
   document.getElementById('btn-cancelar-contato').addEventListener('click', () => fecharModal('modal-contato'));
@@ -289,7 +308,6 @@ function wireEventos() {
     const id = btn.dataset.id;
     const acao = btn.dataset.acao;
     if (acao === 'editar') abrirModalAluno(id);
-    else if (acao === 'excluir') excluirAluno(id);
     else if (acao === 'contato') abrirModalContato(id);
     else mudarStatus(id, acao);
   });
@@ -335,11 +353,13 @@ function lerFiltros() {
     cidade: document.getElementById('filtro-cidade').value,
     soMenor: document.getElementById('filtro-menor').checked,
     // não esconde ninguém: só reordena a tabela pela data de assinatura (ver ordenarPorAssinatura)
-    assinadoDesde: document.getElementById('filtro-assinado').value
+    assinadoDesde: document.getElementById('filtro-assinado').value,
+    tipo: tipoAtual
   };
 }
 
 function passaFiltros(r, f, ignorar = '') {
+  if (ignorar !== 'tipo' && f.tipo && tipoMatricula(r) !== f.tipo) return false;
   if (ignorar !== 'curso' && f.curso && (r.curso || '').trim() !== f.curso) return false;
   if (f.cidade && (r.cidade || '').trim() !== f.cidade) return false;
   if (f.soMenor && !r.menor18) return false;
@@ -353,7 +373,7 @@ function passaFiltros(r, f, ignorar = '') {
 
 function renderCursos(f) {
   // Contagem por curso dentro da aba atual, respeitando os outros filtros.
-  const daAba = registros.filter(r => r.status === abaAtual && passaFiltros(r, f, 'curso'));
+  const daAba = registros.filter(r => naAba(r) && passaFiltros(r, f, 'curso'));
   const porCurso = {};
   daAba.forEach(r => { const c = (r.curso || '').trim() || 'SEM CURSO'; porCurso[c] = (porCurso[c] || 0) + 1; });
   const cursos = Object.entries(porCurso).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -373,13 +393,38 @@ function renderCursos(f) {
   });
 }
 
+function renderTipos(f) {
+  // Cartões por tipo de matrícula: total de matrículas ATIVAS (sem os desistentes, igual ao Relatório de
+  // Matrículas), quantas assinaram e quantas faltam. Não depende da aba; respeita curso/cidade/busca.
+  // Clicar seleciona o tipo e a tela inteira (resumo, abas, cursos, lista) passa a mostrar só ele.
+  const conta = { '': { ass: 0, sem: 0 }, calouro: { ass: 0, sem: 0 }, outros: { ass: 0, sem: 0 }, sem: { ass: 0, sem: 0 } };
+  registros.filter(r => r.status !== 'desistente' && passaFiltros(r, f, 'tipo')).forEach(r => {
+    const k = r.status === 'assinado' ? 'ass' : 'sem';
+    conta[''][k]++; conta[tipoMatricula(r)][k]++;
+  });
+  const card = (valor, rotulo, dica) => {
+    const c = conta[valor], total = c.ass + c.sem;
+    return `<button type="button" class="tipo-card ${valor ? 'tipo-' + valor : 'tipo-total'} ${f.tipo === valor ? 'ativo' : ''}" data-tipo="${valor}" title="${dica}">
+      <span class="tipo-card-rotulo">${rotulo}</span>
+      <span class="tipo-card-total">${total}</span>
+      <span class="tipo-card-det"><b class="ok">✓ ${c.ass}</b> assinado${c.ass === 1 ? '' : 's'} · <b class="falta">${c.sem}</b> falta${c.sem === 1 ? '' : 'm'}</span>
+    </button>`;
+  };
+  document.getElementById('tipo-bar').innerHTML =
+    card('', 'Total de matrículas', 'Todas as matrículas ativas (sem desistentes)') +
+    card('calouro', 'Calouros · 1º período', 'Entram no 1º período (pelo Relatório de Matrículas)') +
+    card('outros', 'Outros períodos', 'Entram direto em outro período: transferência, 2ª graduação etc. (pelo Relatório de Matrículas)') +
+    (conta.sem.ass + conta.sem.sem || f.tipo === 'sem' ? card('sem', 'Sem matrícula', 'Contrato sem matrícula no Relatório de Matrículas: conferir com o Financeiro') : '');
+}
+
 function renderTudo() {
   const f = lerFiltros();
   const base = registros.filter(r => passaFiltros(r, f));
   const qtd = (s) => base.filter(r => r.status === s).length;
   const sem = qtd('sem_assinatura'), ass = qtd('assinado'), des = qtd('desistente');
-  const total = sem + ass + des;
-  document.getElementById('kpi-total').textContent = total;
+  // Matriculados = ativos (sem + assinados), igual ao total do Relatório de Matrículas
+  document.getElementById('kpi-total').textContent = sem + ass;
+  document.getElementById('kpi-total-hint').textContent = f.tipo ? TIPO_LABEL[f.tipo] : (des ? `+ ${des} desistente${des === 1 ? '' : 's'}` : '');
   document.getElementById('kpi-sem').textContent = sem;
   const comColeta = base.filter(r => r.status === 'sem_assinatura' && r.coletaData && r.coletaResponsavel).length;
   document.getElementById('kpi-sem-coleta').textContent = comColeta ? `${comColeta} com coleta agendada` : '';
@@ -388,19 +433,21 @@ function renderTudo() {
   const ativos = sem + ass;
   document.getElementById('kpi-ass-pct').textContent = ativos ? `${Math.round(ass / ativos * 100)}% dos matriculados ativos` : '';
   document.getElementById('kpi-menor').textContent = base.filter(r => r.status === 'sem_assinatura' && r.menor18).length;
+  document.getElementById('qtd-todos').textContent = sem + ass + des;
   document.getElementById('qtd-sem').textContent = sem;
   document.getElementById('qtd-ass').textContent = ass;
   document.getElementById('qtd-des').textContent = des;
 
+  renderTipos(f);
   renderCursos(f);
 
-  const filtrando = !!(f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
+  const filtrando = !!(f.tipo || f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
   document.getElementById('btn-limpar-filtros').classList.toggle('hidden', !filtrando);
-  const partes = [f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
-  const naAba = qtd(abaAtual);
-  const totalAba = registros.filter(r => r.status === abaAtual).length;
+  const partes = [f.tipo && TIPO_LABEL[f.tipo], f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
+  const mostrando = base.filter(naAba).length;
+  const totalAba = registros.filter(naAba).length;
   document.getElementById('filtro-resumo').innerHTML = filtrando
-    ? `Mostrando <strong>${naAba}</strong> de ${totalAba} em ${STATUS_LABEL[abaAtual]} · filtro: ${esc(partes.join(', '))}`
+    ? `Mostrando <strong>${mostrando}</strong> de ${totalAba} em ${ABA_LABEL[abaAtual]} · filtro: ${esc(partes.join(', '))}`
     : '';
 
   renderTabela(base, f);
@@ -423,10 +470,10 @@ function ordenarPorAssinatura(lista, desde) {
 
 function renderTabela(base, f = {}) {
   const corpo = document.getElementById('tabela-corpo');
-  let lista = base.filter(r => r.status === abaAtual);
+  let lista = base.filter(naAba);
   if (f.assinadoDesde) lista = ordenarPorAssinatura(lista, f.assinadoDesde);
   if (!lista.length) {
-    corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno cadastrado nesse semestre ainda. Use "Novo aluno".'}</td></tr>`;
+    corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno nesse semestre ainda. Os alunos entram aqui automaticamente quando o Financeiro lança a matrícula.'}</td></tr>`;
     return;
   }
   // separador quando muda o dia de assinatura (classe mes-linha: a impressão já não conta essas linhas)
@@ -449,25 +496,27 @@ function renderTabela(base, f = {}) {
     const coletaTag = r.status === 'sem_assinatura' && r.coletaData && r.coletaResponsavel
       ? `<span class="ct-coleta-tag ${r.coletaData < hojeLocal() ? 'atrasada' : ''}" title="Coleta de assinatura agendada — está na agenda do Comercial">✍️ ${fmtData(r.coletaData).slice(0, 5)}${r.coletaHora ? ' ' + r.coletaHora : ''} · ${esc(primeiroNome(r.coletaResponsavel.nome))}</span>`
       : '';
-    const contrato = r.status === 'assinado'
+    const situacaoTag = abaAtual === 'todos' && r.status !== 'assinado'
+      ? `<span class="ct-situacao ${r.status}">${STATUS_LABEL[r.status]}</span>` : '';
+    const contrato = situacaoTag + (r.status === 'assinado'
       ? `<span class="ct-assinado">✓ ${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · ') || 'Assinado')}</span>`
-      : (r.assinadoPor || r.assinadoEm ? `<span class="ct-sub">${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · '))}</span>` : (coletaTag ? '' : '<span class="ct-vazio">—</span>')) + (coletaTag ? `<div>${coletaTag}</div>` : '');
+      : (r.assinadoPor || r.assinadoEm ? `<span class="ct-sub">${esc([r.assinadoPor, fmtData(r.assinadoEm)].filter(Boolean).join(' · '))}</span>` : (coletaTag ? '' : '<span class="ct-vazio">—</span>')) + (coletaTag ? `<div>${coletaTag}</div>` : ''));
     let acoes = `<button class="btn-acao" data-acao="contato" data-id="${r.id}" title="Ver histórico e registrar contato">🕘 Histórico</button>`;
     if (r.status === 'sem_assinatura') {
       acoes += `<button class="btn-acao ok" data-acao="assinado" data-id="${r.id}">✓ Assinou</button>`;
-      acoes += `<button class="btn-acao desistir" data-acao="desistente" data-id="${r.id}">Desistiu</button>`;
-    } else if (r.status === 'desistente') {
-      acoes += `<button class="btn-acao" data-acao="sem_assinatura" data-id="${r.id}">Reativar</button>`;
     }
     acoes += `<button class="btn-acao" data-acao="editar" data-id="${r.id}">Editar</button>`;
-    acoes += `<button class="btn-acao desistir" data-acao="excluir" data-id="${r.id}" title="Excluir aluno da lista">🗑</button>`;
     // Veio do Relatório de Matrículas (cadastro da Secretaria/Financeiro): linha em outra cor + etiqueta
     const daMatricula = r.matriculaId
       ? `<span class="ct-matricula ${r.matriculaRemovida ? 'removida' : ''}" title="${r.matriculaRemovida ? 'A matrícula foi excluída no Relatório de Matrículas' : `Vem do Relatório de Matrículas · situação: ${esc(r.matriculaSituacao || '—')}`}">${r.matriculaRemovida ? 'matrícula excluída' : 'Matrículas'}</span>` : '';
+    const tipo = tipoMatricula(r);
+    const tipoTag = tipo === 'outros'
+      ? `<span class="ct-periodo" title="Entra direto no ${esc(r.matriculaPeriodo)} período (Relatório de Matrículas)">${esc(r.matriculaPeriodo)} período</span>`
+      : tipo === 'sem' ? '<span class="ct-periodo sem" title="Sem matrícula no Relatório de Matrículas: conferir com o Financeiro">sem matrícula</span>' : '';
     return `
       <tr class="${r.matriculaId ? 'ct-linha-matricula' : ''}">
         <td class="ct-sub">${i + 1}</td>
-        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
+        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${tipoTag}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
         <td>${fmtData(r.dataMatricula) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.curso) || '<span class="ct-vazio">—</span>'}</td>
         <td>${esc(r.cidade) || '<span class="ct-vazio">—</span>'}</td>
@@ -542,7 +591,7 @@ function abrirModalAluno(id) {
   document.getElementById('f-cidade').value = r?.cidade || '';
   document.getElementById('f-contato').value = r?.contato || '';
   document.getElementById('f-boleto').value = r?.vencimentoBoleto || '';
-  document.getElementById('f-status').value = r?.status || abaAtual;
+  document.getElementById('f-status').value = r?.status || 'sem_assinatura';
   document.getElementById('f-assinado-por').value = r?.assinadoPor || '';
   document.getElementById('f-assinado-em').value = r?.assinadoEm || '';
   document.getElementById('f-menor').checked = !!r?.menor18;
@@ -561,12 +610,14 @@ function abrirModalAluno(id) {
     document.getElementById('f-coleta-equipe').innerHTML = '<span class="ct-sub">Carregando equipe...</span>';
     carregarEquipe().then(() => { if (emEdicaoId === id) renderColetaEquipe(coletor); });
   }
-  document.getElementById('btn-excluir').classList.toggle('hidden', !r);
   // Mudar de semestre só faz sentido pra aluno já cadastrado.
   const selSem = document.getElementById('f-semestre');
   selSem.innerHTML = semestres.map(s => `<option value="${s}">${s}</option>`).join('');
   selSem.value = r?.semestre || semestreAtual;
-  document.getElementById('grupo-semestre').classList.toggle('hidden', !r || semestres.length < 2);
+  document.getElementById('grupo-semestre').classList.add('hidden'); // semestre segue a matrícula
+  const opDes = document.querySelector('#f-status option[value="desistente"]');
+  opDes.disabled = r?.status !== 'desistente'; // desistência vem do Relatório de Matrículas
+  document.getElementById('f-status').disabled = r?.status === 'desistente';
   atualizarGrupoAssinado();
   abrirModal('modal-aluno');
   document.getElementById('f-nome').focus();
@@ -577,7 +628,6 @@ async function salvarAluno(e) {
   const btn = document.getElementById('btn-salvar-aluno');
   const status = document.getElementById('f-status').value;
   const body = {
-    semestre: emEdicaoId ? (document.getElementById('f-semestre').value || semestreAtual) : semestreAtual,
     nome: document.getElementById('f-nome').value,
     dataMatricula: document.getElementById('f-matricula').value,
     curso: document.getElementById('f-curso').value,
