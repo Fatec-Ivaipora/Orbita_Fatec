@@ -208,3 +208,11 @@ input.cp-comp-nome { font: inherit; padding: 7px 9px; border: 1px solid var(--or
 .cp-item-wrap .cp-item-n { margin-right: 6px; }
 .cp-wrap .cp-btn-perigo { color: #fecaca; border-color: rgba(254, 202, 202, .5); }
 .cp-wrap .cp-btn-perigo:hover { background: rgba(185, 28, 28, .25); }
+
+/* Arquivo para o Edubox (04/11/2026) — mesmo modelo da Trilha EAD */
+.cp-modal-edubox { width: min(560px, 100%); }
+.cp-edubox-lista { display: grid; gap: 8px; }
+.cp-edubox-linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 10px; }
+.cp-edubox-linha span { display: grid; gap: 2px; min-width: 0; }
+.cp-edubox-linha small { color: var(--orb-mudo, #5b6a80); }
+.cp-edubox-zero { color: var(--orb-alerta, #a8650b); font-weight: 700; }
