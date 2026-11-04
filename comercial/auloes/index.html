@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aulões - Redações - Órbita FATEC</title>
+    <title>Aulões - Palestras - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
     <link rel="stylesheet" href="/comercial/contratos/contratos.css?v=3">
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
-    <link rel="stylesheet" href="/comercial/auloes/auloes.css?v=1">
+    <link rel="stylesheet" href="/comercial/auloes/auloes.css?v=3">
+    <link rel="stylesheet" href="/comercial/palestras/palestras.css?v=1">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=3">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
@@ -24,7 +25,7 @@
                 <div class="rel-cabecalho-print">
                     <img src="/img/fateclogoazul.png" alt="Logo FATEC" class="rel-print-logo">
                     <div>
-                        <h1>Relatório de Aulões - Redações</h1>
+                        <h1>Relatório de Aulões e Palestras</h1>
                         <p id="print-filtros"></p>
                     </div>
                     <div class="rel-data-emissao" id="print-data-emissao"></div>
@@ -32,8 +33,8 @@
                 <div class="page-header">
                     <div>
                         <span class="cm-selo">Comercial</span>
-                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>Aulões - Redações</h1>
-                        <p class="page-subtitle">Agenda de aulões, redações e palestras nos colégios</p>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>Aulões - Palestras</h1>
+                        <p class="page-subtitle">Uma agenda só: aulões, redações e palestras — e onde cada um do Comercial vai estar</p>
                     </div>
                     <div class="page-header-actions">
                         <button class="btn-secondary hidden" id="btn-imprimir" title="Imprime o que está filtrado na tela, com o logo">
@@ -44,9 +45,13 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             Copiar agenda
                         </button>
-                        <button class="btn-primary action-execute" id="btn-novo">
+                        <button class="btn-primary action-execute" id="btn-novo-aulao">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Agendar aulão
+                        </button>
+                        <button class="btn-primary action-execute" id="btn-novo-palestra">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Agendar palestra
                         </button>
                     </div>
                 </div>
@@ -59,26 +64,30 @@
                 </div>
 
                 <div id="conteudo" class="hidden">
-                    <div class="cursos-bar" id="cidades-bar"></div>
+                    <div class="pl-alerta hidden" id="alerta-transporte"></div>
+
+                    <div class="ap-pessoas-rotulo">Quem do Comercial vai</div>
+                    <div class="cursos-bar" id="pessoas-bar"></div>
 
                     <div class="kpi-grid">
-                        <div class="kpi-card"><div class="kpi-label">Agendamentos</div><div class="kpi-value" id="kpi-total">0</div><div class="kpi-hint" id="kpi-cancelados"></div></div>
+                        <div class="kpi-card"><div class="kpi-label">Na agenda</div><div class="kpi-value" id="kpi-total">0</div><div class="kpi-hint" id="kpi-divisao"></div></div>
                         <div class="kpi-card kpi-sem"><div class="kpi-label">A realizar</div><div class="kpi-value" id="kpi-agendado">0</div><div class="kpi-hint" id="kpi-semana"></div></div>
-                        <div class="kpi-card kpi-ass"><div class="kpi-label">Realizados</div><div class="kpi-value" id="kpi-realizado">0</div></div>
-                        <div class="kpi-card kpi-menor"><div class="kpi-label">Colégios / cidades</div><div class="kpi-value" id="kpi-colegios">0</div><div class="kpi-hint" id="kpi-cidades"></div></div>
+                        <div class="kpi-card kpi-ass"><div class="kpi-label">Realizados</div><div class="kpi-value" id="kpi-realizado">0</div><div class="kpi-hint" id="kpi-cancelados"></div></div>
+                        <div class="kpi-card kpi-des"><div class="kpi-label">Transporte a definir</div><div class="kpi-value" id="kpi-verificar">0</div><div class="kpi-hint">Palestras futuras sem quem leve</div></div>
+                        <div class="kpi-card kpi-menor"><div class="kpi-label">Locais / cidades</div><div class="kpi-value" id="kpi-locais">0</div><div class="kpi-hint" id="kpi-cidades"></div></div>
                     </div>
 
                     <div class="filters-bar">
                         <div class="search-wrap">
                             <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                            <input type="text" id="busca" class="search-input" placeholder="Buscar colégio, turma, responsável ou observação...">
+                            <input type="text" id="busca" class="search-input" placeholder="Buscar colégio, instituição, tema, palestrante ou observação...">
                         </div>
+                        <select id="filtro-tipo" class="select-filter"><option value="">Aulões e palestras</option></select>
                         <select id="filtro-cidade" class="select-filter"><option value="">Todas as cidades</option></select>
-                        <select id="filtro-tipo" class="select-filter"><option value="">Todos os tipos</option></select>
                         <select id="filtro-turno" class="select-filter"><option value="">Todos os turnos</option></select>
                         <select id="filtro-status" class="select-filter">
                             <option value="">Todas as situações</option>
-                            <option value="agendado">Agendado</option>
+                            <option value="agendado">A realizar</option>
                             <option value="realizado">Realizado</option>
                             <option value="cancelado">Cancelado</option>
                         </select>
@@ -92,11 +101,10 @@
                                 <thead>
                                     <tr>
                                         <th>Data</th>
-                                        <th>Turno</th>
-                                        <th>Colégio</th>
-                                        <th>Cidade</th>
-                                        <th>Tipo</th>
-                                        <th>Quem vai</th>
+                                        <th>O quê</th>
+                                        <th>Onde</th>
+                                        <th>Detalhes</th>
+                                        <th>Quem do Comercial vai</th>
                                         <th>Situação</th>
                                         <th class="action-execute acoes-col">Ações</th>
                                     </tr>
@@ -112,20 +120,42 @@
         </main>
     </div>
 
-    <!-- Modal: agendar/editar -->
-    <div id="modal-aulao" class="modal-overlay hidden">
+    <!-- Modal: agendar/editar aulão ou palestra -->
+    <div id="modal-agenda" class="modal-overlay hidden">
         <div class="modal-content modal-content-lg">
-            <h2 id="modal-titulo">Agendar aulão</h2>
+            <h2 id="modal-titulo">Agendar</h2>
             <div class="ct-ultima-alt" id="modal-ultima-alt"></div>
-            <form id="form-aulao">
-                <div class="form-grid-3">
+            <form id="form-agenda">
+                <div class="ap-tipo-escolha" role="radiogroup" aria-label="O que vai ser agendado">
+                    <label class="equipe-chip"><input type="radio" name="tipo-item" value="aulao"> 🎓 Aulão / redação</label>
+                    <label class="equipe-chip"><input type="radio" name="tipo-item" value="palestra"> 🎤 Palestra</label>
+                    <span class="ct-sub hidden" id="f-tipo-travado">O tipo não muda depois de salvo.</span>
+                </div>
+
+                <div class="form-grid-2">
                     <div class="form-group">
-                        <label for="f-data">Data *</label>
-                        <input type="date" id="f-data" required>
+                        <label for="f-local" id="lbl-local">Colégio *</label>
+                        <input type="text" id="f-local" required list="lista-locais" maxlength="150">
                     </div>
                     <div class="form-group">
+                        <label for="f-cidade">Cidade *</label>
+                        <input type="text" id="f-cidade" required list="lista-cidades" maxlength="80">
+                    </div>
+                </div>
+
+                <div class="form-grid-3" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                    <div class="form-group">
+                        <label for="f-data">Data</label>
+                        <input type="date" id="f-data">
+                        <label class="pl-sem-data so-palestra"><input type="checkbox" id="f-sem-data"> Ainda sem data</label>
+                    </div>
+                    <div class="form-group so-palestra" id="grupo-data-prevista">
+                        <label for="f-data-prevista">Previsão *</label>
+                        <input type="text" id="f-data-prevista" maxlength="60" placeholder="Ex.: Novembro">
+                    </div>
+                    <div class="form-group so-aulao">
                         <label for="f-turno">Turno *</label>
-                        <select id="f-turno" required>
+                        <select id="f-turno">
                             <option value="">Selecione...</option>
                             <option>MANHÃ</option>
                             <option>TARDE</option>
@@ -137,58 +167,86 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="f-horario">Horário (opcional)</label>
-                        <input type="time" id="f-horario">
+                        <label for="f-hora">Início</label>
+                        <input type="time" id="f-hora">
+                    </div>
+                    <div class="form-group so-palestra">
+                        <label for="f-horario-texto">Horário (como combinado)</label>
+                        <input type="text" id="f-horario-texto" maxlength="60" placeholder="Ex.: 13:30 às 14:40">
                     </div>
                 </div>
-                <div class="form-grid-3">
+
+                <div class="form-grid-3 so-aulao">
                     <div class="form-group">
-                        <label for="f-colegio">Colégio *</label>
-                        <input type="text" id="f-colegio" required list="lista-colegios" maxlength="120" style="text-transform:uppercase">
+                        <label for="f-subtipo">Tipo de aulão</label>
+                        <input type="text" id="f-subtipo" list="lista-subtipos" maxlength="60">
                     </div>
-                    <div class="form-group">
-                        <label for="f-cidade">Cidade *</label>
-                        <input type="text" id="f-cidade" required list="lista-cidades" maxlength="80">
-                    </div>
-                    <div class="form-group">
-                        <label for="f-tipo">Tipo</label>
-                        <input type="text" id="f-tipo" list="lista-tipos" maxlength="60">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Quem vai (Comercial) — entra na agenda do Meu Espaço de cada um</label>
-                    <div class="equipe-chips" id="f-equipe"><span class="ct-sub">Carregando equipe...</span></div>
-                </div>
-                <div class="form-grid-2">
                     <div class="form-group">
                         <label for="f-turma">Turma(s)</label>
                         <input type="text" id="f-turma" maxlength="60" placeholder="Ex.: 3ºA, 3ºB">
-                    </div>
-                    <div class="form-group">
-                        <label for="f-palestrante">Professor / palestrante</label>
-                        <input type="text" id="f-palestrante" maxlength="120">
-                    </div>
-                </div>
-                <div class="form-grid-2">
-                    <div class="form-group">
-                        <label for="f-contato-colegio">Contato no colégio</label>
-                        <input type="text" id="f-contato-colegio" maxlength="120" placeholder="Nome e telefone de quem agendou">
                     </div>
                     <div class="form-group">
                         <label for="f-publico">Nº de alunos (estimado)</label>
                         <input type="number" id="f-publico" min="0" step="1">
                     </div>
                 </div>
-                <div class="form-group" id="grupo-status">
-                    <label for="f-status">Situação</label>
-                    <select id="f-status">
-                        <option value="agendado">Agendado</option>
-                        <option value="realizado">Realizado</option>
-                        <option value="cancelado">Cancelado</option>
-                    </select>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label for="f-palestrante" id="lbl-palestrante">Professor / palestrante</label>
+                        <input type="text" id="f-palestrante" list="lista-palestrantes" maxlength="150">
+                    </div>
+                    <div class="form-group so-palestra">
+                        <label for="f-tema">Tema</label>
+                        <input type="text" id="f-tema" maxlength="250">
+                    </div>
+                    <div class="form-group so-aulao">
+                        <label for="f-contato-aulao">Contato no colégio</label>
+                        <input type="text" id="f-contato-aulao" maxlength="120" placeholder="Nome e telefone de quem agendou">
+                    </div>
+                </div>
+
+                <div class="pl-transporte">
+                    <label class="pl-transporte-titulo">👥 Quem do Comercial vai? <span class="ct-sub" style="font-weight:600;">(<span id="lbl-vai-dica">vai ao colégio</span> — entra na agenda do Meu Espaço de cada um)</span></label>
+                    <div class="equipe-chips" id="f-vai"><span class="ct-sub">Carregando equipe...</span></div>
+                </div>
+
+                <div class="pl-transporte so-palestra">
+                    <label class="pl-transporte-titulo">🚗 Quem leva o palestrante?</label>
+                    <div class="pl-opcoes" id="f-transporte">
+                        <label class="equipe-chip"><input type="radio" name="transporte" value="comercial">Equipe Comercial</label>
+                        <label class="equipe-chip"><input type="radio" name="transporte" value="outro">Outro motorista</label>
+                        <label class="equipe-chip"><input type="radio" name="transporte" value="proprio">Deslocamento próprio</label>
+                        <label class="equipe-chip"><input type="radio" name="transporte" value="nao_necessario">Não será necessário</label>
+                        <label class="equipe-chip"><input type="radio" name="transporte" value="verificar">A verificar</label>
+                    </div>
+                    <div id="grupo-leva" class="hidden">
+                        <div class="ae-dica" style="margin:0.6rem 0 0.4rem;">Quem for marcado recebe a atividade na agenda do Meu Espaço.</div>
+                        <div class="equipe-chips" id="f-leva"></div>
+                    </div>
+                    <div id="grupo-motorista" class="form-group hidden" style="margin-top:0.75rem;">
+                        <label for="f-motorista">Nome do motorista</label>
+                        <input type="text" id="f-motorista" list="lista-motoristas" maxlength="120" placeholder="Ex.: Diego Jordão">
+                    </div>
+                    <label class="form-check" style="margin:0.75rem 0 0;"><input type="checkbox" id="f-pagar"> Pagar deslocamento ao palestrante</label>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group so-palestra">
+                        <label for="f-contato-palestra">Contato no local</label>
+                        <input type="text" id="f-contato-palestra" maxlength="120" placeholder="Nome e telefone">
+                    </div>
+                    <div class="form-group" id="grupo-status">
+                        <label for="f-status">Situação</label>
+                        <select id="f-status">
+                            <option value="agendado">A realizar</option>
+                            <option value="realizado">Realizado</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
                 </div>
                 <fieldset class="cm-oficio">
-                    <legend>Ofício do colégio</legend>
+                    <legend>Ofício do colégio / instituição</legend>
                     <div class="cm-oficio-atual hidden" id="oficio-atual"></div>
                     <div class="form-grid-2">
                         <div class="form-group">
@@ -210,7 +268,7 @@
                     <textarea id="f-obs" rows="3" maxlength="2000" placeholder="Ex.: levar projetor, tema da redação, material..."></textarea>
                 </div>
                 <div class="modal-actions-split">
-                    <button type="button" class="btn-perigo hidden" id="btn-excluir">Excluir agendamento</button>
+                    <button type="button" class="btn-perigo hidden" id="btn-excluir">Excluir</button>
                     <div style="display:flex;gap:0.75rem;margin-left:auto;">
                         <button type="button" class="btn-secondary" id="btn-cancelar-modal">Cancelar</button>
                         <button type="submit" class="btn-primary" id="btn-salvar">Salvar</button>
@@ -220,18 +278,18 @@
         </div>
     </div>
 
-    <datalist id="lista-colegios"></datalist>
+    <datalist id="lista-locais"></datalist>
     <datalist id="lista-cidades"></datalist>
-    <datalist id="lista-pessoas"></datalist>
-    <datalist id="lista-tipos">
+    <datalist id="lista-palestrantes"></datalist>
+    <datalist id="lista-motoristas"></datalist>
+    <datalist id="lista-subtipos">
         <option value="Aulão de redação">
         <option value="Aulão ENEM">
-        <option value="Palestra">
         <option value="Aulão">
     </datalist>
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/auloes/app.js?v=5"></script>
+    <script type="module" src="/comercial/auloes/app.js?v=7"></script>
 </body>
 </html>
