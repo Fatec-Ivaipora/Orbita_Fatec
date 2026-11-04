@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=25">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=32">
 </head>
 <body class="cb-rel">
     <div id="auth-guard" class="layout-auth-guard">
@@ -34,7 +34,7 @@
                     <div>
                         <span class="cm-selo">FATEC Ivaiporã · Contas a receber · Mensalidades</span>
                         <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></span>Cobrança</h1>
-                        <p class="page-subtitle">Pendências do Edubox — atualiza sozinho às 7h, 12h, 17h e 22h</p>
+                        <p class="page-subtitle">Pendências do Edubox, ao vivo: a tela busca de novo sempre que você abre</p>
                     </div>
                     <div class="page-header-actions">
                         <button class="btn-secondary" id="btn-imprimir" title="Imprime o que está na tela, com o logo">
@@ -61,6 +61,7 @@
                 </div>
 
                 <div class="cb-status" id="cb-status">Carregando...</div>
+                <div class="cb-conf hidden" id="cb-conf"></div>
                 <div class="cb-aviso hidden" id="aviso-advogado"></div>
                 <details class="cb-glossario">
                     <summary>❓ Como ler os números desta tela</summary>
@@ -216,7 +217,8 @@
 
                 <!-- ============ LISTA ============ -->
                 <section id="visao-lista" class="hidden">
-                    <div class="filters-bar">
+                    <div class="filters-bar cb-filtros">
+                      <div class="cb-filtros-linha cb-filtros-principal">
                         <div class="search-wrap">
                             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                             <input type="text" class="search-input" id="l-busca" placeholder="Nome ou CPF...">
@@ -230,6 +232,7 @@
                             <option value="sim-semana">Cobrados nesta semana</option>
                             <option value="promessa">Com promessa de pagamento</option>
                             <option value="sem-celular">📵 Sem celular no Edubox</option>
+                            <option value="bloqueado">🚫 Marcados como não cobrar</option>
                         </select>
                         <select class="select-filter" id="l-lado" title="Parcela de plano Advogado / Débito judicial não é cobrada pelo Financeiro">
                             <option value="cobrar">💼 Cobrança do Financeiro</option>
@@ -237,6 +240,8 @@
                             <option value="debito">🏛 Débito judicial — sem acordo (não cobrar)</option>
                             <option value="enviar">📤 Para enviar ao advogado — desistentes, trancados, cancelados</option>
                         </select>
+                      </div>
+                      <div class="cb-filtros-linha cb-filtros-refinar">
                         <select class="select-filter hidden" id="l-pagando" title="Pagamentos no Edubox nos últimos 90 dias">
                             <option value="">Qualquer situação de pagamento</option>
                             <option value="sim">✅ Pagando (pagou nos últimos 90 dias)</option>
@@ -255,9 +260,10 @@
                             <option value="90+">Mais de 90 dias</option>
                         </select>
                         <select class="select-filter" id="l-curso"><option value="">Todos os cursos</option></select>
+                      </div>
                     </div>
                     <div class="cb-contadores" id="l-contadores"></div>
-                    <div class="card">
+                    <div class="card cb-lista-card">
                         <div class="tabela-wrap">
                             <table class="data-table cb-lista">
                                 <thead><tr><th>Aluno</th><th>Parcelas atrasadas</th><th class="num">A pagar <small>(com juros e multa)</small></th><th>Cobrança</th><th class="acoes-col">Ações</th></tr></thead>
@@ -304,6 +310,20 @@
     </div>
 
     <!-- Modal: WhatsApp -->
+    <div id="modal-conf" class="modal-overlay hidden">
+        <div class="modal-content modal-content-lg">
+            <h2>Conferência com o Edubox</h2>
+            <p class="modal-subtitle" id="conf-sub"></p>
+            <div class="cb-conf-totais" id="conf-totais"></div>
+            <div class="tabela-wrap"><table class="data-table cb-conf-tabela">
+                <thead><tr><th>Aluno</th><th>O que difere</th><th class="num">Parcelas<br><small>Órbita · Edubox</small></th><th class="num">Em aberto<br><small>Órbita · Edubox</small></th><th class="num">Advogado / enviar<br><small>Órbita · Edubox</small></th></tr></thead>
+                <tbody id="conf-corpo"></tbody>
+            </table></div>
+            <p class="cb-sub">A conferência é feita logo depois de cada atualização: busca no Edubox, pelo relay, as parcelas vencidas e em aberto de cada aluno e compara com a lista da Cobrança. Diferença pequena pode ser pagamento ou lançamento feito no Edubox entre a atualização e a conferência — some na próxima atualização.</p>
+            <div class="modal-actions"><button type="button" class="btn-secondary" id="conf-fechar">Fechar</button></div>
+        </div>
+    </div>
+
     <div id="modal-zap" class="modal-overlay hidden">
         <div class="modal-content modal-content-lg">
             <h2>💬 Cobrar pelo WhatsApp</h2>
@@ -339,6 +359,7 @@
         <div class="modal-content modal-content-lg">
             <h2 id="al-nome"></h2>
             <p class="modal-subtitle" id="al-sub"></p>
+            <div class="cb-bloq-box hidden" id="al-bloqueio"></div>
             <div class="cb-duas cb-duas-modal">
                 <div>
                     <div class="card-secao-titulo" style="padding:0 0 0.4rem;">Parcelas atrasadas (não pagas)</div>
@@ -437,6 +458,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=50"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=56"></script>
 </body>
 </html>
