@@ -458,7 +458,8 @@ function renderAvaliacao() {
   const acoes = `
     <button type="button" class="btn-primary" data-ler="1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Ler folhas</button>
     <button type="button" class="btn-secondary" data-imprimir="1">Imprimir folhas</button>
-    <button type="button" class="btn-secondary" data-planilha="1">Baixar planilha</button>
+    <button type="button" class="btn-secondary" data-edubox="1" title="Um arquivo Nome;Nota por turma, igual ao da Trilha EAD — pra importar as notas no Edubox">Arquivo para o Edubox</button>
+    <button type="button" class="btn-secondary" data-planilha="1" title="Planilha completa: acertos, % e a resposta de cada questão">Baixar planilha</button>
     ${podeEditarAv ? '<button type="button" class="btn-secondary cp-btn-perigo" data-excluir-av="1">Excluir</button>' : ''}`;
   const sub = `${av.disciplina ? `<b>${esc(av.disciplina === VARIAS ? 'Várias disciplinas (simulado)' : titulo(av.disciplina))}</b> · ` : ''}${av.tipo ? `${esc(rotuloAv(av))} · ` : ''}${av.semestre ? `${esc(String(av.semestre).replace('-', '.'))} · ` : ''}Código ${String(av.codigo).padStart(4, '0')} · ${av.data ? fmtData(av.data) + ' · ' : ''}${plural(n, 'questão', 'questões')} (${LETRAS.slice(0, av.nAlt).split('').join(', ')}) · ${esc(av.turmas.map(t => nomeTurma(t)).join(', '))} · criada por ${esc(av.criadoPor || '—')}`;
   $('tela').innerHTML = cabecalho(av.nome, sub, acoes, true) + `
@@ -646,6 +647,80 @@ async function baixarPlanilha(btn) {
     const blob = await res.blob(), url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = `${av.nome}.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   } catch (err) { toast(err.message, 'erro'); } finally { btn.disabled = false; }
+}
+
+// ---------- ARQUIVO PARA O EDUBOX (04/11/2026) ----------
+// Mesmo modelo da Trilha EAD (docencia/trilha-ead): CSV UTF-8 com BOM, cabeçalho "Nome;Nota", uma
+// linha por aluno, nota com ponto e 1 casa (o Edubox guarda numeric(3,1)), UM ARQUIVO POR TURMA
+// (= diário do Edubox; os alunos vêm do CADD, com o nome igual ao do Edubox), em ordem alfabética.
+// Quem não teve folha lida sai com 0 — avisado antes, como a Trilha faz com quem não fez nada no AVA.
+const SEM_TURMA = '__sem_turma__';
+function notaEdubox(a) {
+  const l = leituras[a.i];
+  if (!l || !av.valorTotal) return 0;
+  const r = resultado(l);
+  return Math.round(r.acertos / r.total * Number(av.valorTotal) * 10) / 10;
+}
+function gruposEdubox() {
+  const porTurma = new Map();
+  av.alunos.forEach(a => {
+    const k = av.turmas.some(t => t.id === a.turmaId) ? a.turmaId : SEM_TURMA;
+    if (!porTurma.has(k)) porTurma.set(k, []);
+    porTurma.get(k).push(a);
+  });
+  return [...porTurma.entries()].map(([id, alunos]) => ({
+    id, alunos: alunos.slice().sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR')),
+    turma: id === SEM_TURMA ? null : av.turmas.find(t => t.id === id)
+  })).sort((x, y) => !x.turma - !y.turma || (x.turma && y.turma && (String(x.turma.curso || '').localeCompare(String(y.turma.curso || ''), 'pt-BR') || periodoDaTurma(x.turma) - periodoDaTurma(y.turma))));
+}
+// Período pelo nome da turma do CADD ("GESTÃO COMERCIAL 4 - 2025/1" -> 4). Cada período é um diário no Edubox.
+function periodoDaTurma(t) {
+  const m = String(t.turma || '').match(/(\d+)\s*-\s*\d{4}/);
+  return m ? Number(m[1]) : 99;
+}
+function dialogoEdubox() {
+  const grupos = gruposEdubox();
+  const semValor = !av.valorTotal;
+  const d = document.createElement('div');
+  d.className = 'cp-modal'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Arquivo para o Edubox');
+  d.innerHTML = `<div class="cp-modal-box cp-modal-edubox"><h2>Arquivo para o Edubox</h2>
+    <p class="cp-dica">Uma linha por aluno: <b>Nome;Nota</b>, com ponto (ex.: 1.5). Mesmo modelo do arquivo da Trilha EAD. Um arquivo por turma (diário do Edubox), com os alunos da turma.</p>
+    ${grupos.filter(g => g.turma).length > 1 ? `<div class="cp-aviso-banco">Esta prova foi aplicada a <b>${grupos.filter(g => g.turma).length} períodos juntos</b>. No Edubox cada período é um diário separado, então sai <b>um arquivo por período</b> — os alunos não se misturam. Importe cada arquivo no diário do período dele.</div>` : ''}
+    ${semValor ? '<div class="cp-alerta">Esta avaliação está sem <b>Valor da prova</b>, então não há nota pra lançar. Preencha o Valor na aba <b>Gabarito</b> e volte aqui.</div>'
+      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), com 1 casa.</p>`}
+    <div class="cp-edubox-lista">
+      ${grupos.map(g => {
+        const sem = g.alunos.filter(a => !leituras[a.i]).length;
+        return `<div class="cp-edubox-linha">
+          <span><b>${g.turma ? esc(nomeTurma(g.turma)) : 'Alunos adicionados sem turma'}</b>
+            <small>${plural(g.alunos.length, 'aluno', 'alunos')}${sem ? ` · <span class="cp-edubox-zero">${plural(sem, 'sem folha lida sai', 'sem folha lida saem')} com 0</span>` : ' · todos corrigidos'}</small></span>
+          <button type="button" class="btn-primary" data-baixar-edubox="${esc(g.id)}" ${semValor ? 'disabled' : ''}>Baixar</button>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="cp-salvar"><button type="button" class="btn-secondary" data-fechar-modal="1">Fechar</button></div></div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', (e) => {
+    if (e.target === d || e.target.closest('[data-fechar-modal]')) { d.remove(); return; }
+    const b = e.target.closest('[data-baixar-edubox]');
+    if (b && !b.disabled) baixarCsvEdubox(grupos.find(g => g.id === b.dataset.baixarEdubox));
+  });
+}
+function baixarCsvEdubox(g) {
+  if (!g) return;
+  const linhas = ['Nome;Nota'];
+  g.alunos.forEach(a => linhas.push(`${String(a.nome).replace(/;/g, ' ')};${notaEdubox(a).toFixed(1)}`));
+  const blob = new Blob(['\ufeff' + linhas.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+  const disc = av.disciplina === VARIAS || !av.disciplina ? '' : titulo(av.disciplina);
+  const nome = [rotuloAv(av) || 'Avaliação', disc, g.turma ? nomeTurma(g.turma) : 'sem turma', av.semestre ? String(av.semestre).replace('-', '.') : '']
+    .filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]+/g, ' ');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${nome}.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  const sem = g.alunos.filter(a => !leituras[a.i]).length;
+  toast(`Arquivo baixado: ${g.turma ? nomeTurma(g.turma) : 'sem turma'} (${plural(g.alunos.length, 'aluno', 'alunos')}${sem ? `, ${sem} com 0 por não ter folha lida` : ''}).`);
 }
 
 // ---------- ADICIONAR ALUNO QUE FALTOU ----------
@@ -895,6 +970,7 @@ function wireEventos() {
     if (t.closest('[data-ler]')) { abrirLeitor(); return; }
     if (t.closest('[data-imprimir]')) { dialogoImpressao(); return; }
     const pl = t.closest('[data-planilha]'); if (pl) { baixarPlanilha(pl); return; }
+    if (t.closest('[data-edubox]')) { dialogoEdubox(); return; }
     const sg = t.closest('[data-salvar-gab]'); if (sg) { salvarGabarito(sg); return; }
     if (t.closest('[data-excluir-av]')) { excluirAvaliacao(); return; }
   });
