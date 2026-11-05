@@ -84,6 +84,12 @@
                         </div>
                         <select id="filtro-curso" class="select-filter"><option value="">Todos os cursos</option></select>
                         <select id="filtro-cidade" class="select-filter"><option value="">Todas as cidades</option></select>
+                        <select id="filtro-ordem" class="select-filter" title="Ordem da lista">
+                            <option value="alfa">Ordem: alfabética (A–Z)</option>
+                            <option value="mat-recente">Ordem: matrícula mais recente</option>
+                            <option value="mat-antiga">Ordem: matrícula mais antiga</option>
+                        </select>
+                        <label class="filtro-data" title="Só quem fez a matrícula nesse período (data de matrícula)">Matrícula de <input type="date" id="filtro-mat-de" class="select-filter"> até <input type="date" id="filtro-mat-ate" class="select-filter"></label>
                         <label class="filtro-data" title="Ordena a lista pela data de assinatura: primeiro o dia escolhido, depois os dias seguintes">Assinatura a partir de <input type="date" id="filtro-assinado" class="select-filter"></label>
                         <label class="filtro-check"><input type="checkbox" id="filtro-menor"> Só menores de 18</label>
                         <button type="button" class="btn-secondary hidden" id="btn-limpar-filtros">Limpar filtros</button>
@@ -286,6 +292,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=13"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=14"></script>
 </body>
 </html>

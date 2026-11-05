@@ -248,7 +248,7 @@ function wireEventos() {
     renderTudo();
   }));
 
-  ['busca', 'filtro-curso', 'filtro-cidade', 'filtro-menor', 'filtro-assinado'].forEach(id => {
+  ['busca', 'filtro-curso', 'filtro-cidade', 'filtro-menor', 'filtro-assinado', 'filtro-ordem', 'filtro-mat-de', 'filtro-mat-ate'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener(el.type === 'text' ? 'input' : 'change', renderTudo);
   });
@@ -273,6 +273,8 @@ function wireEventos() {
     document.getElementById('filtro-cidade').value = '';
     document.getElementById('filtro-menor').checked = false;
     document.getElementById('filtro-assinado').value = '';
+    document.getElementById('filtro-mat-de').value = '';
+    document.getElementById('filtro-mat-ate').value = '';
     tipoAtual = '';
     renderTudo();
   });
@@ -290,6 +292,8 @@ function wireEventos() {
     opcaoEscolhida('filtro-cidade') && `Cidade: ${opcaoEscolhida('filtro-cidade')}`,
     document.getElementById('filtro-menor').checked && 'Só menores de 18',
     document.getElementById('filtro-assinado').value && `Ordenado pela assinatura a partir de ${fmtData(document.getElementById('filtro-assinado').value)}`,
+    periodoMatriculaTexto(),
+    !document.getElementById('filtro-assinado').value && opcaoEscolhida('filtro-ordem'),
     document.getElementById('busca').value.trim() && `Busca: "${document.getElementById('busca').value.trim()}"`,
     `${document.querySelectorAll('#tabela-corpo tr:not(.mes-linha):not(:has(.tabela-msg))').length} aluno(s) listados`
   ], currentUser.displayName || currentUser.email));
@@ -354,8 +358,34 @@ function lerFiltros() {
     soMenor: document.getElementById('filtro-menor').checked,
     // não esconde ninguém: só reordena a tabela pela data de assinatura (ver ordenarPorAssinatura)
     assinadoDesde: document.getElementById('filtro-assinado').value,
+    // data de matrícula (05/11/2026): período "de/até" e a ordem da lista
+    matDe: document.getElementById('filtro-mat-de').value,
+    matAte: document.getElementById('filtro-mat-ate').value,
+    ordem: document.getElementById('filtro-ordem').value,
     tipo: tipoAtual
   };
+}
+
+// "Matrícula de 01/10/2026 até 31/10/2026" (ou só um dos lados) — resumo e impressão.
+function periodoMatriculaTexto() {
+  const de = document.getElementById('filtro-mat-de').value, ate = document.getElementById('filtro-mat-ate').value;
+  if (de && ate) return `Matrícula de ${fmtData(de)} até ${fmtData(ate)}`;
+  if (de) return `Matrícula a partir de ${fmtData(de)}`;
+  if (ate) return `Matrícula até ${fmtData(ate)}`;
+  return '';
+}
+
+// Ordem escolhida: alfabética (padrão) ou pela data de matrícula. Sem data de matrícula vai pro fim.
+function ordenarLista(lista, ordem) {
+  const porNome = (a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+  if (ordem === 'mat-recente' || ordem === 'mat-antiga') {
+    const dir = ordem === 'mat-recente' ? -1 : 1;
+    return lista.slice().sort((a, b) => {
+      if (!a.dataMatricula !== !b.dataMatricula) return a.dataMatricula ? -1 : 1;
+      return (a.dataMatricula || '').localeCompare(b.dataMatricula || '') * dir || porNome(a, b);
+    });
+  }
+  return lista.slice().sort(porNome);
 }
 
 function passaFiltros(r, f, ignorar = '') {
@@ -363,6 +393,8 @@ function passaFiltros(r, f, ignorar = '') {
   if (ignorar !== 'curso' && f.curso && (r.curso || '').trim() !== f.curso) return false;
   if (f.cidade && (r.cidade || '').trim() !== f.cidade) return false;
   if (f.soMenor && !r.menor18) return false;
+  if (f.matDe && !(r.dataMatricula && r.dataMatricula >= f.matDe)) return false;
+  if (f.matAte && !(r.dataMatricula && r.dataMatricula <= f.matAte)) return false;
   if (f.busca) {
     const noTexto = `${r.nome} ${r.observacoes} ${r.contato}`.toLowerCase().includes(f.busca);
     const noFone = f.buscaDig.length >= 4 && (r.contato || '').replace(/\D/g, '').includes(f.buscaDig);
@@ -441,9 +473,9 @@ function renderTudo() {
   renderTipos(f);
   renderCursos(f);
 
-  const filtrando = !!(f.tipo || f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde);
+  const filtrando = !!(f.tipo || f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde || f.matDe || f.matAte);
   document.getElementById('btn-limpar-filtros').classList.toggle('hidden', !filtrando);
-  const partes = [f.tipo && TIPO_LABEL[f.tipo], f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
+  const partes = [f.tipo && TIPO_LABEL[f.tipo], f.curso && `curso ${f.curso}`, f.cidade && `cidade ${f.cidade}`, f.soMenor && 'menores de 18', periodoMatriculaTexto().toLowerCase(), f.busca && `busca "${f.busca}"`, f.assinadoDesde && `ordenado pela assinatura a partir de ${fmtData(f.assinadoDesde)}`].filter(Boolean);
   const mostrando = base.filter(naAba).length;
   const totalAba = registros.filter(naAba).length;
   document.getElementById('filtro-resumo').innerHTML = filtrando
@@ -470,7 +502,7 @@ function ordenarPorAssinatura(lista, desde) {
 
 function renderTabela(base, f = {}) {
   const corpo = document.getElementById('tabela-corpo');
-  let lista = base.filter(naAba);
+  let lista = ordenarLista(base.filter(naAba), f.ordem);
   if (f.assinadoDesde) lista = ordenarPorAssinatura(lista, f.assinadoDesde);
   if (!lista.length) {
     corpo.innerHTML = `<tr><td colspan="10" class="tabela-msg">${registros.length ? 'Nenhum aluno nessa situação com esses filtros.' : 'Nenhum aluno nesse semestre ainda. Os alunos entram aqui automaticamente quando o Financeiro lança a matrícula.'}</td></tr>`;
