@@ -646,8 +646,17 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         const categoriaSugeridaTexto = req.body.categoriaSugeridaTexto;
         if (categoriaSugeridaTexto !== undefined) query = query.where('categoriaSugeridaTexto', '==', categoriaSugeridaTexto);
 
-        const snap = await query.get();
+        let snap = await query.get();
         if (snap.empty) return res.status(404).json({ error: 'Grupo de importação não encontrado (ou já resolvido).' });
+        // Bloco sem disciplina identificada (05/11/2026): o professor confirma uma disciplina de cada vez,
+        // escolhendo as questões dela (ids) — o resto continua na revisão. Antes, confirmar o bloco levava
+        // o arquivo inteiro (um simulado de 40 questões foi todo pra Conhecimentos Gerais).
+        if (Array.isArray(req.body.ids) && req.body.ids.length) {
+            const escolhidas = new Set(req.body.ids.filter(x => typeof x === 'string'));
+            const docs = snap.docs.filter(d => escolhidas.has(d.id));
+            if (docs.length !== escolhidas.size) return res.status(400).json({ error: 'Algumas questões escolhidas não estão mais neste bloco da revisão. Atualize a página.' });
+            snap = { docs, size: docs.length };
+        }
         const alheia = snap.docs.find(doc => erroDeDono(req, doc.data()));
         if (alheia) return res.status(403).json({ error: erroDeDono(req, alheia.data()) });
 

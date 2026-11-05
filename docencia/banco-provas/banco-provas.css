@@ -412,3 +412,15 @@ body.orb-v2 .modal-actions { border-top: 1px solid var(--orb-linha2, #EEF2F7); p
 /* Revisão: publicar todos os blocos de uma vez (29/10/2026) */
 .bp-revisao-todos { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: .9rem; }
 .bp-revisao-todos.hidden { display: none; }
+
+/* Bloco sem disciplina identificada (05/11/2026): faixa de questões da disciplina escolhida */
+.bp-revisao-faixa { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 4px; padding: 10px 12px; border: 1px dashed #f0b45a; border-radius: 10px; background: #fff8ec; }
+.bp-revisao-faixa .bp-revisao-incerta { flex: 1 1 100%; }
+.bp-revisao-faixa label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.85rem; }
+.bp-revisao-faixa input { width: 80px; }
+
+/* Gabarito digitado na importação (05/11/2026) */
+.gab-digitar { display: grid; gap: 6px; margin: 4px 0 12px; font-weight: 700; font-size: 0.9rem; }
+.gab-digitar small { font-weight: 500; color: var(--text-secondary, #5b6a80); }
+.gab-digitar input { padding: 10px 12px; border: 1px solid #d5dce6; border-radius: 10px; font: 600 1rem/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+.gab-digitar input:focus-visible { outline: 2px solid #1f6fb2; outline-offset: 1px; }

@@ -6,7 +6,7 @@
     <title>Banco de Provas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=16">
+    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=18">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -338,6 +338,9 @@
             <div id="importar-etapa-gabarito" class="hidden">
                 <p class="modal-subtitle">Importando para <strong id="importar-gabarito-curso-nome"></strong> — clique na alternativa certa de cada questão. <span id="importar-gabarito-progresso" class="bp-badge bp-badge-objetiva"></span></p>
                 <p id="importar-rascunho-aviso" class="form-hint hidden" style="color:var(--accent-orange); font-weight:600;">Progresso salvo automaticamente neste navegador — pode fechar e voltar depois sem perder o que já marcou.</p>
+                <label class="gab-digitar" for="importar-gabarito-digitar">Digitar o gabarito <small>(opcional — as letras em sequência, igual na Correção de Provas: ex.: ABCDA BECDA…; espaço e número são ignorados. Saia do campo ou aperte Enter.)</small>
+                    <input type="text" id="importar-gabarito-digitar" autocomplete="off" spellcheck="false" placeholder="Ex.: ABCDA BECDA CCADE…">
+                </label>
                 <div id="importar-gabarito-lista" style="max-height:50vh; overflow-y:auto;"></div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" id="btn-descartar-importar">Descartar e começar de novo</button>
@@ -481,6 +484,6 @@
 
     <!-- JSZip: tira as fontes embutidas do .docx antes de enviar (mesma versão do CPA) -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script type="module" src="/docencia/banco-provas/app.js?v=26"></script>
+    <script type="module" src="/docencia/banco-provas/app.js?v=28"></script>
 </body>
 </html>
