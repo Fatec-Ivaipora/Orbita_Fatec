@@ -11,7 +11,10 @@ const { montar, semestresPadrao, normSemestre, formatosEdubox, cursoIdDe } = req
 // Lista as disciplinas EAD do semestre (tipo "A Distância" no Edubox, lançadas
 // nas turmas — mesma consulta do Matrizes, relay /matrizes/dados) e sugere:
 //   replicar        já foi oferecida antes no mesmo curso (mesmo código ou mesmo nome)
-//   replicar-outro  nunca no curso, mas existe com o mesmo nome em outro curso
+//   replicar-outro  nunca no curso, mas existe com o MESMO NOME em curso que compartilha conteúdo
+//                   (hoje só Arquitetura ↔ Engenharia Civil — CURSOS_MESMO_CONTEUDO)
+//   Mesmo nome em outro curso fora desses grupos NÃO é o mesmo conteúdo (05/11/2026: "a Optativa da Fisio
+//   não é a mesma da Biomed") → fica "criar", com aviso da sala parecida; a TI só muda pra replicar se combinado.
 //   criar           nunca oferecida → precisa ser criada do zero (com professor pago)
 // A TI confirma/ajusta. As que são "criar" seguem o fluxo de criação:
 //   1 treinamento (TI) · 2 seleção das unidades (TI) · 3 coordenador valida as
@@ -53,6 +56,21 @@ const DESTINOS = ['coordenador', 'ead'];
 const ORIGENS = ['criar', 'replicar', 'replicar-outro', 'ja-existe'];
 
 // Só os cursos da FATEC (o banco do Edubox é compartilhado com outras instituições).
+// Cursos que compartilham conteúdo: disciplina com o mesmo nome na matriz é a mesma sala e pode ser copiada
+// de um pro outro (05/11/2026 — Arquitetura e Engenharia Civil). Aumentar aqui se combinar outro par.
+const CURSOS_MESMO_CONTEUDO = [['arquitetura-urbanismo', 'engenharia-civil']];
+// Disciplinas COMUNS a todos os cursos (05/11/2026): o conteúdo é o mesmo e já há sala pronta — curso que nunca
+// teve copia a sala mais recente de QUALQUER curso. Pelo nome normalizado (sem acento/pontuação).
+// "Gestão e Empreendedorismo em Medicina Veterinária" é outra disciplina (não entra).
+const DISCIPLINAS_COMUNS = [
+    { id: 'empreendedorismo', re: /^EMPREENDEDORISMO$/ },
+    { id: 'educacao-em-humanidades', re: /^EDUCACAO EM HUMANIDADES\b/ }
+];
+const comumDe = (nome) => { const n = String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); const c = DISCIPLINAS_COMUNS.find(d => d.re.test(n)); return c ? c.id : null; };
+const grupoDoCurso = (c) => { const g = CURSOS_MESMO_CONTEUDO.find(x => x.includes(c)); return g ? g.join('+') : c; };
+const mesmoConteudo = (a, b) => grupoDoCurso(a) === grupoDoCurso(b);
+// nome da disciplina dentro do nome da sala ("EAD 2026 2 ARQUITETURA URBANISMO 6 PER HIDRAULICA SANEAMENTO" -> "HIDRAULICA SANEAMENTO")
+const discDaSala = (a) => { const m = String(a.chave || '').match(/\bPER (.+)$/); return m ? m[1] : String(a.chave || ''); };
 const CURSOS_FATEC = ['agronegocio', 'agronomia', 'arquitetura-urbanismo', 'biomedicina', 'contabeis', 'direito', 'enfermagem',
     'engenharia-civil', 'gestao-financeira', 'fisioterapia', 'gestao-comercial', 'logistica', 'medicina', 'medicina-veterinaria',
     'pedagogia', 'psicologia', 'rh'];
@@ -153,38 +171,92 @@ function noAva(salas, semestre, cursoId, k) {
     const antes = achadas.filter(a => a.semestre < semestre && /\bEAD\b/i.test(a.nome));
     if (!antes.length) return null;
     const doCurso = antes.filter(a => a.cursoId === cursoId);
-    return doCurso.length ? { origem: 'replicar', a: ord(doCurso) } : { origem: 'replicar-outro', a: ord(antes) };
+    if (doCurso.length) return { origem: 'replicar', a: ord(doCurso) };
+    // outro curso: só copia se o curso compartilha conteúdo E o nome da disciplina é IGUAL
+    // ("HIDRAULICA" não é "HIDRAULICA SANEAMENTO")
+    const irmas = antes.filter(a => mesmoConteudo(a.cursoId, cursoId) && discDaSala(a) === k);
+    if (irmas.length) return { origem: 'replicar-outro', a: ord(irmas) };
+    return { origem: 'parecida', a: ord(antes) }; // só aviso: sala com nome parecido em outro curso
+}
+
+// Períodos que estudam juntos (05/11/2026): vêm dos arquivos de horário do módulo Matrizes
+// (matrizes_grade/{semestre}__{curso}.grupos, ex.: [[2],[3,4],[5,6]]). Sem o horário do semestre, usa o do
+// semestre anterior com todo mundo subindo um período ([5,6] de 2026.2 → [6,7] de 2027.1) e marca pra confirmar.
+async function gruposQueEstudamJuntos(semestre) {
+    const ler = async (sem) => {
+        const snap = await db.collection('matrizes_grade').where('semestre', '==', sem).get();
+        const m = new Map();
+        snap.docs.forEach(d => { const x = d.data(); const g = (x.grupos || []).map(v => (Array.isArray(v) ? v : v.periodos || [])); if (g.length) m.set(x.cursoId || d.id.split('__')[1], g); });
+        return m;
+    };
+    const atual = await ler(semestre);
+    const antes = await ler(anteriores(semestre, 1)[0]);
+    const out = new Map();
+    atual.forEach((g, c) => out.set(c, { grupos: g, confirmado: true }));
+    antes.forEach((g, c) => { if (!out.has(c)) out.set(c, { grupos: g.map(p => p.map(n => n + 1)), confirmado: false }); });
+    return out;
 }
 
 async function listaDoSemestre(semestre) {
-    const [atual, antigos, salas] = await Promise.all([
+    const [atual, antigos, salas, juntosPorCurso] = await Promise.all([
         dadosDe(formatosEdubox(semestre)),
         dadosDe(anteriores(semestre, 8).flatMap(formatosEdubox)),
-        salasDoAva()
+        salasDoAva(),
+        gruposQueEstudamJuntos(semestre)
     ]);
+    // true/false = o horário diz; null = não há horário do curso pra saber
+    const estudamJuntos = (cursoId, a, b) => {
+        const j = juntosPorCurso.get(cursoId);
+        if (!j) return { juntas: null, confirmado: false };
+        return { juntas: j.grupos.some(g => a.some(p => g.includes(p)) && b.some(p => g.includes(p))), confirmado: j.confirmado };
+    };
     const lista = eadDoSemestre(atual);
     const antes = eadDoSemestre(antigos);
-    const porCod = new Map(), porNomeCurso = new Map(), porNome = new Map();
+    const porCod = new Map(), porNomeCurso = new Map(), porNomeGrupo = new Map(), porNome = new Map(), porComum = new Map();
     const maisNovo = (m, k, x) => { if (!m.has(k) || x.semestre > m.get(k).semestre) m.set(k, x); };
     antes.forEach(x => {
         maisNovo(porCod, `${x.cursoId}:${x.coddis}`, x);
         maisNovo(porNomeCurso, `${x.cursoId}:${chave(x.nome)}`, x);
+        maisNovo(porNomeGrupo, `${grupoDoCurso(x.cursoId)}:${chave(x.nome)}`, x);
         maisNovo(porNome, chave(x.nome), x);
+        const comum = comumDe(x.nome);
+        if (comum) maisNovo(porComum, comum, x);
     });
     const de = (r) => ({ semestre: r.semestre, cursoId: r.cursoId, cursoNome: r.cursoNome, nome: r.nome });
-    const criadasAgora = new Map(); // mesma disciplina nova em 2 cursos/turmas no mesmo semestre: cria uma vez só
+    // mesma disciplina nova em 2 turmas do mesmo curso (ou de cursos que compartilham conteúdo) no mesmo
+    // semestre: cria uma vez só
+    const criadasAgora = new Map();
     [...lista.values()].sort((a, b) => a.cursoNome.localeCompare(b.cursoNome) || a.periodos[0] - b.periodos[0]).forEach(x => {
         const k = chave(x.nome);
+        const kg = `${grupoDoCurso(x.cursoId)}:${k}`;
         const ref = porCod.get(`${x.cursoId}:${x.coddis}`) || porNomeCurso.get(`${x.cursoId}:${k}`);
+        const irma = !ref && porNomeGrupo.get(kg);   // mesmo nome na matriz de um curso que compartilha conteúdo
+        const comum = !ref && comumDe(x.nome) && porComum.get(comumDe(x.nome)); // disciplina comum: sala de qualquer curso
         const ava = noAva(salas, semestre, x.cursoId, k);
+        const agora = criadasAgora.get(kg);
         if (ava && ava.origem === 'ja-existe') x.sugestao = { origem: 'ja-existe', de: { ...ava.a, ava: true } };
         else if (ref) x.sugestao = { origem: 'replicar', de: de(ref) };
         else if (ava && ava.origem === 'replicar') x.sugestao = { origem: 'replicar', de: { ...ava.a, ava: true } };
-        else if (porNome.get(k)) x.sugestao = { origem: 'replicar-outro', de: de(porNome.get(k)) };
-        else if (ava) x.sugestao = { origem: 'replicar-outro', de: { ...ava.a, ava: true } };
-        else if (criadasAgora.has(k)) x.sugestao = { origem: 'replicar-outro', de: de(criadasAgora.get(k)) };
-        else { x.sugestao = { origem: 'criar', de: null }; criadasAgora.set(k, x); }
+        else if (irma) x.sugestao = { origem: 'replicar-outro', de: de(irma) };
+        else if (comum) x.sugestao = { origem: 'replicar-outro', de: de(comum), comum: true };
+        else if (ava && ava.origem === 'replicar-outro') x.sugestao = { origem: 'replicar-outro', de: { ...ava.a, ava: true } };
+        // mesma disciplina já "a criar" neste semestre em outro período do curso (ou no curso parceiro):
+        // é a MESMA sala — cria uma vez só e esta turma usa a mesma (não é cópia do semestre anterior)
+        else if (agora && (agora.cursoId !== x.cursoId || estudamJuntos(x.cursoId, agora.periodos, x.periodos).juntas !== false)) {
+            // no mesmo curso só é a mesma sala se os períodos estudam juntos (horário); entre cursos parceiros, sim
+            const j = agora.cursoId === x.cursoId ? estudamJuntos(x.cursoId, agora.periodos, x.periodos) : { juntas: true, confirmado: true };
+            x.sugestao = { origem: agora.cursoId === x.cursoId ? 'replicar' : 'replicar-outro', de: { ...de(agora), periodos: agora.periodos }, mesmaSala: true,
+                juntas: j.juntas, juntasConfirmado: j.confirmado };
+        }
+        else {
+            // nome igual/parecido em OUTRO curso não é o mesmo conteúdo: cria, e só avisa onde tem sala parecida
+            const outro = porNome.get(k);
+            const parecida = outro && outro.cursoId !== x.cursoId ? de(outro) : (ava && ava.origem === 'parecida' ? { ...ava.a, ava: true } : null);
+            x.sugestao = { origem: 'criar', de: null, ...(parecida ? { parecida } : {}) };
+            criadasAgora.set(kg, x);
+        }
         if (x.sugestao.de) delete x.sugestao.de.chave;
+        if (x.sugestao.parecida) delete x.sugestao.parecida.chave;
     });
     return lista;
 }
@@ -380,11 +452,12 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
             });
         });
         linhas.sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') || a.periodo - b.periodo || a.disciplina.localeCompare(b.disciplina, 'pt-BR'));
-        // SALA-MÃE: a mesma disciplina (mesmo nome) em vários cursos/turmas tem o mesmo conteúdo. Uma sala é a
+        // SALA-MÃE: a mesma disciplina (mesmo nome) em várias turmas DO MESMO CURSO (ou de cursos que compartilham
+        // conteúdo — CURSOS_MESMO_CONTEUDO) tem o mesmo conteúdo. Uma sala é a
         // mãe — 1ª rodada: replica a sala do semestre anterior (ou é criada do zero) e a TI atualiza;
         // 2ª rodada: as outras replicam da mãe já atualizada.
         const grupos = new Map();
-        linhas.filter(l => l.origem !== 'ja-existe').forEach(l => { const k = chave(l.disciplina); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); });
+        linhas.filter(l => l.origem !== 'ja-existe').forEach(l => { const k = `${grupoDoCurso(l.cursoId)}:${chave(l.disciplina)}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); });
         grupos.forEach(g => {
             const mae = g.find(l => l.origem === 'criar') || g.find(l => l.origem === 'replicar' && l.modelo) || g.find(l => l.modelo) || g[0];
             g.forEach(l => {
