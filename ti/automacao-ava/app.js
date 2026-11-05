@@ -130,10 +130,17 @@ function renderCriacao() {
 
 const nomeCurso = (n) => String(n || '').replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '');
 
+// Sala com o mesmo nome em OUTRO curso (fora dos que compartilham conteúdo): não é o mesmo conteúdo,
+// então a sugestão é criar; o aviso fica pra TI decidir se foi combinado copiar.
+function avisoParecida(d) {
+  const p = d.origem === 'criar' && d.sugestao && d.sugestao.parecida;
+  return p ? `<span class="av-sub av-parecida" title="Mesmo nome em outro curso não é o mesmo conteúdo. Só copie se foi combinado (escolha na ficha).">Há sala com o mesmo nome em ${esc(nomeCurso(p.cursoNome))} (${esc(p.semestre)}) — outro curso, só copiar se combinado</span>` : '';
+}
+
 function linha(d) {
   const per = d.periodos && d.periodos.length ? `${d.periodos.join('º/')}º per.` : '';
   const meta = [nomeCurso(d.cursoNome), per, d.chEad ? `${d.chEad}h EAD` : ''].filter(Boolean).join(' · ');
-  const tags = `${d.edubox === false ? '<span class="av-tag av-tag-alerta" title="Não está mais lançada no Edubox">fora do Edubox</span>' : ''}`;
+  const tags = `${d.edubox === false ? '<span class="av-tag av-tag-alerta" title="Não está mais lançada no Edubox">fora do Edubox</span>' : ''}${d.sugestao && d.sugestao.comum ? '<span class="av-tag" title="Disciplina comum a todos os cursos: copia a sala mais recente de qualquer curso">disciplina comum</span>' : ''}`;
   const origem = `<span class="av-origem av-origem-${d.origem}">${ORIGEM[d.origem].curto}</span>`;
   const de = d.sugestao && d.sugestao.de ? `${esc(d.sugestao.de.nome)}<span class="av-sub">${esc(nomeCurso(d.sugestao.de.cursoNome))} · ${esc(d.sugestao.de.semestre)}${d.sugestao.de.ava ? ' · sala no AVA' : ''}</span>` : '<span class="av-sub">—</span>';
   let resto;
@@ -142,10 +149,11 @@ function linha(d) {
     resto = `<td>${d.professor ? `${esc(d.professor)}<span class="av-sub">${d.titulacao ? `${esc(dados.titulacoes[d.titulacao].rotulo)} · ${brl(d.valor)}` : 'titulação não definida'}${a.pago ? ' · <b class="av-ok">pago</b>' : ''}</span>` : '<span class="av-sub av-alerta">definir professor</span>'}</td>
       <td><div class="av-passos">${dados.etapas.map((e, i) => `<span class="av-passo${a.etapas[i] ? ' feito' : ''}" title="${esc(e.rotulo)}">${i + 1}</span>`).join('')}</div>
         <span class="av-sub">avaliações ${a.entregues}/${a.total} · <span class="av-sit av-sit-${a.situacao.id}">${a.situacao.rotulo}</span></span></td>`;
-  } else if (filtroOrigem === 'todas') resto = `<td colspan="2" class="av-sub">${d.sugestao && d.sugestao.de ? `copiar de ${esc(d.sugestao.de.nome)} (${esc(nomeCurso(d.sugestao.de.cursoNome))} · ${esc(d.sugestao.de.semestre)}${d.sugestao.de.ava ? ' · sala no AVA' : ''})` : '—'}</td>`;
+  } else if (d.sugestao && d.sugestao.mesmaSala) resto = `<td colspan="2" class="av-sub">mesma sala do ${esc((d.sugestao.de.periodos || []).join('º/'))}º período${d.sugestao.de.cursoId !== d.cursoId ? ` de ${esc(nomeCurso(d.sugestao.de.cursoNome))}` : ''} — criada uma vez só, as turmas usam a mesma${d.sugestao.juntas === null ? ' <b class="av-alerta">(sem horário do curso: confirmar se estudam juntos)</b>' : d.sugestao.juntasConfirmado === false ? ' <i>(estudam juntos pelo horário do semestre anterior; confirmar quando sair o novo)</i>' : ''}</td>`;
+  else if (filtroOrigem === 'todas') resto = `<td colspan="2" class="av-sub">${d.sugestao && d.sugestao.de ? `copiar de ${esc(d.sugestao.de.nome)} (${esc(nomeCurso(d.sugestao.de.cursoNome))} · ${esc(d.sugestao.de.semestre)}${d.sugestao.de.ava ? ' · sala no AVA' : ''})` : '—'}</td>`;
   else resto = `<td>${de}</td>`;
   return `<tr class="av-linha" data-av-abrir="${esc(d.id)}" tabindex="0">
-    <td><span class="av-titulo">${esc(d.nome)}</span>${tags}<span class="av-sub">${esc(meta)}</span></td>
+    <td><span class="av-titulo">${esc(d.nome)}</span>${tags}<span class="av-sub">${esc(meta)}</span>${avisoParecida(d)}</td>
     <td>${origem}</td>${resto}</tr>`;
 }
 

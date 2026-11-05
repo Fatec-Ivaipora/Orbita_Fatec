@@ -136,3 +136,5 @@
 }
 .av-rel-fixa { table-layout: fixed; }
 .av-rel-fixa td, .av-rel-fixa th { overflow-wrap: anywhere; }
+
+.av-parecida { display: block; color: #a8650b; font-weight: 600; }
