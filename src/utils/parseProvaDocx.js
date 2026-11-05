@@ -214,6 +214,23 @@ function tituloDeUmaPalavra(linha, proxima) {
     return marcadorPorPalavra((proxima || '').trim()) !== null;
 }
 
+// Título de disciplina em letras normais ("Anatomia e Fisiologia", "Prát. Laboratório em Morfofisiologia",
+// "Empreendedorismo" — simulado da Enfermagem, 05/11/2026): o leitor só aceitava título em CAIXA ALTA e
+// juntava as 40 questões numa disciplina só. Vale só logo antes de um "Questão N", curto, sem pontuação no
+// fim, sem letra de alternativa no começo e com TODA palavra de 4+ letras começando em maiúscula — assim
+// uma alternativa sem letra ("Coluna renal", "O epidídimo.") nunca vira título.
+function tituloAntesDaQuestao(linha, proxima) {
+    const t = (linha || '').trim();
+    if (t.length < 3 || t.length > 80 || /^Quest(ã|a)o\b/i.test(t)) return false;
+    if (/[.;:,?!)]$/.test(t)) return false;
+    if (/^\(?[A-Ea-e]\s*[\)\.\-–]/.test(t)) return false;
+    if (!/^\p{Lu}/u.test(t) || FRASES_IGNORADAS_COMO_SECAO.has(t)) return false;
+    const palavras = t.split(/\s+/);
+    if (palavras.length > 8) return false;
+    if (!palavras.filter(w => w.replace(/[^\p{L}]/gu, '').length >= 4).every(w => /^\p{Lu}/u.test(w))) return false;
+    return marcadorPorPalavra((proxima || '').trim()) !== null;
+}
+
 // Remove um prefixo de letra decorativo ("A)", "a.", "A -") do INÍCIO da
 // linha, se existir — a letra de verdade vem da posição, não desse prefixo.
 const PREFIXO_LETRA_REGEX = /^([A-Ea-e])\s*[\)\.\-]\s*/;
@@ -368,7 +385,7 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
             proximoEsperado = numeroMarcador + 1;
             continue;
         }
-        const ehTitulo = pareceCabecalhoDeSecao(linha) || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]);
+        const ehTitulo = pareceCabecalhoDeSecao(linha) || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]) || tituloAntesDaQuestao(linha, linhasBrutas[i + 1]);
         if (!blocoAtual && ehTitulo) {
             disciplinaAtual = linha;
             continue;

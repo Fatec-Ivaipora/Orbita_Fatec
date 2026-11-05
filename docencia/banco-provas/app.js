@@ -648,6 +648,16 @@ function renderRevisao() {
             <button type="button" class="btn-secondary bp-revisao-btn-descartar">Descartar</button>
           </div>
         </div>
+        ${g.categoriaSugeridaTexto ? '' : (() => {
+          const nums = g.itens.map(q => Number(q.numeroOriginal)).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+          const cheio = g.itens.length <= FAIXA_AUTOMATICA_ATE; // arquivo pequeno sem título: normalmente é uma disciplina só
+          return `<div class="bp-revisao-faixa">
+            <div class="bp-revisao-incerta">Não identifiquei as disciplinas deste arquivo. Se ele tem mais de uma disciplina, confirme <b>uma de cada vez</b>: informe só as questões da disciplina escolhida acima. As outras continuam aqui.</div>
+            <label>Questões da nº <input type="number" class="select-filter bp-revisao-de" min="${nums[0] || 1}" max="${nums[nums.length - 1] || 1}" value="${cheio && nums.length ? nums[0] : ''}" aria-label="Primeira questão desta disciplina"></label>
+            <label>até a nº <input type="number" class="select-filter bp-revisao-ate" min="${nums[0] || 1}" max="${nums[nums.length - 1] || 1}" value="${cheio && nums.length ? nums[nums.length - 1] : ''}" aria-label="Última questão desta disciplina"></label>
+            <span class="bp-revisao-card-qtd">${nums.length ? `neste bloco: da ${nums[0]} à ${nums[nums.length - 1]}` : ''}</span>
+          </div>`;
+        })()}
         <details class="bp-revisao-questoes">
           <summary>Ver questões / mover para outro bloco</summary>
           ${g.itens.map(q => {
@@ -670,7 +680,9 @@ function renderRevisao() {
     disciplinaId: card.querySelector('.bp-revisao-select-disciplina').value,
     bimestre: card.querySelector('.bp-revisao-select-bimestre').value,
     chamada: card.querySelector('.bp-revisao-select-chamada').value,
-    semestre: card.querySelector('.bp-revisao-input-semestre').value.trim()
+    semestre: card.querySelector('.bp-revisao-input-semestre').value.trim(),
+    de: card.querySelector('.bp-revisao-de')?.value || '',
+    ate: card.querySelector('.bp-revisao-ate')?.value || ''
   });
   grupoLista.forEach((g, i) => {
     const card = lista.querySelector(`[data-grupo-index="${i}"]`);
@@ -699,19 +711,37 @@ function renderRevisao() {
   if (btnTodos) btnTodos.onclick = () => confirmarTodosRevisao(grupoLista.map((g, i) => ({ g, dados: dadosDoCard(lista.querySelector(`[data-grupo-index="${i}"]`)) })));
 }
 
+// Bloco "sem seção detectada": até este tamanho a faixa já vem com todas as questões (arquivo de uma
+// disciplina só sem título); acima, a faixa é obrigatória — é simulado/arquivo com várias disciplinas.
+const FAIXA_AUTOMATICA_ATE = 12;
+// Questões do bloco sem seção que vão pra disciplina escolhida (pela faixa "da nº … até a nº …").
+// Devolve { ids } ou { erro }. Bloco com título: { ids: null } (confirma o bloco todo, como sempre).
+function questoesDaFaixa(grupo, dados) {
+  if (grupo.categoriaSugeridaTexto) return { ids: null };
+  const de = parseInt(dados.de, 10), ate = parseInt(dados.ate, 10);
+  if (!Number.isFinite(de) || !Number.isFinite(ate)) return { erro: 'Este arquivo não teve as disciplinas identificadas: informe as questões desta disciplina (da nº … até a nº …).' };
+  if (de > ate) return { erro: 'A questão inicial tem que ser menor ou igual à final.' };
+  const ids = grupo.itens.filter(q => Number(q.numeroOriginal) >= de && Number(q.numeroOriginal) <= ate).map(q => q.id);
+  if (!ids.length) return { erro: `Nenhuma questão entre a nº ${de} e a nº ${ate} neste bloco.` };
+  return { ids };
+}
+
 // "Confirmar todos" (29/10/2026): publica todos os blocos de uma vez. Confere tudo antes de gravar
 // qualquer coisa — se faltar disciplina/bimestre/chamada em algum bloco, avisa qual e não publica nada.
 async function confirmarTodosRevisao(itens) {
   const faltando = itens.filter(({ dados }) => !dados.disciplinaId || !dados.chamada || (dados.chamada !== 'exame' && !dados.bimestre))
     .map(({ g }) => g.categoriaSugeridaTexto || '(sem seção detectada)');
   if (faltando.length) { showToast(`Falta disciplina, bimestre ou chamada em: ${faltando.join(', ')}.`, 'error'); return; }
+  const semFaixa = itens.find(({ g, dados }) => questoesDaFaixa(g, dados).erro);
+  if (semFaixa) { showToast(questoesDaFaixa(semFaixa.g, semFaixa.dados).erro, 'error'); return; }
   const btn = document.getElementById('bp-revisao-btn-todos');
   btn.disabled = true; btn.textContent = 'Publicando...';
   let ok = 0, total = 0;
   try {
     for (const { g, dados } of itens) {
-      await apiFetch(`/banco-provas/questoes/lote/${g.loteId}/resolver`, { method: 'PUT', body: JSON.stringify({ ...dados, categoriaSugeridaTexto: g.categoriaSugeridaTexto }) });
-      ok++; total += g.itens.length;
+      const { ids } = questoesDaFaixa(g, dados);
+      await apiFetch(`/banco-provas/questoes/lote/${g.loteId}/resolver`, { method: 'PUT', body: JSON.stringify({ ...dados, categoriaSugeridaTexto: g.categoriaSugeridaTexto, ...(ids ? { ids } : {}) }) });
+      ok++; total += ids ? ids.length : g.itens.length;
     }
     showToast(`${total} questões publicadas (${ok} blocos).`);
   } catch (err) {
@@ -731,12 +761,15 @@ async function resolverGrupoRevisao(grupo, dados) {
   // Exame não tem bimestre (só acontece depois do 2º bimestre), então essa
   // exigência não vale quando a chamada é "Exame".
   if (dados.chamada !== 'exame' && !dados.bimestre) { showToast('Selecione o bimestre.', 'error'); return; }
+  const faixa = questoesDaFaixa(grupo, dados);
+  if (faixa.erro) { showToast(faixa.erro, 'error'); return; }
   try {
     await apiFetch(`/banco-provas/questoes/lote/${grupo.loteId}/resolver`, {
       method: 'PUT',
-      body: JSON.stringify({ ...dados, categoriaSugeridaTexto: grupo.categoriaSugeridaTexto })
+      body: JSON.stringify({ ...dados, categoriaSugeridaTexto: grupo.categoriaSugeridaTexto, ...(faixa.ids ? { ids: faixa.ids } : {}) })
     });
-    showToast('Disciplina confirmada — questões publicadas.');
+    const resto = faixa.ids ? grupo.itens.length - faixa.ids.length : 0;
+    showToast(faixa.ids ? `${faixa.ids.length} questão(ões) publicadas.${resto ? ` ${resto} continuam na revisão para as outras disciplinas.` : ''}` : 'Disciplina confirmada — questões publicadas.');
     await carregarTudoDoCurso();
   } catch (err) {
     showToast(err.message, 'error');
@@ -819,6 +852,7 @@ function popularSelectCursoImportacao(cursoPreSelecionado) {
 }
 
 function abrirModalImportar() {
+  const campoGabDig = document.getElementById('importar-gabarito-digitar'); if (campoGabDig) campoGabDig.value = '';
   document.getElementById('modal-importar').classList.remove('hidden');
 
   const rascunho = lerRascunhoImportacao();
@@ -1013,6 +1047,23 @@ function renderGabaritoImportacao() {
   });
 
   atualizarProgressoGabarito();
+}
+
+// Gabarito digitado (05/11/2026, igual ao "Colar o gabarito" da Correção de Provas): as letras em sequência
+// preenchem as questões objetivas NA ORDEM (dissertativa é pulada). Só letras válidas pra quantidade de
+// alternativas da prova; o resto (espaço, número, traço) é ignorado. As bolinhas continuam valendo.
+function aplicarGabaritoDigitado(texto) {
+  const validas = LETRAS_GABARITO.slice(0, importarAlternativasPorQuestao);
+  const letras = String(texto || '').toUpperCase().replace(/[^A-Z]/g, '').split('');
+  const invalidas = [...new Set(letras.filter(l => !validas.includes(l)))];
+  const objetivas = importarQuestoesAnalisadas.filter(q => q.tipo !== 'dissertativa');
+  let n = 0;
+  letras.filter(l => validas.includes(l)).slice(0, objetivas.length).forEach((l, i) => { objetivas[i].gabarito = l; n++; });
+  if (!n) { showToast(`Digite as letras do gabarito (${validas.join(', ')}).`, 'error'); return; }
+  salvarRascunhoImportacao();
+  renderGabaritoImportacao();
+  const sobrou = letras.filter(l => validas.includes(l)).length - n;
+  showToast(`${n} resposta(s) preenchida(s) de ${objetivas.length} questões.${sobrou > 0 ? ` ${sobrou} letra(s) a mais foram ignoradas.` : ''}${invalidas.length ? ` Ignorei: ${invalidas.join(', ')}.` : ''}`);
 }
 
 function atualizarProgressoGabarito() {
@@ -1736,6 +1787,9 @@ function bindEventos() {
     }
   });
   document.getElementById('btn-imprimir-gabarito-importar').addEventListener('click', imprimirGabaritoImportacao);
+  const campoGab = document.getElementById('importar-gabarito-digitar');
+  campoGab.addEventListener('change', () => { if (campoGab.value.trim()) aplicarGabaritoDigitado(campoGab.value); });
+  campoGab.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (campoGab.value.trim()) aplicarGabaritoDigitado(campoGab.value); } });
   document.getElementById('btn-confirmar-importar').addEventListener('click', confirmarImportacao);
 
   document.getElementById('bp-btn-nova-prova').addEventListener('click', abrirModalProva);
