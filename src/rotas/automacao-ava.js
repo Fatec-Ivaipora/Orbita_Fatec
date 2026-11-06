@@ -64,7 +64,10 @@ const CURSOS_MESMO_CONTEUDO = [['arquitetura-urbanismo', 'engenharia-civil']];
 // "Gestão e Empreendedorismo em Medicina Veterinária" é outra disciplina (não entra).
 const DISCIPLINAS_COMUNS = [
     { id: 'empreendedorismo', re: /^EMPREENDEDORISMO$/ },
-    { id: 'educacao-em-humanidades', re: /^EDUCACAO EM HUMANIDADES\b/ }
+    { id: 'educacao-em-humanidades', re: /^EDUCACAO EM HUMANIDADES\b/ },
+    // 06/11/2026 (pedido do usuário): também comuns — uma sala-mãe pra todos os cursos
+    { id: 'metodologia-cientifica', re: /^METODOLOGIA CIENTIFICA$/ },
+    { id: 'competencias-habilidades-linguisticas', re: /^COMPETENCIAS E HABILIDADES LINGUISTICAS?$/ }
 ];
 const comumDe = (nome) => { const n = String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); const c = DISCIPLINAS_COMUNS.find(d => d.re.test(n)); return c ? c.id : null; };
 const grupoDoCurso = (c) => { const g = CURSOS_MESMO_CONTEUDO.find(x => x.includes(c)); return g ? g.join('+') : c; };
@@ -422,11 +425,12 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
         if (!['ti', 'adm'].includes(papelDe(req))) return res.status(403).json({ error: 'Só a TI gera os arquivos do Conduit.' });
         const semestre = req.query.semestre;
         if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
-        const [r, lista, snap, salasAva] = await Promise.all([
+        const [r, lista, snap, salasAva, juntos] = await Promise.all([
             relay(`/automacao-ava/salas?semestres=${encodeURIComponent(formatosEdubox(semestre).join(','))}`, { timeoutMs: 45000 }),
             listaDoSemestre(semestre),
             db.collection(COL).where('semestre', '==', semestre).get(),
-            salasDoAva()
+            salasDoAva(),
+            gruposQueEstudamJuntos(semestre)
         ]);
         const salvos = new Map(snap.docs.map(d => [d.id, d.data()]));
         const [ano, sem] = semestre.split('.');
@@ -448,27 +452,69 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
                 idnumber: String(s.coddtu),
                 category: `UNESVI\\Graduação\\${codcur}\\${ano}${codcur === 'MED' ? '-' : '/'}${sem}`,
                 fullname: `EAD - ${semestre} - ${ROTULO_AVA[codcur] || codcur}${per} - ${texto(s.disciplina, 200)}`,
-                modelo: modelo ? { idAva: modelo.idAva, nome: modelo.nome, semestre: modelo.semestre, shortname: modelo.shortname || null } : null
+                modelo: modelo ? { idAva: modelo.idAva, nome: modelo.nome, semestre: modelo.semestre, cursoId: modelo.cursoId, shortname: modelo.shortname || null } : null,
+                mesmaSala: !!x.sugestao.mesmaSala
             });
         });
         linhas.sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') || a.periodo - b.periodo || a.disciplina.localeCompare(b.disciplina, 'pt-BR'));
+        // PERÍODOS QUE ESTUDAM JUNTOS (06/11/2026): a mesma disciplina em períodos do mesmo curso que têm aula
+        // juntos (horário do Matrizes) é UMA sala só — a do período menor, nome "6° E 7° PER"; os diários dos
+        // outros períodos entram nela pelo enroll (diarios). Sem horário do curso, cada período tem a sua sala.
+        const salas = [], porDisc = new Map();
+        linhas.forEach(l => {
+            const j = juntos.get(l.cursoId), k = `${l.cursoId}:${chave(l.disciplina)}`;
+            const lst = porDisc.get(k) || []; porDisc.set(k, lst);
+            // tecnólogo: o nome da sala não tem período e as turmas rodam juntas → sempre UMA sala por disciplina
+            const tec = TECNOLOGOS.includes(l.codcur);
+            const par = tec ? lst[0] : j && lst.find(s => j.grupos.some(g => g.includes(l.periodo) && s.periodos.some(p => g.includes(p))));
+            if (par) {
+                if (!par.periodos.includes(l.periodo)) par.periodos.push(l.periodo);
+                par.diarios.push(l.coddtu);
+                par.juntasConfirmado = tec || j.confirmado;
+                return;
+            }
+            l.periodos = [l.periodo]; l.diarios = [l.coddtu];
+            lst.push(l); salas.push(l);
+        });
+        salas.filter(l => l.periodos.length > 1 && !TECNOLOGOS.includes(l.codcur)).forEach(l => {
+            const o = l.codcur === 'CI.CONT' ? 'º' : '°', ps = l.periodos.sort((a, b) => a - b).map(p => `${p}${o}`);
+            const per = ps.length === 2 ? ps.join(' E ') : `${ps.slice(0, -1).join(', ')} E ${ps[ps.length - 1]}`;
+            l.fullname = l.fullname.replace(` - ${l.periodo}${o} PER - `, ` - ${per} PER - `);
+        });
+        linhas.length = 0; linhas.push(...salas);
         // SALA-MÃE: a mesma disciplina (mesmo nome) em várias turmas DO MESMO CURSO (ou de cursos que compartilham
         // conteúdo — CURSOS_MESMO_CONTEUDO) tem o mesmo conteúdo. Uma sala é a
         // mãe — 1ª rodada: replica a sala do semestre anterior (ou é criada do zero) e a TI atualiza;
         // 2ª rodada: as outras replicam da mãe já atualizada.
+        // DISCIPLINAS COMUNS (Empreendedorismo, Metodologia Científica, Educação em Humanidades, Competências e
+        // Habilidades Linguísticas — 06/11/2026): UMA sala-mãe pra TODOS os cursos; a TI edita a mãe e depois as
+        // outras (cada uma com o nome do seu curso e período) copiam dela na 2ª rodada.
         const grupos = new Map();
-        linhas.filter(l => l.origem !== 'ja-existe').forEach(l => { const k = `${grupoDoCurso(l.cursoId)}:${chave(l.disciplina)}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); });
+        linhas.filter(l => l.origem !== 'ja-existe').forEach(l => {
+            const comum = comumDe(l.disciplina);
+            if (comum) l.comum = comum;
+            const k = comum ? `comum:${comum}` : `${grupoDoCurso(l.cursoId)}:${chave(l.disciplina)}`;
+            if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l);
+        });
+        // mãe que copia da sala mais recente (com shortname lido; empate: modelo do próprio curso)
+        const melhor = (g) => g.filter(l => l.modelo).sort((p, q) => String(q.modelo.semestre).localeCompare(String(p.modelo.semestre))
+            || !!q.modelo.shortname - !!p.modelo.shortname || (q.modelo.cursoId === q.cursoId) - (p.modelo.cursoId === p.cursoId))[0];
         grupos.forEach(g => {
-            const mae = g.find(l => l.origem === 'criar') || g.find(l => l.origem === 'replicar' && l.modelo) || g.find(l => l.modelo) || g[0];
+            const mae = g.find(l => l.origem === 'criar') || melhor(g) || g[0];
             g.forEach(l => {
                 l.grupo = g.length;
                 if (l === mae) { l.mae = g.length > 1; l.rodada = l.origem === 'criar' ? 0 : 1; return; }
+                // disciplina nova nos dois cursos parceiros (Arq ↔ Eng Civil): é a MESMA sala — os alunos do
+                // parceiro entram na sala criada (enroll), sem sala própria (ex.: Patologia das Estruturas 2027.1)
+                if (l.mesmaSala && !l.comum && mae.origem === 'criar' && mae.cursoId !== l.cursoId) {
+                    mae.diarios.push(...l.diarios); l.juntoDe = mae.shortname; return;
+                }
                 l.rodada = 2;
                 l.origem = l.origem === 'criar' ? 'replicar-outro' : l.origem;
                 l.modelo = { nome: mae.fullname, shortname: mae.shortname, semestre, mae: true };
             });
         });
-        res.json({ semestre, linhas, retratoAva: avaCache && avaCache.atualizadoEm });
+        res.json({ semestre, linhas: linhas.filter(l => !l.juntoDe), retratoAva: avaCache && avaCache.atualizadoEm });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
