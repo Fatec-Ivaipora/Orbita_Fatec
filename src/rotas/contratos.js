@@ -361,6 +361,9 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
         ...(m.cidade ? { cidade: maiusculo(m.cidade, 80) } : {}),
         ...(m.telefone ? { contato: texto(m.telefone, 60) } : {}),
         ...(m.vencimentoBoleto ? { vencimentoBoleto: data(m.vencimentoBoleto) } : {}),
+        // menor de 18 marcado na matrícula liga o "-18" do contrato; desmarcado NÃO apaga a marca que o
+        // Comercial já pôs à mão (06/11/2026)
+        ...(m.menor18 === true ? { menor18: true } : {}),
         matriculaId: String(matriculaId), matriculaSituacao: m.situacao || '', matriculaPeriodo: m.periodo || '', matriculaRemovida: false
     };
     if (!ref) {

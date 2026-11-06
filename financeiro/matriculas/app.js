@@ -672,7 +672,7 @@ function renderTabelaAlunos(lista) {
   }
   tbody.innerHTML = lista.map(a => `
     <tr>
-      <td>${esc(a.nome)}${a.formando ? '<span class="revisar-badge" title="Marcado como formando — último período, não vai sozinho pro próximo semestre na Virada.">🎓 formando</span>' : ''}${a.revisarManualmente ? '<span class="revisar-badge" title="Migrado da planilha com situação/plano fora do padrão — confira e edite.">⚠ revisar</span>' : ''}</td>
+      <td>${esc(a.nome)}${a.menor18 ? '<span class="revisar-badge" title="Menor de 18 anos — contrato assinado pelo pai ou responsável.">-18</span>' : ''}${a.formando ? '<span class="revisar-badge" title="Marcado como formando — último período, não vai sozinho pro próximo semestre na Virada.">🎓 formando</span>' : ''}${a.revisarManualmente ? '<span class="revisar-badge" title="Migrado da planilha com situação/plano fora do padrão — confira e edite.">⚠ revisar</span>' : ''}</td>
       <td>${esc(a.curso)}</td>
       <td>${esc(a.periodo)}</td>
       <td>${esc(a.cidade)}</td>
@@ -828,6 +828,7 @@ function setupModalAluno() {
         planoConfissao: document.getElementById('aluno-plano').value,
         observacoes: document.getElementById('aluno-observacoes').value,
         formando: document.getElementById('aluno-formando').checked,
+        menor18: document.getElementById('aluno-menor18').checked,
         indicadoPorAlunoId: alunoIndicadoPor?.id || null,
         indicadoPorNome: alunoIndicadoPor?.nome || null
       };
@@ -876,6 +877,7 @@ function abrirModalAluno(aluno) {
   document.getElementById('aluno-plano').value = aluno?.planoConfissao || 'Não';
   document.getElementById('aluno-observacoes').value = aluno?.observacoes || '';
   document.getElementById('aluno-formando').checked = !!aluno?.formando;
+  document.getElementById('aluno-menor18').checked = !!aluno?.menor18;
 
   const grupoCurso = document.getElementById('grupo-curso-aluno');
   const isFatec = (aluno ? aluno.modulo : moduloSelecionado) === 'fatec';
@@ -1950,7 +1952,7 @@ function vsRenderTabela() {
     tbody.innerHTML = filtrados.map(a => `
       <tr>
         <td><input type="checkbox" data-vs-check="${a.id}" ${a._selecionado ? 'checked' : ''}></td>
-        <td>${esc(a.nome)}${a.formando ? '<span class="revisar-badge" title="Formando — não vai pro próximo semestre (o servidor pula mesmo se marcado). Se reprovou, desmarque formando no cadastro.">🎓 formando</span>' : ''}</td>
+        <td>${esc(a.nome)}${a.menor18 ? '<span class="revisar-badge" title="Menor de 18 anos — contrato assinado pelo pai ou responsável.">-18</span>' : ''}${a.formando ? '<span class="revisar-badge" title="Formando — não vai pro próximo semestre (o servidor pula mesmo se marcado). Se reprovou, desmarque formando no cadastro.">🎓 formando</span>' : ''}</td>
         <td>${esc(a.curso)}</td>
         <td>${esc(a.periodo)}</td>
         <td><input type="text" data-vs-periodo="${a.id}" value="${esc(a._periodoNovo)}" style="width: 4.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;"></td>

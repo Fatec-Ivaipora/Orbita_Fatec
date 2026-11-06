@@ -328,6 +328,8 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             // (Rematrícula Assinada/Pendência/Não Assinou), que senão some do
             // cadastro quando ela troca pra "Formando" na situação (01/10).
             formando: !!formando,
+            // Menor de 18 (06/11/2026): contrato assinado pelo pai/responsável — vai pro Comercial (Contratos).
+            menor18: req.body.menor18 === true,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             updatedAt: new Date().toISOString()
@@ -367,6 +369,7 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
         if (periodo !== undefined) dados.periodo = normalizarPeriodo(periodo);
         if (cidade !== undefined) dados.cidade = (cidade || '').trim();
         if (telefone !== undefined) dados.telefone = (telefone || '').trim();
+        if (req.body.menor18 !== undefined) dados.menor18 = req.body.menor18 === true;
         if (req.body.vencimentoBoleto !== undefined) dados.vencimentoBoleto = /^\d{4}-\d{2}-\d{2}$/.test(req.body.vencimentoBoleto || '') ? req.body.vencimentoBoleto : null;
         if (observacoes !== undefined) dados.observacoes = (observacoes || '').trim();
         if (cursoId !== undefined && curso !== undefined) {
