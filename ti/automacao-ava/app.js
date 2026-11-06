@@ -407,7 +407,7 @@ async function renderConduit() {
   const porCurso = cursos.filter(([id]) => !filtroCurso || id === filtroCurso).map(([id, nome]) => ({ id, nome, linhas: novas.filter(l => l.cursoId === id) })).filter(c => c.linhas.length);
   const rot = { criar: 'Criar do zero', replicar: 'Replicar', 'replicar-outro': 'Replicar de outro curso' };
   const modeloTxt = (l) => {
-    const mae = l.mae ? `<span class="av-tag">sala-mãe de ${l.grupo} salas</span>` : '';
+    const mae = l.mae ? `<span class="av-tag">sala-mãe de ${l.grupo} salas${l.comum ? ' — disciplina comum a todos os cursos' : ''}</span>` : '';
     if (!/^replicar/.test(l.origem)) return `${mae}<span class="av-sub">sala nova — o professor monta as unidades (etapas da criação)</span>`;
     if (l.mae && l.modelo) return `${mae}${l.modelo.shortname ? `<code>${esc(l.modelo.shortname)}</code>` : '<span class="av-sub av-alerta">falta ler o shortname no AVA</span>'}<span class="av-sub"><b>1ª rodada</b> — ${esc(l.modelo.nome)}; depois a TI atualiza</span>`;
     if (!l.modelo) return '<span class="av-sub av-alerta">nenhuma sala EAD modelo achada no AVA — conferir</span>';
@@ -449,7 +449,7 @@ async function renderConduit() {
       <div class="av-tabela-wrap"><table class="av-tabela">
         <thead><tr><th>Sala (shortname)</th><th>Nome completo no AVA</th><th>Situação</th><th>Copiar unidades de (templatecourse)</th></tr></thead>
         <tbody>${c.linhas.map(l => `<tr>
-          <td><code>${esc(l.shortname)}</code>${l.semSigla ? '<span class="av-sub av-alerta">sem sigla no Edubox</span>' : ''}<span class="av-sub">${esc(l.turma)}</span></td>
+          <td><code>${esc(l.shortname)}</code>${l.semSigla ? '<span class="av-sub av-alerta">sem sigla no Edubox</span>' : ''}<span class="av-sub">${esc(l.turma)}</span>${(l.diarios || []).length > 1 ? `<span class="av-sub ${l.juntasConfirmado ? '' : 'av-alerta'}">uma sala pros diários ${l.diarios.map(esc).join(' + ')} (estudam juntos${l.juntasConfirmado ? '' : ' — conferir no horário'}); os outros entram pelo enroll</span>` : ''}</td>
           <td>${esc(l.fullname)}</td>
           <td>${rot[l.origem] || esc(l.origem)}</td>
           <td>${modeloTxt(l)}</td>
