@@ -200,6 +200,37 @@ async function gruposQueEstudamJuntos(semestre) {
     return out;
 }
 
+// Períodos que estudam juntos pela GRADE do semestre no Edubox (06/11/2026): se dois períodos do mesmo curso
+// têm 2+ disciplinas iguais no mesmo semestre, é porque estudam juntos (o par é fixo: 1º+2º, 3º+4º...; quem
+// entrou no semestre anterior vira 2º e estuda com os calouros do 1º). Só junta períodos VIZINHOS (2º com 1º
+// ou 3º): período distante que repete disciplinas é outra turma, em outra sala física (ex.: Enfermagem 10º —
+// turma 2022/2 refazendo disciplinas do 1º — tem as salas dela; 06/11/2026).
+function gruposDaGrade(salas) {
+    const por = new Map();
+    salas.forEach(s => {
+        const c = cursoIdDe(String(s.codcur).trim());
+        if (!por.has(c)) por.set(c, new Map());
+        const m = por.get(c);
+        if (!m.has(s.periodo)) m.set(s.periodo, new Set());
+        m.get(s.periodo).add(chave(s.disciplina));
+    });
+    const out = new Map();
+    por.forEach((m, c) => {
+        const ps = [...m.keys()].sort((a, b) => a - b);
+        const pai = new Map(ps.map(p => [p, p]));
+        const raiz = (p) => pai.get(p) === p ? p : raiz(pai.get(p));
+        ps.forEach((a, i) => ps.slice(i + 1).forEach(b => {
+            let n = 0; m.get(a).forEach(k => { if (m.get(b).has(k)) n++; });
+            if (n >= 2 && b - a === 1) pai.set(raiz(b), raiz(a));
+        }));
+        const g = new Map();
+        ps.forEach(p => { const r = raiz(p); if (!g.has(r)) g.set(r, []); g.get(r).push(p); });
+        const grupos = [...g.values()].filter(x => x.length > 1);
+        if (grupos.length) out.set(c, { grupos, confirmado: true, fonte: 'grade' });
+    });
+    return out;
+}
+
 async function listaDoSemestre(semestre) {
     const [atual, antigos, salas, juntosPorCurso] = await Promise.all([
         dadosDe(formatosEdubox(semestre)),
@@ -433,6 +464,10 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
             gruposQueEstudamJuntos(semestre)
         ]);
         const salvos = new Map(snap.docs.map(d => [d.id, d.data()]));
+        // quem estuda junto: a grade do semestre no Edubox; o horário do Matrizes só manda se for do próprio semestre
+        const juntosGrade = gruposDaGrade(r.salas || []);
+        juntos.forEach((v, c) => { if (v.confirmado) juntosGrade.set(c, v); });
+        juntos.clear(); juntosGrade.forEach((v, c) => juntos.set(c, v));
         const [ano, sem] = semestre.split('.');
         const linhas = [];
         (r.salas || []).forEach(s => {
@@ -462,7 +497,10 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
         // outros períodos entram nela pelo enroll (diarios). Sem horário do curso, cada período tem a sua sala.
         const salas = [], porDisc = new Map();
         linhas.forEach(l => {
-            const j = juntos.get(l.cursoId), k = `${l.cursoId}:${chave(l.disciplina)}`;
+            // tecnólogo: Projeto Integrador é UMA sala pro curso todo, mesmo com nomes diferentes por matriz
+            // (ex.: "PI I" da turma antiga + "PI em …" das novas — 06/11/2026)
+            const piTec = TECNOLOGOS.includes(l.codcur) && /^PROJETO INTEGRADOR/.test(norm(l.disciplina));
+            const j = juntos.get(l.cursoId), k = `${l.cursoId}:${piTec ? 'PROJETO INTEGRADOR' : chave(l.disciplina)}`;
             const lst = porDisc.get(k) || []; porDisc.set(k, lst);
             // tecnólogo: o nome da sala não tem período e as turmas rodam juntas → sempre UMA sala por disciplina
             const tec = TECNOLOGOS.includes(l.codcur);
@@ -519,4 +557,4 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
 });
 
 module.exports = router;
-module.exports._interno = { eadDoSemestre, anteriores, chave, TITULACOES, ETAPAS, AVALIACOES };
+module.exports._interno = { eadDoSemestre, anteriores, chave, gruposDaGrade, TITULACOES, ETAPAS, AVALIACOES };
