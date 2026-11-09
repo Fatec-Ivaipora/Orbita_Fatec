@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
+const { nomeNorm, matriculaDuplicada, mensagemDuplicada } = require('../utils/matriculas-duplicidade');
 
 // Trava de semestre por usuário (users.matriculasSemestreMinimo, ex.: robô da
 // ODTech só de 2027.1 em diante, 16/10/2026). Vale pra todas as rotas: barra
@@ -303,6 +304,10 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             return res.status(400).json({ error: 'Plano/Confissão inválido.' });
         }
         if (modulo === 'fatec' && (!cursoId || !curso)) return res.status(400).json({ error: 'Informe o curso.' });
+        // uma pessoa = uma matrícula por semestre (09/11/2026)
+        const outraPessoa = req.body.outraPessoa === true;   // homônimo confirmado por quem cadastra (09/11/2026)
+        const dup = outraPessoa ? null : await matriculaDuplicada(semestre, nome);
+        if (dup) return res.status(409).json({ error: mensagemDuplicada(dup), duplicadaId: dup.id });
 
         const dados = {
             modulo,
@@ -310,6 +315,8 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             curso: modulo === 'fatec' ? curso : 'Medicina',
             periodo: normalizarPeriodo(periodo),
             nome: nome.trim(),
+            nomeNorm: nomeNorm(nome),
+            ...(outraPessoa ? { outraPessoa: true, outraPessoaPor: req.user.name || req.user.email || '', outraPessoaEm: new Date().toISOString() } : {}),
             cidade: (cidade || '').trim(),
             telefone: (telefone || '').trim(),
             vencimentoBoleto,
@@ -355,6 +362,11 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
         if (nome !== undefined) {
             if (!nome.trim()) return res.status(400).json({ error: 'Informe o nome do aluno.' });
             dados.nome = nome.trim();
+            dados.nomeNorm = nomeNorm(nome);
+            const atualDoc = (await db.collection(COL_ALUNOS).doc(req.params.id).get()).data() || {};
+            const dup = req.body.outraPessoa === true ? null : await matriculaDuplicada(atualDoc.semestre, nome, req.params.id);
+            if (dup) return res.status(409).json({ error: mensagemDuplicada(dup), duplicadaId: dup.id });
+            if (req.body.outraPessoa === true) Object.assign(dados, { outraPessoa: true, outraPessoaPor: req.user.name || req.user.email || '', outraPessoaEm: new Date().toISOString() });
         }
         if (situacao !== undefined) {
             if (!SITUACOES.includes(situacao) && !ehDesistente(situacao)) return res.status(400).json({ error: 'Situação inválida.' });
@@ -741,6 +753,95 @@ router.get('/aluno-indica', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// ==========================================
+// EDUBOX → MATRÍCULAS (09/11/2026): ao abrir a tela (semestre ≥ 2027.1) compara com o Edubox e monta as
+// DIFERENÇAS pro pessoal das Matrículas aplicar ou ignorar (ver src/utils/matriculas-edubox.js).
+// No máximo 1x a cada 10 min. GET = abrir a tela; POST = "Atualizar agora" (força).
+// ==========================================
+const moduloSemestre = (req) => ({
+    modulo: (req.query.modulo || req.body?.modulo || '').toString(),
+    semestre: (req.query.semestre || req.body?.semestre || '').toString().trim()
+});
+async function rotaEdubox(req, res, forcar) {
+    try {
+        const { sincronizarSeNecessario } = require('../utils/matriculas-edubox');
+        const { modulo, semestre } = moduloSemestre(req);
+        if (!MODULOS.includes(modulo) || !validarSemestre(semestre)) return res.status(400).json({ error: 'Informe módulo e semestre.' });
+        res.json(await sincronizarSeNecessario({ modulo, semestre, forcar }));
+    } catch (err) {
+        res.status(502).json({ error: `Não foi possível atualizar com o Edubox: ${err.message}` });
+    }
+}
+router.get('/edubox/sincronizar', verifyToken, checkPermission, (req, res) => rotaEdubox(req, res, false));
+router.post('/edubox/sincronizar', verifyToken, checkPermission, (req, res) => rotaEdubox(req, res, true));
+
+router.get('/edubox/pendencias', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { listarPendencias } = require('../utils/matriculas-edubox');
+        const { modulo, semestre } = moduloSemestre(req);
+        if (!MODULOS.includes(modulo) || !validarSemestre(semestre)) return res.status(400).json({ error: 'Informe módulo e semestre.' });
+        res.json(await listarPendencias({ modulo, semestre }));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// body: { ids: [...], acao: 'aplicar' | 'ignorar' } — uma ou várias diferenças
+router.post('/edubox/pendencias/resolver', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { resolverPendencia } = require('../utils/matriculas-edubox');
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 500) : [];
+        const acao = req.body?.acao;
+        if (!ids.length || !['aplicar', 'ignorar'].includes(acao)) return res.status(400).json({ error: 'Informe as diferenças e a ação.' });
+        const quem = req.user.name || req.user.email || '';
+        const resultados = [];
+        for (const id of ids) {
+            try { resultados.push({ id, ...(await resolverPendencia({ id, acao, quem, normalizarPeriodo, normalizarDesistente })) }); }
+            catch (e) { resultados.push({ id, ok: false, erro: e.message }); }
+        }
+        res.json({ resultados, ok: resultados.filter(r => r.ok).length, erros: resultados.filter(r => !r.ok).length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// DUPLICADAS (09/11/2026): mesma pessoa (nome normalizado) mais de uma vez no semestre. Quem cuida das
+// Matrículas decide: apagar a que sobra (DELETE /alunos/:id) ou marcar "são pessoas diferentes".
+// Só lê quando a aba é aberta.
+// ==========================================
+router.get('/duplicadas', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = (req.query.semestre || '').toString().trim();
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre.' });
+        const snap = await db.collection(COL_ALUNOS).where('semestre', '==', semestre).get();
+        const grupos = new Map();
+        snap.docs.forEach(d => {
+            const x = d.data(), n = x.nomeNorm || nomeNorm(x.nome);
+            if (!grupos.has(n)) grupos.set(n, []);
+            grupos.get(n).push({ id: d.id, nome: x.nome, modulo: x.modulo, curso: x.modulo === 'medicina' ? 'Medicina' : x.curso, periodo: x.periodo || '',
+                situacao: x.situacao, createdAt: x.createdAt || '', eduboxCodmat: x.eduboxCodmat || null, outraPessoa: !!x.outraPessoa });
+        });
+        // grupo some quando todos (ou todos menos um) já foram marcados como "outra pessoa"
+        const lista = [...grupos.values()].filter(g => g.length > 1 && g.filter(x => !x.outraPessoa).length > 1)
+            .sort((a, b) => a[0].nome.localeCompare(b[0].nome, 'pt-BR'));
+        res.json(lista);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+router.post('/duplicadas/outra-pessoa', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 20) : [];
+        if (ids.length < 2) return res.status(400).json({ error: 'Informe os cadastros do grupo.' });
+        const agora = new Date().toISOString(), quem = req.user.name || req.user.email || '';
+        for (const id of ids) await db.collection(COL_ALUNOS).doc(id).update({ outraPessoa: true, outraPessoaPor: quem, outraPessoaEm: agora });
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/config/opcoes', verifyToken, checkPermission, async (req, res) => {
     res.json({ situacoes: SITUACOES, planosConfissao: PLANOS_CONFISSAO });
 });
@@ -800,8 +901,11 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
         // Quem já foi copiado pra esse destino antes (virada feita de novo) não
         // é copiado outra vez — senão o aluno aparece duplicado no semestre novo.
         const jaNoDestino = new Set();
-        const destinoSnap = await db.collection(COL_ALUNOS).where('semestre', '==', semestreDestino).select('origemAlunoId').get();
+        const destinoSnap = await db.collection(COL_ALUNOS).where('semestre', '==', semestreDestino).select('origemAlunoId', 'nomeNorm', 'nome').get();
         destinoSnap.forEach(d => { if (d.data().origemAlunoId) jaNoDestino.add(d.data().origemAlunoId); });
+        // uma pessoa = uma matrícula por semestre: quem já tem matrícula no destino (lançada à mão ou vinda do
+        // Edubox) não ganha outra (09/11/2026)
+        const nomesNoDestino = new Set(destinoSnap.docs.map(d => d.data().nomeNorm || nomeNorm(d.data().nome)));
 
         const avisosPeriodo = [];
         const formandosPulados = [];
@@ -816,7 +920,8 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
             // foram copiados (removidos em 02/10). Formando que reprovou: desmarcar
             // "formando" no cadastro antes de virar.
             if (origem.formando) { formandosPulados.push(origem.nome); continue; }
-            if (jaNoDestino.has(snap.id)) { jaCopiados++; continue; }
+            if (jaNoDestino.has(snap.id) || nomesNoDestino.has(nomeNorm(origem.nome))) { jaCopiados++; continue; }
+            nomesNoDestino.add(nomeNorm(origem.nome));
 
             const override = overrides[snap.id] || {};
             const periodoSugerido = avancarPeriodo(origem.periodo);
@@ -832,6 +937,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
                 curso: origem.curso,
                 periodo: periodoNovo,
                 nome: origem.nome,
+                nomeNorm: nomeNorm(origem.nome),
                 cidade: origem.cidade || '',
                 telefone: origem.telefone || '',
                 situacao: situacaoNova,

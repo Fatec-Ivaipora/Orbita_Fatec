@@ -51,10 +51,8 @@
                         <option value="fatec">Fatec (16 cursos)</option>
                         <option value="medicina">Medicina</option>
                     </select>
-                    <select class="select-filter" id="rel-semestre-select">
-                        <option value="2026.1">2026.1</option>
-                        <option value="2026.2" selected>2026.2</option>
-                    </select>
+                    <!-- sem opção fixa: abre no semestre mais novo da lista (09/11/2026) -->
+                    <select class="select-filter" id="rel-semestre-select"></select>
                     <select class="select-filter" id="rel-curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
@@ -356,6 +354,6 @@
     .ranking-primeiro .ranking-num-total { font-size: 1.8rem !important; }
     .ranking-primeiro .ranking-num { font-size: 1.35rem; }
     </style>
-    <script type="module" src="/financeiro/matriculas/app.js?v=121"></script>
+    <script type="module" src="/financeiro/matriculas/app.js?v=126"></script>
 </body>
 </html>
