@@ -96,7 +96,10 @@ async function comparar({ modulo, semestre }) {
         cursosDoOrbita()
     ]);
     if (!r || !r.ok) throw new Error((r && r.erro) || 'Edubox não respondeu.');
-    const doEdubox = (r.matriculas || []).filter(e => (modulo === 'medicina') === (e.codcur === 'MED'));
+    // nome social (config/nomes_sociais): o Edubox só tem o nome de registro — troca antes de comparar, senão
+    // o aluno com nome social parece outra pessoa (ex.: VALDEIR → CLARK, 09/11/2026)
+    const { aplicarNasLinhas } = require('./nome-social');
+    const doEdubox = await aplicarNasLinhas((r.matriculas || []).filter(e => (modulo === 'medicina') === (e.codcur === 'MED')));
     const { nomeParecido } = require('../rotas/contratos')._interno;
 
     const docs = snap.docs.map(d => ({ id: d.id, ref: d.ref, d: d.data() }));
