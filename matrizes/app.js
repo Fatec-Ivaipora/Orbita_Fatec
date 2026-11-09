@@ -44,6 +44,8 @@ let cursoSel = '';         // id do doc (semestre__cursoId)
 let abaSel = 'semestre';
 let emEdicao = null;       // { turma, disc } aberto no modal
 let cmpA = '', cmpB = '';  // comparação de matrizes (códigos de grade)
+let filtroSemProf = false; // botão do topo: só as disciplinas sem professor (vazio ou "contratar") — 09/11/2026
+let titIndex = [];         // titulação dos professores no Edubox (GET /matrizes → titulacoes)
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (id) => document.getElementById(id);
@@ -144,7 +146,8 @@ async function carregar(semestre) {
     if (auth.currentUser) currentUser = auth.currentUser;
     dados = await apiFetch('/matrizes' + (semestre ? `?semestre=${encodeURIComponent(semestre)}` : ''));
     if (!dados.cursos.some(c => c.id === cursoSel)) cursoSel = dados.cursos[0] ? dados.cursos[0].id : '';
-    $('lista-professores').innerHTML = dados.professores.map(p => `<option value="${esc(p)}">`).join('');
+    titIndex = (dados.titulacoes || []).map(t => ({ ...t, toks: normT(t.nome).split(' ') }));
+    listaProfessores();
     $('lista-salas').innerHTML = (dados.salas || []).map(x => `<option value="${esc(x)}">`).join('');
     renderTudo();
   } catch (err) {
@@ -154,6 +157,58 @@ async function carregar(semestre) {
 }
 
 const cursoAtual = () => dados && dados.cursos.find(c => c.id === cursoSel);
+
+// ---- Professor: "sem professor" e titulação do Edubox (09/11/2026)
+// sem professor = disciplina sem horário, ou só com professor vazio/"contratar"/"a definir"
+const ehContratar = (p) => !String(p || '').trim() || /contrat|a definir|indefinid/i.test(p);
+const semProfessor = (aulas) => !aulas.length || aulas.every(a => ehContratar(a.professor));
+const normT = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// O coordenador digita nome curto ("Silmara Pietrobelli"); o Edubox tem o completo ("SILMARA RODRIGUES
+// PIETROBELLI"): casa pelo 1º nome + os outros nomes digitados (ou o começo deles). Mais de um = "?".
+function titulacaoDe(prof) {
+  if (ehContratar(prof) || !titIndex.length) return null;
+  const tk = normT(prof).split(' ').filter(Boolean);
+  if (!tk.length) return null;
+  const cand = titIndex.filter(t => t.toks[0] === tk[0] && tk.slice(1).every(w => t.toks.slice(1).some(x => x === w || x.startsWith(w))));
+  if (!cand.length) return { tit: '', nomes: [] };
+  const tits = [...new Set(cand.map(c => c.titulacao))];
+  return { tit: tits.length === 1 ? tits[0] : '?', nomes: cand.map(c => c.nome) };
+}
+function seloTitulacao(prof) {
+  if (ehContratar(prof)) return '<span class="mz-tit contratar">a contratar</span>';
+  const t = titulacaoDe(prof);
+  if (!t) return '';
+  if (!t.nomes.length) return '<span class="mz-tit nao" title="Não achei esse nome entre os professores do Edubox — escolha o nome completo da lista">sem titulação</span>';
+  if (t.tit === '?') return `<span class="mz-tit nao" title="Mais de um professor no Edubox com esse nome: ${esc(t.nomes.join(' | '))} — escolha o nome completo da lista">?</span>`;
+  return `<span class="mz-tit ${esc(t.tit.toLowerCase())}" title="Edubox: ${esc(t.nomes.join(' | '))}">${esc(t.tit || '—')}</span>`;
+}
+// sugestões do campo Professor: os nomes completos do Edubox (com a titulação) + os já usados nos horários
+const nomeEdubox = (nome) => tituloCaso(String(nome || '').toLowerCase());
+// candidatos do Edubox pro que foi digitado: 1º nome igual (ou começo) + os outros nomes digitados em qualquer
+// parte do nome completo (ou o começo deles) — "silmara pietro" acha "Silmara Rodrigues Pietrobelli"
+function candidatosEdubox(digitado) {
+  const tk = normT(digitado).split(' ').filter(Boolean);
+  if (!tk.length) return [];
+  const exatos = titIndex.filter(t => t.toks[0].startsWith(tk[0]) && tk.slice(1).every(w => t.toks.slice(1).some(x => x.startsWith(w))));
+  if (exatos.length) return exatos;
+  // tolerante a erro de digitação ("Moreti" → Moretti, "Murillo" → Murilo): 1 letra em nome curto, 2 em nome longo
+  const tol = (w) => (w.length >= 6 ? 2 : 1);
+  const perto = (x, w) => x.startsWith(w) || lev(x, w) <= tol(w) || (w.length < x.length && lev(x.slice(0, w.length), w) <= tol(w) - 1 + (w.length >= 6 ? 0 : 0));
+  return titIndex.filter(t => perto(t.toks[0], tk[0]) && tk.slice(1).every(w => t.toks.slice(1).some(x => perto(x, w))));
+}
+// nome digitado que bate com UM professor do Edubox → nome completo dele; senão devolve o digitado
+function nomeCorreto(digitado) {
+  if (ehContratar(digitado)) return digitado;
+  const c = candidatosEdubox(digitado);   // inclui erro de digitação; só troca se for UM professor
+  return c.length === 1 ? nomeEdubox(c[0].nome) : digitado;
+}
+function listaProfessores() {
+  const vistos = new Set();
+  const ops = [];
+  (dados.titulacoes || []).forEach(t => { const k = normT(t.nome); if (vistos.has(k)) return; vistos.add(k); ops.push(`<option value="${esc(nomeEdubox(t.nome))}">${esc(t.titulacao || '')}</option>`); });
+  (dados.professores || []).forEach(p => { const k = normT(p); if (vistos.has(k)) return; vistos.add(k); ops.push(`<option value="${esc(p)}">`); });
+  $('lista-professores').innerHTML = ops.join('');
+}
 const chave = (t, d) => `${t.codTurma}:${d.codDisciplina}`;
 const aulasDe = (c, t, d) => ((c.alocacoes[chave(t, d)] || {}).aulas) || [];
 const fmtAula = (a) => `${DIA_CURTO[a.dia]} ${a.inicio}–${a.fim}`;
@@ -340,17 +395,19 @@ function renderTudo() {
 }
 
 function resumo(c) {
-  let disc = 0, comHorario = 0, conferir = 0, ch = 0;
+  let disc = 0, comHorario = 0, conferir = 0, ch = 0, semProf = 0;
   const gs = grupos(c);
   gs.forEach(g => {
     conferir += g.turmas.filter(t => t.situacao === 'conferir').length;
     g.linhas.forEach(l => {
       if (l.d.naoOfertada) return;
       disc++; ch += l.d.ch.total;
-      if (aulasLinha(c, g, l).length) comHorario++;
+      const aulas = aulasLinha(c, g, l);
+      if (aulas.length) comHorario++;
+      if (semProfessor(aulas)) semProf++;
     });
   });
-  return { disc, comHorario, conferir, ch, grupos: gs.length, turmas: c.turmas.length, matrizes: c.grades.length };
+  return { disc, comHorario, conferir, ch, semProf, grupos: gs.length, turmas: c.turmas.length, matrizes: c.grades.length };
 }
 
 function renderKpis() {
@@ -363,6 +420,7 @@ function renderKpis() {
     <div class="mz-kpi"><b>${r.matrizes}</b><span>${r.matrizes === 1 ? 'matriz em uso' : 'matrizes em uso'}</span></div>
     <div class="mz-kpi"><b>${r.disc}</b><span>disciplinas no semestre</span></div>
     <div class="mz-kpi"><b>${pct}%</b><span>com horário definido (${r.comHorario}/${r.disc})</span><div class="mz-barra"><i style="width:${pct}%"></i></div></div>
+    <button type="button" class="mz-kpi mz-kpi-filtro ${filtroSemProf ? 'on' : ''} ${r.semProf ? 'alerta' : ''}" data-filtro-semprof title="Clique pra mostrar só as disciplinas sem professor definido (vazio ou &quot;contratar&quot;)"><b>${r.semProf}</b><span>${filtroSemProf ? '✓ mostrando só' : 'filtrar'} disciplina(s) sem professor</span></button>
     <div class="mz-kpi ${r.conferir ? 'alerta' : ''}"><b>${r.conferir}</b><span>turma(s) p/ conferir no Edubox</span></div>
     <div class="mz-kpi"><b style="font-size:15px">${esc(ult)}</b><span>consultado no Edubox</span></div>`;
 }
@@ -370,16 +428,17 @@ function renderKpis() {
 function renderCursos() {
   $('cursos').innerHTML = dados.cursos.map(c => {
     const r = resumo(c);
-    return `<button type="button" class="mz-curso ${c.id === cursoSel ? 'ativo' : ''}" data-curso="${esc(c.id)}" role="tab" aria-selected="${c.id === cursoSel}">${esc(c.cursoNome.replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '').replace(/ - FORMAÇÃO.*/i, ''))}<small>${r.comHorario}/${r.disc}</small></button>`;
+    return `<button type="button" class="mz-curso ${c.id === cursoSel ? 'ativo' : ''}" data-curso="${esc(c.id)}" role="tab" aria-selected="${c.id === cursoSel}">${esc(c.cursoNome.replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '').replace(/ - FORMAÇÃO.*/i, ''))}<small>${filtroSemProf ? `${r.semProf} sem prof.` : `${r.comHorario}/${r.disc}`}</small></button>`;
   }).join('');
 }
 
 function renderAbas() {
   document.querySelectorAll('.mz-aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === abaSel));
-  ['semestre', 'matrizes', 'horario', 'carga'].forEach(a => $(`painel-${a}`).classList.toggle('ativo', a === abaSel));
+  ['semestre', 'matrizes', 'horario', 'carga', 'titulacao'].forEach(a => $(`painel-${a}`).classList.toggle('ativo', a === abaSel));
   if (abaSel === 'semestre') renderSemestre();
   else if (abaSel === 'matrizes') renderMatrizes();
   else if (abaSel === 'horario') renderHorario();
+  else if (abaSel === 'titulacao') renderTitulacao();
   else renderCarga();
 }
 
@@ -397,24 +456,33 @@ const tagTipo = (d) => `<span class="mz-tag ${ehSincrona(d) ? 'sinc' : (/dist/i.
 function renderSemestre() {
   const c = cursoAtual();
   const nMat = c.grades.length;
-  let html = `<div class="mz-info">${nMat > 1 ? `Este curso tem <b>${nMat} matrizes rodando ao mesmo tempo</b>. ` : ''}Cada turma continua com a <b>própria matriz</b> (etiquetas abaixo). Turmas que <b>estudam juntas</b> (matriz rotativa) aparecem num bloco só, e o horário definido vale para todas elas.</div>`;
-  html += grupos(c).map((g, gi) => {
+  const gsFiltro = grupos(c);
+  const totalSem = filtroSemProf ? gsFiltro.reduce((n, g) => n + g.linhas.filter(l => !l.d.naoOfertada && semProfessor(aulasLinha(c, g, l))).length, 0) : 0;
+  let html = filtroSemProf
+    ? `<div class="mz-info mz-info-filtro">Mostrando só as <b>${totalSem} disciplina(s) sem professor</b> definido (vazio ou "contratar"). <button type="button" class="mz-btn mz-btn-sec mz-btn-mini" data-filtro-semprof>Mostrar todas</button></div>`
+    : '';
+  html += `<div class="mz-info">${nMat > 1 ? `Este curso tem <b>${nMat} matrizes rodando ao mesmo tempo</b>. ` : ''}Cada turma continua com a <b>própria matriz</b> (etiquetas abaixo). Turmas que <b>estudam juntas</b> (matriz rotativa) aparecem num bloco só, e o horário definido vale para todas elas.</div>`;
+  html += gsFiltro.map((g, gi) => {
+    // filtro "sem professor": guarda o índice original da linha (o botão Editar usa gi|li)
+    const linhasVis = g.linhas.map((l, li) => ({ l, li })).filter(({ l }) => !filtroSemProf || (!l.d.naoOfertada && semProfessor(aulasLinha(c, g, l))));
+    if (filtroSemProf && !linhasVis.length) return '';
     const avisos = g.turmas.filter(t => t.situacao === 'conferir').map(t => {
       const nFora = t.disciplinas.filter(d => d.foraDaMatriz).length;
       const nNao = t.disciplinas.filter(d => d.naoOfertada).length;
       return `<div class="mz-aviso"><b>Conferir no Edubox — ${esc(t.nome)}:</b> ${nFora ? `${nFora} disciplina(s) lançada(s) que não são do ${t.periodo}º período da matriz “${esc(t.grade)}”` : ''}${nFora && nNao ? '; ' : ''}${nNao ? `${nNao} disciplina(s) do ${t.periodo}º período dessa matriz que não foram lançadas na turma` : ''}.</div>`;
     }).join('');
-    const linhas = g.linhas.map((l, li) => {
+    const linhas = linhasVis.map(({ l, li }) => {
       const d = l.d;
       const aulas = aulasLinha(c, g, l);
       const marca = d.foraDaMatriz ? '<span class="mz-tag conferir">fora da matriz</span>' : d.naoOfertada ? '<span class="mz-tag conferir">não lançada</span>' : '';
       const nomes = [...new Set(Object.values(l.porTurma).map(x => x.nome))];
       const dica = nomes.length > 1 ? ` title="No Edubox: ${esc(nomes.join(' | '))}"` : '';
       const horario = d.naoOfertada ? '<span class="mz-sem">—</span>'
-        : (aulas.length ? `<div class="mz-aulas">${aulas.map(a => `<div class="mz-aula"><b>${esc(a.professor)}</b><span>${esc(DIA_LONGO[a.dia])} · ${esc(a.inicio)}–${esc(a.fim)}${a.sala ? ` · ${esc(salaTxt(a.sala))}` : ''}</span></div>`).join('')}</div>` : '<span class="mz-sem">sem horário</span>');
+        : (aulas.length ? `<div class="mz-aulas">${aulas.map(a => `<div class="mz-aula"><b>${esc(a.professor)}</b> ${seloTitulacao(a.professor)}<span>${esc(DIA_LONGO[a.dia])} · ${esc(a.inicio)}–${esc(a.fim)}${a.sala ? ` · ${esc(salaTxt(a.sala))}` : ''}</span></div>`).join('')}</div>` : '<span class="mz-falta-selo">Falta professor e horário</span>');
       const acao = (podeEditar && !d.naoOfertada)
         ? `<button type="button" class="mz-btn mz-btn-sec mz-btn-mini" data-editar="${gi}|${li}">${aulas.length ? 'Editar' : 'Definir'}</button>` : '';
-      return `<tr class="${marca ? 'marcada' : ''}"><td class="disc"${dica}>${esc(nomeBonito(d.nome))} ${marca}</td><td>${tagTipo(d)}</td>${chCelulas(d)}<td>${horario}</td><td>${acao}</td></tr>`;
+      const faltaProf = !d.naoOfertada && semProfessor(aulas);
+      return `<tr class="${marca ? 'marcada' : ''} ${faltaProf ? 'mz-falta-prof' : ''}"><td class="disc"${dica}>${esc(nomeBonito(d.nome))} ${marca}</td><td>${tagTipo(d)}</td>${chCelulas(d)}<td>${horario}</td><td>${acao}</td></tr>`;
     }).join('');
     const tags = g.turmas.map(t => `<span class="mz-tag matriz" title="Matriz que o Edubox vincula à turma ${esc(t.nome)}">${t.periodo}º · matriz ${esc(t.grade || '—')}</span>`).join(' ');
     const ok = g.turmas.every(t => t.situacao === 'ok');
@@ -611,7 +679,7 @@ function baixarCsvCarga() {
 // ---------- MODAL DE HORÁRIO ----------
 function linhaHtml(a = {}) {
   return `<div class="mz-linha">
-    <input type="text" list="lista-professores" class="f-prof" placeholder="Professor" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor">
+    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div></div>
     <select class="f-dia" aria-label="Dia da semana">${DIAS.map(d => `<option value="${d}" ${a.dia === d ? 'selected' : ''}>${DIA_LONGO[d]}</option>`).join('')}</select>
     <input type="time" class="f-ini" value="${esc(a.inicio || '')}" aria-label="Início">
     <input type="time" class="f-fim" value="${esc(a.fim || '')}" aria-label="Fim">
@@ -621,6 +689,17 @@ function linhaHtml(a = {}) {
       ${PRESETS.map(p => `<button type="button" class="mz-btn mz-btn-sec mz-btn-mini f-pre" data-ini="${p.ini}" data-fim="${p.fim}">${p.rotulo}</button>`).join('')}
     </div>
   </div>`;
+}
+
+// sugestões do nome correto embaixo do campo Professor (09/11/2026)
+function sugestoesHtml(digitado) {
+  const v = String(digitado || '').trim();
+  if (!v || ehContratar(v) || !titIndex.length) return '';
+  const exato = titIndex.find(t => normT(t.nome) === normT(v));
+  if (exato) return `<span class="f-sug-ok">✓ ${esc(exato.titulacao || 'no Edubox')}</span>`;
+  const c = candidatosEdubox(v).slice(0, 5);
+  if (!c.length) return v.length >= 3 ? '<span class="f-sug-nao">Não achei no Edubox — confira o nome (ou use "contratar")</span>' : '';
+  return `<span class="f-sug-rot">Nome no Edubox:</span>${c.map(t => `<button type="button" class="f-sug-op" data-nome="${esc(nomeEdubox(t.nome))}">${esc(nomeEdubox(t.nome))}<small>${esc(t.titulacao || '')}</small></button>`).join('')}`;
 }
 
 function abrirModal(gi, li) {
@@ -645,7 +724,7 @@ async function salvarHorario(ev) {
   ev.preventDefault();
   const erro = (m) => { $('mh-erro').textContent = m; $('mh-erro').classList.remove('hidden'); };
   const aulas = [...document.querySelectorAll('#mh-linhas .mz-linha')].map(l => ({
-    professor: l.querySelector('.f-prof').value.trim(),
+    professor: nomeCorreto(l.querySelector('.f-prof').value.trim()),
     dia: l.querySelector('.f-dia').value,
     inicio: l.querySelector('.f-ini').value,
     fim: l.querySelector('.f-fim').value,
@@ -675,7 +754,7 @@ async function salvarHorario(ev) {
       (r.conflitos || []).forEach(x => { if (!conflitos.some(y => y.professor === x.professor && y.dia === x.dia && y.inicio === x.inicio && y.curso === x.curso && y.disciplina === x.disciplina)) conflitos.push(x); });
       feitos++;
     }
-    $('lista-professores').innerHTML = dados.professores.map(p => `<option value="${esc(p)}">`).join('');
+    listaProfessores();
     fecharModal();
     renderKpis(); renderCursos(); renderAbas();
     const reais = conflitos.filter(x => !x.exato), iguais = conflitos.filter(x => x.exato);
@@ -696,6 +775,23 @@ async function salvarHorario(ev) {
 // ---------- EVENTOS ----------
 function wireEventos() {
   $('sel-semestre').addEventListener('change', (e) => carregar(e.target.value));
+  $('mh-linhas').addEventListener('input', (e) => {
+    if (!e.target.classList.contains('f-prof')) return;
+    e.target.closest('.f-prof-wrap').querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
+  });
+  $('mh-linhas').addEventListener('click', (e) => {
+    const op = e.target.closest('.f-sug-op');
+    if (!op) return;
+    const wrap = op.closest('.f-prof-wrap');
+    wrap.querySelector('.f-prof').value = op.dataset.nome;
+    wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-filtro-semprof]') || !dados) return;
+    filtroSemProf = !filtroSemProf;
+    if (filtroSemProf) abaSel = 'semestre';   // o filtro é da aba "Semestre por turma"
+    renderKpis(); renderCursos(); renderAbas();
+  });
   $('cursos').addEventListener('click', (e) => {
     const b = e.target.closest('[data-curso]');
     if (!b) return;
@@ -754,3 +850,104 @@ function wireEventos() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && emEdicao) fecharModal(); });
   $('form-horario').addEventListener('submit', salvarHorario);
 }
+
+// ---- Aba: Titulação dos professores (09/11/2026) — relatório do diretor, TODOS os cursos que o usuário vê.
+// Cada professor conta 1x por curso. Regra: mestres + doutores tem que ser MAIOR que especialistas.
+let titCache = null;   // { semestre, dados } — lê só ao abrir a aba
+const pctN = (n, t) => (t ? Math.round(n / t * 1000) / 10 : 0);
+async function renderTitulacao(forcar = false) {
+  const p = $('painel-titulacao');
+  if (!forcar && titCache && titCache.semestre === dados.semestre) return desenharTitulacao();
+  p.innerHTML = '<div class="mz-info">Buscando os professores e a titulação no Edubox...</div>';
+  try {
+    titCache = { semestre: dados.semestre, dados: await apiFetch(`/matrizes/titulacao?semestre=${encodeURIComponent(dados.semestre)}`) };
+    desenharTitulacao();
+  } catch (err) {
+    p.innerHTML = `<div class="mz-aviso">Não foi possível montar o relatório: ${esc(err.message)}</div>`;
+  }
+}
+function desenharTitulacao() {
+  const r = titCache.dados;
+  const curto = (n) => tituloCaso(String(n).replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '').replace(/ - FORMAÇÃO.*/i, '').trim());
+  const planejamento = r.fonte === 'matrizes';
+  const base = r.cursos.map((c, i) => {
+    const md = c.doutor + c.mestre;
+    const cumpre = c.total > 0 && md > c.especialista;
+    // quantos mestres/doutores a mais faltam pra passar dos especialistas (contratando sem tirar ninguém)
+    const faltam = c.total > 0 && !cumpre ? c.especialista - md + 1 : 0;
+    return { ...c, i, md, cumpre, faltam, pctMD: pctN(md, c.total) };
+  });
+  // quem precisa de atenção primeiro; depois os sem professor; depois o maior % de mestres + doutores
+  const ordem = [...base].sort((a, b) => (a.total ? (a.cumpre ? 1 : 0) : 2) - (b.total ? (b.cumpre ? 1 : 0) : 2) || a.pctMD - b.pctMD);
+  const comProf = base.filter(c => c.total);
+  const cumprem = comProf.filter(c => c.cumpre).length;
+  const atencao = ordem.filter(c => c.total && !c.cumpre);
+  const semProfTot = base.reduce((n, c) => n + (c.semProfessor || 0), 0);
+  const fonte = planejamento
+    ? `Planejamento de ${esc(r.semestre.replace('.', '/'))}: o Edubox ainda não tem professor nos diários, então os números vêm dos professores que os coordenadores definiram nos horários.`
+    : `Professores lançados nos diários do Edubox em ${esc(r.semestre.replace('.', '/'))}.`;
+
+  const seg = (n, tot, cls, rot) => n ? `<i class="tt-seg ${cls}" style="flex:${n}" title="${n} ${rot}"></i>` : '';
+  const barra = (c) => c.total
+    ? `<div class="tt-barra" role="img" aria-label="${c.doutor} doutores, ${c.mestre} mestres, ${c.especialista} especialistas, ${c.graduado} graduados, ${c.semTitulacao} sem titulação">
+        <div class="tt-segs">${seg(c.doutor, c.total, 'dout', 'doutor(es)')}${seg(c.mestre, c.total, 'mest', 'mestre(s)')}${seg(c.especialista, c.total, 'esp', 'especialista(s)')}${seg(c.graduado, c.total, 'grad', 'graduado(s)')}${seg(c.semTitulacao, c.total, 'falta', 'sem titulação')}</div>
+        <span class="tt-corte" title="Mestres + doutores precisam passar desta linha"></span>
+      </div>`
+    : '<div class="tt-barra tt-vazia"><span>nenhum professor definido</span></div>';
+  const nums = (c) => c.total
+    ? `<span class="tt-n dout">${c.doutor} dout.</span><span class="tt-n mest">${c.mestre} mest.</span><span class="tt-n esp">${c.especialista} esp.</span>${c.graduado ? `<span class="tt-n grad">${c.graduado} grad.</span>` : ''}${c.semTitulacao ? `<span class="tt-n falta">${c.semTitulacao} sem titulação</span>` : ''}`
+    : '';
+  const veredito = (c) => !c.total ? '<span class="tt-ver falta">Sem professores</span>'
+    : c.cumpre ? `<span class="tt-ver ok">${c.pctMD.toLocaleString('pt-BR')}% mestres e doutores</span>`
+    : `<span class="tt-ver alerta">${c.pctMD.toLocaleString('pt-BR')}% — precisa de +${c.faltam} ${c.faltam === 1 ? 'mestre ou doutor' : 'mestres ou doutores'}</span>`;
+  const linha = (c) => `
+    <div class="tt-curso ${!c.total ? 'vazio' : c.cumpre ? 'ok' : 'alerta'}" data-tit-curso="${c.i}" tabindex="0" role="button" aria-expanded="false">
+      <div class="tt-nome"><b>${esc(curto(c.cursoNome))}</b><small>${c.total} ${c.total === 1 ? 'professor' : 'professores'}</small></div>
+      ${barra(c)}
+      <div class="tt-lado">${veredito(c)}<div class="tt-nums">${nums(c)}</div>
+        ${planejamento && c.semProfessor ? `<span class="tt-faltaprof">${c.semProfessor} ${c.semProfessor === 1 ? 'disciplina' : 'disciplinas'} sem professor</span>` : ''}</div>
+    </div>
+    <div class="tt-det hidden" data-tit-det="${c.i}">${c.professores.length
+      ? ['Doutor', 'Mestre', 'Especialista', 'Graduado', ''].map(t => {
+          const ps = c.professores.filter(p => (p.titulacao || '') === t || (t === '' && !['Doutor', 'Mestre', 'Especialista', 'Graduado'].includes(p.titulacao)));
+          if (!ps.length) return '';
+          const rot = { Doutor: 'Doutores', Mestre: 'Mestres', Especialista: 'Especialistas', Graduado: 'Graduados', '': 'Sem titulação no Edubox' }[t];
+          return `<div class="tt-grupo ${t ? t.toLowerCase() : 'falta'}"><h4>${rot} <span>${ps.length}</span></h4><ul>${ps.map(p => `<li>${esc(tituloCaso(p.nome))}${p.digitado && normT(p.digitado) !== normT(p.nome) ? ` <small>digitado “${esc(p.digitado)}”</small>` : ''}</li>`).join('')}</ul></div>`;
+        }).join('')
+      : '<p class="tt-sem">Nenhum professor definido nos horários deste curso ainda.</p>'}</div>`;
+
+  const emissao = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  $('painel-titulacao').innerHTML = `
+    <div class="mz-rel-cab tt-so-impressao">
+      <img src="/img/fateclogoazul.png" alt="Fatec Ivaiporã">
+      <div><h2>Titulação dos professores por curso</h2><p>Semestre ${esc(r.semestre.replace('.', '/'))} · Fatec Ivaiporã</p></div>
+    </div>
+    <section class="tt-topo">
+      <div class="tt-manchete">
+        <p class="tt-frase"><b>${cumprem} de ${comProf.length}</b> ${comProf.length === 1 ? 'curso tem' : 'cursos têm'} mais mestres e doutores que especialistas</p>
+        <p class="tt-fonte">${fonte} Cada professor conta uma vez por curso, mesmo dando aula em várias turmas.</p>
+      </div>
+      <div class="tt-legenda" aria-hidden="true">
+        <span><i class="dout"></i>Doutor</span><span><i class="mest"></i>Mestre</span><span><i class="esp"></i>Especialista</span><span><i class="grad"></i>Graduado</span><span><i class="falta"></i>Falta informação</span><span><i class="corte"></i>Linha dos 50%</span>
+      </div>
+    </section>
+    ${atencao.length ? `<section class="tt-atencao"><h3>Precisam de atenção</h3><ul>${atencao.map(c => `<li><b>${esc(curto(c.cursoNome))}</b> ${c.pctMD.toLocaleString('pt-BR')}% · +${c.faltam} ${c.faltam === 1 ? 'mestre ou doutor' : 'mestres ou doutores'}</li>`).join('')}</ul></section>` : ''}
+    ${planejamento && semProfTot ? `<p class="tt-aviso-falta"><b>${semProfTot} disciplinas</b> ainda estão sem professor ou “a contratar” — esses números mudam conforme os coordenadores completam os horários.</p>` : ''}
+    <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores.</span></div>
+    <div class="tt-lista">${ordem.map(linha).join('')}</div>
+    <p class="mz-rel-emissao tt-so-impressao">Emitido em ${esc(emissao)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}. ${r.fonte === 'edubox' ? 'Titulação e professores conforme os diários do Edubox.' : 'Planejamento conforme os horários definidos pelos coordenadores; titulação conforme o Edubox.'}</p>`;
+}
+document.addEventListener('click', (e) => {
+  const l = e.target.closest('[data-tit-curso]');
+  if (l) { const det = document.querySelector(`[data-tit-det="${l.dataset.titCurso}"]`); det?.classList.toggle('hidden'); l.setAttribute('aria-expanded', det && !det.classList.contains('hidden') ? 'true' : 'false'); }
+  if (e.target.id === 'btn-atualizar-tit') renderTitulacao(true);
+  if (e.target.id === 'btn-imprimir-tit') {
+    const p = $('painel-titulacao');
+    p.classList.add('imprimir');
+    const limpar = () => { p.classList.remove('imprimir'); window.removeEventListener('afterprint', limpar); };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+  }
+});
+
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-tit-curso]')) { e.preventDefault(); e.target.click(); } });

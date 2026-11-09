@@ -192,3 +192,143 @@ details.mz-card[open] > summary { border-bottom: 1px solid var(--border-color); 
 .mz-por-periodo th, .mz-por-periodo td, .mz-resumo-ch th, .mz-resumo-ch td { width: auto !important; }
 .mz-tabela tr.mz-total td { font-weight: 700; background: #f8fafc; border-top: 1px solid var(--border-color); }
 .mz-tabela tr.mz-geral td { background: #eff6ff; color: #1e3a8a; font-size: 0.95rem; }
+
+/* Sem professor + titulação (09/11/2026) */
+.mz-kpi-filtro { cursor: pointer; text-align: left; font: inherit; border: 1px solid transparent; }
+.mz-kpi-filtro:hover { border-color: #14b8a6; }
+.mz-kpi-filtro.on { border-color: #1B3A4B; box-shadow: inset 0 0 0 1px #1B3A4B; }
+.mz-info-filtro { background: #fff8eb; border-color: #fcd34d; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mz-tit { display: inline-block; border-radius: 6px; padding: 0 6px; font-size: 0.7rem; font-weight: 700; margin-left: 4px; background: #eef2f7; color: #475569; vertical-align: middle; }
+.mz-tit.doutor { background: #ede9fe; color: #5b21b6; }
+.mz-tit.mestre { background: #e0f2fe; color: #075985; }
+.mz-tit.especialista { background: #dcfce7; color: #166534; }
+.mz-tit.graduado { background: #f1f5f9; color: #334155; }
+.mz-tit.nao { background: #fff4ed; color: #9a3412; }
+.mz-tit.contratar { background: #fee2e2; color: #991b1b; }
+
+/* Aba Titulação (09/11/2026) */
+.mz-tit-linha { cursor: pointer; }
+.mz-tit-linha:hover td { background: #f8fafc; }
+.mz-tit-det td { background: #fbfcfd; }
+.mz-tit-profs { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.82rem; }
+.mz-alerta-txt { color: #b45309; font-weight: 700; }
+.mz-kpis-tit { margin: 10px 0; }
+.mz-tabela-tit td, .mz-tabela-tit th { white-space: nowrap; }
+
+/* ===== Titulação v2 (09/11/2026): composição do corpo docente por curso =====
+   Cor com significado: doutor petróleo, mestre turquesa, especialista ocre, graduado ardósia;
+   carmim listrado só pra FALTA DE INFORMAÇÃO (sem professor, a contratar, sem titulação). */
+:root {
+  --tt-dout: #1B3A4B; --tt-mest: #14b8a6; --tt-esp: #C98A2B; --tt-grad: #94A3B8;
+  --tt-falta: #BE123C; --tt-falta-fundo: #FFF1F3; --tt-ok: #0F766E; --tt-linha: #E2E8F0; --tt-texto: #334155;
+  --tt-listra: repeating-linear-gradient(135deg, var(--tt-falta) 0 4px, #F9C6D0 4px 8px);
+}
+.tt-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 28px; align-items: flex-end; margin: 4px 0 16px; }
+.tt-frase { font-size: 1.45rem; line-height: 1.25; color: var(--tt-dout); margin: 0; max-width: 34ch; font-weight: 500; letter-spacing: -0.01em; }
+.tt-frase b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.tt-fonte { color: #64748b; font-size: 0.82rem; margin: 6px 0 0; max-width: 70ch; line-height: 1.45; }
+.tt-legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78rem; color: var(--tt-texto); }
+.tt-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.tt-legenda i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.tt-legenda i.dout { background: var(--tt-dout); } .tt-legenda i.mest { background: var(--tt-mest); }
+.tt-legenda i.esp { background: var(--tt-esp); } .tt-legenda i.grad { background: var(--tt-grad); }
+.tt-legenda i.falta { background: var(--tt-listra); }
+.tt-legenda i.corte { width: 2px; height: 14px; background: var(--tt-dout); border-radius: 0; }
+
+.tt-atencao { border-left: 4px solid var(--tt-falta); background: var(--tt-falta-fundo); padding: 10px 14px; border-radius: 0 10px 10px 0; margin-bottom: 14px; }
+.tt-atencao h3 { margin: 0 0 6px; font-size: 0.9rem; color: var(--tt-falta); }
+.tt-atencao ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.86rem; color: var(--tt-texto); }
+.tt-aviso-falta { background: var(--tt-falta-fundo); color: #9F1239; border: 1px dashed #FDA4B4; border-radius: 10px; padding: 8px 12px; font-size: 0.85rem; margin: 0 0 14px; }
+.tt-acoes { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.tt-dica { font-size: 0.8rem; color: #64748b; margin-left: 4px; }
+
+.tt-lista { border-top: 1px solid var(--tt-linha); }
+.tt-curso { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(220px, 2.2fr) minmax(220px, 1.5fr); gap: 16px; align-items: center; padding: 12px 10px 12px 14px; border-bottom: 1px solid var(--tt-linha); cursor: pointer; position: relative; }
+.tt-curso::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: transparent; }
+.tt-curso.alerta::before { background: var(--tt-falta); }
+.tt-curso.ok::before { background: var(--tt-mest); }
+.tt-curso.vazio::before { background: var(--tt-listra); }
+.tt-curso:hover, .tt-curso:focus-visible { background: #F8FAFC; outline: none; }
+.tt-curso:focus-visible { box-shadow: inset 0 0 0 2px var(--tt-mest); }
+.tt-nome b { display: block; color: var(--tt-dout); font-size: 0.95rem; }
+.tt-nome small { color: #64748b; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+
+.tt-barra { position: relative; height: 22px; }
+.tt-segs { display: flex; height: 100%; border-radius: 6px; overflow: hidden; background: #F1F5F9; gap: 2px; }
+.tt-seg { display: block; min-width: 4px; }
+.tt-seg.dout { background: var(--tt-dout); } .tt-seg.mest { background: var(--tt-mest); }
+.tt-seg.esp { background: var(--tt-esp); } .tt-seg.grad { background: var(--tt-grad); }
+.tt-seg.falta { background: var(--tt-listra); }
+.tt-corte { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--tt-dout); opacity: 0.55; }
+.tt-vazia { background: var(--tt-listra); border-radius: 6px; opacity: 0.85; display: flex; align-items: center; padding-left: 10px; }
+.tt-vazia span { background: #fff; color: var(--tt-falta); font-size: 0.74rem; font-weight: 700; border-radius: 4px; padding: 1px 6px; }
+
+.tt-lado { display: flex; flex-direction: column; gap: 4px; }
+.tt-ver { font-weight: 700; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.tt-ver.ok { color: var(--tt-ok); }
+.tt-ver.alerta { color: var(--tt-falta); }
+.tt-ver.falta { color: var(--tt-falta); }
+.tt-nums { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.76rem; color: #64748b; font-variant-numeric: tabular-nums; }
+.tt-n::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.tt-n.dout::before { background: var(--tt-dout); } .tt-n.mest::before { background: var(--tt-mest); }
+.tt-n.esp::before { background: var(--tt-esp); } .tt-n.grad::before { background: var(--tt-grad); }
+.tt-n.falta { color: var(--tt-falta); font-weight: 700; } .tt-n.falta::before { background: var(--tt-listra); }
+.tt-faltaprof { align-self: flex-start; background: var(--tt-listra); color: #fff; font-size: 0.74rem; font-weight: 700; border-radius: 6px; padding: 2px 8px; text-shadow: 0 0 2px var(--tt-falta), 0 0 2px var(--tt-falta); }
+
+.tt-det { padding: 6px 14px 16px 18px; border-bottom: 1px solid var(--tt-linha); display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 20px; background: #FBFCFD; }
+.tt-det.hidden { display: none; }
+.tt-grupo h4 { margin: 4px 0 6px; font-size: 0.8rem; color: var(--tt-texto); display: flex; gap: 6px; align-items: center; }
+.tt-grupo h4 span { font-variant-numeric: tabular-nums; color: #64748b; font-weight: 600; }
+.tt-grupo h4::before { content: ''; width: 10px; height: 10px; border-radius: 2px; }
+.tt-grupo.doutor h4::before { background: var(--tt-dout); } .tt-grupo.mestre h4::before { background: var(--tt-mest); }
+.tt-grupo.especialista h4::before { background: var(--tt-esp); } .tt-grupo.graduado h4::before { background: var(--tt-grad); }
+.tt-grupo.falta h4 { color: var(--tt-falta); } .tt-grupo.falta h4::before { background: var(--tt-listra); }
+.tt-grupo ul { margin: 0; padding-left: 16px; font-size: 0.82rem; color: var(--tt-texto); line-height: 1.55; }
+.tt-grupo small { color: #94a3b8; }
+.tt-sem { color: var(--tt-falta); font-size: 0.85rem; margin: 6px 0; }
+
+@media (max-width: 760px) {
+  .tt-curso { grid-template-columns: 1fr; gap: 8px; }
+  .tt-frase { font-size: 1.2rem; }
+}
+@media print {
+  .tt-det { display: grid !important; }
+  .tt-curso { break-inside: avoid; }
+}
+
+/* ===== Semestre por turma: falta de informação em carmim ===== */
+.mz-tabela tr.mz-falta-prof td { background: var(--tt-falta-fundo); }
+.mz-tabela tr.mz-falta-prof td:first-child { box-shadow: inset 4px 0 0 var(--tt-falta); }
+.mz-falta-selo { display: inline-block; background: var(--tt-listra); color: #fff; font-weight: 700; font-size: 0.74rem; border-radius: 6px; padding: 2px 8px; text-shadow: 0 0 2px var(--tt-falta), 0 0 2px var(--tt-falta); }
+.mz-tit.contratar { background: var(--tt-listra); color: #fff; text-shadow: 0 0 2px var(--tt-falta), 0 0 2px var(--tt-falta); }
+.mz-tit.nao { background: var(--tt-falta-fundo); color: var(--tt-falta); box-shadow: inset 0 0 0 1px #FDA4B4; }
+.mz-tit.doutor { background: var(--tt-dout); color: #fff; }
+.mz-tit.mestre { background: var(--tt-mest); color: #fff; }
+.mz-tit.especialista { background: #FBEBCF; color: #8A5A12; }
+.mz-kpi-filtro.alerta b { color: var(--tt-falta); }
+.mz-kpi-filtro.alerta { box-shadow: inset 4px 0 0 var(--tt-falta); }
+/* selos de "falta": fundo carmim sólido (texto legível) + quadradinho listrado como marca */
+.tt-faltaprof, .mz-falta-selo, .mz-tit.contratar { background: var(--tt-falta); color: #fff; text-shadow: none; display: inline-flex; align-items: center; gap: 6px; }
+.tt-faltaprof::before, .mz-falta-selo::before, .mz-tit.contratar::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: repeating-linear-gradient(135deg, #fff 0 2px, #F9C6D0 2px 4px); flex: none; }
+
+/* Nome correto do professor (09/11/2026) */
+.f-prof-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.f-sug { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 0.74rem; }
+.f-sug:empty { display: none; }
+.f-sug-rot { color: #64748b; }
+.f-sug-op { border: 1px solid #b6dfd9; background: #eef7f6; color: #1B3A4B; border-radius: 999px; padding: 2px 9px; cursor: pointer; font-size: 0.76rem; display: inline-flex; gap: 6px; align-items: center; }
+.f-sug-op small { color: #0F766E; font-weight: 700; }
+.f-sug-op:hover, .f-sug-op:focus-visible { border-color: #14b8a6; background: #dff4f1; outline: none; }
+.f-sug-ok { color: #0F766E; font-weight: 700; }
+.f-sug-nao { color: #BE123C; font-weight: 600; }
+.mz-linha { align-items: start; }
+
+/* Titulação impressa no padrão dos relatórios do Órbita: logo da Fatec + emissão (09/11/2026) */
+.tt-so-impressao { display: none !important; }
+@media print {
+  .tt-so-impressao { display: flex !important; }
+  p.tt-so-impressao { display: block !important; }
+  #painel-titulacao .tt-acoes, #painel-titulacao .tt-dica { display: none !important; }
+  #painel-titulacao .tt-curso { cursor: default; }
+  #painel-titulacao .tt-segs, #painel-titulacao .tt-legenda i, #painel-titulacao .tt-n::before, .tt-faltaprof, .tt-atencao, .tt-aviso-falta { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
