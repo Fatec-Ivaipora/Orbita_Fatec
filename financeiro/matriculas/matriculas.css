@@ -595,3 +595,69 @@ body .kpi-card::before { display: none; }
 /* Espaço entre grupos de cartões do Resumo do semestre (09/10/2026) */
 /* a grade de cartões deste relatório é flex (quebra de linha), por isso flex-basis 100%; grid-column vale se voltar a ser grid */
 .kpi-quebra { flex: 0 0 100%; grid-column: 1 / -1; height: 0; margin: 0; padding: 0; }
+
+/* Faixa Edubox → Matrículas (09/11/2026) */
+.edubox-faixa { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; background: #eef7f6; border: 1px solid #b6dfd9; color: #1B3A4B; border-radius: 10px; padding: 9px 14px; margin-bottom: 14px; font-size: 0.86rem; }
+.edubox-faixa.erro { background: #fff4ed; border-color: #fdba74; color: #9a3412; }
+.edubox-acoes { display: flex; gap: 8px; }
+.edubox-btn { background: #fff; border: 1px solid #b6dfd9; color: #1B3A4B; border-radius: 7px; padding: 4px 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.edubox-btn:hover { border-color: #14b8a6; }
+.edubox-alerta { color: #b45309; }
+.edubox-girando { display: inline-block; animation: edubox-gira 1s linear infinite; }
+@keyframes edubox-gira { to { transform: rotate(360deg); } }
+.edubox-detalhes { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; max-height: 320px; overflow: auto; }
+.edubox-lista ul { margin: 4px 0 0; padding-left: 18px; }
+.edubox-lista li { font-size: 0.8rem; margin: 2px 0; }
+
+/* Diferenças com o Edubox (09/11/2026) */
+.edubox-faixa.com-pendencia { background: #fff8eb; border-color: #fcd34d; }
+.edubox-btn.destaque { background: #1B3A4B; color: #fff; border-color: #1B3A4B; }
+.edubox-modal { max-width: 1000px; width: 96vw; }
+.edubox-sub { font-size: 0.78rem; color: #64748b; margin: 2px 0 0; }
+.edubox-ajuda { font-size: 0.84rem; color: #475569; margin: 0 0 12px; }
+.edubox-abas { display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 10px; overflow-x: auto; }
+.edubox-aba { background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 10px; font-weight: 700; color: #64748b; cursor: pointer; white-space: nowrap; }
+.edubox-aba.on { color: #1B3A4B; border-bottom-color: #14b8a6; }
+.edubox-aba b { background: #eef2f7; border-radius: 999px; padding: 0 7px; margin-left: 4px; font-size: 0.75rem; }
+.edubox-lote { display: flex; gap: 8px; margin-bottom: 8px; }
+.edubox-corpo { max-height: 60vh; overflow: auto; }
+.edubox-tab { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.edubox-tab th { text-align: left; font-size: 0.72rem; text-transform: uppercase; color: #64748b; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; background: #fff; }
+.edubox-tab td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.edubox-acoes-linha { white-space: nowrap; }
+.edubox-acoes-linha .edubox-btn { margin: 0 0 4px 4px; }
+.edubox-tipo { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+.edubox-tipo.criar { background: #e0f2fe; color: #075985; }
+.edubox-tipo.situacao { background: #ede9fe; color: #5b21b6; }
+.edubox-tipo.periodo { background: #fef3c7; color: #92400e; }
+.edubox-tipo.conferir { background: #fee2e2; color: #991b1b; }
+.edubox-res.aplicada { color: #166534; font-weight: 700; }
+.edubox-res.ignorada { color: #64748b; font-weight: 700; }
+.edubox-so { columns: 2; font-size: 0.82rem; padding-left: 18px; }
+@media (max-width: 720px) {
+  .edubox-so { columns: 1; }
+  .edubox-tab thead { display: none; }
+  .edubox-tab tr { display: block; border-bottom: 1px solid #e2e8f0; padding: 6px 0; }
+  .edubox-tab td { display: block; border: none; padding: 3px 8px; }
+  .edubox-acoes-linha { white-space: normal; }
+}
+.edubox-modal .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.edubox-modal .modal-header h2 { margin: 0; }
+.edubox-modal .modal-close { background: none; border: none; font-size: 1.6rem; line-height: 1; color: #64748b; cursor: pointer; padding: 0 4px; }
+.edubox-tipo.formando { background: #dcfce7; color: #166534; }
+.edubox-lote { flex-wrap: wrap; justify-content: space-between; align-items: center; }
+.edubox-tudo, .edubox-marcadas { display: flex; flex-wrap: wrap; gap: 8px; }
+.edubox-btn.confirmar { background: #b45309; border-color: #b45309; color: #fff; }
+.edubox-ajuda-lote { font-size: 0.8rem; color: #475569; }
+.edubox-tipo.curso { background: #ffedd5; color: #9a3412; }
+
+/* Duplicadas (09/11/2026) */
+.aluno-duplicado { background: #fff4ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; padding: 10px 12px; margin: 6px 0 10px; font-size: 0.85rem; }
+.aluno-duplicado p { margin: 0 0 8px; }
+.aluno-duplicado label { display: flex; gap: 8px; align-items: center; font-weight: 600; color: #7c2d12; }
+.aluno-duplicado input { width: auto; }
+.dup-grupo { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+.dup-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.dup-linha { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px dashed #e2e8f0; font-size: 0.85rem; }
+.dup-linha:first-of-type { border-top: none; }
+.dup-tag { display: inline-block; background: #e0f2fe; color: #075985; border-radius: 6px; padding: 0 6px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; }

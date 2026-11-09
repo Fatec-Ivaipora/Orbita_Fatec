@@ -231,6 +231,7 @@ async function initPaginaLancamento() {
   setupSituacaoMultiSelect();
   await popularSelectSemestres(document.getElementById('semestre-select'));
   semestreSelecionado = document.getElementById('semestre-select')?.value || semestreSelecionado;
+  sincronizarEdubox();
 
   document.getElementById('modulo-select')?.addEventListener('change', (e) => {
     moduloSelecionado = e.target.value;
@@ -240,6 +241,7 @@ async function initPaginaLancamento() {
     atualizarVisibilidadeCurso();
     atualizarBotaoNovoAluno();
     atualizarLabelImpressaoLista();
+    sincronizarEdubox();
     if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
@@ -248,6 +250,7 @@ async function initPaginaLancamento() {
     semestreSelecionado = e.target.value;
     atualizarBotaoNovoAluno();
     atualizarLabelImpressaoLista();
+    sincronizarEdubox();
     if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
     else { renderTabelaAlunos([]); limparContadorRegistros(); }
   });
@@ -830,7 +833,8 @@ function setupModalAluno() {
         formando: document.getElementById('aluno-formando').checked,
         menor18: document.getElementById('aluno-menor18').checked,
         indicadoPorAlunoId: alunoIndicadoPor?.id || null,
-        indicadoPorNome: alunoIndicadoPor?.nome || null
+        indicadoPorNome: alunoIndicadoPor?.nome || null,
+        outraPessoa: document.getElementById('aluno-outra-pessoa').checked
       };
       if (moduloSelecionado === 'fatec') {
         payload.cursoId = cursoSel.value;
@@ -849,6 +853,11 @@ function setupModalAluno() {
       modal.classList.add('hidden');
       await carregarAlunos();
     } catch (err) {
+      // trava de duplicidade: mostra o aviso no próprio cadastro com a opção "é outra pessoa"
+      if (/^Já existe matrícula/.test(err.message)) {
+        document.getElementById('aluno-duplicado-msg').textContent = err.message;
+        document.getElementById('aluno-duplicado').classList.remove('hidden');
+      }
       showToast('Erro ao salvar: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
@@ -859,6 +868,8 @@ function setupModalAluno() {
 
 function abrirModalAluno(aluno) {
   alunoEmEdicaoId = aluno ? aluno.id : null;
+  document.getElementById('aluno-duplicado').classList.add('hidden');
+  document.getElementById('aluno-outra-pessoa').checked = false;
   document.getElementById('modal-aluno-title').textContent = aluno ? 'Editar Aluno' : 'Novo Aluno';
   document.getElementById('aluno-id').value = aluno?.id || '';
   document.getElementById('aluno-nome').value = aluno?.nome || '';
@@ -2037,3 +2048,213 @@ async function vsConfirmar() {
     vsAtualizarContadorEBotao();
   }
 }
+
+// ==========================================
+// EDUBOX → MATRÍCULAS (09/11/2026): ao abrir (e ao trocar módulo/semestre), a partir de 2026.2, o servidor
+// compara com o Edubox (no máximo 1x a cada 10 min) e monta as DIFERENÇAS. Nada muda sozinho: o pessoal
+// das Matrículas aplica ou ignora cada uma na janela "Diferenças com o Edubox".
+// ==========================================
+let eduboxSeq = 0;
+let eduboxUltimo = null;
+let eduboxPend = [];
+const EDUBOX_TIPO = { criar: ['🆕', 'Matrícula nova'], situacao: ['🔁', 'Situação'], periodo: ['📅', 'Período'], formando: ['🎓', 'Formando'], curso: ['🔀', 'Curso'], conferir: ['⚠️', 'Conferir'] };
+const fmtCurto = (iso) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+
+async function sincronizarEdubox(forcar = false) {
+  const faixa = document.getElementById('edubox-faixa');
+  if (!faixa) return;
+  const seq = ++eduboxSeq;
+  if (!semestreSelecionado || semestreSelecionado < '2026.2') { faixa.classList.add('hidden'); return; }
+  faixa.classList.remove('hidden', 'erro');
+  faixa.innerHTML = '<span class="edubox-girando">⟳</span> Conferindo com o Edubox...';
+  try {
+    const r = forcar
+      ? await apiFetch('/matriculas/edubox/sincronizar', { method: 'POST', body: JSON.stringify({ modulo: moduloSelecionado, semestre: semestreSelecionado }) })
+      : await apiFetch(`/matriculas/edubox/sincronizar?modulo=${encodeURIComponent(moduloSelecionado)}&semestre=${encodeURIComponent(semestreSelecionado)}`);
+    if (seq !== eduboxSeq) return;   // trocou de semestre/módulo no meio
+    eduboxUltimo = r;
+    renderFaixaEdubox(r);
+  } catch (err) {
+    if (seq !== eduboxSeq) return;
+    faixa.classList.add('erro');
+    faixa.innerHTML = `⚠️ ${esc(err.message)} <button type="button" class="edubox-btn" data-edubox-forcar>Tentar de novo</button>`;
+  }
+}
+
+function renderFaixaEdubox(r) {
+  const faixa = document.getElementById('edubox-faixa');
+  const n = r.pendentes || 0;
+  const so = r.resumo && r.resumo.soNoOrbita;
+  faixa.classList.toggle('com-pendencia', n > 0);
+  faixa.innerHTML = `
+    <span>🔄 Conferido com o <b>Edubox</b> em ${fmtCurto(r.ultimaEm)} · ${n
+      ? `<b class="edubox-alerta">${n} diferença(s)</b> esperando confirmação`
+      : 'nenhuma diferença pendente'}${so ? ` · ${so} só no Órbita` : ''}${r.resumo && r.resumo.duplicadas ? ` · <b class="edubox-alerta">${r.resumo.duplicadas} duplicada(s)</b>` : ''}</span>
+    <span class="edubox-acoes">
+      <button type="button" class="edubox-btn ${n ? 'destaque' : ''}" data-edubox-abrir>${n ? 'Revisar diferenças' : 'Ver diferenças'}</button>
+      <button type="button" class="edubox-btn" data-edubox-forcar>Atualizar agora</button>
+    </span>`;
+}
+
+async function abrirDiferencasEdubox() {
+  document.getElementById('modal-edubox').classList.remove('hidden');
+  document.getElementById('edubox-sub').textContent = `${moduloSelecionado === 'medicina' ? 'Medicina' : 'Fatec'} · ${semestreSelecionado}`;
+  document.getElementById('edubox-corpo').innerHTML = '<p class="tabela-msg">Carregando...</p>';
+  try {
+    eduboxPend = await apiFetch(`/matriculas/edubox/pendencias?modulo=${encodeURIComponent(moduloSelecionado)}&semestre=${encodeURIComponent(semestreSelecionado)}`);
+    renderDiferencasEdubox();
+  } catch (err) {
+    document.getElementById('edubox-corpo').innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderDiferencasEdubox() {
+  const aba = document.querySelector('#modal-edubox .edubox-aba.on')?.dataset.aba || 'pendente';
+  const pend = eduboxPend.filter(p => p.status === 'pendente');
+  const so = (eduboxUltimo && eduboxUltimo.resumo && eduboxUltimo.resumo.listaSoNoOrbita) || [];
+  document.querySelector('#modal-edubox [data-aba="pendente"] b').textContent = pend.length;
+  document.querySelector('#modal-edubox [data-aba="resolvida"] b').textContent = eduboxPend.length - pend.length;
+  document.querySelector('#modal-edubox [data-aba="so"] b').textContent = so.length;
+  document.getElementById('edubox-lote').classList.toggle('hidden', aba !== 'pendente' || !pend.some(p => p.tipo !== 'conferir'));
+  const corpo = document.getElementById('edubox-corpo');
+  if (aba === 'dup') { renderDuplicadas(); return; }
+  if (aba === 'so') {
+    corpo.innerHTML = so.length
+      ? `<p class="edubox-ajuda">Estão no Órbita e não aparecem no Edubox em ${esc(semestreSelecionado)} (ex.: rematrícula ainda não lançada lá). Só pra acompanhar — nada a aplicar.</p><ul class="edubox-so">${so.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
+      : '<p class="tabela-msg">Todo mundo do Órbita está no Edubox.</p>';
+    return;
+  }
+  const lista = aba === 'pendente' ? pend : eduboxPend.filter(p => p.status !== 'pendente');
+  if (!lista.length) { corpo.innerHTML = `<p class="tabela-msg">${aba === 'pendente' ? 'Nenhuma diferença esperando confirmação. ✅' : 'Nada resolvido ainda.'}</p>`; return; }
+  corpo.innerHTML = `<table class="edubox-tab"><thead><tr>
+      ${aba === 'pendente' ? '<th><input type="checkbox" id="edubox-todos" title="Marcar/desmarcar todas" checked></th>' : ''}
+      <th>Tipo</th><th>Aluno</th><th>Diferença</th><th>${aba === 'pendente' ? '' : 'Resolvido'}</th></tr></thead><tbody>
+    ${lista.map(p => {
+      const [ic, rot] = EDUBOX_TIPO[p.tipo] || ['•', p.tipo];
+      const acoes = aba === 'pendente'
+        ? (p.tipo === 'conferir'
+          ? `<button type="button" class="edubox-btn action-execute" data-edubox-res="ignorar" data-id="${esc(p.id)}">Já conferi</button>`
+          : `<button type="button" class="edubox-btn destaque action-execute" data-edubox-res="aplicar" data-id="${esc(p.id)}">Aplicar</button><button type="button" class="edubox-btn action-execute" data-edubox-res="ignorar" data-id="${esc(p.id)}">Ignorar</button>`)
+        : `<span class="edubox-res ${esc(p.status)}">${p.status === 'aplicada' ? '✅ Aplicada' : '🚫 Ignorada'}</span><div class="edubox-sub">${esc((p.resolvidaPor || '').split(' ')[0])} · ${fmtCurto(p.resolvidaEm)}</div>`;
+      return `<tr>
+        ${aba === 'pendente' ? `<td>${p.tipo === 'conferir' ? '' : `<input type="checkbox" class="edubox-chk" value="${esc(p.id)}" checked>`}</td>` : ''}
+        <td><span class="edubox-tipo ${esc(p.tipo)}">${ic} ${rot}</span></td>
+        <td><b>${esc(p.nome)}</b><div class="edubox-sub">${esc(p.curso || '')} ${esc(p.periodo || '')}</div></td>
+        <td>${esc(p.descricao || '')}</td>
+        <td class="edubox-acoes-linha">${acoes}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  contarMarcadasEdubox();
+}
+
+// mostra quantas estão marcadas nos botões do lote; tira a confirmação pendente se a seleção mudar
+function contarMarcadasEdubox() {
+  const n = document.querySelectorAll('.edubox-chk:checked').length;
+  const ap = document.getElementById('edubox-aplicar-marcadas'), ig = document.getElementById('edubox-ignorar-marcadas');
+  if (!ap) return;
+  ap.dataset.confirmar = '';
+  ap.classList.remove('confirmar');
+  ap.textContent = `✅ Aplicar marcadas (${n})`;
+  ig.textContent = `Ignorar marcadas (${n})`;
+  ap.disabled = ig.disabled = !n;
+}
+
+async function resolverEdubox(ids, acao, botao) {
+  if (!ids.length) { showToast('Marque pelo menos uma diferença.', 'error'); return; }
+  // em blocos de 20 (cada chamada fica curta no servidor), mostrando o progresso no botão
+  const BLOCO = 20;
+  let ok = 0;
+  const erros = [];
+  try {
+    for (let i = 0; i < ids.length; i += BLOCO) {
+      if (botao && ids.length > BLOCO) botao.textContent = `Aplicando ${Math.min(i + BLOCO, ids.length)} de ${ids.length}...`;
+      const r = await apiFetch('/matriculas/edubox/pendencias/resolver', { method: 'POST', body: JSON.stringify({ ids: ids.slice(i, i + BLOCO), acao }) });
+      ok += r.ok || 0;
+      erros.push(...(r.resultados || []).filter(x => !x.ok));
+    }
+  } catch (err) {
+    erros.push({ erro: err.message });
+  }
+  showToast(`${ok} diferença(s) ${acao === 'aplicar' ? 'aplicada(s)' : 'resolvida(s)'}${erros.length ? ` · ${erros.length} com erro: ${erros[0].erro}` : ''}`, erros.length ? 'error' : 'success');
+  await abrirDiferencasEdubox();
+  if (eduboxUltimo) { eduboxUltimo.pendentes = eduboxPend.filter(p => p.status === 'pendente').length; renderFaixaEdubox(eduboxUltimo); }
+  if (acao === 'aplicar' && ok && podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-edubox-forcar]')) sincronizarEdubox(true);
+  if (e.target.closest('[data-edubox-abrir]')) abrirDiferencasEdubox();
+  if (e.target.closest('[data-edubox-fechar]') || e.target.id === 'modal-edubox') document.getElementById('modal-edubox').classList.add('hidden');
+  const aba = e.target.closest('#modal-edubox .edubox-aba');
+  if (aba) { document.querySelectorAll('#modal-edubox .edubox-aba').forEach(b => b.classList.toggle('on', b === aba)); renderDiferencasEdubox(); }
+  const res = e.target.closest('[data-edubox-res]');
+  if (res) resolverEdubox([res.dataset.id], res.dataset.eduboxRes);
+  const lote = e.target.closest('[data-edubox-lote]');
+  if (lote) {
+    const ids = [...document.querySelectorAll('.edubox-chk:checked')].map(c => c.value);
+    if (lote.dataset.eduboxLote === 'aplicar' && ids.length > 1 && lote.dataset.confirmar !== '1') {
+      lote.dataset.confirmar = '1';   // 1º clique pede confirmação no próprio botão
+      lote.classList.add('confirmar');
+      lote.textContent = `Clique de novo pra aplicar ${ids.length}`;
+      setTimeout(() => { if (lote.isConnected && lote.dataset.confirmar === '1') contarMarcadasEdubox(); }, 5000);
+    } else {
+      lote.disabled = true;
+      resolverEdubox(ids, lote.dataset.eduboxLote, lote);
+    }
+  }
+  if (e.target.id === 'edubox-todos') document.querySelectorAll('.edubox-chk').forEach(c => { c.checked = e.target.checked; });
+  if (e.target.id === 'edubox-todos' || e.target.classList.contains('edubox-chk')) contarMarcadasEdubox();
+});
+
+// ==========================================
+// DUPLICADAS (09/11/2026): a mesma pessoa mais de uma vez no semestre. Quem cuida das Matrículas decide:
+// apagar a que sobrou ou marcar "são pessoas diferentes" (homônimos). Nada é apagado sozinho.
+// ==========================================
+let duplicadas = [];
+async function renderDuplicadas() {
+  const corpo = document.getElementById('edubox-corpo');
+  corpo.innerHTML = '<p class="tabela-msg">Procurando duplicadas...</p>';
+  try {
+    duplicadas = await apiFetch(`/matriculas/duplicadas?semestre=${encodeURIComponent(semestreSelecionado)}`);
+  } catch (err) { corpo.innerHTML = `<p class="tabela-msg">Erro: ${esc(err.message)}</p>`; return; }
+  document.querySelector('#modal-edubox [data-aba="dup"] b').textContent = duplicadas.length;
+  if (!duplicadas.length) { corpo.innerHTML = `<p class="tabela-msg">Nenhuma pessoa com mais de uma matrícula em ${esc(semestreSelecionado)}. ✅</p>`; return; }
+  corpo.innerHTML = `<p class="edubox-ajuda">A mesma pessoa aparece mais de uma vez em ${esc(semestreSelecionado)}. Uma pessoa só pode ter <b>uma</b> matrícula por semestre: apague a que sobrou (ex.: curso antigo de quem trocou) ou, se forem pessoas diferentes com o mesmo nome, marque <b>"São pessoas diferentes"</b>.</p>` +
+    duplicadas.map((g, gi) => `<div class="dup-grupo">
+      <div class="dup-topo"><b>${esc(g[0].nome)}</b>
+        <button type="button" class="edubox-btn action-execute" data-dup-outra="${gi}">São pessoas diferentes</button></div>
+      ${g.map(x => `<div class="dup-linha">
+        <span>${esc(x.curso)} ${esc(x.periodo)} — <b>${esc(x.situacao)}</b>${x.eduboxCodmat ? '<span class="dup-tag" title="Ligada a uma matrícula do Edubox">Edubox</span>' : ''}<span class="edubox-sub">criada em ${x.createdAt ? new Date(x.createdAt).toLocaleDateString('pt-BR') : '—'}</span></span>
+        <button type="button" class="edubox-btn action-execute" data-dup-apagar="${esc(x.id)}" data-rot="Apagar esta">Apagar esta</button>
+      </div>`).join('')}
+    </div>`).join('');
+}
+
+document.addEventListener('click', async (e) => {
+  const apagar = e.target.closest('[data-dup-apagar]');
+  if (apagar) {
+    if (apagar.dataset.confirmar !== '1') {   // 1º clique pede confirmação no próprio botão
+      apagar.dataset.confirmar = '1';
+      apagar.classList.add('confirmar');
+      apagar.textContent = 'Clique de novo pra apagar';
+      setTimeout(() => { if (apagar.isConnected) { apagar.dataset.confirmar = ''; apagar.classList.remove('confirmar'); apagar.textContent = apagar.dataset.rot; } }, 5000);
+      return;
+    }
+    apagar.disabled = true;
+    try {
+      await apiFetch(`/matriculas/alunos/${apagar.dataset.dupApagar}`, { method: 'DELETE' });
+      showToast('Matrícula apagada.');
+      await renderDuplicadas();
+      if (podeCarregar()) { carregarAlunos(); atualizarContadorRegistros(); }
+    } catch (err) { showToast(err.message, 'error'); apagar.disabled = false; }
+  }
+  const outra = e.target.closest('[data-dup-outra]');
+  if (outra) {
+    const g = duplicadas[Number(outra.dataset.dupOutra)] || [];
+    outra.disabled = true;
+    try {
+      await apiFetch('/matriculas/duplicadas/outra-pessoa', { method: 'POST', body: JSON.stringify({ ids: g.map(x => x.id) }) });
+      showToast('Marcado: são pessoas diferentes.');
+      await renderDuplicadas();
+    } catch (err) { showToast(err.message, 'error'); outra.disabled = false; }
+  }
+});

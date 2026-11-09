@@ -6,7 +6,7 @@
     <title>Relatório Matrículas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=108">
+    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=115">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
@@ -50,15 +50,15 @@
                     </div>
                 </div>
 
+                <div class="edubox-faixa hidden no-print" id="edubox-faixa"></div>
+
                 <div class="filters-bar no-print">
                     <select class="select-filter" id="modulo-select">
                         <option value="fatec">Fatec (16 cursos)</option>
                         <option value="medicina">Medicina</option>
                     </select>
-                    <select class="select-filter" id="semestre-select">
-                        <option value="2026.1">2026.1</option>
-                        <option value="2026.2" selected>2026.2</option>
-                    </select>
+                    <!-- sem opção fixa: abre no semestre mais novo da lista (09/11/2026 — hoje 2027.1) -->
+                    <select class="select-filter" id="semestre-select"></select>
                     <select class="select-filter" id="curso-select">
                         <option value="">Todos os cursos</option>
                     </select>
@@ -211,6 +211,11 @@
                     <label>Observações</label>
                     <textarea id="aluno-observacoes" placeholder="Observações da coordenação/financeiro"></textarea>
                 </div>
+                <!-- uma pessoa = uma matrícula por semestre: aparece quando a trava recusa (09/11/2026) -->
+                <div class="aluno-duplicado hidden" id="aluno-duplicado">
+                    <p id="aluno-duplicado-msg"></p>
+                    <label><input type="checkbox" id="aluno-outra-pessoa"> É <b>outra pessoa</b> com o mesmo nome — salvar mesmo assim</label>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" id="btn-cancelar-aluno">Cancelar</button>
                     <button type="submit" class="btn-primary" id="btn-salvar-aluno">Salvar</button>
@@ -221,6 +226,31 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/matriculas/app.js?v=122"></script>
+    <!-- Diferenças com o Edubox (09/11/2026) -->
+    <div id="modal-edubox" class="modal-overlay hidden">
+        <div class="modal-content edubox-modal">
+            <div class="modal-header">
+                <div><h2>Diferenças com o Edubox</h2><p class="edubox-sub" id="edubox-sub"></p></div>
+                <button type="button" class="modal-close" data-edubox-fechar>&times;</button>
+            </div>
+            <p class="edubox-ajuda">O que está diferente entre o Órbita e o Edubox. Nada muda sozinho: <b>Aplicar</b> leva a informação do Edubox pro Órbita (e pros Contratos do Comercial); <b>Ignorar</b> mantém o Órbita como está e a diferença não volta, a não ser que o Edubox mude de novo.</p>
+            <div class="edubox-abas">
+                <button type="button" class="edubox-aba on" data-aba="pendente">Esperando confirmação <b>0</b></button>
+                <button type="button" class="edubox-aba" data-aba="resolvida">Resolvidas <b>0</b></button>
+                <button type="button" class="edubox-aba" data-aba="so">Só no Órbita <b>0</b></button>
+                <button type="button" class="edubox-aba" data-aba="dup">Duplicadas <b>—</b></button>
+            </div>
+            <div class="edubox-lote hidden" id="edubox-lote">
+                <span class="edubox-ajuda-lote">Todas já vêm marcadas — desmarque as que não concorda e aplique de uma vez.</span>
+                <div class="edubox-marcadas">
+                    <button type="button" class="edubox-btn destaque action-execute" data-edubox-lote="aplicar" id="edubox-aplicar-marcadas">✅ Aplicar marcadas</button>
+                    <button type="button" class="edubox-btn action-execute" data-edubox-lote="ignorar" id="edubox-ignorar-marcadas">Ignorar marcadas</button>
+                </div>
+            </div>
+            <div id="edubox-corpo" class="edubox-corpo"></div>
+        </div>
+    </div>
+
+    <script type="module" src="/financeiro/matriculas/app.js?v=130"></script>
 </body>
 </html>
