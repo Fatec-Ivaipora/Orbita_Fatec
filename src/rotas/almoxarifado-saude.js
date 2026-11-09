@@ -543,6 +543,47 @@ router.post('/itens/:id/movimentacoes', verifyToken, checkPermission, async (req
 });
 
 // ==========================================
+// LANÇAMENTOS RECENTES (09/11/2026 — pedido da Amanda, responsável)
+// ==========================================
+
+// GET /api/almoxarifado-saude/recentes?dias=7 — linha do tempo dos últimos lançamentos: itens cadastrados,
+// entradas/saídas, edições de item e conferências de patrimônio, com quem fez. Só lê quando a aba é aberta.
+// (Exclusão de item não fica registrada: o item some junto com o histórico dele.)
+router.get('/recentes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const dias = Math.min(90, Math.max(1, parseInt(req.query.dias) || 7));
+        const desde = new Date(Date.now() - dias * 86400000).toISOString();
+        const LIM = 300;
+        const [cad, edit, conf, mov] = await Promise.all([
+            db.collection(COL_ITENS).where('criadoEm', '>=', desde).orderBy('criadoEm', 'desc').limit(LIM).get(),
+            db.collection(COL_ITENS).where('updatedAt', '>=', desde).orderBy('updatedAt', 'desc').limit(LIM).get(),
+            db.collection(COL_ITENS).where('conferidoEm', '>=', desde).orderBy('conferidoEm', 'desc').limit(LIM).get(),
+            db.collection(COL_MOV).where('realizadoEm', '>=', desde).orderBy('realizadoEm', 'desc').limit(LIM).get()
+        ]);
+        const ev = [];
+        cad.forEach(d => { const x = d.data(); ev.push({ tipo: 'cadastro', em: x.criadoEm, por: x.criadoPor, itemId: d.id, item: x.nome, categoria: x.categoria, localizacao: x.localizacao, quantidade: x.quantidade, unidade: x.unidade }); });
+        edit.forEach(d => { const x = d.data(); ev.push({ tipo: 'edicao', em: x.updatedAt, por: x.updatedBy, itemId: d.id, item: x.nome, categoria: x.categoria, localizacao: x.localizacao, unidade: x.unidade }); });
+        // patrimônio cadastrado já nasce "conferido": essa conferência não é um lançamento à parte
+        conf.forEach(d => { const x = d.data(); if (x.conferidoEm !== x.criadoEm) ev.push({ tipo: 'conferencia', em: x.conferidoEm, por: x.conferidoPor, itemId: d.id, item: x.nome, categoria: x.categoria, localizacao: x.localizacao, quantidade: x.quantidade, unidade: x.unidade }); });
+        // o "Estoque inicial" já aparece no próprio cadastro do item
+        mov.forEach(d => { const x = d.data(); if (x.motivo === 'Estoque inicial' && x.lote === 'Estoque inicial') return; ev.push({ tipo: x.tipo, em: x.realizadoEm, por: x.realizadoPor, itemId: x.itemId, item: x.itemNome, quantidade: x.quantidade, lote: x.lote || null, motivo: x.motivo }); });
+        ev.sort((a, b) => String(b.em).localeCompare(String(a.em)));
+
+        // nome de quem fez (users/{uid}), lido uma vez por pessoa
+        const uids = [...new Set(ev.map(e => e.por).filter(Boolean))];
+        const nomes = {};
+        if (uids.length) {
+            const docs = await db.getAll(...uids.map(u => db.collection('users').doc(u)));
+            docs.forEach(d => { if (d.exists) nomes[d.id] = d.data().name || d.data().email || ''; });
+        }
+        ev.forEach(e => { e.porNome = nomes[e.por] || ''; delete e.por; });
+        res.json({ dias, desde, eventos: ev, limitado: [cad, edit, conf, mov].some(s => s.size >= LIM) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
 // STATS (resumo/dashboard)
 // ==========================================
 
