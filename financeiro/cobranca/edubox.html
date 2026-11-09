@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=32">
+    <link rel="stylesheet" href="/financeiro/cobranca/edubox.css?v=33">
 </head>
 <body class="cb-rel">
     <div id="auth-guard" class="layout-auth-guard">
@@ -73,7 +73,7 @@
                         <p><b>⏳ Ainda vai vencer</b> — mensalidade futura. Não é atraso.</p>
                         <p><b>🟢 Entrou / pago</b> — dinheiro que já caiu (baixa feita no Edubox: PIX, boleto, caixa...).</p>
                         <p><b>Semestre</b> — pela <b>data de vencimento</b>, igual ao relatório do Edubox: 2026.1 = vence de janeiro a junho; 2026.2 = de julho a dezembro.</p>
-                        <p><b>Quem o Financeiro cobra</b> — só alunos com matrícula <b>Ativo, Concluído ou Pendente</b>. Desistência, trancamento, cancelamento e transferência ficam em <b>📤 Para enviar ao advogado</b>.</p>
+                        <p><b>Quem o Financeiro cobra</b> — alunos com matrícula <b>Ativo, Concluído ou Pendente</b>. Desistência, trancamento, cancelamento e transferência (<b>📤 Para enviar ao advogado</b>) <b>também são cobrados</b> e aparecem na lista com a etiqueta 📤.</p>
                         <p><b>💼 Financeiro</b> — parcelas que o Financeiro cobra. <b>⚖️ Advogado</b> — acordo feito com a advogada. <b>🏛 Débito judicial</b> — está com a advogada, ainda sem acordo. Advogado e débito o Financeiro <b>não cobra</b>.</p>
                     </div>
                 </details>
@@ -238,7 +238,7 @@
                             <option value="cobrar">💼 Cobrança do Financeiro</option>
                             <option value="advogado">⚖️ Advogado — acordo feito (não cobrar)</option>
                             <option value="debito">🏛 Débito judicial — sem acordo (não cobrar)</option>
-                            <option value="enviar">📤 Para enviar ao advogado — desistentes, trancados, cancelados</option>
+                            <option value="enviar">📤 Só os do "Para enviar ao advogado" — desistentes, trancados, cancelados</option>
                         </select>
                       </div>
                       <div class="cb-filtros-linha cb-filtros-refinar">
@@ -458,6 +458,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/financeiro/cobranca/edubox.js?v=56"></script>
+    <script type="module" src="/financeiro/cobranca/edubox.js?v=57"></script>
 </body>
 </html>

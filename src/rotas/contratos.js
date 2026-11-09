@@ -399,10 +399,17 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
     return { acao: atual.matriculaId ? 'atualizado' : 'vinculado', id: ref.id, status: doc.status };
 }
 
-// Matrícula excluída: o contrato fica (pode ter observação/assinatura do Comercial), só marca que a matrícula saiu.
+// Matrícula excluída: se o contrato ainda não tem nada do Comercial (sem assinatura, observação nem coleta
+// na agenda), sai junto — senão, quando a matrícula é lançada de novo, o contrato fica DUPLICADO (06/11/2026).
+// Com trabalho do Comercial, o contrato fica e só marca que a matrícula saiu.
 async function matriculaExcluida(matriculaId) {
     const vinc = await db.collection(COL).where('matriculaId', '==', String(matriculaId)).get();
-    for (const d of vinc.docs) await d.ref.update({ matriculaRemovida: true, updatedAt: new Date().toISOString(), updatedBy: 'Matrículas (automático)' });
+    for (const d of vinc.docs) {
+        const c = d.data();
+        const temTrabalho = !!(c.assinadoEm || (c.observacoes || '').trim() || c.atividadeId || c.coletaData || c.status === 'assinado');
+        if (!temTrabalho) await d.ref.delete();
+        else await d.ref.update({ matriculaRemovida: true, updatedAt: new Date().toISOString(), updatedBy: 'Matrículas (automático)' });
+    }
     return vinc.size;
 }
 

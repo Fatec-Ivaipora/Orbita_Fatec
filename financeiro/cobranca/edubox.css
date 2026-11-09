@@ -117,6 +117,8 @@
 .cb-filtro-data { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
 .cb-filtro-data input { width: 140px; }
 #l-plano { min-width: 210px; }
+.cb-tag-enviar { display: inline-block; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 6px; padding: 0 0.4rem; font-size: 0.68rem; font-weight: 700; margin-left: 0.3rem; }
+.cb-env-cont { color: #9a3412; }
 .cb-tag-acordo { display: inline-block; background: #f5f3ff; color: #6d28d9; border: 1px dashed #c4b5fd; border-radius: 6px; padding: 0 0.4rem; font-size: 0.68rem; font-weight: 700; margin-left: 0.3rem; }
 .cb-pagto { display: inline-flex; align-items: center; gap: 0.3rem; border-radius: 20px; padding: 0.15rem 0.6rem; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
 .cb-pagto.sim { background: #ecfdf5; color: #047857; }

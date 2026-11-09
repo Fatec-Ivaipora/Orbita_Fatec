@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
+import { getEffectiveLevel } from '../../core/permissions.js';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -87,12 +88,13 @@ onAuthStateChanged(auth, async (user) => {
       level = 3;
     } else {
       try {
-        const perms = await apiFetch('/usuarios/config/permissions');
-        const rolePerms = perms[role] || {};
-        const rawPerm = rolePerms['almoxarifado-saude'];
-        level = (rawPerm !== undefined && typeof rawPerm === 'object')
-          ? (rawPerm.execute ? 3 : (rawPerm.view ? 2 : 1))
-          : (parseInt(rawPerm) || 1);
+        // nível efetivo = permissão individual do usuário (users/{uid}.permissoes) vence a do cargo —
+        // ex.: coordenadores da saúde com almoxarifado-saude = 2 (só ver), 09/11/2026
+        const [perms, eu] = await Promise.all([
+          apiFetch('/usuarios/config/permissions'),
+          apiFetch('/usuarios/me').catch(() => null)
+        ]);
+        level = getEffectiveLevel(perms[role] || {}, eu && eu.permissoes, 'almoxarifado-saude');
       } catch (e) {
         if (role === 'adm_l2') level = 3;
       }
