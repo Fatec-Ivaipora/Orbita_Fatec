@@ -303,3 +303,34 @@ body.pagina-relatorio .layout-content {
     border-radius: 0;
   }
 }
+
+/* Lançamentos recentes (09/11/2026) */
+.rec-resumo { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
+.rec-chip { background: var(--card); border: 1px solid var(--linha); border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; color: var(--text-secondary); }
+.rec-chip b { color: var(--petroleo); }
+.rec-wrap { background: var(--card); border: 1px solid var(--linha); border-radius: 12px; overflow-x: auto; }
+.rec-tabela { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.rec-tabela th { text-align: left; padding: 10px 12px; font-size: 0.74rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary); border-bottom: 1px solid var(--linha); white-space: nowrap; }
+.rec-tabela td { padding: 9px 12px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+.rec-tabela tr:last-child td { border-bottom: none; }
+.rec-quando { white-space: nowrap; color: var(--text-secondary); }
+.rec-quando b { color: var(--petroleo); display: block; }
+.rec-tipo { display: inline-block; border-radius: 6px; padding: 2px 8px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+.rec-tipo.cadastro { background: #e0f2fe; color: #075985; }
+.rec-tipo.entrada { background: #dcfce7; color: #166534; }
+.rec-tipo.saida { background: #fee2e2; color: #991b1b; }
+.rec-tipo.edicao { background: #fef3c7; color: #92400e; }
+.rec-tipo.conferencia { background: #ede9fe; color: #5b21b6; }
+.rec-item { font-weight: 700; color: var(--petroleo); }
+.rec-sub { display: block; font-size: 0.78rem; color: var(--text-secondary); }
+.rec-vazio { text-align: center; padding: 28px 12px !important; color: var(--text-secondary); }
+.rec-legenda { font-size: 0.78rem; color: var(--text-secondary); margin-top: 10px; }
+@media (max-width: 720px) {
+  .rec-tabela thead { display: none; }
+  .rec-tabela tr { display: block; padding: 8px 4px; border-bottom: 1px solid var(--linha); }
+  .rec-tabela td { display: block; border: none; padding: 3px 10px; }
+}
+/* 4 abas no celular: rolam de lado dentro da barra, sem alargar a página */
+.alx-tabs { overflow-x: auto; scrollbar-width: none; }
+.alx-tabs::-webkit-scrollbar { display: none; }
+.alx-tab { white-space: nowrap; flex-shrink: 0; }

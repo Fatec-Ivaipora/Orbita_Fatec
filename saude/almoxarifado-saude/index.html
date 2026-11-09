@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/saude/almoxarifado-saude/almoxarifado-saude.css">
+    <link rel="stylesheet" href="/saude/almoxarifado-saude/almoxarifado-saude.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -52,6 +52,7 @@
                     <button class="alx-tab on" data-view="Consumível" id="tab-consumivel">Consumíveis</button>
                     <button class="alx-tab" data-view="Permanente" id="tab-permanente">Patrimônio</button>
                     <button class="alx-tab" data-view="Agendamento" id="tab-agendamento">Agendamento</button>
+                    <button class="alx-tab" data-view="Recentes" id="tab-recentes">🕘 Lançamentos recentes</button>
                 </div>
 
                 <div id="painel-itens">
@@ -91,6 +92,40 @@
                     <div id="agendamentos-list" class="alx-grid">
                         <div class="empty-state"><p>Carregando reservas...</p></div>
                     </div>
+                </div>
+
+                <!-- Lançamentos recentes (09/11/2026): cadastros, entradas/saídas, edições e conferências, com quem fez -->
+                <div id="painel-recentes" class="hidden">
+                    <div class="filters-bar">
+                        <select id="rec-dias" class="select-localizacao" title="Período">
+                            <option value="1">Últimas 24 horas</option>
+                            <option value="7" selected>Últimos 7 dias</option>
+                            <option value="15">Últimos 15 dias</option>
+                            <option value="30">Últimos 30 dias</option>
+                            <option value="60">Últimos 60 dias</option>
+                            <option value="90">Últimos 90 dias</option>
+                        </select>
+                        <select id="rec-tipo" class="select-localizacao" title="Tipo de lançamento">
+                            <option value="">Todos os lançamentos</option>
+                            <option value="cadastro">🆕 Itens cadastrados</option>
+                            <option value="entrada">⬆️ Entradas</option>
+                            <option value="saida">⬇️ Saídas</option>
+                            <option value="edicao">✏️ Edições de item</option>
+                            <option value="conferencia">✅ Conferências de patrimônio</option>
+                        </select>
+                        <select id="rec-pessoa" class="select-localizacao" title="Quem lançou">
+                            <option value="">Todas as pessoas</option>
+                        </select>
+                        <input type="text" id="rec-busca" class="search-input" placeholder="Buscar item, lote ou motivo...">
+                    </div>
+                    <div class="rec-resumo" id="rec-resumo"></div>
+                    <div class="rec-wrap">
+                        <table class="rec-tabela">
+                            <thead><tr><th>Quando</th><th>Lançamento</th><th>Item</th><th>Detalhe</th><th>Quem</th></tr></thead>
+                            <tbody id="rec-lista"><tr><td colspan="5" class="rec-vazio">Carregando...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <p class="rec-legenda">Mostra o que foi lançado no Almoxarifado Saúde, do mais recente para o mais antigo. Item excluído não aparece (o histórico dele é apagado junto).</p>
                 </div>
             </div>
         </main>
@@ -274,6 +309,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/saude/almoxarifado-saude/app.js?v=2"></script>
+    <script type="module" src="/saude/almoxarifado-saude/app.js?v=3"></script>
 </body>
 </html>

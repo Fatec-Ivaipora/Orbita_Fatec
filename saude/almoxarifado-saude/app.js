@@ -166,6 +166,10 @@ function setupTabs() {
   document.getElementById('tab-consumivel').addEventListener('click', () => trocarAba('Consumível'));
   document.getElementById('tab-permanente').addEventListener('click', () => trocarAba('Permanente'));
   document.getElementById('tab-agendamento').addEventListener('click', () => trocarAba('Agendamento'));
+  document.getElementById('tab-recentes').addEventListener('click', () => trocarAba('Recentes'));
+  document.getElementById('rec-dias').addEventListener('change', () => loadRecentes());
+  for (const id of ['rec-tipo', 'rec-pessoa']) document.getElementById(id).addEventListener('change', renderRecentes);
+  document.getElementById('rec-busca').addEventListener('input', renderRecentes);
 }
 
 async function trocarAba(view) {
@@ -174,12 +178,21 @@ async function trocarAba(view) {
   document.getElementById('tab-consumivel').classList.toggle('on', view === 'Consumível');
   document.getElementById('tab-permanente').classList.toggle('on', view === 'Permanente');
   document.getElementById('tab-agendamento').classList.toggle('on', view === 'Agendamento');
+  document.getElementById('tab-recentes').classList.toggle('on', view === 'Recentes');
 
   const isAgendamento = view === 'Agendamento';
-  document.getElementById('painel-itens').classList.toggle('hidden', isAgendamento);
+  const isRecentes = view === 'Recentes';
+  document.getElementById('painel-itens').classList.toggle('hidden', isAgendamento || isRecentes);
   document.getElementById('painel-agendamento').classList.toggle('hidden', !isAgendamento);
-  document.getElementById('painel-itens-acoes').classList.toggle('hidden', isAgendamento);
+  document.getElementById('painel-recentes').classList.toggle('hidden', !isRecentes);
+  document.getElementById('painel-itens-acoes').classList.toggle('hidden', isAgendamento || isRecentes);
   document.getElementById('painel-agendamento-acoes').classList.toggle('hidden', !isAgendamento);
+
+  if (isRecentes) {
+    document.body.classList.remove('categoria-permanente');
+    await loadRecentes();
+    return;
+  }
 
   if (isAgendamento) {
     document.body.classList.remove('categoria-permanente');
@@ -1083,4 +1096,72 @@ function showToast(msg, type = 'success') {
   toast.className = `toast toast-${type}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+// ==========================================
+// LANÇAMENTOS RECENTES (09/11/2026 — pedido da Amanda, responsável pelo almoxarifado)
+// ==========================================
+let recentes = [];
+const REC_TIPO = {
+  cadastro: ['🆕', 'Item cadastrado'], entrada: ['⬆️', 'Entrada'], saida: ['⬇️', 'Saída'],
+  edicao: ['✏️', 'Item editado'], conferencia: ['✅', 'Conferência']
+};
+
+async function loadRecentes() {
+  const tb = document.getElementById('rec-lista');
+  tb.innerHTML = '<tr><td colspan="5" class="rec-vazio">Carregando...</td></tr>';
+  try {
+    const dias = document.getElementById('rec-dias').value;
+    const r = await apiFetch(`/almoxarifado-saude/recentes?dias=${encodeURIComponent(dias)}`);
+    recentes = r.eventos || [];
+    recentes.limitado = r.limitado;
+    const sel = document.getElementById('rec-pessoa');
+    const atual = sel.value;
+    const pessoas = [...new Set(recentes.map(e => e.porNome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    sel.innerHTML = '<option value="">Todas as pessoas</option>' + pessoas.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    sel.value = pessoas.includes(atual) ? atual : '';
+    renderRecentes();
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="5" class="rec-vazio">Não foi possível carregar: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderRecentes() {
+  const tipo = document.getElementById('rec-tipo').value;
+  const pessoa = document.getElementById('rec-pessoa').value;
+  const busca = document.getElementById('rec-busca').value.trim().toLowerCase();
+  const lista = recentes.filter(e => (!tipo || e.tipo === tipo) && (!pessoa || e.porNome === pessoa) &&
+    (!busca || [e.item, e.lote, e.motivo, e.localizacao].some(v => String(v || '').toLowerCase().includes(busca))));
+  const cont = {};
+  lista.forEach(e => { cont[e.tipo] = (cont[e.tipo] || 0) + 1; });
+  document.getElementById('rec-resumo').innerHTML =
+    `<span class="rec-chip"><b>${lista.length}</b> lançamento(s)</span>` +
+    Object.keys(REC_TIPO).filter(t => cont[t]).map(t => `<span class="rec-chip">${REC_TIPO[t][0]} ${REC_TIPO[t][1]}: <b>${cont[t]}</b></span>`).join('') +
+    (recentes.limitado ? '<span class="rec-chip">⚠️ Período com muitos lançamentos — mostrando os 300 mais recentes de cada tipo</span>' : '');
+  const tb = document.getElementById('rec-lista');
+  if (!lista.length) { tb.innerHTML = '<tr><td colspan="5" class="rec-vazio">Nenhum lançamento nesse período.</td></tr>'; return; }
+  tb.innerHTML = lista.map(e => {
+    const d = new Date(e.em);
+    const dia = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const [ic, rot] = REC_TIPO[e.tipo] || ['•', e.tipo];
+    const un = e.unidade ? ` ${esc(e.unidade)}` : '';
+    let det = '';
+    if (e.tipo === 'entrada' || e.tipo === 'saida') {
+      det = `<b>${e.tipo === 'saida' ? '−' : '+'}${esc(e.quantidade)}</b>${e.lote ? `<span class="rec-sub">lote: ${esc(e.lote)}</span>` : ''}${e.motivo ? `<span class="rec-sub">motivo: ${esc(e.motivo)}</span>` : ''}`;
+    } else if (e.tipo === 'cadastro') {
+      det = `${esc(e.categoria === 'Permanente' ? 'Patrimônio' : (e.categoria || ''))}${e.quantidade ? ` · ${esc(e.quantidade)}${un}` : ''}<span class="rec-sub">${esc(e.localizacao || '')}</span>`;
+    } else if (e.tipo === 'conferencia') {
+      det = `contado: <b>${esc(e.quantidade)}</b>${un}<span class="rec-sub">${esc(e.localizacao || '')}</span>`;
+    } else {
+      det = `<span class="rec-sub">${esc(e.localizacao || '')}</span>`;
+    }
+    return `<tr>
+      <td class="rec-quando"><b>${dia}</b>${hora}</td>
+      <td><span class="rec-tipo ${esc(e.tipo)}">${ic} ${rot}</span></td>
+      <td><span class="rec-item">${esc(e.item || '—')}</span></td>
+      <td>${det}</td>
+      <td>${esc(e.porNome || '—')}</td>
+    </tr>`;
+  }).join('');
 }
