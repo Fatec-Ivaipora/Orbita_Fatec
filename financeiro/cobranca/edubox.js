@@ -544,8 +544,12 @@ function ladosJuridico(rj) {
   return saida;
 }
 function ehModoAdvogado(modo) { return modo === 'advogado' || modo === 'debito'; }
-// Modos em que o Financeiro NÃO cobra (sem WhatsApp): advogado, débito e "enviar".
-function ehModoSemCobranca(modo) { return ehModoAdvogado(modo) || modo === 'enviar'; }
+// Modos em que o Financeiro NÃO cobra (sem WhatsApp): advogado e débito.
+// Desistentes/trancados/cancelados ("Para enviar ao advogado") o Financeiro TAMBÉM cobra (06/11/2026):
+// entram na lista de cobrança com a etiqueta do grupo; o filtro "enviar" mostra só eles.
+function ehModoSemCobranca(modo) { return ehModoAdvogado(modo); }
+const SITUACOES_ATIVAS = ['Ativo', 'Concluído', 'Pendente'];
+const situacaoEnviar = (a) => (a.situacoes || []).filter(s => !SITUACOES_ATIVAS.includes(s)).join(', ') || 'sem matrícula';
 
 function renderPainel() {
   const r = recorte();
@@ -558,13 +562,16 @@ function renderPainel() {
   // Quem manda é o plano da parcela: parcela normal é do Financeiro mesmo
   // que o aluno tenha acordo; Advogado (acordo feito) e Débito judicial (sem
   // acordo) não são cobrados pelo Financeiro.
-  document.getElementById('k-vencido').innerHTML = `${brl(apDe(fin))}<small class="cb-orig">valor original ${brl(fin.valor)} + juros e multa</small>`;
+  // o Financeiro também cobra os desistentes/trancados/cancelados ("Para enviar ao advogado") — soma no card
+  const env = (r && r.enviar && r.enviar.vencido) || vazio;
+  const finTot = { valor: fin.valor + env.valor, aPagar: apDe(fin) + apDe(env) };
+  document.getElementById('k-vencido').innerHTML = `${brl(finTot.aPagar)}<small class="cb-orig">valor original ${brl(finTot.valor)} + juros e multa</small>`;
   const devFin = (r && r.devido && r.devido.financeiro) || 0;
   document.getElementById('k-vencido-hint').innerHTML = [
     `${plural(fin.alunos, 'aluno', 'alunos')}, ${plural(fin.parcelas, 'parcela', 'parcelas')}`,
     devFin ? `<b>${pct(fin.valor / devFin)}</b> do que já venceu (${brlCurto(devFin)})` : '',
     finAdv.alunos ? `${plural(finAdv.alunos, 'aluno também tem', 'alunos também têm')} acordo com advogado` : '',
-    r && r.enviar && r.enviar.vencido.valor ? `Fora da cobrança: ${brlCurto(r.enviar.vencido.valor)} de ${plural(r.enviar.vencido.alunos, 'desistente/trancado/cancelado', 'desistentes/trancados/cancelados')}` : ''
+    env.valor ? `📤 Inclui ${brlCurto(apDe(env))} de ${plural(env.alunos, 'desistente/trancado/cancelado', 'desistentes/trancados/cancelados')} (grupo "Para enviar ao advogado")` : ''
   ].filter(Boolean).map(l => `<span class="cb-hint-linha">${l}</span>`).join('');
   const lados = ladosJuridico(rj);
   // "pagando" é por aluno (não por semestre): só faz sentido no total
@@ -802,7 +809,7 @@ async function renderDiretor() {
   document.getElementById('d-adv').innerHTML =
     linha('⚖️ Acordos com advogado', sit.advogado, lados.advogado, 'acordo feito — paga direto') +
     linha('🏛 Débito judicial', sit.debito, lados.debito, 'com a advogada, ainda sem acordo') +
-    `<div class="cb-adv-linha"><b>📤 Para enviar ao advogado</b> <small class="cb-sub">desistentes, trancados, cancelados — o Financeiro não cobra</small>
+    `<div class="cb-adv-linha"><b>📤 Para enviar ao advogado</b> <small class="cb-sub">desistentes, trancados, cancelados — o Financeiro também cobra</small>
       <div class="cb-dir-texto">💰 <b>${brlCurto(apDe(env.vencido))} a pagar</b> (original ${brlCurto(env.vencido.valor)}) de ${plural(env.vencido.alunos, 'aluno', 'alunos')}${semestre !== 'todos' ? ` · no ${esc(usaMes() ? nomeMes(mes) : semestre)}: ${brlCurto(apDe(envSem.vencido))} de ${plural(envSem.vencido.alunos, 'aluno', 'alunos')}` : ''}</div></div>`;
 }
 
@@ -1401,7 +1408,7 @@ const REGRA_GRUPO_CONS = {
   financeiro: 'Situação da matrícula = Ativo, Concluído ou Pendente, e a parcela não é de plano de Renegociação Judicial — é o que o setor Financeiro cobra direto.',
   advogado: 'Parcela de plano de categoria "Renegociação Judicial" com "ADVOGADO" no nome do plano — acordo já feito, em andamento com o escritório.',
   debito: 'Parcela de plano de Renegociação Judicial que não é "Advogado" — está com a advogada, sem acordo ainda (Débito Judicial).',
-  enviar: 'Situação da matrícula é Desistência, Trancamento, Cancelado ou Transferência, ou a parcela não tem matrícula vinculada — fora da cobrança do Financeiro.'
+  enviar: 'Situação da matrícula é Desistência, Trancamento, Cancelado ou Transferência, ou a parcela não tem matrícula vinculada — o Financeiro também cobra (aparecem na lista com a etiqueta 📤).'
 };
 const REGRA_FAIXA_CONS = 'Dias de atraso = hoje menos a data de vencimento, em dias corridos. Cada parcela vencida entra numa única faixa, pelos dias que já passaram do vencimento.';
 const REGRA_ABC_CONS = 'Curva ABC pelo valor em atraso de cada aluno (um por cliente, único no ano): ordena do maior pro menor e soma acumulada — Classe A = alunos que juntos chegam a 80% do vencido; Classe B = de 80% a 95%; Classe C = o restante até 100%.';
@@ -1614,9 +1621,10 @@ function recortarAluno(a, modo, f) {
   if (adv && a.tipoAdvogado !== modo) return null;
   const nomes = listas[grupo].planos || [];
   const parcelas = a.parcelas.filter(p => {
-    // cobrar: normais de matrícula Ativo/Concluído/Pendente · advogado/débito: jurídicas · enviar: normais de desistente/trancado/cancelado
+    // cobrar: todas as normais (inclusive de desistente/trancado/cancelado — 06/11/2026) · advogado/débito:
+    // jurídicas · enviar: só as normais de desistente/trancado/cancelado
     if (modo === 'enviar') { if (p.j || !p.e) return false; }
-    else if (adv ? !p.j : (p.j || p.e)) return false;
+    else if (adv ? !p.j : p.j) return false;
     if (semestre !== 'todos' && p.s !== semestre) return false;
     if (usaMes() && p.v.slice(0, 7) !== mes) return false;
     if (f.de && p.v < f.de) return false;
@@ -1629,7 +1637,7 @@ function recortarAluno(a, modo, f) {
   const maisAntigo = parcelas[0].v;
   const dias = Math.round((hoje - dataLocal(maisAntigo).getTime()) / 86400000);
   const totalAP = parcelas.reduce((s, p) => s + aPagarParcela(p.valor, p.v), 0);
-  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, apVis: Math.round(totalAP * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: ehModoSemCobranca(modo), modoEnviar: modo === 'enviar' };
+  return { ...a, parcelasVis: parcelas, totalVis: Math.round(total * 100) / 100, apVis: Math.round(totalAP * 100) / 100, maisAntigoVis: maisAntigo, diasVis: dias, modoAdv: ehModoSemCobranca(modo), deEnviar: !ehModoAdvogado(modo) && parcelas.some(p => p.e) };
 }
 
 function bloqueioDe(a) {
@@ -1694,14 +1702,6 @@ function filtrarLista() {
   const totalOrig = filtrados.reduce((s, a) => s + a.totalVis, 0);
   const cobradosSemana = filtrados.filter(a => situacaoCobranca(a).semana).length;
   const bloqueadosN = filtrados.filter(a => bloqueioDe(a) && !situacaoCobranca(a).semana).length;
-  if (lado === 'enviar') {
-    document.getElementById('l-contadores').innerHTML = `
-      <span>📤 <b>${filtrados.length}</b> alunos desistentes/trancados/cancelados · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)})</small></span>
-      <span>O Financeiro <b>não cobra</b> — lista pra encaminhar ao advogado</span>
-      <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
-    renderLista();
-    return;
-  }
   if (adv) {
     const pagandoN = filtrados.filter(a => a.pagamento && a.pagamento.pago90 > 0).length;
     document.getElementById('l-contadores').innerHTML = `
@@ -1712,10 +1712,12 @@ function filtrarLista() {
     renderLista();
     return;
   }
+  const envN = filtrados.filter(a => a.deEnviar).length;
   document.getElementById('l-contadores').innerHTML = `
-    <span><b>${filtrados.length}</b> alunos com atraso · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)} + juros e multa)</small></span>
+    <span>${lado === 'enviar' ? '📤 ' : ''}<b>${filtrados.length}</b> ${lado === 'enviar' ? 'desistentes/trancados/cancelados' : 'alunos'} com atraso · 💰 <b>${brl(total)}</b> a pagar <small>(original ${brl(totalOrig)} + juros e multa)</small></span>
     <span>✅ Cobrados nesta semana: <b>${cobradosSemana}</b></span>
     <span>⏳ Faltam cobrar: <b>${filtrados.length - cobradosSemana - bloqueadosN}</b></span>
+    ${envN && lado !== 'enviar' ? `<span class="cb-env-cont" title="Desistência, trancamento, cancelamento ou transferência no Edubox — o Financeiro também cobra">📤 Para enviar ao advogado: <b>${envN}</b></span>` : ''}
     ${filtrados.some(a => bloqueioDe(a)) ? `<span class="cb-bloq-cont" title="Marcados pelo Financeiro como quem não pode ser cobrado">🚫 Não cobrar: <b>${filtrados.filter(a => bloqueioDe(a)).length}</b></span>` : ''}
     ${filtrados.some(a => !a.celular) ? `<span class="cb-sem-cel-aviso" title="Só cobramos no celular do próprio aluno — atualize o cadastro no Edubox">📵 ${filtrados.filter(a => !a.celular).length} sem celular no Edubox</span>` : ''}
     <span class="cb-sub">Lista do Edubox de ${fmtDataHora(L.geradoEm)}</span>`;
@@ -1732,7 +1734,6 @@ function badgePagamento(a) {
 }
 
 function badgeCobranca(a) {
-  if (a.modoEnviar) return `<span class="cb-pagto nao">📤 ${esc((a.situacoes || []).filter(s => !['Ativo', 'Concluído', 'Pendente'].includes(s)).join(', ') || 'sem matrícula')}</span><div class="cb-sub">enviar ao advogado</div>`;
   if (a.modoAdv) return badgePagamento(a);
   const { c } = situacaoCobranca(a);
   const bl = bloqueioDe(a);
@@ -1770,7 +1771,7 @@ function renderLista() {
   const classeF = { '1-30': 'f1', '31-60': 'f2', '61-90': 'f3', '90+': 'f4' };
   tb.innerHTML = filtrados.slice(0, mostrando).map((a, i) => `
     <tr class="${a.celular ? '' : 'cb-sem-cel'} ${!a.modoAdv && bloqueioDe(a) ? 'cb-bloqueado' : ''}">
-      <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.modoEnviar ? '<span class="cb-tag-jur">PARA O ADVOGADO — NÃO COBRAR</span>' : a.modoAdv ? `<span class="cb-tag-jur">${a.tipoAdvogado === 'advogado' ? 'ACORDO COM ADVOGADO' : 'DÉBITO JUDICIAL'} — NÃO COBRAR</span>` : a.comAdvogado ? `<span class="cb-tag-acordo" title="${esc((a.planosAdvogado || []).join(', '))} — essas parcelas são do advogado; as da lista são normais">também tem acordo c/ advogado</span>` : ''}
+      <td><span class="cb-aluno-nome" data-abrir="${i}">${esc(a.nome)}</span>${a.deEnviar ? `<span class="cb-tag-enviar" title="Grupo 📤 Para enviar ao advogado — situação da matrícula no Edubox. O Financeiro também cobra.">📤 ${esc(situacaoEnviar(a).toUpperCase())} — PARA ENVIAR AO ADVOGADO</span>` : ''}${a.modoAdv ? `<span class="cb-tag-jur">${a.tipoAdvogado === 'advogado' ? 'ACORDO COM ADVOGADO' : 'DÉBITO JUDICIAL'} — NÃO COBRAR</span>` : a.comAdvogado ? `<span class="cb-tag-acordo" title="${esc((a.planosAdvogado || []).join(', '))} — essas parcelas são do advogado; as da lista são normais">também tem acordo c/ advogado</span>` : ''}
         <div class="cb-sub">${esc(a.cursos.map(nomeCurso).join(' / '))} · ${esc(a.fone || 'sem celular no Edubox')}</div></td>
       <td>${plural(a.parcelasVis.length, 'parcela', 'parcelas')}<span class="cb-atraso ${classeF[faixaDe(a.diasVis)]}" title="dias desde a parcela mais antiga">${a.diasVis} dias de atraso</span>
         <div class="cb-sub">desde ${fmtData(a.maisAntigoVis)}</div>
