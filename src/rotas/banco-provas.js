@@ -958,4 +958,219 @@ router.get('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// ==========================================
+// LINK DO PROFESSOR (10/11/2026) — o coordenador gera um link por disciplina e manda pro professor
+// (WhatsApp); o professor abre SEM login, cola as questões (ou manda o Word), marca o gabarito na
+// prévia e envia. As questões caem na Revisão de Importação do curso, já com a disciplina, o
+// bimestre, a chamada e o semestre do link — o coordenador só confere e confirma.
+// O token É o id do documento (aleatório, 24 caracteres) e o link para de funcionar depois do prazo
+// ou quando o coordenador desativa.
+// ==========================================
+const crypto = require('crypto');
+const COL_LINKS = 'docencia_bp_links';
+const MAX_QUESTOES_ENVIO = 150;
+
+const hojeSP = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+const escHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const ROTULO_CHAMADA = { 1: '1ª chamada', 2: '2ª chamada', exame: 'Exame' };
+
+function situacaoLink(l) {
+    if (l.ativo === false) return 'desativado';
+    if (l.prazo && l.prazo < hojeSP()) return 'vencido';
+    return 'aberto';
+}
+
+// o que o professor vê (nada de uid/e-mail de quem criou)
+function linkPublico(id, l) {
+    const curso = CURSOS.find(c => c.id === l.curso);
+    return {
+        token: id, cursoNome: curso ? curso.name : l.curso, disciplinaNome: l.disciplinaNome, periodo: l.periodo,
+        professorNome: l.professorNome || '', semestre: l.semestre, bimestre: l.bimestre, chamada: l.chamada,
+        chamadaRotulo: ROTULO_CHAMADA[l.chamada] || '', prazo: l.prazo, situacao: situacaoLink(l),
+        questoesEnviadas: l.questoesEnviadas || 0, ultimoEnvioEm: l.ultimoEnvioEm || null,
+        coordenadorNome: l.createdPorNome || ''
+    };
+}
+
+async function carregarLinkAberto(token, res) {
+    if (!/^[A-Za-z0-9_-]{20,40}$/.test(String(token || ''))) { res.status(404).json({ error: 'Link inválido. Confira se copiou o endereço inteiro.' }); return null; }
+    const snap = await db.collection(COL_LINKS).doc(token).get();
+    if (!snap.exists) { res.status(404).json({ error: 'Link não encontrado. Peça um novo ao coordenador.' }); return null; }
+    const l = snap.data();
+    const sit = situacaoLink(l);
+    if (sit !== 'aberto') {
+        res.status(410).json({ error: sit === 'vencido' ? 'O prazo deste link terminou. Peça ao coordenador para abrir um novo.' : 'Este link foi desativado pelo coordenador.', link: linkPublico(snap.id, l) });
+        return null;
+    }
+    return { ref: snap.ref, id: snap.id, l };
+}
+
+// --- coordenador ---
+// POST /links — { curso, disciplinaId, professorNome, semestre, bimestre, chamada, prazo }
+router.post('/links', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const curso = normalizarTexto(req.body.curso);
+        if (!CURSOS.some(c => c.id === curso)) return res.status(400).json({ error: 'Selecione um curso válido.' });
+        const erroAcesso = await checarAcessoCurso(req, curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const disc = await db.collection(COL_DISCIPLINAS).doc(normalizarTexto(req.body.disciplinaId) || '-').get();
+        if (!disc.exists || disc.data().curso !== curso) return res.status(400).json({ error: 'Selecione a disciplina.' });
+        const semestre = normalizarTexto(req.body.semestre);
+        if (!/^\d{4}\.[12]$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre (ex.: 2027.1).' });
+        const chamada = normalizarChamada(req.body.chamada);
+        if (!chamada) return res.status(400).json({ error: 'Selecione a chamada.' });
+        const bimestre = chamada === 'exame' ? null : parseInt(req.body.bimestre, 10);
+        if (chamada !== 'exame' && ![1, 2].includes(bimestre)) return res.status(400).json({ error: 'Selecione o bimestre.' });
+        const prazo = normalizarTexto(req.body.prazo);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(prazo) || prazo < hojeSP()) return res.status(400).json({ error: 'Informe um prazo de hoje em diante.' });
+        const professorNome = normalizarTexto(req.body.professorNome).slice(0, 120);
+
+        const token = crypto.randomBytes(18).toString('base64url');
+        const dados = {
+            curso, disciplinaId: disc.id, disciplinaNome: disc.data().nome, periodo: disc.data().periodo ?? null,
+            professorNome, semestre, bimestre, chamada, prazo, ativo: true,
+            questoesEnviadas: 0, envios: 0, ultimoEnvioEm: null,
+            createdBy: req.user.uid, createdPorNome: req.user.name || req.user.email || 'Coordenador',
+            createdAt: new Date().toISOString()
+        };
+        await db.collection(COL_LINKS).doc(token).set(dados);
+        res.status(201).json({ id: token, ...dados, situacao: 'aberto', message: 'Link criado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /links?curso=X — links do curso (lê só os do curso)
+router.get('/links', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const curso = normalizarTexto(req.query.curso);
+        if (!curso) return res.status(400).json({ error: 'Informe o curso.' });
+        const erroAcesso = await checarAcessoCurso(req, curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const snap = await db.collection(COL_LINKS).where('curso', '==', curso).get();
+        const links = snap.docs.map(d => ({ id: d.id, ...d.data(), situacao: situacaoLink(d.data()) }))
+            .filter(l => !erroDeDono(req, l))
+            .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        res.json(links);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /links/:id — { ativo } (desativar/reativar) e/ou { prazo } (prorrogar)
+router.put('/links/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_LINKS).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Link não encontrado.' });
+        const erroAcesso = await checarAcessoCurso(req, snap.data().curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const erroDono = erroDeDono(req, snap.data());
+        if (erroDono) return res.status(403).json({ error: erroDono });
+        const mud = { updatedAt: new Date().toISOString() };
+        if (typeof req.body.ativo === 'boolean') mud.ativo = req.body.ativo;
+        if (req.body.prazo !== undefined) {
+            const prazo = normalizarTexto(req.body.prazo);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(prazo) || prazo < hojeSP()) return res.status(400).json({ error: 'Informe um prazo de hoje em diante.' });
+            mud.prazo = prazo;
+        }
+        await ref.update(mud);
+        const novo = { ...snap.data(), ...mud };
+        res.json({ id: snap.id, ...novo, situacao: situacaoLink(novo), message: 'Link atualizado.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- professor (público, sem login: o token do link é a autorização) ---
+router.get('/publico/link/:token', async (req, res) => {
+    try {
+        if (!/^[A-Za-z0-9_-]{20,40}$/.test(req.params.token)) return res.status(404).json({ error: 'Link inválido. Confira se copiou o endereço inteiro.' });
+        const snap = await db.collection(COL_LINKS).doc(req.params.token).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Link não encontrado. Peça um novo ao coordenador.' });
+        res.json(linkPublico(snap.id, snap.data()));
+    } catch (err) {
+        res.status(500).json({ error: 'Não foi possível abrir o link agora. Tente de novo em instantes.' });
+    }
+});
+
+// POST /publico/link/:token/analisar-docx — { arquivoBase64, alternativasPorQuestao } → questões (não grava)
+router.post('/publico/link/:token/analisar-docx', async (req, res) => {
+    try {
+        const link = await carregarLinkAberto(req.params.token, res);
+        if (!link) return;
+        const alternativasPorQuestao = parseInt(req.body.alternativasPorQuestao, 10);
+        if (![4, 5].includes(alternativasPorQuestao)) return res.status(400).json({ error: 'Escolha se as questões têm 4 ou 5 alternativas.' });
+        const b64 = String(req.body.arquivoBase64 || '');
+        if (!b64) return res.status(400).json({ error: 'Envie o arquivo Word.' });
+        if (b64.length > 16 * 1024 * 1024) return res.status(400).json({ error: 'Arquivo grande demais (máx. 12 MB). Tente colar o texto das questões.' });
+        let brutas;
+        try { brutas = await parseProvaDocx(Buffer.from(b64, 'base64'), alternativasPorQuestao); }
+        catch (e) { return res.status(400).json({ error: 'Não consegui ler esse arquivo. Confira se é um documento Word (.docx ou .doc) ou cole o texto.' }); }
+        res.json({ questoes: brutas.filter(q => !q.vazia), alternativasPorQuestao });
+    } catch (err) {
+        res.status(500).json({ error: 'Não foi possível ler o arquivo agora. Tente de novo em instantes.' });
+    }
+});
+
+// POST /publico/link/:token/enviar — { questoes:[{tipo, enunciado, alternativas, gabarito}], alternativasPorQuestao, professorNome }
+router.post('/publico/link/:token/enviar', async (req, res) => {
+    try {
+        const link = await carregarLinkAberto(req.params.token, res);
+        if (!link) return;
+        const { l } = link;
+        const professorNome = normalizarTexto(req.body.professorNome || l.professorNome).slice(0, 120);
+        if (!professorNome) return res.status(400).json({ error: 'Informe o seu nome.' });
+        const alternativasPorQuestao = parseInt(req.body.alternativasPorQuestao, 10);
+        if (![4, 5].includes(alternativasPorQuestao)) return res.status(400).json({ error: 'Escolha se as questões têm 4 ou 5 alternativas.' });
+        const questoes = Array.isArray(req.body.questoes) ? req.body.questoes : [];
+        if (!questoes.length) return res.status(400).json({ error: 'Nenhuma questão para enviar.' });
+        if (questoes.length > MAX_QUESTOES_ENVIO) return res.status(400).json({ error: `Envie no máximo ${MAX_QUESTOES_ENVIO} questões por vez.` });
+        const letras = LETRAS_VALIDAS.slice(0, alternativasPorQuestao);
+        const problemas = [];
+        const limpas = questoes.map((q, i) => {
+            const n = i + 1;
+            const dissertativa = q.tipo === 'dissertativa';
+            const enunciado = String(q.enunciado || '').trim().slice(0, 20000);
+            if (!enunciado) problemas.push(`a ${n}ª está sem enunciado`);
+            const alts = dissertativa ? null : (Array.isArray(q.alternativas) ? q.alternativas : []).map(a => String(a || '').trim().slice(0, 4000));
+            if (!dissertativa && (alts.length !== alternativasPorQuestao || alts.some(a => !a))) problemas.push(`a ${n}ª precisa de ${alternativasPorQuestao} alternativas preenchidas`);
+            if (!dissertativa && !letras.includes(q.gabarito)) problemas.push(`a ${n}ª está sem gabarito`);
+            return { dissertativa, enunciado, alts, gabarito: dissertativa ? null : q.gabarito };
+        });
+        if (problemas.length) return res.status(400).json({ error: `Confira antes de enviar: ${problemas.slice(0, 6).join('; ')}${problemas.length > 6 ? '…' : ''}.` });
+
+        const agora = new Date().toISOString();
+        const loteId = db.collection(COL_QUESTOES).doc().id;
+        const batch = db.batch();
+        limpas.forEach((q, i) => {
+            batch.set(db.collection(COL_QUESTOES).doc(), {
+                curso: l.curso, disciplinaId: null, periodo: null,
+                bimestre: l.bimestre ?? null, chamada: l.chamada ?? null, semestre: l.semestre || null,
+                tipo: q.dissertativa ? 'dissertativa' : 'objetiva',
+                enunciadoHtml: escHtml(q.enunciado),
+                alternativas: q.dissertativa ? null : q.alts.map((texto, j) => ({ letra: LETRAS_VALIDAS[j], texto: escHtml(texto) })),
+                gabarito: q.gabarito,
+                dificuldade: 'media', valor: null,
+                professorNome,
+                categoriaSugeridaTexto: l.disciplinaNome,   // a Revisão já casa com a disciplina pelo nome
+                numeroOriginal: i + 1,
+                loteId, linkId: link.id, origem: 'link-professor',
+                status: 'revisao_importacao',
+                createdBy: l.createdBy,                     // fica com quem gerou o link (regra de dono do EAD)
+                createdPorNome: `${professorNome} (link do professor)`,
+                createdAt: agora
+            });
+        });
+        batch.update(link.ref, {
+            questoesEnviadas: (l.questoesEnviadas || 0) + limpas.length, envios: (l.envios || 0) + 1,
+            ultimoEnvioEm: agora, professorNomeEnvio: professorNome
+        });
+        await batch.commit();
+        res.status(201).json({ message: `${limpas.length} questão(ões) enviada(s) ao coordenador.`, total: limpas.length, questoesEnviadas: (l.questoesEnviadas || 0) + limpas.length });
+    } catch (err) {
+        res.status(500).json({ error: 'Não foi possível enviar agora. Suas questões continuam na tela — tente de novo em instantes.' });
+    }
+});
+
 module.exports = router;

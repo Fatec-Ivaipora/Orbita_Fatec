@@ -424,3 +424,25 @@ body.orb-v2 .modal-actions { border-top: 1px solid var(--orb-linha2, #EEF2F7); p
 .gab-digitar small { font-weight: 500; color: var(--text-secondary, #5b6a80); }
 .gab-digitar input { padding: 10px 12px; border: 1px solid #d5dce6; border-radius: 10px; font: 600 1rem/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
 .gab-digitar input:focus-visible { outline: 2px solid #1f6fb2; outline-offset: 1px; }
+
+/* Links dos professores (10/11/2026) */
+.bp-link-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem 1rem; padding: 1rem 1.1rem; align-items: end; overflow: visible; }
+.bp-link-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary, #44536b); }
+.bp-link-form label.hidden { display: none; }
+.bp-link-form .select-filter { width: 100%; }
+.bp-link-novo { margin-top: 0.9rem; border: 1px solid #b9dcc9; background: #e2f2ea; color: #0b5c38; border-radius: 12px; padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.bp-link-novo.hidden { display: none; }
+.bp-link-novo-url { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.bp-link-novo-url input { flex: 1; min-width: 240px; border: 1px solid #b9dcc9; border-radius: 8px; padding: 0.5rem 0.7rem; font: 0.85rem ui-monospace, Consolas, monospace; background: #fff; color: #0d1b33; }
+.bp-link-novo-url .btn-secondary, .bp-link-acoes .btn-secondary { text-decoration: none; display: inline-flex; align-items: center; }
+.bp-link-sub { display: block; color: #5b6a80; font-size: 0.78rem; }
+.bp-link-sit { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.bp-link-sit.ok { background: #e2f2ea; color: #0f7a4b; }
+.bp-link-sit.espera { background: #e7ecf5; color: #12294d; }
+.bp-link-sit.atraso { background: #fbe9e6; color: #c8392f; }
+.bp-link-sit.off { background: #eef2f7; color: #5b6a80; }
+.bp-link-sit-cel small { display: block; color: #5b6a80; font-size: 0.76rem; margin-top: 2px; }
+.bp-link-acoes { white-space: nowrap; }
+.bp-link-acoes .bp-link-acao { padding: 0.35rem 0.7rem; font-size: 0.8rem; margin: 2px 2px 2px 0; }
+.bp-revisao-link { color: #0f7a4b; font-weight: 600; }
+.bp-link-acoes { text-align: right; }
