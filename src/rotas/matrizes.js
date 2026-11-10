@@ -44,6 +44,9 @@ function limparAulas(aulas) {
         const inicio = String(a.inicio || '');
         const fim = String(a.fim || '');
         if (!professor) throw new Error(`Horário ${i + 1}: informe o professor.`);
+        // Só o professor, sem dia e horário ainda (10/11/2026): o coordenador define quem dá a aula antes
+        // de fechar o horário (e a Secretaria Acadêmica já lança o professor no Edubox).
+        if (!dia && !inicio && !fim) return { professor };
         if (!DIAS.includes(dia)) throw new Error(`Horário ${i + 1}: dia da semana inválido.`);
         if (!HORA.test(inicio) || !HORA.test(fim)) throw new Error(`Horário ${i + 1}: informe início e fim (HH:MM).`);
         if (minutos(fim) <= minutos(inicio)) throw new Error(`Horário ${i + 1}: o fim precisa ser depois do início.`);
@@ -73,6 +76,7 @@ function acharConflitos(aulas, docsGrade, ignorarDoc, ignorarKey, nomeDisc = '')
             if (mesma(al.disciplina, nomeDisc)) continue;
             for (const o of al.aulas || []) {
                 for (const a of aulas) {
+                    if (!a.dia || !o.dia) continue;   // professor sem horário ainda: não tem como conflitar
                     if (o.dia !== a.dia || !(minutos(a.inicio) < minutos(o.fim) && minutos(o.inicio) < minutos(a.fim))) continue;
                     // horário idêntico = provável aula conjunta; sobreposição parcial = conflito de verdade
                     const exato = o.inicio === a.inicio && o.fim === a.fim;
@@ -100,6 +104,63 @@ async function semestresDisponiveis() {
     const candidatos = semestresPadrao();
     const { semestres } = await relay(`/matrizes/semestres?formatos=${encodeURIComponent(candidatos.flatMap(formatosEdubox).join(','))}`);
     return [...new Set(semestres.map(normSemestre))].filter(s => candidatos.includes(s)).sort();
+}
+
+// ==========================================
+// DISCIPLINAS AJUSTADAS NO ÓRBITA (10/11/2026) — quando a matriz nova ainda não está no Edubox, o
+// coordenador inclui/altera aqui e imprime as alterações pra Secretaria Acadêmica lançar no Edubox.
+// No doc matrizes_grade/{AAAA.S}__{cursoId}:
+//   disciplinasManuais: { M<id>: { nome, tipo, ch, turmas:[codTurma], criadoPor, criadoEm } }
+//   ajustesDisciplinas: { "{codTurma}:{codDisciplina}": { nome?, tipo?, ch?, retirar?, lancar?, por, em } }
+// Quando o Edubox passar a ter a disciplina, o ajuste continua só como registro (a tela mostra o que mudou).
+// ==========================================
+const TIPOS_DISC = ['Presencial', 'A Distância'];
+const CAMPOS_CH = ['teorica', 'pratica', 'ead', 'sincrona', 'extensao'];
+function limparDisciplina(b) {
+    const nome = String(b.nome || '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 150);
+    if (nome.length < 3) throw new Error('Informe o nome da disciplina.');
+    const tipo = TIPOS_DISC.includes(b.tipo) ? b.tipo : null;
+    if (!tipo) throw new Error('Escolha se a disciplina é presencial ou a distância.');
+    const ch = {};
+    CAMPOS_CH.forEach(k => {
+        const v = Number((b.ch || {})[k] || 0);
+        if (!Number.isInteger(v) || v < 0 || v > 1000) throw new Error('Carga horária inválida (use horas inteiras).');
+        ch[k] = v;
+    });
+    ch.total = CAMPOS_CH.reduce((n, k) => n + ch[k], 0);
+    if (!ch.total) throw new Error('Informe a carga horária.');
+    return { nome, tipo, ch };
+}
+function aplicarAjustes(m, g) {
+    const manuais = (g && g.disciplinasManuais) || {};
+    const ajustes = (g && g.ajustesDisciplinas) || {};
+    for (const t of m.turmas || []) {
+        t.disciplinas = t.disciplinas.map(d => {
+            const a = ajustes[`${t.codTurma}:${d.codDisciplina}`];
+            if (!a) return d;
+            const nd = { ...d, ajuste: { nomeEdubox: d.nome, tipoEdubox: d.tipo, chEdubox: d.ch } };
+            if (a.nome) nd.nome = a.nome;
+            if (a.tipo) nd.tipo = a.tipo;
+            if (a.ch) nd.ch = a.ch;
+            if (a.retirar) nd.retirada = true;
+            if (a.lancar && d.naoOfertada) { nd.naoOfertada = false; nd.lancar = true; }
+            nd.alterada = !!(a.nome || a.tipo || a.ch);
+            return nd;
+        });
+        Object.entries(manuais).forEach(([id, x]) => {
+            if ((x.turmas || []).map(String).includes(String(t.codTurma))) {
+                t.disciplinas.push({ codDisciplina: id, nome: x.nome, tipo: x.tipo, ch: x.ch, manual: true });
+            }
+        });
+        t.disciplinas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    }
+    return m;
+}
+async function cursoComAjustes(semestre, cursoId) {
+    const docId = `${semestre}__${cursoId}`;
+    const [ms, gSnap] = await Promise.all([matrizesDoSemestre(semestre, cursoId), db.collection('matrizes_grade').doc(docId).get()]);
+    const m = ms.find(x => x.id === docId);
+    return m ? { m: aplicarAjustes(m, gSnap.exists ? gSnap.data() : null), docId, ref: gSnap.ref } : null;
 }
 
 // Docs por curso do semestre, montados na hora a partir do relay. `cursoId` filtra um curso só.
@@ -247,6 +308,7 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), as
             });
             docsEdubox.forEach(m => {
                 if (!podeVer(escopo, m.cursoId)) return;
+                aplicarAjustes(m, grades.get(m.id));
                 cursos.push({
                     id: m.id, cursoId: m.cursoId, cursoNome: m.cursoNome,
                     turmas: (m.turmas || []).sort((a, b) => a.periodo - b.periodo || a.nome.localeCompare(b.nome, 'pt-BR')),
@@ -282,9 +344,9 @@ router.put('/grade/:semestre/:cursoId/:turma/:disciplina', verifyToken, verifyTo
         const escopo = await escopoDe(req);
         if (!podeVer(escopo, cursoId)) return res.status(403).json({ error: 'Você não tem acesso a esse curso.' });
 
-        const docId = `${semestre}__${cursoId}`;
-        const m = (await matrizesDoSemestre(semestre, cursoId)).find(x => x.id === docId);
-        if (!m) return res.status(404).json({ error: 'Curso/semestre não encontrado.' });
+        const achado = await cursoComAjustes(semestre, cursoId);
+        if (!achado) return res.status(404).json({ error: 'Curso/semestre não encontrado.' });
+        const { m, docId } = achado;
         const t = (m.turmas || []).find(x => String(x.codTurma) === turma);
         const d = t && t.disciplinas.find(x => String(x.codDisciplina) === disciplina);
         if (!d) return res.status(404).json({ error: 'Disciplina não pertence a essa turma.' });
@@ -313,5 +375,108 @@ router.put('/grade/:semestre/:cursoId/:turma/:disciplina', verifyToken, verifyTo
     }
 });
 
+// --- disciplina incluída no Órbita ---
+async function prepararCurso(req, res) {
+    const { semestre, cursoId } = req.params;
+    if (!SEMESTRE.test(semestre)) { res.status(400).json({ error: 'Semestre inválido.' }); return null; }
+    const escopo = await escopoDe(req);
+    if (!podeVer(escopo, cursoId)) { res.status(403).json({ error: 'Você não tem acesso a esse curso.' }); return null; }
+    const achado = await cursoComAjustes(semestre, cursoId);
+    if (!achado) { res.status(404).json({ error: 'Curso/semestre não encontrado no Edubox.' }); return null; }
+    return { ...achado, semestre, cursoId, quem: { uid: req.user.uid, nome: req.user.name || req.user.email || '' } };
+}
+
+// POST /api/matrizes/disciplina/:semestre/:cursoId  { nome, tipo, ch, turmas:[codTurma] }
+router.post('/disciplina/:semestre/:cursoId', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const c = await prepararCurso(req, res);
+        if (!c) return;
+        let disc;
+        try { disc = limparDisciplina(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
+        const turmas = [...new Set((Array.isArray(req.body.turmas) ? req.body.turmas : []).map(String))];
+        if (!turmas.length || turmas.some(t => !c.m.turmas.some(x => String(x.codTurma) === t))) return res.status(400).json({ error: 'Escolha a(s) turma(s) da disciplina.' });
+        const id = 'M' + require('crypto').randomBytes(5).toString('hex');
+        const reg = { ...disc, turmas, criadoPor: c.quem, criadoEm: new Date().toISOString() };
+        await c.ref.set({ semestre: c.semestre, cursoId: c.cursoId, cursoNome: c.m.cursoNome, disciplinasManuais: { [id]: reg } }, { merge: true });
+        res.status(201).json({ id, ...reg, message: 'Disciplina incluída.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/matrizes/disciplina/:semestre/:cursoId/:id  { nome, tipo, ch }
+router.put('/disciplina/:semestre/:cursoId/:id', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const c = await prepararCurso(req, res);
+        if (!c) return;
+        const atual = ((await c.ref.get()).data() || {}).disciplinasManuais || {};
+        if (!atual[req.params.id]) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        let disc;
+        try { disc = limparDisciplina(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
+        const reg = { ...atual[req.params.id], ...disc, atualizadoPor: c.quem, atualizadoEm: new Date().toISOString() };
+        await c.ref.set({ disciplinasManuais: { [req.params.id]: reg } }, { merge: true });
+        res.json({ id: req.params.id, ...reg, message: 'Disciplina atualizada.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/matrizes/disciplina/:semestre/:cursoId/:id — tira a disciplina incluída (e o horário dela)
+router.delete('/disciplina/:semestre/:cursoId/:id', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const c = await prepararCurso(req, res);
+        if (!c) return;
+        const g = (await c.ref.get()).data() || {};
+        const reg = (g.disciplinasManuais || {})[req.params.id];
+        if (!reg) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        const del = admin.firestore.FieldValue.delete();
+        const alocacoes = {};
+        (reg.turmas || []).forEach(t => { if ((g.alocacoes || {})[`${t}:${req.params.id}`]) alocacoes[`${t}:${req.params.id}`] = del; });
+        await c.ref.set({ disciplinasManuais: { [req.params.id]: del }, ...(Object.keys(alocacoes).length ? { alocacoes } : {}) }, { merge: true });
+        res.json({ message: 'Disciplina excluída.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/matrizes/ajuste/:semestre/:cursoId/:turma/:disciplina — disciplina que veio do Edubox:
+// { nome, tipo, ch } (alterar) e/ou { retirar: true } / { lancar: true }; { desfazer: true } apaga o ajuste.
+router.put('/ajuste/:semestre/:cursoId/:turma/:disciplina', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const c = await prepararCurso(req, res);
+        if (!c) return;
+        const { turma, disciplina } = req.params;
+        const t = c.m.turmas.find(x => String(x.codTurma) === turma);
+        const d = t && t.disciplinas.find(x => String(x.codDisciplina) === disciplina && !x.manual);
+        if (!d) return res.status(404).json({ error: 'Disciplina não pertence a essa turma.' });
+        const key = `${turma}:${disciplina}`;
+        if (req.body.desfazer) {
+            await c.ref.set({ ajustesDisciplinas: { [key]: admin.firestore.FieldValue.delete() } }, { merge: true });
+            return res.json({ key, ajuste: null, message: 'Alteração desfeita.' });
+        }
+        const orig = d.ajuste ? { nome: d.ajuste.nomeEdubox, tipo: d.ajuste.tipoEdubox, ch: d.ajuste.chEdubox } : { nome: d.nome, tipo: d.tipo, ch: d.ch };
+        const aj = { por: c.quem, em: new Date().toISOString() };
+        if (req.body.nome !== undefined) {
+            let disc;
+            try { disc = limparDisciplina(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
+            if (disc.nome !== orig.nome) aj.nome = disc.nome;
+            if (disc.tipo !== orig.tipo) aj.tipo = disc.tipo;
+            if (CAMPOS_CH.concat('total').some(k => (disc.ch[k] || 0) !== ((orig.ch || {})[k] || 0))) aj.ch = disc.ch;
+        }
+        if (req.body.retirar) aj.retirar = true;
+        if (req.body.lancar) aj.lancar = true;
+        if (!aj.nome && !aj.tipo && !aj.ch && !aj.retirar && !aj.lancar) {
+            await c.ref.set({ ajustesDisciplinas: { [key]: admin.firestore.FieldValue.delete() } }, { merge: true });
+            return res.json({ key, ajuste: null, message: 'Nada mudou em relação ao Edubox.' });
+        }
+        // retirar do semestre: o horário dessa turma sai junto
+        const extra = aj.retirar ? { alocacoes: { [key]: admin.firestore.FieldValue.delete() } } : {};
+        await c.ref.set({ semestre: c.semestre, cursoId: c.cursoId, cursoNome: c.m.cursoNome, ajustesDisciplinas: { [key]: aj }, ...extra }, { merge: true });
+        res.json({ key, ajuste: aj, message: 'Alteração salva.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
-module.exports._interno = { limparAulas, acharConflitos, podeVer };
+module.exports._interno = { limparAulas, acharConflitos, podeVer, limparDisciplina, aplicarAjustes };

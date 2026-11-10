@@ -6,7 +6,7 @@
     <title>Matrizes e Horários - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/matrizes/matrizes.css?v=13">
+    <link rel="stylesheet" href="/matrizes/matrizes.css?v=15">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -43,6 +43,7 @@
                         <button type="button" class="mz-aba" data-aba="horario" role="tab">Horário de aula (relatório)</button>
                         <button type="button" class="mz-aba" data-aba="carga" role="tab">Carga horária por matriz</button>
                         <button type="button" class="mz-aba" data-aba="titulacao" role="tab">Titulação dos professores</button>
+                        <button type="button" class="mz-aba" data-aba="secretaria" role="tab">Alterações p/ Secretaria</button>
                     </div>
 
                     <section id="painel-semestre" class="mz-painel ativo"></section>
@@ -50,6 +51,7 @@
                     <section id="painel-horario" class="mz-painel"></section>
                     <section id="painel-carga" class="mz-painel"></section>
                     <section id="painel-titulacao" class="mz-painel"></section>
+                    <section id="painel-secretaria" class="mz-painel"></section>
                 </div>
 
                 <div id="vazio" class="mz-vazio hidden"></div>
@@ -63,13 +65,43 @@
         <div class="mz-modal-card">
             <h2 id="mh-titulo">Horário da disciplina</h2>
             <p class="mz-modal-sub" id="mh-sub"></p>
+            <p class="md-dica">Dia e horário podem ficar para depois: deixe "Dia a definir" e salve só o professor.</p>
             <form id="form-horario" autocomplete="off">
                 <div id="mh-linhas"></div>
                 <button type="button" class="mz-btn mz-btn-sec" id="mh-add">+ Adicionar horário</button>
                 <p class="mz-erro hidden" id="mh-erro"></p>
                 <div class="mz-modal-acoes">
                     <button type="button" class="mz-btn mz-btn-sec" id="mh-cancelar">Cancelar</button>
-                    <button type="submit" class="mz-btn mz-btn-pri" id="mh-salvar">Salvar horário</button>
+                    <button type="submit" class="mz-btn mz-btn-pri" id="mh-salvar">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: incluir/alterar disciplina (10/11/2026) -->
+    <div id="modal-disc" class="mz-modal hidden mz-no-print" role="dialog" aria-modal="true" aria-labelledby="md-titulo">
+        <div class="mz-modal-card">
+            <h2 id="md-titulo">Disciplina</h2>
+            <p class="mz-modal-sub" id="md-sub"></p>
+            <p class="md-orig hidden" id="md-orig"></p>
+            <form id="form-disc" autocomplete="off">
+                <label class="md-campo">Nome da disciplina<input type="text" id="md-nome" maxlength="150" required></label>
+                <label class="md-campo">Tipo<select id="md-tipo"><option value="Presencial">Presencial</option><option value="A Distância">A distância (EAD)</option></select></label>
+                <fieldset class="md-ch-grade"><legend>Carga horária (horas)</legend>
+                    <label>Teórica<input type="number" min="0" max="1000" step="1" class="md-ch" id="md-ch-teorica"></label>
+                    <label>Prática<input type="number" min="0" max="1000" step="1" class="md-ch" id="md-ch-pratica"></label>
+                    <label>EAD<input type="number" min="0" max="1000" step="1" class="md-ch" id="md-ch-ead"></label>
+                    <label>Síncrona<input type="number" min="0" max="1000" step="1" class="md-ch" id="md-ch-sincrona"></label>
+                    <label>Extensão<input type="number" min="0" max="1000" step="1" class="md-ch" id="md-ch-extensao"></label>
+                    <div class="md-total">Total<b id="md-ch-total">0 h</b></div>
+                </fieldset>
+                <fieldset class="md-turmas-wrap" id="md-turmas-wrap"><legend>Turmas</legend><div id="md-turmas"></div></fieldset>
+                <p class="md-dica" id="md-dica"></p>
+                <p class="mz-erro hidden" id="md-erro"></p>
+                <div class="mz-modal-acoes md-acoes">
+                    <div id="md-extras" class="md-extras"></div>
+                    <button type="button" class="mz-btn mz-btn-sec" id="md-cancelar">Cancelar</button>
+                    <button type="submit" class="mz-btn mz-btn-pri" id="md-salvar">Salvar</button>
                 </div>
             </form>
         </div>
@@ -79,6 +111,6 @@
     <datalist id="lista-salas"></datalist>
     <div id="toast" class="mz-toast hidden mz-no-print" role="status"></div>
 
-    <script type="module" src="/matrizes/app.js?v=11"></script>
+    <script type="module" src="/matrizes/app.js?v=13"></script>
 </body>
 </html>
