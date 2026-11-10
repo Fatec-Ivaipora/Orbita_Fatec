@@ -6,7 +6,7 @@
     <title>Matrizes e Horários - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/matrizes/matrizes.css?v=7">
+    <link rel="stylesheet" href="/matrizes/matrizes.css?v=13">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -42,12 +42,14 @@
                         <button type="button" class="mz-aba" data-aba="matrizes" role="tab">Matrizes em uso</button>
                         <button type="button" class="mz-aba" data-aba="horario" role="tab">Horário de aula (relatório)</button>
                         <button type="button" class="mz-aba" data-aba="carga" role="tab">Carga horária por matriz</button>
+                        <button type="button" class="mz-aba" data-aba="titulacao" role="tab">Titulação dos professores</button>
                     </div>
 
                     <section id="painel-semestre" class="mz-painel ativo"></section>
                     <section id="painel-matrizes" class="mz-painel"></section>
                     <section id="painel-horario" class="mz-painel"></section>
                     <section id="painel-carga" class="mz-painel"></section>
+                    <section id="painel-titulacao" class="mz-painel"></section>
                 </div>
 
                 <div id="vazio" class="mz-vazio hidden"></div>
@@ -77,6 +79,6 @@
     <datalist id="lista-salas"></datalist>
     <div id="toast" class="mz-toast hidden mz-no-print" role="status"></div>
 
-    <script type="module" src="/matrizes/app.js?v=6"></script>
+    <script type="module" src="/matrizes/app.js?v=11"></script>
 </body>
 </html>
