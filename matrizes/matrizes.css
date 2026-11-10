@@ -332,3 +332,59 @@ details.mz-card[open] > summary { border-bottom: 1px solid var(--border-color); 
   #painel-titulacao .tt-curso { cursor: default; }
   #painel-titulacao .tt-segs, #painel-titulacao .tt-legenda i, #painel-titulacao .tt-n::before, .tt-faltaprof, .tt-atencao, .tt-aviso-falta { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ===== Disciplinas ajustadas no Órbita + Alterações p/ Secretaria (10/11/2026) ===== */
+.mz-tag.orbita { background: #e0f2f1; color: #0f5e57; }
+.mz-tag.retirar { background: #fde4e8; color: #9f1239; }
+.mz-tabela tr.mz-retirada td.disc { text-decoration: line-through; text-decoration-color: #be123c; color: #64748b; }
+.mz-tabela tr.mz-retirada td.disc .mz-tag { text-decoration: none; }
+.mz-btn-disc { margin-left: 4px; }
+.mz-card-pe { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0.7rem 1.25rem; border-top: 1px solid var(--border-color); font-size: 0.82rem; color: var(--text-secondary); }
+.mz-btn-perigo { background: #fff; color: #be123c; border-color: #fda4b4; }
+.mz-btn-perigo:hover { background: #fff1f3; border-color: #be123c; }
+.md-campo { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.7rem; }
+.md-campo input, .md-campo select { width: 100%; }
+.md-ch-grade { border: 1px solid var(--border-color); border-radius: 12px; padding: 0.6rem 0.8rem 0.8rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 0.5rem; margin: 0 0 0.7rem; }
+.md-ch-grade legend, .md-turmas-wrap legend { font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); padding: 0 4px; }
+.md-ch-grade label { display: flex; flex-direction: column; gap: 3px; font-size: 0.76rem; color: var(--text-secondary); }
+.md-ch-grade input { width: 100%; }
+.md-total { display: flex; flex-direction: column; gap: 3px; font-size: 0.76rem; color: var(--text-secondary); }
+.md-total b { font-size: 1.15rem; color: var(--text-main); padding-top: 0.35rem; font-variant-numeric: tabular-nums; }
+.md-turmas-wrap { border: 1px solid var(--border-color); border-radius: 12px; padding: 0.5rem 0.8rem 0.7rem; margin: 0 0 0.7rem; }
+.md-turmas-wrap.hidden { display: none; }
+.md-turma { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; padding: 3px 0; }
+.md-orig { background: #f1f5f9; border-radius: 10px; padding: 0.5rem 0.75rem; font-size: 0.82rem; color: #334155; margin: -0.4rem 0 0.9rem; }
+.md-orig.hidden { display: none; }
+.md-dica { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.6rem; line-height: 1.45; }
+.md-acoes { flex-wrap: wrap; }
+.md-extras { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-right: auto; }
+.mz-sec-filtro { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-secondary); }
+.mz-sec-cont { font-size: 0.75rem; font-weight: 700; color: #0f5e57; background: #e0f2f1; border-radius: 999px; padding: 2px 9px; vertical-align: middle; }
+.mz-sec td small { display: block; color: #475569; font-size: 0.76rem; margin-top: 3px; line-height: 1.35; }
+.mz-sec-acao { display: inline-block; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.02em; border-radius: 6px; padding: 2px 8px; }
+.mz-sec-acao.incluir { background: #0f766e; color: #fff; }
+.mz-sec-acao.alterar { background: #c98a2b; color: #fff; }
+.mz-sec-acao.retirar { background: #be123c; color: #fff; }
+.mz-sec tr.sec-retirar td:nth-child(2) { text-decoration: line-through; text-decoration-color: #be123c; }
+.mz-sec tr.sec-incluir td, .mz-sec tr.sec-alterar td, .mz-sec tr.sec-retirar td { background: #fbfcfd; }
+@media print {
+  .mz-sec-acao, .mz-sec-cont { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* Ajustes de alinhamento (10/11/2026): abas quebram linha em vez de rolar; coluna de ações com 2 botões;
+   tabela da Secretaria com larguras próprias (não herda as do relatório de horário) */
+.mz-abas { flex-wrap: wrap; overflow: visible; }
+.mz-tabela col.c-acao { width: 190px; }
+.mz-tabela td:last-child .mz-btn-mini { white-space: nowrap; }
+.mz-tabela td:last-child { white-space: nowrap; }
+.mz-btn-disc { margin-left: 6px; }
+.mz-rel .mz-sec th, .mz-rel .mz-sec td { width: auto; }
+.mz-rel .mz-sec col.s-acao { width: 24%; }
+.mz-rel .mz-sec col.s-disc { width: 36%; }
+.mz-rel .mz-sec col.s-tipo { width: 11%; }
+.mz-rel .mz-sec col.s-ch { width: 9%; }
+.mz-rel .mz-sec col.s-prof { width: 20%; }
+.mz-rel .mz-sec th:last-child, .mz-rel .mz-sec td:last-child { text-align: left; white-space: normal; }
+.mz-rel .mz-sec td { vertical-align: top; }
+.mz-rel .mz-sec td:nth-child(2) { font-weight: 600; }
+.mz-rel-acoes { flex-wrap: wrap; gap: 0.6rem 1rem; }
