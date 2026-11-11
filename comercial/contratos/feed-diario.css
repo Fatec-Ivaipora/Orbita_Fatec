@@ -1,0 +1,144 @@
+/* Feed diário de matrículas (11/11/2026) — relatório pra direção, dentro de Contratos.
+   Padrão dos relatórios do Órbita: marca ÓRBITA FATEC + logo da Fatec IVP, azul-marinho, Archivo nos números.
+   Cor só com significado: verde = folga, ocre = margem dos 10%, âmbar = últimas vagas, vermelho = lotado. */
+.fd {
+  --fd-marca: #12294d; --fd-fatec: #0f4eb8; --fd-laranja: #eb7025;
+  --fd-tinta: #0d1b33; --fd-tinta2: #44536b; --fd-mudo: #5b6a80; --fd-linha: #e3e8f0; --fd-linha2: #eef2f7;
+  --fd-ok: #0f7a4b; --fd-ok-s: #e2f2ea; --fd-margem: #8a5a12; --fd-margem-s: #fbebcf;
+  --fd-reta: #a8650b; --fd-reta-s: #fdf0dd; --fd-lot: #c8392f; --fd-lot-s: #fbe9e6;
+  display: none;
+}
+body.fd-aberto .fd { display: block; width: 100%; max-width: 1180px; margin: 0 auto; }
+body.fd-aberto .layout-content > *:not(#feed-diario) { display: none !important; }
+
+.fd-barra-topo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-bottom: 16px; }
+.fd-barra-topo #fd-voltar { margin-right: auto; }
+.fd-campo { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; font-weight: 600; color: var(--fd-mudo); }
+
+.fd-carregando, .fd-erro { background: #fff; border: 1px solid var(--fd-linha); border-radius: 12px; padding: 48px 20px; text-align: center; color: var(--fd-mudo); display: flex; gap: 10px; justify-content: center; align-items: center; }
+.fd-erro { color: var(--fd-lot); background: var(--fd-lot-s); border-color: #f3c4bd; }
+.fd-spin { width: 18px; height: 18px; border: 2px solid var(--fd-linha); border-top-color: var(--fd-fatec); border-radius: 50%; animation: fd-gira 0.8s linear infinite; }
+@keyframes fd-gira { to { transform: rotate(360deg); } }
+
+.fd-folha { background: #fff; border: 1px solid var(--fd-linha); border-radius: 14px; padding: 26px clamp(18px, 3vw, 34px) 22px; color: var(--fd-tinta); width: 100%; box-sizing: border-box; }
+
+/* cabeçalho com as duas marcas */
+.fd-cab { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 14px; border-bottom: 2px solid var(--fd-marca); }
+.fd-marca { display: flex; align-items: center; gap: 9px; }
+.fd-orbita { position: relative; width: 32px; height: 32px; border: 2px solid var(--fd-linha); border-radius: 50%; display: grid; place-items: center; }
+.fd-orbita span { font: 800 0.95rem/1 'Outfit', sans-serif; color: var(--fd-fatec); }
+.fd-orbita i { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--fd-laranja); top: -4px; left: 50%; margin-left: -4px; }
+.fd-marca-nome { font: 800 1.3rem/1 'Outfit', sans-serif; letter-spacing: -0.04em; }
+.fd-marca-nome b { color: #031426; font-weight: 800; }
+.fd-marca-nome em { color: var(--fd-fatec); font-style: normal; }
+.fd-logo { height: 30px; width: auto; }
+
+.fd-titulo { margin: 18px 0 16px; }
+.fd-titulo h2 { font: 800 1.55rem/1.15 'Archivo', system-ui, sans-serif; color: var(--fd-marca); margin: 0; letter-spacing: -0.015em; }
+.fd-titulo p { margin: 4px 0 0; color: var(--fd-tinta2); font-size: 0.92rem; }
+
+/* destaques */
+.fd-destaques { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.fd-num { border: 1px solid var(--fd-linha); border-radius: 12px; padding: 12px 14px 11px 16px; position: relative; }
+.fd-num::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--fd-linha); }
+.fd-num b { display: block; font: 800 1.9rem/1.05 'Archivo', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--fd-marca); }
+.fd-num span { font-size: 0.8rem; color: var(--fd-tinta2); }
+.fd-num-hoje::before { background: var(--fd-laranja); }
+.fd-num-hoje b { color: var(--fd-laranja); }
+.fd-num-alerta::before { background: var(--fd-lot); }
+.fd-num-alerta b { color: var(--fd-lot); }
+
+/* alertas */
+.fd-alertas { border: 1px solid #f3c4bd; background: #fffaf9; border-radius: 12px; padding: 12px 16px 14px; margin-bottom: 16px; }
+.fd-alertas h3 { margin: 0 0 8px; font: 700 0.95rem 'Archivo', system-ui, sans-serif; color: var(--fd-lot); }
+.fd-alertas ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 16px; }
+.fd-alertas li { display: flex; flex-direction: column; padding-left: 12px; border-left: 3px solid var(--fd-reta); }
+.fd-alertas li.fd-a-lotado { border-left-color: var(--fd-lot); }
+.fd-alertas li.fd-a-margem { border-left-color: #c98a2b; }
+.fd-alertas li b { font-size: 0.92rem; }
+.fd-alertas li span { font-weight: 700; font-size: 0.86rem; color: var(--fd-reta); }
+.fd-alertas li.fd-a-lotado span { color: var(--fd-lot); }
+.fd-alertas li.fd-a-margem span { color: var(--fd-margem); }
+.fd-alertas li small { color: var(--fd-mudo); font-size: 0.76rem; }
+.fd-aviso-vagas { background: var(--fd-linha2); border-radius: 10px; padding: 8px 12px; font-size: 0.84rem; color: var(--fd-tinta2); margin: 0 0 14px; }
+
+/* tabela */
+.fd-tabela-wrap { overflow-x: auto; }
+.fd-tabela { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 760px; }
+.fd-tabela th, .fd-tabela td { padding: 9px 10px; border-bottom: 1px solid var(--fd-linha2); text-align: left; vertical-align: middle; }
+.fd-tabela thead th { font-size: 0.72rem; font-weight: 700; color: var(--fd-mudo); border-bottom: 1px solid var(--fd-linha); white-space: nowrap; }
+.fd-tabela tbody th { font-weight: 600; color: var(--fd-tinta); }
+.fd-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fd-tabela tfoot th, .fd-tabela tfoot td { font-weight: 800; border-top: 2px solid var(--fd-linha); border-bottom: 0; font-family: 'Archivo', system-ui, sans-serif; }
+.fd-hoje b { color: var(--fd-laranja); }
+.fd-zero { color: #a3aec0; }
+.fd-barra-cel { width: 18%; min-width: 120px; }
+.fd-barra { position: relative; height: 10px; background: var(--fd-linha2); border-radius: 999px; }
+.fd-barra i { display: block; height: 100%; border-radius: 999px; background: var(--fd-ok); }
+.fd-l-margem .fd-barra i { background: #c98a2b; }
+.fd-l-reta .fd-barra i { background: var(--fd-reta); }
+.fd-l-lotado .fd-barra i { background: var(--fd-lot); }
+.fd-marca-mec { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fd-marca); opacity: 0.55; }
+.fd-selo { display: inline-block; font-size: 0.78rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.fd-s-ok { background: var(--fd-ok-s); color: var(--fd-ok); }
+.fd-s-margem { background: var(--fd-margem-s); color: var(--fd-margem); }
+.fd-s-reta { background: var(--fd-reta-s); color: var(--fd-reta); }
+.fd-s-lotado { background: var(--fd-lot); color: #fff; }
+.fd-s-sem-vagas { background: var(--fd-linha2); color: var(--fd-mudo); font-weight: 600; }
+.fd-l-lotado th { box-shadow: inset 3px 0 0 var(--fd-lot); }
+.fd-vaga-in { width: 84px; text-align: right; border: 1px solid var(--fd-linha); border-radius: 8px; padding: 5px 8px; font: inherit; }
+.fd-vagas-acoes { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+.fd-vagas-acoes small { color: var(--fd-mudo); }
+
+/* por dia */
+.fd-dias { margin-top: 20px; }
+.fd-dias h3 { margin: 0 0 8px; font: 700 0.95rem 'Archivo', system-ui, sans-serif; color: var(--fd-marca); }
+.fd-dias-barras { display: flex; align-items: flex-end; gap: 8px; height: 120px; border-bottom: 1px solid var(--fd-linha); padding-bottom: 0; }
+.fd-dia { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 28px; position: relative; }
+.fd-dia i { display: block; width: 70%; max-width: 34px; background: #c7d3e6; border-radius: 4px 4px 0 0; }
+.fd-dia.atual i { background: var(--fd-laranja); }
+.fd-dia-n { font: 700 0.76rem 'Archivo', system-ui, sans-serif; color: var(--fd-tinta2); margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.fd-dia-d { position: absolute; bottom: -20px; font-size: 0.7rem; color: var(--fd-mudo); white-space: nowrap; }
+.fd-dias { padding-bottom: 22px; }
+
+.fd-rodape { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--fd-linha); font-size: 0.76rem; color: var(--fd-mudo); }
+.fd-rodape p { margin: 2px 0; }
+
+@media (max-width: 760px) {
+  .fd-destaques { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fd-titulo h2 { font-size: 1.3rem; }
+  .fd-logo { height: 22px; }
+  .fd-marca-nome { font-size: 1.05rem; }
+}
+@media (prefers-reduced-motion: reduce) { .fd-spin { animation: none; } }
+
+@media print {
+  body.fd-aberto .fd { display: block !important; }
+  body.fd-aberto .fd-no-print, body.fd-aberto .rel-cabecalho-print { display: none !important; }
+  body.fd-aberto .fd-folha { border: 0; padding: 0; max-width: none; }
+  body.fd-aberto .fd-tabela { min-width: 0; font-size: 10.5px; }
+  body.fd-aberto .fd-tabela th, body.fd-aberto .fd-tabela td { padding: 5px 6px; }
+  body.fd-aberto .fd-tabela tr { break-inside: avoid; }
+  body.fd-aberto .fd-num, body.fd-aberto .fd-barra, body.fd-aberto .fd-barra i, body.fd-aberto .fd-selo,
+  body.fd-aberto .fd-alertas, body.fd-aberto .fd-dia i, body.fd-aberto .fd-orbita i, body.fd-aberto .fd-num::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.fd-aberto .fd-dias { break-inside: avoid; }
+}
+
+/* v2 (11/11/2026): feed do dia por curso no topo; tabela só com matriculados, vagas do edital e disponíveis */
+.fd-dia-feed { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; gap: 16px 24px; align-items: center; border: 1px solid var(--fd-linha); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; }
+.fd-dia-total { border-right: 1px solid var(--fd-linha); padding-right: 18px; }
+.fd-dia-total b { display: block; font: 800 2.6rem/1 'Archivo', system-ui, sans-serif; color: var(--fd-laranja); font-variant-numeric: tabular-nums; }
+.fd-dia-total span { font-size: 0.86rem; color: var(--fd-tinta2); }
+.fd-dia-cursos ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 18px; }
+.fd-dia-cursos li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 1px dashed var(--fd-linha); padding: 4px 0; font-size: 0.92rem; }
+.fd-dia-cursos li b { font: 800 1.05rem 'Archivo', system-ui, sans-serif; color: var(--fd-laranja); font-variant-numeric: tabular-nums; }
+.fd-dia-cursos p { margin: 0; }
+.fd-sub { margin: 4px 0 6px; font: 700 0.95rem 'Archivo', system-ui, sans-serif; color: var(--fd-marca); }
+.fd-mais { font-size: 0.76rem; font-weight: 700; color: var(--fd-laranja); margin-left: 4px; }
+.fd-esgotou { color: var(--fd-lot); }
+.fd-tabela { min-width: 620px; }
+@media (max-width: 760px) {
+  .fd-dia-feed { grid-template-columns: 1fr; }
+  .fd-dia-total { border-right: 0; border-bottom: 1px solid var(--fd-linha); padding: 0 0 10px; }
+}
+@media print { body.fd-aberto .fd-dia-feed, body.fd-aberto .fd-dia-total b, body.fd-aberto .fd-mais { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

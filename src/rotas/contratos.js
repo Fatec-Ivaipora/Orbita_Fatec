@@ -150,6 +150,118 @@ router.post('/rota/montar', verifyToken, checkPermission, async (req, res) => {
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+// ==========================================
+// FEED DIÁRIO DE MATRÍCULAS (11/11/2026) — relatório pro Fábio (direção), dentro de Contratos.
+// Direto do Edubox (relay /matriculas-edubox/lista), na hora em que abre: não depende de ninguém aplicar as
+// pendências das Matrículas. Conta os CALOUROS do semestre (ingresso no próprio semestre) por curso, que é o
+// que as vagas do edital limitam. Cada curso pode passar até 10% das vagas; o relatório avisa
+// quando está chegando no limite.
+// Vagas por curso: contratos_config/vagas_mec { cursos: { CODCUR: vagas } } — só ADM altera.
+// ==========================================
+const { relay } = require('../utils/edubox-relay');
+const COL_CONFIG_COM = 'contratos_config';
+const DOC_VAGAS = 'vagas_mec';
+const MARGEM_MEC = 0.10;
+const NOME_CURSO_FEED = {
+    AGRO: 'Agronegócio', AGRON: 'Agronomia', ARQUIT: 'Arquitetura e Urbanismo', BIOMED: 'Biomedicina', 'CI.CONT': 'Ciências Contábeis',
+    DIR: 'Direito', ENFER: 'Enfermagem', 'ENG.CIV': 'Engenharia Civil', FINAN: 'Gestão Financeira', FISIO: 'Fisioterapia',
+    'GEST.COM': 'Gestão Comercial', LOG: 'Logística', MED: 'Medicina', 'MED.VET.': 'Medicina Veterinária', PED: 'Pedagogia',
+    PSICO: 'Psicologia', RH: 'Recursos Humanos'
+};
+const SAIU_EDUBOX = /^(cancel|tranc|desist|transf)/i;
+const ehAdmin = (role) => role === 'adm_l1' || role === 'adm_l2';
+const hojeSP = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+const limiteDe = (vagas) => (vagas ? Math.floor(vagas * (1 + MARGEM_MEC) + 1e-9) : null);
+
+router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = String(req.query.semestre || '');
+        if (!/^\d{4}\.[12]$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre (ex.: 2027.1).' });
+        const data = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.data || '')) ? req.query.data : hojeSP();
+        // Medicina fica de fora por enquanto (pedido 11/11/2026: "depois trabalhamos eles")
+        const [fatec, vagasSnap] = await Promise.all([
+            relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semestre.replace('.', '/'))}`, { timeoutMs: 60000 }).catch(e => ({ ok: false, erro: e.message })),
+            db.collection(COL_CONFIG_COM).doc(DOC_VAGAS).get()
+        ]);
+        if (!fatec || !fatec.ok) return res.status(502).json({ error: `Edubox não respondeu: ${(fatec && fatec.erro) || 'sem resposta'}` });
+        const vagasCfg = vagasSnap.exists ? vagasSnap.data() : {};
+        const vagas = vagasCfg.cursos || {};
+
+        const cursos = new Map();
+        const porDia = {};
+        const curso = (cod) => {
+            if (!cursos.has(cod)) cursos.set(cod, { codcur: cod, nome: NOME_CURSO_FEED[cod] || cod, total: 0, hoje: 0, semana: 0, sairam: 0 });
+            return cursos.get(cod);
+        };
+        const seteDiasAtras = new Date(new Date(`${data}T12:00:00`).getTime() - 6 * 86400000).toISOString().slice(0, 10);
+        const linhas = (fatec.matriculas || []).filter(e => e.codcur !== 'MED').map(e => ({ e, sem: semestre.replace('.', '/') }));
+        for (const { e, sem } of linhas) {
+            if (e.semestre_ingresso !== sem) continue;   // só calouro (ingresso no próprio semestre)
+            const c = curso(e.codcur);
+            const dia = String(e.data_matricula || '').slice(0, 10);
+            if (SAIU_EDUBOX.test(e.situacao || '')) { c.sairam++; continue; }
+            c.total++;
+            if (dia === data) c.hoje++;
+            if (dia >= seteDiasAtras && dia <= data) c.semana++;
+            if (dia && dia <= data) porDia[dia] = (porDia[dia] || 0) + 1;
+        }
+        // cursos com vaga cadastrada aparecem mesmo sem nenhum calouro ainda
+        Object.keys(NOME_CURSO_FEED).filter(cod => cod !== 'MED').forEach(cod => curso(cod));   // todos os cursos (a tela esconde os sem calouro e sem vaga)
+
+        const lista = [...cursos.values()].map(c => {
+            const v = Number(vagas[c.codcur]) || null;
+            const limite = limiteDe(v);
+            const restam = limite === null ? null : limite - c.total;
+            const reta = limite === null ? 0 : Math.max(3, Math.ceil(limite * 0.05));
+            let situacao = 'ok';
+            if (limite === null) situacao = 'sem-vagas';
+            else if (restam <= 0) situacao = 'lotado';
+            else if (restam <= reta) situacao = 'reta';
+            else if (c.total > v) situacao = 'margem';
+            return { ...c, vagas: v, limite, restam, situacao, ocupacao: limite ? Math.round(c.total / limite * 1000) / 10 : null };
+        }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+        const dias = Object.entries(porDia).sort((a, b) => a[0].localeCompare(b[0])).slice(-14).map(([dia, n]) => ({ dia, n }));
+        res.json({
+            semestre, data, consultadoEm: new Date().toISOString(),
+            cursos: lista,
+            totais: {
+                hoje: lista.reduce((n, c) => n + c.hoje, 0), semana: lista.reduce((n, c) => n + c.semana, 0),
+                total: lista.reduce((n, c) => n + c.total, 0), sairam: lista.reduce((n, c) => n + c.sairam, 0),
+                vagas: lista.reduce((n, c) => n + (c.vagas || 0), 0), limite: lista.reduce((n, c) => n + (c.limite || 0), 0)
+            },
+            porDia: dias,
+            vagasAtualizadasEm: vagasCfg.atualizadoEm || null, vagasAtualizadasPor: vagasCfg.atualizadoPor || null,
+            podeEditarVagas: ehAdmin(req.user.role)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /vagas-mec — { cursos: { CODCUR: vagas } } (só ADM)
+router.put('/vagas-mec', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehAdmin(req.user.role)) return res.status(403).json({ error: 'Só o administrador altera as vagas do edital.' });
+        const entrada = req.body && typeof req.body.cursos === 'object' ? req.body.cursos : null;
+        if (!entrada) return res.status(400).json({ error: 'Informe as vagas por curso.' });
+        const cursos = {};
+        for (const [cod, v] of Object.entries(entrada)) {
+            if (!NOME_CURSO_FEED[cod]) continue;
+            if (v === '' || v === null) continue;
+            const n = Number(v);
+            if (!Number.isInteger(n) || n < 0 || n > 10000) return res.status(400).json({ error: `Vagas inválidas em ${NOME_CURSO_FEED[cod]}.` });
+            cursos[cod] = n;
+        }
+        const reg = { cursos, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user.name || req.user.email || '' };
+        await db.collection(COL_CONFIG_COM).doc(DOC_VAGAS).set(reg);
+        res.json({ ...reg, message: 'Vagas salvas.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // PUT /:id/localizacao { lat, lng } — "Salvar localização daqui": o GPS do celular na porta do aluno.
 router.put('/:id/localizacao', verifyToken, checkPermission, async (req, res) => {
     try {
