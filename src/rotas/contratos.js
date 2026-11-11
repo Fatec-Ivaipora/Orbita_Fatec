@@ -196,7 +196,7 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
         const seteDiasAtras = new Date(new Date(`${data}T12:00:00`).getTime() - 6 * 86400000).toISOString().slice(0, 10);
         const linhas = (fatec.matriculas || []).filter(e => e.codcur !== 'MED').map(e => ({ e, sem: semestre.replace('.', '/') }));
         for (const { e, sem } of linhas) {
-            if (e.semestre_ingresso !== sem) continue;   // só calouro (ingresso no próprio semestre)
+            if (String(e.semestre_ingresso || '').replace(/[-/]/, '.') !== semestre) continue;   // só calouro (ingresso no próprio semestre; o Edubox às vezes grava "2027-1")
             const c = curso(e.codcur);
             const dia = String(e.data_matricula || '').slice(0, 10);
             if (SAIU_EDUBOX.test(e.situacao || '')) { c.sairam++; continue; }

@@ -61,8 +61,10 @@ function grupo(s) {
     return 'outro'; // Pendência Financeira, Formando, Reprovado…: do Órbita
 }
 
+// o Edubox às vezes grava o ingresso com traço ("2027-1") mesmo na graduação (11/11/2026, Emilly — Agronomia)
+const mesmoSemestre = (a, b) => String(a || '').replace(/[-/]/, '.') === String(b || '').replace(/[-/]/, '.');
 function situacaoDoEdubox(e, semEdubox) {
-    const calouro = e.semestre_ingresso === semEdubox;
+    const calouro = mesmoSemestre(e.semestre_ingresso, semEdubox);
     const s = (e.situacao || '').toLowerCase();
     if (s.startsWith('cancel')) {
         if (/transf.*curso/i.test(e.motivo || '')) return 'Mudança de Curso';
@@ -151,6 +153,20 @@ async function comparar({ modulo, semestre }) {
             // aluno que JÁ tem matrícula no Órbita no semestre (em outro curso, já ligada): criar duplicaria a
             // contagem e o contrato do Comercial — só avisa pra conferir/cancelar a matrícula sobrando no Edubox
             const jaTem = docs.find(x => usados.has(x.id) && norm(x.d.nome) === norm(e.nome));
+            // troca de curso de verdade (11/11/2026): a matrícula do Órbita aponta pra uma matrícula do Edubox que
+            // foi cancelada/trancada ou nem existe mais, e esta (outro curso) está ativa → o Órbita acompanha o
+            // Edubox: pendência de CURSO com botão Aplicar (muda o mesmo cadastro), não "conferir" à mão.
+            const daAntiga = jaTem && jaTem.d.eduboxCodmat ? doEdubox.find(x => String(x.codmat) === String(jaTem.d.eduboxCodmat)) : null;
+            const antigaSaiu = jaTem && (!daAntiga || ehSaida(situacaoDoEdubox(daAntiga, semEdubox) || ''));
+            if (jaTem && antigaSaiu && !ehSaida(sitEdubox) && (jaTem.d.cursoId !== curso.id)) {
+                const mudaSit = ehSaida(jaTem.d.situacao || '') || grupo(jaTem.d.situacao || '') !== grupo(sitEdubox);
+                propostas.push({
+                    ...base, chave: `curso_${jaTem.id}`, tipo: 'curso', alunoId: jaTem.id, de: jaTem.d.curso, para: curso.nome,
+                    cursoIdPara: curso.id, periodoPara: base.periodo, curso: jaTem.d.curso, ...(mudaSit ? { situacaoPara: sitEdubox } : {}),
+                    descricao: `Trocou de curso no Edubox: ${jaTem.d.curso} ${jaTem.d.periodo || ''} (${jaTem.d.situacao}) → ${curso.nome} ${base.periodo}${mudaSit ? ` (${sitEdubox})` : ''}`
+                });
+                continue;
+            }
             if (jaTem) {
                 propostas.push({ ...base, chave: `conf_${e.codmat}`, tipo: 'conferir', alunoId: jaTem.id,
                     descricao: `Já está no Órbita em ${jaTem.d.curso} ${jaTem.d.periodo || ''} (${jaTem.d.situacao}); o Edubox ainda tem também ${curso.nome} ${base.periodo} (${e.situacao}) — provável troca de curso: confira e cancele a matrícula que sobrou no Edubox` });
@@ -301,9 +317,10 @@ async function resolverPendencia({ id, acao, quem, normalizarPeriodo, normalizar
             if (p.tipo === 'curso') {
                 upd.cursoId = p.cursoIdPara; upd.curso = p.para; upd.eduboxCodmat = p.codmat;
                 if (p.periodoPara) upd.periodo = normalizarPeriodo(p.periodoPara);
+                if (p.situacaoPara) upd.situacao = normalizarDesistente(p.situacaoPara, upd.periodo || a.data().periodo);
             }
             await aRef.update(upd);
-            try { await sincronizarDaMatricula(p.alunoId, { ...a.data(), ...upd }, quem, p.tipo === 'situacao'); } catch (err) { console.error('[matriculas-edubox] contrato:', err.message); }
+            try { await sincronizarDaMatricula(p.alunoId, { ...a.data(), ...upd }, quem, p.tipo === 'situacao' || !!upd.situacao); } catch (err) { console.error('[matriculas-edubox] contrato:', err.message); }
         }
     }
     await ref.update({ status: acao === 'aplicar' ? 'aplicada' : 'ignorada', resolvidaPor: quem, resolvidaEm: agora, alunoId });
