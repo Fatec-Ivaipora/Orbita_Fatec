@@ -526,6 +526,9 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
         // Só faz sentido em semestre com Virada (sem origemAlunoId não dá pra separar).
         const SITS_ATIVAS_NAO_CALOURO = [...VETERANOS_SITS, 'Pendência Financeira'];
         let novasAcimaAtivas = 0;
+        // "Matrícula Nova" que já entra acima do 1º período (transferência/retorno direto no 7º, 9º…):
+        // não é calouro — conta junto das matrículas novas acima do 1º (11/11/2026).
+        let calourosForaDo1 = 0;
         // Marcação independente de "formando" (campo `formando`, não a
         // situação) — conta certo mesmo que a situação real seja Rematrícula
         // Assinada/Pendência/Não Assinou (01/10).
@@ -538,6 +541,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             total++;
             if (a.origemAlunoId) vindosDeVirada++;
             else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao)) novasAcimaAtivas++;
+            if (a.periodo && a.periodo !== '1º' && CALOUROS_SITS.includes(a.situacao)) calourosForaDo1++;
             if (a.formando) formandos++;
             const curso = a.curso || '—';
             if (a.revisarManualmente) pendentesRevisao++;
@@ -572,6 +576,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             desistenteCalouroPorCurso,
             vindosDeVirada,
             novasAcimaAtivas,
+            calourosForaDo1,
             formandos,
             situacoes: SITUACOES_RELATORIO,
             planosConfissao: PLANOS_CONFISSAO

@@ -1271,8 +1271,13 @@ function montarDetalhe(chave, ps, linha) {
   } else if (chave === 'quantidadeMatriculas') {
     const c = contaQtdMatriculas || { novasAcima: 0, comVirada: false };
     grupo('Calouros ativos', CALOUROS_SITS, 'verde', 'Subtotal calouros ativos');
+    if (c.foraDo1) {
+      itens.push({ nome: '− "Matrícula Nova" que entrou acima do 1º período (vai pro grupo de baixo)', qtd: -c.foraDo1, tipo: 'verde' });
+      itens.push({ nome: 'Calouros ativos do 1º período', qtd: c.calourosAtivos, tipo: 'verde', subtotal: true });
+    }
     itens.push({ secao: 'Matrículas novas acima do 1º período (ativas)', tipo: 'header-verde' });
-    itens.push({ nome: c.comVirada ? 'Não vieram pela Virada, período 2º ou mais, situação ativa' : 'Semestre sem Virada — não dá para separar', qtd: c.novasAcima, tipo: 'verde' });
+    if (c.foraDo1) itens.push({ nome: '"Matrícula Nova" (transferência/retorno) no 2º período ou mais', qtd: c.foraDo1, tipo: 'verde' });
+    itens.push({ nome: c.comVirada ? 'Não vieram pela Virada, período 2º ou mais, situação ativa' : 'Semestre sem Virada — não dá para separar', qtd: c.novasAcima - (c.foraDo1 || 0), tipo: 'verde' });
     itens.push({ nome: 'Subtotal matrículas novas acima do 1º', qtd: c.novasAcima, tipo: 'verde', subtotal: true });
     // o que NÃO entra, só para conferência
     const fora = [['Cancelou (calouro)', linha.cancelouCalouro || 0], ['1ª Evasão', ps['1ª Evasão'] || 0], ['2ª Evasão', ps['2ª Evasão'] || 0], ['Desistente (calouro)', linha.desistenteCalouro || 0], ['Trancou (calouro)', linha.trancouCalouro || 0]].filter(([, q]) => q > 0);
@@ -1455,13 +1460,15 @@ function renderRelatorio(dados) {
     // Quantidade de matrículas: só quem está ATIVO no semestre (09/10/2026) — calouros ativos +
     // matrículas novas acima do 1º período que não são calouros. Cancelado, trancado,
     // transferência e evasão não entram.
-    const calourosAtivos = somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS);
-    const novasAcima = comVirada ? (dados.novasAcimaAtivas || 0) : 0;
+    // "Matrícula Nova" acima do 1º período não é calouro: vai pras matrículas novas acima do 1º (11/11/2026)
+    const foraDo1 = dados.calourosForaDo1 || 0;
+    const calourosAtivos = somaSituacoes(porSituacaoTotal, ...CALOUROS_SITS) - foraDo1;
+    const novasAcima = (comVirada ? (dados.novasAcimaAtivas || 0) : 0) + foraDo1;
     document.getElementById('kpi-matricula-direta').textContent = calourosAtivos + novasAcima;
-    contaQtdMatriculas = { calourosAtivos, novasAcima, comVirada, total: calourosAtivos + novasAcima };
+    contaQtdMatriculas = { calourosAtivos, novasAcima, foraDo1, comVirada, total: calourosAtivos + novasAcima };
     const dicaMat = cardMatricula.querySelector('.kpi-hint');
     if (dicaMat) dicaMat.textContent = comVirada
-      ? `${calourosAtivos} calouros ativos + ${novasAcima} ${novasAcima === 1 ? 'matrícula nova' : 'matrículas novas'} acima do 1º período (ativas). Cancelados, trancados e transferências não entram.`
+      ? `${calourosAtivos} calouros ativos (1º período) + ${novasAcima} ${novasAcima === 1 ? 'matrícula nova' : 'matrículas novas'} em outros períodos (ativas). Cancelados, trancados e transferências não entram.`
       : `${calourosAtivos} calouros ativos. Semestre sem Virada: não dá para separar matrícula nova acima do 1º período. Cancelados, trancados e transferências não entram.`;
     const dicaVindos = cardVindos.querySelector('.kpi-hint');
     if (dicaVindos) dicaVindos.textContent = comVirada ? 'Copiados pela Virada de Semestre' : 'Estimado: total de alunos − calouros captados (semestre sem Virada)';
