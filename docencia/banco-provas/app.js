@@ -1910,7 +1910,8 @@ function renderLinks() {
       ? '<button type="button" class="btn-secondary bp-link-acao" data-acao="reativar">Reativar</button>'
       : `<button type="button" class="btn-secondary bp-link-acao" data-acao="copiar">Copiar link</button>
          <a class="btn-secondary bp-link-acao" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(mensagemWhatsapp(l))}">WhatsApp</a>
-         <button type="button" class="btn-secondary bp-link-acao" data-acao="desativar">Desativar</button>`}</td>
+         <button type="button" class="btn-secondary bp-link-acao" data-acao="desativar">Desativar</button>`}
+      <button type="button" class="btn-secondary bp-link-acao bp-link-excluir" data-acao="excluir" title="Exclui o link. As questões que o professor já enviou continuam no banco.">Excluir</button></td>
   </tr>`).join('');
 }
 
@@ -1956,6 +1957,18 @@ document.getElementById('bp-links-tbody').addEventListener('click', async (e) =>
   const id = b.closest('tr').dataset.link;
   const l = linksDoCurso.find(x => x.id === id);
   if (b.dataset.acao === 'copiar') { if (await copiar(urlDoLink(id))) showToast('Link copiado.'); return; }
+  if (b.dataset.acao === 'excluir') {
+    // 2 cliques: o 1º só pede confirmação (sem caixa de diálogo do navegador)
+    if (!b.dataset.confirma) { b.dataset.confirma = '1'; b.textContent = 'Confirmar exclusão'; setTimeout(() => { if (b.isConnected) { delete b.dataset.confirma; b.textContent = 'Excluir'; } }, 5000); return; }
+    b.disabled = true;
+    try {
+      await apiFetch(`/banco-provas/links/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      linksDoCurso = linksDoCurso.filter(x => x.id !== id);
+      renderLinks();
+      showToast(l && l.questoesEnviadas ? 'Link excluído. As questões que o professor já enviou continuam no banco.' : 'Link excluído.');
+    } catch (err) { showToast(err.message, 'error'); b.disabled = false; }
+    return;
+  }
   b.disabled = true;
   try {
     const novo = await apiFetch(`/banco-provas/links/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ativo: b.dataset.acao === 'reativar' }) });

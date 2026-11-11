@@ -177,7 +177,7 @@ e) Túbulo contorcido proximal
         <ol class="eq-q-alts" role="radiogroup" aria-label="Resposta certa da questão ${q.numero}">
           ${q.alternativas.map((a, j) => `<li><button type="button" class="eq-bolha ${marcada === LETRAS[j] ? 'on' : ''}" data-q="${i}" data-marcar="${LETRAS[j]}" role="radio" aria-checked="${marcada === LETRAS[j]}" aria-label="Marcar ${LETRAS[j]} como certa">${LETRAS[j]}</button><span>${esc(a)}</span></li>`).join('')}
         </ol>
-        ${(q.avisoAlternativas || []).length ? `<p class="eq-q-dica">A ordem das letras no seu texto não bate com a posição. Confira as alternativas.</p>` : ''}
+        ${(q.avisoAlternativas || []).length ? `<p class="eq-q-dica">${esc(q.avisoAlternativas.join(' '))}</p>` : ''}
       </article>`;
     }).join('');
     atualizarRodape();

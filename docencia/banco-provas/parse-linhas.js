@@ -104,7 +104,10 @@ function marcadorPorNumeroSolto(linha, proximoEsperado) {
     // Também "1 - Texto", "2- Texto" e "3 – Texto" (traço ou travessão, o
     // jeito como vários professores numeram — 16/10/2026). Depois do
     // marcador pode vir aspas ou parêntese ("1 - (ENEM) ...").
-    const m = /^(\d{1,3})\s*(?:[\.\)\-–—]\s*|\s+)(?=[A-Za-zÀ-ÿ"“(])/.exec(linha);
+    // Também dois-pontos ("2: Texto") e uma pontuação sobrando depois do número ("02. : (IBGE)...",
+    // "3) - Texto") — 11/11/2026: no simulado de Conhecimentos Gerais da Fisio a "02. :" não era lida e as
+    // questões 2 a 5 iam todas pra dentro da 1.
+    const m = /^(\d{1,3})\s*(?:[\.\)\-–—:]\s*(?:[:;\-–—]\s*)?|\s+)(?=[A-Za-zÀ-ÿ"“(])/.exec(linha);
     if (!m) return null;
     const numero = parseInt(m[1], 10);
     return numero === proximoEsperado ? numero : null;
@@ -113,7 +116,7 @@ function marcadorPorNumeroSolto(linha, proximoEsperado) {
 function limparInicioBloco(linhas) {
     let semNumero = linhas[0]
         .replace(/^Quest(ã|a)o\s*0*\d+\s*[:\-]?\s*/i, '')
-        .replace(/^\d{1,3}\s*(?:[\.\)\-–—]\s*|\s+)/, '')
+        .replace(/^\d{1,3}\s*(?:[\.\)\-–—:]\s*(?:[:;\-–—]\s*)?|\s+)/, '')
         .trim();
     // Sobra de digitação colada no número ("Questão 08l") não vira começo do enunciado.
     if (semNumero.length <= 1) semNumero = '';
@@ -176,8 +179,27 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
             });
             return;
         }
-        const alternativasBrutas = linhas.slice(linhas.length - alternativasPorQuestao);
-        const enunciadoLinhas = linhas.slice(0, linhas.length - alternativasPorQuestao);
+        // Linha solta DEPOIS da última alternativa ("Fundamentação temática:", fonte, comentário — simulado da
+        // Fisio, 11/11/2026): se as alternativas estão escritas com letra, em ordem (A, B, C, D[, E]), elas são
+        // essas linhas; o que sobra depois da última fica de fora, com aviso. Sem isso a linha solta virava a
+        // última alternativa e a A ia parar no enunciado.
+        let fim = linhas.length;
+        const sobra = [];
+        const ultimaLetra = LETRAS_ALTERNATIVA[alternativasPorQuestao - 1];
+        for (let k = linhas.length - 2; k >= alternativasPorQuestao; k--) {
+            if (extrairLetraImpressa(linhas[k]) !== ultimaLetra) continue;
+            const emOrdem = LETRAS_ALTERNATIVA.slice(0, alternativasPorQuestao)
+                .every((letra, j) => extrairLetraImpressa(linhas[k - alternativasPorQuestao + 1 + j]) === letra);
+            // a sobra não pode ter cara de alternativa ("E) ..." numa prova marcada como 4 alternativas
+            // continua caindo no aviso de letra trocada, em vez de sumir)
+            if (emOrdem && !linhas.slice(k + 1).some(l => extrairLetraImpressa(l))) {
+                fim = k + 1;
+                sobra.push(...linhas.slice(k + 1));
+            }
+            break;
+        }
+        const alternativasBrutas = linhas.slice(fim - alternativasPorQuestao, fim);
+        const enunciadoLinhas = linhas.slice(0, fim - alternativasPorQuestao);
 
         // Confere a letra atribuída por POSIÇÃO contra a letra que estava
         // de fato escrita na linha (se tinha alguma) — pedido explícito
@@ -191,6 +213,7 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
                 avisoAlternativas.push(`A alternativa ${letraPosicao} (pela ordem) estava escrita como "${letraImpressa})" no arquivo original — confira antes de marcar o gabarito.`);
             }
         });
+        if (sobra.length) avisoAlternativas.push(`Texto depois da alternativa ${ultimaLetra} ficou de fora: "${sobra.join(' ').slice(0, 120)}".`);
 
         questoes.push({
             numero: blocoAtual.numero,

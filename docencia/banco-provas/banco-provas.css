@@ -446,3 +446,6 @@ body.orb-v2 .modal-actions { border-top: 1px solid var(--orb-linha2, #EEF2F7); p
 .bp-link-acoes .bp-link-acao { padding: 0.35rem 0.7rem; font-size: 0.8rem; margin: 2px 2px 2px 0; }
 .bp-revisao-link { color: #0f7a4b; font-weight: 600; }
 .bp-link-acoes { text-align: right; }
+body .bp-link-acoes .btn-secondary.bp-link-excluir { color: #c8392f; border-color: #f3c4bd; }
+body .bp-link-acoes .btn-secondary.bp-link-excluir:hover { background: #fbe9e6; border-color: #c8392f; }
+body .bp-link-acoes .btn-secondary.bp-link-excluir[data-confirma] { background: #c8392f; color: #fff; border-color: #c8392f; }
