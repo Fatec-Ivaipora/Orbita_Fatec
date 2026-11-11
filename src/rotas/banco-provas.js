@@ -1082,6 +1082,24 @@ router.put('/links/:id', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// DELETE /links/:id — exclui o link (11/11/2026). As questões já enviadas por ele continuam (na revisão ou no
+// banco); o link some e para de funcionar na hora.
+router.delete('/links/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_LINKS).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Link não encontrado.' });
+        const erroAcesso = await checarAcessoCurso(req, snap.data().curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const erroDono = erroDeDono(req, snap.data());
+        if (erroDono) return res.status(403).json({ error: erroDono });
+        await ref.delete();
+        res.json({ message: 'Link excluído.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- professor (público, sem login: o token do link é a autorização) ---
 router.get('/publico/link/:token', async (req, res) => {
     try {
