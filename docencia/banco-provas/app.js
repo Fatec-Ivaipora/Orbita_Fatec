@@ -1297,7 +1297,8 @@ async function editarQuestaoNoPreview(bloco, id) {
       tipo: q.tipo, dificuldade: q.dificuldade || 'media', enunciadoHtml: enunciado, valor: q.valor ?? '', professorNome: q.professorNome || ''
     };
     if (q.tipo === 'objetiva') {
-      payload.alternativas = [...bloco.querySelectorAll('.bp-prev-ed-alt-txt')].map(inp => ({ texto: inp.value.trim() }));
+      // a letra vai junto (11/11/2026): sem ela a prova impressa saía "undefined)" no lugar de "A)"
+      payload.alternativas = [...bloco.querySelectorAll('.bp-prev-ed-alt-txt')].map((inp, i) => ({ letra: LETRAS[i], texto: inp.value.trim() }));
       if (payload.alternativas.some(a => !a.texto)) { showToast('Preencha o texto de todas as alternativas.', 'error'); return; }
       const marcada = bloco.querySelector(`input[name="ed-correta-${CSS.escape(id)}"]:checked`);
       if (!marcada) { showToast('Marque qual alternativa é a correta.', 'error'); return; }
