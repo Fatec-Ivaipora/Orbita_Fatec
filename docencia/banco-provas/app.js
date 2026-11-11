@@ -628,7 +628,7 @@ function renderRevisao() {
         <div class="bp-revisao-card-topo">
           <div>
             <div class="bp-revisao-card-titulo">${esc(g.categoriaSugeridaTexto || '(sem seção detectada)')}</div>
-            <div class="bp-revisao-card-qtd">${g.itens.length} questão(ões)${nota}</div>
+            <div class="bp-revisao-card-qtd">${g.itens.length} questão(ões)${nota}${g.itens[0].origem === 'link-professor' ? ` · <span class="bp-revisao-link">enviado por ${esc(g.itens[0].professorNome || 'professor')} pelo link</span>` : ''}</div>
           </div>
           <div class="bp-revisao-card-acoes">
             <select class="select-filter bp-revisao-select-disciplina">${opcoes}</select>
@@ -1737,7 +1737,9 @@ async function salvarProva() {
 function bindEventos() {
   document.getElementById('bp-curso-select').addEventListener('change', async (e) => {
     cursoAtivo = e.target.value;
+    linksDoCurso = null;
     await carregarTudoDoCurso();
+    if (abaLinksAberta) abrirAbaLinks();
   });
 
   // ":not(.prova-tipo-btn)" — os botões Simulado/Bimestral/Exame do modal
@@ -1752,6 +1754,9 @@ function bindEventos() {
       document.getElementById('bp-view-questoes').classList.toggle('hidden', tab !== 'questoes');
       document.getElementById('bp-view-revisao').classList.toggle('hidden', tab !== 'revisao');
       document.getElementById('bp-view-provas').classList.toggle('hidden', tab !== 'provas');
+      document.getElementById('bp-view-links').classList.toggle('hidden', tab !== 'links');
+      abaLinksAberta = tab === 'links';
+      if (abaLinksAberta) abrirAbaLinks();
     });
   });
 
@@ -1845,3 +1850,117 @@ async function avisoGeral() {
 }
 document.getElementById('questao-disciplina').addEventListener('change', avisoGeral);
 document.getElementById('questao-semestre').addEventListener('change', avisoGeral);
+
+
+// ==========================================
+// LINKS DOS PROFESSORES (10/11/2026) — o coordenador gera o link por disciplina e manda pelo WhatsApp;
+// o professor envia as questões sem login (página /enviar-questoes/). Lê os links só ao abrir a aba.
+// ==========================================
+let abaLinksAberta = false;
+let linksDoCurso = null;
+const ROT_CHAMADA = { 1: '1ª chamada', 2: '2ª chamada', exame: 'Exame' };
+const urlDoLink = (id) => `${location.origin}/enviar-questoes/?t=${encodeURIComponent(id)}`;
+const dataBR = (iso) => { const [a, m, d] = String(iso || '').slice(0, 10).split('-'); return d ? `${d}/${m}/${a}` : ''; };
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const descProva = (l) => l.chamada === 'exame' ? 'Exame' : `${l.bimestre}º bim. · ${ROT_CHAMADA[l.chamada] || ''}`;
+
+function mensagemWhatsapp(l) {
+  return `Olá${l.professorNome ? `, prof. ${l.professorNome.split(' ')[0]}` : ''}! Para montarmos a prova de *${l.disciplinaNome}* (${descProva(l)}, ${String(l.semestre).replace('.', '/')}), envie as suas questões por este link até *${dataBR(l.prazo)}*:\n${urlDoLink(l.id)}\n\nÉ só colar as questões (ou abrir o Word), marcar a resposta certa e enviar. Não precisa de login.`;
+}
+
+async function abrirAbaLinks() {
+  const sel = document.getElementById('bp-link-disciplina');
+  sel.innerHTML = disciplinas.length
+    ? '<option value="">Escolha a disciplina</option>' + disciplinas.map(d => `<option value="${d.id}">${ordinal(d.periodo)} · ${esc(d.nome)}</option>`).join('')
+    : '<option value="">Cadastre as disciplinas do curso primeiro</option>';
+  const profs = [...new Set(questoes.map(q => q.professorNome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  document.getElementById('bp-link-professores').innerHTML = profs.map(p => `<option value="${esc(p)}">`).join('');
+  const sem = document.getElementById('bp-link-semestre');
+  if (!sem.value) { const h = new Date(); sem.value = `${h.getFullYear()}.${h.getMonth() < 6 ? 1 : 2}`; }
+  const prazo = document.getElementById('bp-link-prazo');
+  prazo.min = isoLocal(new Date());
+  if (!prazo.value) { const d = new Date(); d.setDate(d.getDate() + 7); prazo.value = isoLocal(d); }
+  if (linksDoCurso) return renderLinks();
+  document.getElementById('bp-links-tbody').innerHTML = '<tr><td colspan="6" class="tabela-msg">Carregando...</td></tr>';
+  try {
+    linksDoCurso = await apiFetch(`/banco-provas/links?curso=${encodeURIComponent(cursoAtivo)}`);
+    renderLinks();
+  } catch (err) {
+    document.getElementById('bp-links-tbody').innerHTML = `<tr><td colspan="6" class="tabela-msg">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function situacaoHtml(l) {
+  if (l.situacao === 'desativado') return '<span class="bp-link-sit off">Desativado</span>';
+  if (l.questoesEnviadas) return `<span class="bp-link-sit ok">Enviou ${l.questoesEnviadas} ${l.questoesEnviadas === 1 ? 'questão' : 'questões'}</span><small>${dataBR(l.ultimoEnvioEm)}</small>`;
+  if (l.situacao === 'vencido') return '<span class="bp-link-sit atraso">Prazo vencido sem envio</span>';
+  return '<span class="bp-link-sit espera">Aguardando</span>';
+}
+
+function renderLinks() {
+  const tb = document.getElementById('bp-links-tbody');
+  if (!linksDoCurso.length) { tb.innerHTML = '<tr><td colspan="6" class="tabela-msg">Nenhum link gerado ainda neste curso.</td></tr>'; return; }
+  tb.innerHTML = linksDoCurso.map(l => `<tr data-link="${esc(l.id)}">
+    <td><b>${esc(l.disciplinaNome)}</b>${l.periodo ? `<small class="bp-link-sub">${ordinal(l.periodo)} período</small>` : ''}</td>
+    <td>${esc(l.professorNomeEnvio || l.professorNome || '—')}</td>
+    <td>${esc(descProva(l))}<small class="bp-link-sub">${esc(String(l.semestre).replace('.', '/'))}</small></td>
+    <td>${dataBR(l.prazo)}</td>
+    <td class="bp-link-sit-cel">${situacaoHtml(l)}</td>
+    <td class="bp-link-acoes">${l.situacao === 'desativado'
+      ? '<button type="button" class="btn-secondary bp-link-acao" data-acao="reativar">Reativar</button>'
+      : `<button type="button" class="btn-secondary bp-link-acao" data-acao="copiar">Copiar link</button>
+         <a class="btn-secondary bp-link-acao" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(mensagemWhatsapp(l))}">WhatsApp</a>
+         <button type="button" class="btn-secondary bp-link-acao" data-acao="desativar">Desativar</button>`}</td>
+  </tr>`).join('');
+}
+
+async function copiar(texto) {
+  try { await navigator.clipboard.writeText(texto); return true; }
+  catch (e) { const t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok; }
+}
+
+document.getElementById('bp-link-chamada').addEventListener('change', (e) => {
+  document.getElementById('bp-link-bimestre-wrap').classList.toggle('hidden', e.target.value === 'exame');
+});
+
+document.getElementById('bp-link-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('bp-link-gerar');
+  btn.disabled = true;
+  try {
+    const l = await apiFetch('/banco-provas/links', { method: 'POST', body: JSON.stringify({
+      curso: cursoAtivo,
+      disciplinaId: document.getElementById('bp-link-disciplina').value,
+      professorNome: document.getElementById('bp-link-professor').value.trim(),
+      semestre: document.getElementById('bp-link-semestre').value.trim(),
+      chamada: document.getElementById('bp-link-chamada').value,
+      bimestre: document.getElementById('bp-link-bimestre').value,
+      prazo: document.getElementById('bp-link-prazo').value
+    }) });
+    linksDoCurso = [l, ...(linksDoCurso || [])];
+    renderLinks();
+    const box = document.getElementById('bp-link-novo');
+    box.innerHTML = `<div><b>Link criado para ${esc(l.disciplinaNome)}.</b> Mande para ${l.professorNome ? esc(l.professorNome) : 'o professor'}:</div>
+      <div class="bp-link-novo-url"><input type="text" readonly value="${esc(urlDoLink(l.id))}" aria-label="Link do professor"><button type="button" class="btn-primary" id="bp-link-novo-copiar">Copiar</button><a class="btn-secondary" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(mensagemWhatsapp(l))}">Mandar no WhatsApp</a></div>`;
+    box.classList.remove('hidden');
+    document.getElementById('bp-link-novo-copiar').addEventListener('click', async () => { if (await copiar(urlDoLink(l.id))) showToast('Link copiado.'); });
+    document.getElementById('bp-link-professor').value = '';
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally { btn.disabled = false; }
+});
+
+document.getElementById('bp-links-tbody').addEventListener('click', async (e) => {
+  const b = e.target.closest('button.bp-link-acao');
+  if (!b) return;
+  const id = b.closest('tr').dataset.link;
+  const l = linksDoCurso.find(x => x.id === id);
+  if (b.dataset.acao === 'copiar') { if (await copiar(urlDoLink(id))) showToast('Link copiado.'); return; }
+  b.disabled = true;
+  try {
+    const novo = await apiFetch(`/banco-provas/links/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ativo: b.dataset.acao === 'reativar' }) });
+    Object.assign(l, novo);
+    renderLinks();
+    showToast(b.dataset.acao === 'reativar' ? 'Link reativado.' : 'Link desativado: o professor não consegue mais enviar por ele.');
+  } catch (err) { showToast(err.message, 'error'); b.disabled = false; }
+});

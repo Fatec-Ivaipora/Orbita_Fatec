@@ -6,7 +6,7 @@
     <title>Banco de Provas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=18">
+    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=19">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -38,6 +38,7 @@
                         <button class="bp-tab-btn" data-tab="questoes">Banco de Questões</button>
                         <button class="bp-tab-btn" data-tab="revisao">Revisão de Importação <span id="bp-revisao-badge" class="bp-badge bp-badge-dissertativa hidden" style="margin-left:0.3rem;">0</span></button>
                         <button class="bp-tab-btn" data-tab="provas">Provas</button>
+                        <button class="bp-tab-btn" data-tab="links">Links dos professores</button>
                     </div>
 
                     <!-- ============ VIEW: DISCIPLINAS ============ -->
@@ -123,6 +124,30 @@
                         </div>
                         <div id="bp-revisao-lista"></div>
                         <p id="bp-revisao-vazio" class="tabela-msg hidden">Nada pendente de revisão no momento.</p>
+                    </section>
+
+                    <!-- ============ VIEW: LINKS DOS PROFESSORES (10/11/2026) ============ -->
+                    <section id="bp-view-links" class="bp-view hidden">
+                        <p class="form-hint" style="margin-bottom:1rem;">Gere um link por disciplina e mande pro professor. Ele abre sem login, cola as questões (ou manda o Word), marca o gabarito e envia. As questões chegam na <b>Revisão de Importação</b> já com a disciplina, o bimestre e o semestre.</p>
+                        <form id="bp-link-form" class="card bp-link-form">
+                            <label>Disciplina<select class="select-filter" id="bp-link-disciplina" required></select></label>
+                            <label>Professor<input type="text" class="select-filter" id="bp-link-professor" maxlength="120" placeholder="Nome do professor" list="bp-link-professores"></label>
+                            <datalist id="bp-link-professores"></datalist>
+                            <label>Semestre<input type="text" class="select-filter" id="bp-link-semestre" placeholder="2026.2" pattern="\d{4}\.[12]" required></label>
+                            <label>Chamada<select class="select-filter" id="bp-link-chamada"><option value="1">1ª chamada</option><option value="2">2ª chamada</option><option value="exame">Exame</option></select></label>
+                            <label id="bp-link-bimestre-wrap">Bimestre<select class="select-filter" id="bp-link-bimestre"><option value="1">1º bimestre</option><option value="2">2º bimestre</option></select></label>
+                            <label>Prazo<input type="date" class="select-filter" id="bp-link-prazo" required></label>
+                            <button type="submit" class="btn-primary" id="bp-link-gerar">Gerar link</button>
+                        </form>
+                        <div id="bp-link-novo" class="bp-link-novo hidden" role="status"></div>
+                        <div class="card" style="margin-top:1rem;">
+                            <div class="tabela-wrap">
+                                <table class="data-table bp-links-tabela">
+                                    <thead><tr><th>Disciplina</th><th>Professor</th><th>Prova</th><th>Prazo</th><th>Situação</th><th>Ações</th></tr></thead>
+                                    <tbody id="bp-links-tbody"><tr><td colspan="6" class="tabela-msg">Abra esta aba para carregar.</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </section>
 
                     <!-- ============ VIEW: PROVAS ============ -->
@@ -484,6 +509,6 @@
 
     <!-- JSZip: tira as fontes embutidas do .docx antes de enviar (mesma versão do CPA) -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script type="module" src="/docencia/banco-provas/app.js?v=28"></script>
+    <script type="module" src="/docencia/banco-provas/app.js?v=29"></script>
 </body>
 </html>

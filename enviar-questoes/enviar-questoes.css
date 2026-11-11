@@ -1,0 +1,154 @@
+/* Página do professor — enviar questões pelo link (10/11/2026).
+   Marca do Órbita (azul-marinho, órbita com planeta laranja) + logo da Fatec IVP.
+   O que dá personalidade é a prévia em forma de folha de prova: a resposta certa
+   se marca preenchendo a bolinha, igual ao cartão-resposta da Correção de Provas. */
+:root {
+  --marca: #12294d;
+  --marca-2: #1b3866;
+  --fatec: #0f4eb8;
+  --plano: #eef1f6;
+  --papel: #ffffff;
+  --linha: #e3e8f0;
+  --linha-2: #eef2f7;
+  --tinta: #0d1b33;
+  --tinta-2: #44536b;
+  --mudo: #5b6a80;
+  --laranja: #eb7025;
+  --bom: #0f7a4b; --bom-suave: #e2f2ea;
+  --alerta: #a8650b; --alerta-suave: #fdf0dd;
+  --crit: #c8392f; --crit-suave: #fbe9e6;
+  --display: "Archivo", system-ui, sans-serif;
+  --texto: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--plano); color: var(--tinta); font: 15px/1.55 var(--texto); -webkit-font-smoothing: antialiased; min-height: 100vh; display: flex; flex-direction: column; }
+code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.86em; background: var(--linha-2); border-radius: 4px; padding: 0 4px; color: var(--marca); }
+:focus-visible { outline: 2px solid var(--fatec); outline-offset: 2px; border-radius: 6px; }
+.eq-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------- topo: as duas marcas ---------- */
+.eq-topo { background: var(--papel); border-bottom: 1px solid var(--linha); display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px clamp(16px, 4vw, 40px); }
+.eq-marca { display: flex; align-items: center; gap: 10px; }
+.eq-orbita { position: relative; width: 34px; height: 34px; border: 2px solid var(--linha); border-radius: 50%; display: grid; place-items: center; flex: none; }
+.eq-orbita-f { font: 800 1rem/1 "Outfit", sans-serif; color: var(--fatec); }
+.eq-orbita-planeta { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--laranja); top: -4px; left: 50%; margin-left: -4px; transform-origin: 4px 21px; animation: eq-orbitar 6s linear infinite; }
+@keyframes eq-orbitar { to { transform: rotate(360deg); } }
+.eq-marca-nome { font: 800 1.35rem/1 "Outfit", sans-serif; letter-spacing: -0.04em; }
+.eq-marca-orbita { color: #031426; }
+.eq-marca-fatec { color: var(--fatec); }
+.eq-logo-fatec { height: 30px; width: auto; display: block; }
+
+.eq-main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 22px clamp(16px, 4vw, 40px) 120px; }
+.eq-rodape { text-align: center; color: var(--mudo); font-size: 0.8rem; padding: 18px 16px 96px; }
+
+/* ---------- o pedido: disciplina + prazo ---------- */
+.eq-pedido { background: var(--marca); color: #fff; border-radius: 14px; padding: 22px clamp(18px, 3vw, 30px); display: flex; justify-content: space-between; align-items: flex-end; gap: 18px 28px; flex-wrap: wrap; }
+.eq-pedido-para { margin: 0 0 4px; color: #c9d4e6; font-size: 0.95rem; }
+.eq-disciplina { font: 800 clamp(1.6rem, 3.6vw, 2.35rem)/1.1 var(--display); letter-spacing: -0.02em; margin: 0; text-wrap: balance; max-width: 28ch; }
+.eq-meta { margin: 10px 0 0; color: #dbe3f0; font-size: 0.92rem; }
+.eq-meta span { color: #7f93b5; }
+.eq-prazo { border-left: 3px solid var(--laranja); padding: 2px 0 2px 14px; display: flex; flex-direction: column; min-width: 130px; }
+.eq-prazo-rot { color: #c9d4e6; font-size: 0.8rem; }
+.eq-prazo b { font: 800 1.5rem/1.15 var(--display); font-variant-numeric: tabular-nums; }
+.eq-prazo span:last-child { color: #dbe3f0; font-size: 0.85rem; }
+.eq-prazo.urgente span:last-child { color: #ffd2b5; font-weight: 600; }
+.eq-ja-enviou { margin: 12px 2px 0; color: var(--bom); background: var(--bom-suave); border-radius: 10px; padding: 8px 14px; font-size: 0.9rem; }
+
+/* ---------- passos ---------- */
+.eq-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 22px; margin-top: 22px; align-items: start; }
+.eq-col { background: var(--papel); border: 1px solid var(--linha); border-radius: 14px; padding: 18px 20px 20px; min-width: 0; }
+.eq-col-texto { position: sticky; top: 14px; }
+.eq-passo-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.eq-col h2 { font: 700 1.08rem/1.3 var(--display); margin: 0; display: flex; align-items: center; gap: 10px; color: var(--marca); }
+.eq-n { width: 26px; height: 26px; border-radius: 50%; background: var(--marca); color: #fff; display: inline-grid; place-items: center; font: 700 0.85rem/1 var(--display); flex: none; }
+.eq-ajuda { color: var(--tinta-2); font-size: 0.88rem; margin: 6px 0 12px; }
+
+.eq-arquivo { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linha); border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; color: var(--marca); cursor: pointer; background: var(--papel); }
+.eq-arquivo:hover { border-color: var(--fatec); color: var(--fatec); }
+.eq-arquivo:focus-within { outline: 2px solid var(--fatec); outline-offset: 2px; }
+.eq-arquivo input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.eq-alts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.86rem; color: var(--tinta-2); }
+.eq-alts > span { margin-right: 4px; }
+.eq-alt-btn { border: 1px solid var(--linha); background: var(--papel); color: var(--tinta-2); border-radius: 999px; padding: 4px 12px; font: 600 0.86rem var(--texto); cursor: pointer; }
+.eq-alt-btn small { font-weight: 400; color: var(--mudo); }
+.eq-alt-btn.on { background: var(--marca); border-color: var(--marca); color: #fff; }
+.eq-alt-btn.on small { color: #c9d4e6; }
+
+#eq-texto { width: 100%; min-height: 52vh; resize: vertical; border: 1px solid var(--linha); border-radius: 10px; padding: 14px; font: 0.92rem/1.6 var(--texto); color: var(--tinta); background: #fbfcfe; }
+#eq-texto:focus { outline: none; border-color: var(--fatec); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.12); background: var(--papel); }
+#eq-texto::placeholder { color: #9aa7ba; }
+.eq-dicas { margin-top: 10px; font-size: 0.86rem; color: var(--tinta-2); }
+.eq-dicas summary { cursor: pointer; font-weight: 600; color: var(--marca); }
+.eq-dicas ul { margin: 8px 0 0; padding-left: 18px; }
+.eq-dicas li { margin: 4px 0; }
+
+/* ---------- a folha de prova ---------- */
+.eq-contagem { font: 700 0.9rem var(--display); color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.eq-folha { margin-top: 8px; }
+.eq-folha-vazia { border: 1.5px dashed var(--linha); border-radius: 12px; padding: 44px 20px; text-align: center; color: var(--mudo); display: flex; flex-direction: column; gap: 6px; }
+.eq-folha-vazia b { color: var(--tinta-2); font-size: 1rem; }
+.eq-q { padding: 16px 4px 16px 0; border-top: 1px dashed var(--linha); }
+.eq-q:first-child { border-top: none; padding-top: 6px; }
+.eq-q header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.eq-q-num { font: 800 1rem/1 var(--display); color: var(--marca); min-width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid var(--marca); display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.eq-q.falta .eq-q-num { border-color: var(--alerta); color: var(--alerta); }
+.eq-q-pend { font-size: 0.8rem; font-weight: 600; color: var(--alerta); background: var(--alerta-suave); border-radius: 999px; padding: 2px 10px; }
+.eq-q-gab { font-size: 0.8rem; font-weight: 600; color: var(--bom); background: var(--bom-suave); border-radius: 999px; padding: 2px 10px; }
+.eq-q-tipo { font-size: 0.8rem; font-weight: 600; color: var(--marca); background: #e7ecf5; border-radius: 999px; padding: 2px 10px; }
+.eq-q-enun { margin: 0 0 10px; white-space: pre-line; color: var(--tinta); }
+.eq-q-alts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.eq-q-alts li { display: flex; gap: 10px; align-items: flex-start; }
+.eq-q-alts li span { padding-top: 3px; color: var(--tinta-2); }
+.eq-bolha { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid #9aa7ba; background: var(--papel); color: var(--tinta-2); font: 700 0.82rem/1 var(--display); cursor: pointer; display: grid; place-items: center; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s; }
+.eq-bolha:hover { border-color: var(--marca); color: var(--marca); }
+.eq-bolha.on { background: var(--marca); border-color: var(--marca); color: #fff; transform: scale(1.06); }
+.eq-bolha.on + span { color: var(--tinta); font-weight: 600; }
+.eq-q.erro { background: var(--crit-suave); border: 1px solid #f3c4bd; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.eq-q-erro { margin: 0; color: var(--crit); }
+.eq-q-dica { margin: 6px 0 0; font-size: 0.84rem; color: var(--tinta-2); }
+
+/* ---------- envio (barra fixa embaixo) ---------- */
+.eq-envio { position: fixed; left: 0; right: 0; bottom: 0; background: var(--papel); border-top: 1px solid var(--linha); box-shadow: 0 -6px 20px rgba(13, 27, 51, 0.06); display: flex; align-items: center; gap: 12px 18px; padding: 12px clamp(16px, 4vw, 40px); flex-wrap: wrap; z-index: 5; }
+.eq-nome { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; color: var(--tinta-2); }
+.eq-nome input { border: 1px solid var(--linha); border-radius: 8px; padding: 8px 10px; font: 0.92rem var(--texto); min-width: 230px; color: var(--tinta); }
+.eq-nome input:focus { outline: none; border-color: var(--fatec); box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.12); }
+.eq-status { flex: 1; margin: 0; font-size: 0.9rem; color: var(--alerta); min-width: 200px; }
+.eq-status.pronto { color: var(--bom); font-weight: 600; }
+.eq-status.erro { color: var(--crit); font-weight: 600; }
+.eq-btn-enviar { background: var(--marca); color: #fff; border: none; border-radius: 10px; padding: 12px 22px; font: 700 0.98rem var(--display); cursor: pointer; }
+.eq-btn-enviar:hover:not(:disabled) { background: var(--marca-2); }
+.eq-btn-enviar:disabled { background: #b8c2d3; cursor: not-allowed; }
+
+/* ---------- avisos (link fechado, enviado, carregando) ---------- */
+.eq-carregando { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 80px 0; color: var(--mudo); }
+.eq-spinner { width: 18px; height: 18px; border: 2px solid var(--linha); border-top-color: var(--fatec); border-radius: 50%; animation: eq-orbitar 0.8s linear infinite; }
+.eq-aviso { max-width: 620px; margin: 40px auto; background: var(--papel); border: 1px solid var(--linha); border-top: 4px solid var(--marca); border-radius: 14px; padding: 28px 30px; }
+.eq-aviso h1 { font: 800 1.6rem/1.2 var(--display); color: var(--marca); margin: 0 0 10px; letter-spacing: -0.015em; }
+.eq-aviso p { margin: 0; color: var(--tinta-2); }
+.eq-aviso-acoes { margin-top: 20px; }
+.eq-btn-sec { border: 1px solid var(--marca); background: var(--papel); color: var(--marca); border-radius: 10px; padding: 10px 18px; font: 700 0.92rem var(--display); cursor: pointer; }
+.eq-btn-sec:hover { background: #e7ecf5; }
+
+@media (max-width: 900px) {
+  .eq-grade { grid-template-columns: 1fr; }
+  .eq-col-texto { position: static; }
+  #eq-texto { min-height: 34vh; }
+}
+@media (max-width: 560px) {
+  .eq-topo { padding: 10px 16px; }
+  .eq-marca-nome { font-size: 1.1rem; }
+  .eq-logo-fatec { height: 22px; }
+  .eq-main { padding: 14px 16px 150px; }
+  .eq-col { padding: 14px; }
+  .eq-envio { padding: 10px 16px; }
+  .eq-nome { width: 100%; }
+  .eq-nome input { flex: 1; min-width: 0; }
+  .eq-btn-enviar { width: 100%; }
+  .eq-rodape { padding-bottom: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq-orbita-planeta, .eq-spinner { animation: none; }
+  .eq-bolha { transition: none; }
+}
