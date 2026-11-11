@@ -63,6 +63,9 @@ function normalizarChamada(v) {
     return Number.isNaN(n) ? null : n;
 }
 
+// Bloco de revisão: null e "" são o mesmo "sem seção"
+const mesmaSecao = (a, b) => (a || '') === (b || '');
+
 function validarTexto(v, max = 150) {
     return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max;
 }
@@ -644,9 +647,14 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
             .where('loteId', '==', req.params.loteId)
             .where('status', '==', 'revisao_importacao');
         const categoriaSugeridaTexto = req.body.categoriaSugeridaTexto;
-        if (categoriaSugeridaTexto !== undefined) query = query.where('categoriaSugeridaTexto', '==', categoriaSugeridaTexto);
 
         let snap = await query.get();
+        // "sem seção" pode estar gravado como null OU "" (questão movida pro bloco sem seção virava ""):
+        // filtra em memória tratando os dois como o mesmo bloco (11/11/2026 — revisão da Fisio travada)
+        if (categoriaSugeridaTexto !== undefined) {
+            const docsDoBloco = snap.docs.filter(d => mesmaSecao(d.data().categoriaSugeridaTexto, categoriaSugeridaTexto));
+            snap = { docs: docsDoBloco, size: docsDoBloco.length, empty: !docsDoBloco.length };
+        }
         if (snap.empty) return res.status(404).json({ error: 'Grupo de importação não encontrado (ou já resolvido).' });
         // Bloco sem disciplina identificada (05/11/2026): o professor confirma uma disciplina de cada vez,
         // escolhendo as questões dela (ids) — o resto continua na revisão. Antes, confirmar o bloco levava
@@ -683,8 +691,9 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
 router.put('/questoes/revisao/mover-bloco', verifyToken, checkPermission, async (req, res) => {
     try {
         const ids = Array.isArray(req.body.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 200) : [];
-        const destino = req.body.categoriaSugeridaTexto;
-        if (!ids.length || typeof destino !== 'string') return res.status(400).json({ error: 'Informe as questões e o bloco de destino.' });
+        // destino "" ou null = bloco "sem seção": grava sempre null (igual ao que a importação grava)
+        const destino = typeof req.body.categoriaSugeridaTexto === 'string' && req.body.categoriaSugeridaTexto.trim() ? req.body.categoriaSugeridaTexto : null;
+        if (!ids.length || (req.body.categoriaSugeridaTexto !== null && typeof req.body.categoriaSugeridaTexto !== 'string')) return res.status(400).json({ error: 'Informe as questões e o bloco de destino.' });
         const docs = await Promise.all(ids.map(id => db.collection(COL_QUESTOES).doc(id).get()));
         const lotes = new Set();
         for (const d of docs) {
@@ -712,8 +721,11 @@ router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req
         let query = db.collection(COL_QUESTOES)
             .where('loteId', '==', req.params.loteId)
             .where('status', '==', 'revisao_importacao');
-        if (req.query.categoriaSugeridaTexto !== undefined) query = query.where('categoriaSugeridaTexto', '==', req.query.categoriaSugeridaTexto);
-        const snap = await query.get();
+        let snap = await query.get();
+        if (req.query.categoriaSugeridaTexto !== undefined) {
+            const docsDoBloco = snap.docs.filter(d => mesmaSecao(d.data().categoriaSugeridaTexto, req.query.categoriaSugeridaTexto));
+            snap = { docs: docsDoBloco, size: docsDoBloco.length };
+        }
         const alheia = snap.docs.find(doc => erroDeDono(req, doc.data()));
         if (alheia) return res.status(403).json({ error: erroDeDono(req, alheia.data()) });
         const batch = db.batch();
