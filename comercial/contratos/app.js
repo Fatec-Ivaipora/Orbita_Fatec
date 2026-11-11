@@ -5,6 +5,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../.
 import { getEffectiveLevel } from '../../core/permissions.js';
 import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
 import { iniciarRotaColeta } from './rota.js?v=3';
+import { iniciarFeedDiario } from './feed-diario.js?v=6';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -279,6 +280,10 @@ function wireEventos() {
     renderTudo();
   });
 
+  iniciarFeedDiario({
+    apiFetch, esc, showToast,
+    semestres: () => [...document.querySelectorAll('#sel-semestre option')].map(o => o.value).filter(Boolean)
+  });
   iniciarRotaColeta({
     apiFetch, esc, fmtData, linkWhatsapp, toast: showToast, hoje: hojeLocal,
     getSemestre: () => semestreAtual, getRegistros: () => registros,
