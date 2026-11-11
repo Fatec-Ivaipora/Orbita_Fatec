@@ -63,6 +63,11 @@ function normalizarChamada(v) {
     return Number.isNaN(n) ? null : n;
 }
 
+// Alternativas sempre com a letra pela POSIÇÃO (A, B, C...), venha a letra ou não do cliente — a edição pela
+// visualização da prova mandava só o texto e a prova impressa saía "undefined)" (11/11/2026).
+const alternativasComLetra = (lista) => (Array.isArray(lista) ? lista : [])
+    .map((a, i) => ({ letra: LETRAS_VALIDAS[i], texto: String(a && typeof a === 'object' ? (a.texto ?? '') : (a ?? '')).trim() }));
+
 // Bloco de revisão: null e "" são o mesmo "sem seção"
 const mesmaSecao = (a, b) => (a || '') === (b || '');
 
@@ -368,7 +373,8 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         const bimestre = req.body.bimestre ? parseInt(req.body.bimestre, 10) : null;
         const chamada = normalizarChamada(req.body.chamada);
 
-        const { tipo, enunciadoHtml, alternativas, gabarito } = req.body;
+        const { tipo, enunciadoHtml, gabarito } = req.body;
+        const alternativas = alternativasComLetra(req.body.alternativas);
         const docRef = await db.collection(COL_QUESTOES).add({
             disciplinaId: disciplinaId || null,
             curso, periodo, bimestre, chamada,
@@ -416,7 +422,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         const disciplinaId = req.body.disciplinaId !== undefined ? normalizarTexto(req.body.disciplinaId) : atual.disciplinaId;
         const geral = disciplinaId === DISCIPLINA_GERAL_ID;
         const periodo = geral ? null : await periodoDaDisciplina(disciplinaId);
-        const { tipo, enunciadoHtml, alternativas, gabarito } = req.body;
+        const { tipo, enunciadoHtml, gabarito } = req.body;
+        const alternativas = alternativasComLetra(req.body.alternativas);
 
         await ref.update({
             disciplinaId: disciplinaId || null,

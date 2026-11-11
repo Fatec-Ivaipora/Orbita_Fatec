@@ -256,11 +256,14 @@ function gradeGabarito(quantidade) {
 // retirar os espaços e preencher, não tem problema ir pra outra página o
 // resto da pergunta". Prioriza aproveitar o papel; o texto flui livre,
 // mesmo que corte uma questão entre página/coluna.
+// letra gravada na alternativa ou, se faltar, a da posição (A, B, C...) — nunca "undefined)" (11/11/2026)
+const letraDe = (alt, i) => (alt && alt.letra) || ['A', 'B', 'C', 'D', 'E'][i];
+
 function blocoQuestaoObjetiva(numero, q) {
     const alternativas = q.alternativas || [];
     const paras = [paragrafo(`${numero}. ${q.enunciadoHtml}`, { bold: false, after: 80 })];
-    alternativas.forEach(alt => {
-        paras.push(paragrafo(`${alt.letra}) ${alt.texto}`, { size: 20, after: 40 }));
+    alternativas.forEach((alt, i) => {
+        paras.push(paragrafo(`${letraDe(alt, i)}) ${alt.texto}`, { size: 20, after: 40 }));
     });
     // Espaço visível entre uma questão e outra — pedido explícito (18/09):
     // "só deixa um espaço de uma questão pra outra pra ficar claro qual
@@ -290,8 +293,8 @@ function blocoQuestaoObjetivaSimulado(numero, q) {
         paragrafo(`Questão ${String(numero).padStart(2, '0')}`, { bold: true, after: 60, keepNext: true }),
         paragrafo(q.enunciadoHtml, { bold: false, after: 80 })
     ];
-    alternativas.forEach(alt => {
-        paras.push(paragrafo(`${alt.letra}) ${alt.texto}`, { size: 20, after: 40 }));
+    alternativas.forEach((alt, i) => {
+        paras.push(paragrafo(`${letraDe(alt, i)}) ${alt.texto}`, { size: 20, after: 40 }));
     });
     // Espaço visível entre uma questão e outra — mesmo pedido (18/09) da
     // Bimestral/Exame, aplicado aqui também.
@@ -430,8 +433,8 @@ function escHtml(s) {
 // PUT /questoes/:id/gabarito e atualiza a questão de verdade no banco — o
 // HTML aqui só marca visualmente qual é a correta AGORA.
 function htmlGabaritoEditavel(q) {
-    return `<div class="bp-prev-gabarito-editor">${(q.alternativas || []).map(alt => `
-        <button type="button" class="bp-prev-alt-btn${alt.letra === q.gabarito ? ' bp-prev-alt-correta' : ''}" data-letra="${escHtml(alt.letra)}">${escHtml(alt.letra)}) ${escHtml(alt.texto)}</button>`).join('')}</div>`;
+    return `<div class="bp-prev-gabarito-editor">${(q.alternativas || []).map((alt, i) => `
+        <button type="button" class="bp-prev-alt-btn${letraDe(alt, i) === q.gabarito ? ' bp-prev-alt-correta' : ''}" data-letra="${escHtml(letraDe(alt, i))}">${escHtml(letraDe(alt, i))}) ${escHtml(alt.texto)}</button>`).join('')}</div>`;
 }
 
 // Pré-visualização em HTML antes de gerar o .docx final — pedido explícito
