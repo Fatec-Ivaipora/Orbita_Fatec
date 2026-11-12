@@ -235,7 +235,9 @@ const requireModulePermission = (moduleName) => {
                 palestras: 3,
                 'agenda-espacos': 3,
                 'trilha-ead': 3,
-                'plano-acao': 3
+                'plano-acao': 3,
+                // Formulários (12/11/2026): Direção (ADM N1) e a assistente da Direção (ADM N2)
+                formularios: 3
             },
             ti: {
                 'automacao-ava': 3,
