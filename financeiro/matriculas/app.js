@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
-import { iniciarEnvios } from './envios.js?v=3';
+import { iniciarEnvios } from './envios.js?v=4';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);

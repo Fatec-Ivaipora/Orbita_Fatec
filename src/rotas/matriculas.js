@@ -990,6 +990,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
 //   GET  /envios/coordenadores                cursoId → e-mail institucional do coordenador
 // ==========================================
 const COL_ENVIOS = 'matriculas_envios_feed';
+const INICIO_ENVIOS = '2026-11-12';   // primeiro dia do envio pelo Órbita (pedido do usuário)
 const CURSO_EMAIL = {
     AGRO: 'AGRONEGÓCIO', AGRON: 'AGRONOMIA', ARQUIT: 'ARQUITETURA E URBANISMO', BIOMED: 'BIOMEDICINA', 'CI.CONT': 'CIÊNCIAS CONTÁBEIS',
     DIR: 'DIREITO', ENFER: 'ENFERMAGEM', 'ENG.CIV': 'ENGENHARIA CIVIL', FINAN: 'GESTÃO FINANCEIRA', FISIO: 'FISIOTERAPIA',
@@ -1036,8 +1037,9 @@ router.get('/envios/feed', verifyToken, checkPermission, async (req, res) => {
         if (!r || !r.ok) return res.status(502).json({ error: `Edubox não respondeu: ${(r && r.erro) || 'sem resposta'}` });
         // dia do envio escolhido na tela (12/11/2026); padrão hoje
         const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dia || '')) && req.query.dia <= hojeSPEnvios() ? req.query.dia : hojeSPEnvios();
-        // só de ontem até o dia escolhido (12/11/2026): o que é mais antigo já foi no modelo antigo
-        const desde = new Date(new Date(`${hoje}T12:00:00`).getTime() - 1 * 86400000).toISOString().slice(0, 10);
+        // de 12/11/2026 em diante (o que é mais antigo foi no modelo antigo): toda matrícula a partir daí que ainda
+        // não saiu em nenhum feed continua aparecendo até ser marcada — ninguém fica de fora
+        const desde = INICIO_ENVIOS;
         const calouros = (await aplicarNasLinhas(r.matriculas || []))
             .filter(e => e.codcur !== 'MED' && String(e.semestre_ingresso || '').replace(/[-/]/, '.') === semestre && !SAIU_ENVIOS.test(e.situacao || ''))
             .filter(e => { const d = String(e.data_matricula || '').slice(0, 10); return d >= desde && d <= hoje; });
@@ -1121,3 +1123,4 @@ router.get('/envios/coordenadores', verifyToken, checkPermission, async (req, re
 });
 
 module.exports = router;
+module.exports._normalizar = { normalizarPeriodo, normalizarDesistente };
