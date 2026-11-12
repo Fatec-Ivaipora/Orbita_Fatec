@@ -241,8 +241,23 @@ async function sincronizar({ modulo, semestre }) {
         await db.collection(COL_PEND).doc(id).set({ ...p, modulo, semestre, assinatura: assinatura(p), status: 'pendente', criadaEm: agora, vistaEm: agora });
     }
     for (const [id, d] of antes) if (!agoraIds.has(id) && d.data().status === 'pendente') await d.ref.delete();
+    // Matrícula NOVA sem conflito entra sozinha (12/11/2026, pedido do usuário): pendência "criar" de calouro
+    // (Matrícula Nova / Retorno / Transferência) é aplicada na hora — cria o cadastro e o contrato do Comercial.
+    // Conflito (nome repetido, troca de curso, situação diferente) continua pendente pra Lisa decidir.
+    let novasAutomaticas = 0;
+    const { normalizarPeriodo, normalizarDesistente } = require('../rotas/matriculas')._normalizar || {};
+    if (normalizarPeriodo && normalizarDesistente) {
+        for (const p of c.propostas.filter(x => x.tipo === 'criar' && CALOUROS.includes(x.para))) {
+            const id = idPend(modulo, semestre, p.chave);
+            const doc = await db.collection(COL_PEND).doc(id).get();
+            if (!doc.exists || doc.data().status !== 'pendente') continue;
+            try { await resolverPendencia({ id, acao: 'aplicar', quem: QUEM, normalizarPeriodo, normalizarDesistente }); novasAutomaticas++; }
+            catch (err) { console.error('[matriculas-edubox] matrícula nova automática:', p.nome, err.message); }
+        }
+    }
     return {
-        pendentes: c.propostas.filter(p => { const a = antes.get(idPend(modulo, semestre, p.chave)); return !a || a.data().assinatura !== assinatura(p) || a.data().status === 'pendente'; }).length,
+        novasAutomaticas,
+        pendentes: c.propostas.filter(p => !(p.tipo === 'criar' && CALOUROS.includes(p.para))).filter(p => { const a = antes.get(idPend(modulo, semestre, p.chave)); return !a || a.data().assinatura !== assinatura(p) || a.data().status === 'pendente'; }).length,
         ligadas: c.ligadas, automaticos: c.automaticos.length, soNoOrbita: c.soNoOrbita.length, duplicadas: c.duplicadas, listaSoNoOrbita: c.soNoOrbita.slice(0, 300),
         totalEdubox: c.totalEdubox, totalOrbita: c.totalOrbita
     };

@@ -46,7 +46,7 @@ export function iniciarEnvios(contexto) {
   $('ev-semestre').addEventListener('change', () => { if (abaAtual === 'feed') carregarFeed(); });
   $('ev-atualizar').addEventListener('click', carregarFeed);
   const hojeISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-  $('ev-dia').value = hojeISO; $('ev-dia').max = hojeISO;
+  $('ev-dia').value = hojeISO; $('ev-dia').max = hojeISO; $('ev-dia').min = '2026-11-12';   // envio pelo Órbita começou em 12/11
   $('ev-dia').addEventListener('change', () => { if ($('ev-dia').value) carregarFeed(); });
   wireFeed();
   wireSaida();
@@ -97,13 +97,13 @@ async function carregarFeed() {
 function desenharFeed() {
   const esc = ctx.esc;
   if (!feed.alunos.length) {
-    $('ev-feed-lista').innerHTML = `<p class="ev-vazio">Nenhuma matrícula para o feed de ${ddmm(feed.hoje)}: não houve matrícula nesse dia e as de ${ddmm(feed.desde)} em diante já saíram em algum feed.</p>`;
+    $('ev-feed-lista').innerHTML = `<p class="ev-vazio">Nenhuma matrícula para o feed de ${ddmm(feed.hoje)}: não houve matrícula nesse dia e as anteriores (desde ${ddmm(feed.desde)}) já saíram em algum feed.</p>`;
     $('ev-feed-saidas').classList.add('hidden');
     $('ev-feed-final').classList.add('hidden');
     return;
   }
   $('ev-feed-lista').innerHTML = `
-    <p class="ev-dica">Feed de <b>${ddmm(feed.hoje)}</b>: matrículas desse dia e as de ${ddmm(feed.desde)} (dia anterior) que ainda não saíram em nenhum feed. Quem já foi enviado vem desmarcado. Desmarque quem não deve entrar.</p>
+    <p class="ev-dica">Feed de <b>${ddmm(feed.hoje)}</b>: matrículas desse dia e as de dias anteriores (desde ${ddmm(feed.desde)}) que ainda não saíram em nenhum feed. Quem já foi enviado vem desmarcado. Desmarque quem não deve entrar.</p>
     <table class="ev-tabela"><thead><tr><th><input type="checkbox" id="ev-todos" ${marcados.size === feed.alunos.length ? 'checked' : ''} aria-label="Marcar todos"></th><th>Aluno</th><th>Curso</th><th>Parcelas</th><th>Telefone</th><th>Matrícula</th></tr></thead>
     <tbody>${feed.alunos.map(a => `<tr class="${marcados.has(a.codmat) ? '' : 'ev-desmarcado'}">
       <td><input type="checkbox" class="ev-marca" data-cod="${esc(a.codmat)}" ${marcados.has(a.codmat) ? 'checked' : ''} aria-label="Incluir ${esc(a.nome)}"></td>
