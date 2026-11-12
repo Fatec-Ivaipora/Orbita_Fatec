@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulários - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <link rel="stylesheet" href="/docencia/formularios/formularios.css?v=5">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header fm-no-print">
+                    <div>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span>Formulários</h1>
+                        <p class="page-subtitle">Crie um formulário, mande o link e os alunos respondem do celular, sem login</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button type="button" class="btn-primary" id="fm-novo">+ Novo formulário</button>
+                    </div>
+                </div>
+                <div id="fm-tela"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="fm-toast" class="fm-toast hidden" role="status"></div>
+    <script type="module" src="/docencia/formularios/app.js?v=4"></script>
+</body>
+</html>
