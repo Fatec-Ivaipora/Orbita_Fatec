@@ -3,6 +3,7 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
 import { getEffectiveLevel } from '../../core/permissions.js';
+import { iniciarEnvios } from './envios.js?v=3';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -177,6 +178,9 @@ async function initApp(user, role) {
     initPaginaAlunoIndica();
   } else if (document.getElementById('matriculas-comparativo-root')) {
     initPaginaComparativo();
+  } else if (document.getElementById('matriculas-envios-root')) {
+    // Envios (12/11/2026): fechamento do dia + trancamento/cancelamento — financeiro/matriculas/envios.js
+    iniciarEnvios({ apiFetch, esc, showToast });
   }
 }
 

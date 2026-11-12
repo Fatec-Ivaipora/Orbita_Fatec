@@ -980,4 +980,144 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
     }
 });
 
+// ==========================================
+// ENVIOS (12/11/2026) — menu "Envios" das Matrículas: o fechamento do dia (e-mail "MATRÍCULAS dd/mm" + feed
+// do WhatsApp) e os e-mails de trancamento e cancelamento. Os textos e os destinatários ficam na tela
+// (financeiro/matriculas/envios.js); aqui só os dados.
+//   GET  /envios/feed?semestre=2027.1&dia=    calouros do Edubox de ontem e do dia ainda não enviados + parcelas
+//   POST /envios/feed/enviado                 { semestre, codmats, dataFeed } marca como enviados
+//   GET  /envios/buscar-aluno?semestre&q=     até 15 alunos do Órbita pelo começo do nome
+//   GET  /envios/coordenadores                cursoId → e-mail institucional do coordenador
+// ==========================================
+const COL_ENVIOS = 'matriculas_envios_feed';
+const CURSO_EMAIL = {
+    AGRO: 'AGRONEGÓCIO', AGRON: 'AGRONOMIA', ARQUIT: 'ARQUITETURA E URBANISMO', BIOMED: 'BIOMEDICINA', 'CI.CONT': 'CIÊNCIAS CONTÁBEIS',
+    DIR: 'DIREITO', ENFER: 'ENFERMAGEM', 'ENG.CIV': 'ENGENHARIA CIVIL', FINAN: 'GESTÃO FINANCEIRA', FISIO: 'FISIOTERAPIA',
+    'GEST.COM': 'GESTÃO COMERCIAL', LOG: 'LOGÍSTICA', 'MED.VET.': 'MEDICINA VETERINÁRIA', PED: 'PEDAGOGIA', PSICO: 'PSICOLOGIA', RH: 'RECURSOS HUMANOS'
+};
+// nome do curso no cadastro do aluno → id do curso no cadastro do coordenador (users.cursos)
+const CURSO_SLUG = {
+    'AGRONEGÓCIO': 'agronegocio', 'AGRONOMIA': 'agronomia', 'ARQUITETURA URB.': 'arquitetura-urbanismo', 'BIOMEDICINA': 'biomedicina',
+    'CONTÁBEIS': 'contabeis', 'DIREITO': 'direito', 'ENFERMAGEM': 'enfermagem', 'ENGENHARIA CÍVIL': 'engenharia-civil',
+    'GESTÃO FINANCEIRA': 'gestao-financeira', 'FISIOTERAPIA': 'fisioterapia', 'GESTÃO COMERCIAL': 'gestao-comercial', 'LOGÍSTICA': 'logistica',
+    'MEDICINA VETERINÁRIA': 'medicina-veterinaria', 'PEDAGOGIA': 'pedagogia', 'PSICOLOGIA': 'psicologia', 'RECURSOS HUMANOS': 'rh', 'MEDICINA': 'medicina'
+};
+const SAIU_ENVIOS = /^(cancel|tranc|desist|transf)/i;
+const hojeSPEnvios = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+
+// parcelas do semestre → { qtd, valor (com desconto), percentual, dia (o que mais se repete), mes, plano }
+function resumoParcelas(ps) {
+    const validas = ps.filter(p => !p.cancelada && !/cancel/i.test(p.status || ''));
+    if (!validas.length) return null;
+    const p1 = validas[0];
+    // % pelo valor do desconto ÷ valor cheio (a soma dos percentuais cadastrados passava de 100% quando o aluno
+    // tem dois descontos, um por vigência — ex.: 73,696% + 50% = 123,696%)
+    const perc = Number(p1.valor) > 0 ? (Number(p1.desconto) || 0) / Number(p1.valor) * 100 : 0;
+    const dias = {};
+    validas.forEach(p => { const d = Number(String(p.vencimento || '').slice(8, 10)); if (d) dias[d] = (dias[d] || 0) + 1; });
+    const dia = Number(Object.entries(dias).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]);
+    return {
+        qtd: validas.length,
+        valor: Math.round(((Number(p1.valor) || 0) - (Number(p1.desconto) || 0)) * 100) / 100,
+        percentual: Math.round(perc * 1000) / 1000,
+        dia, mes: Number(String(p1.vencimento || '').slice(5, 7)),
+        plano: p1.plano || ''
+    };
+}
+
+router.get('/envios/feed', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = String(req.query.semestre || '');
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Informe o semestre (ex.: 2027.1).' });
+        const { relay } = require('../utils/edubox-relay');
+        const { aplicarNasLinhas } = require('../utils/nome-social');
+        const semEdubox = semestre.replace('.', '/');
+        const r = await relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semEdubox)}`, { timeoutMs: 60000 });
+        if (!r || !r.ok) return res.status(502).json({ error: `Edubox não respondeu: ${(r && r.erro) || 'sem resposta'}` });
+        // dia do envio escolhido na tela (12/11/2026); padrão hoje
+        const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dia || '')) && req.query.dia <= hojeSPEnvios() ? req.query.dia : hojeSPEnvios();
+        // só de ontem até o dia escolhido (12/11/2026): o que é mais antigo já foi no modelo antigo
+        const desde = new Date(new Date(`${hoje}T12:00:00`).getTime() - 1 * 86400000).toISOString().slice(0, 10);
+        const calouros = (await aplicarNasLinhas(r.matriculas || []))
+            .filter(e => e.codcur !== 'MED' && String(e.semestre_ingresso || '').replace(/[-/]/, '.') === semestre && !SAIU_ENVIOS.test(e.situacao || ''))
+            .filter(e => { const d = String(e.data_matricula || '').slice(0, 10); return d >= desde && d <= hoje; });
+        const enviados = new Map();   // codmat → dataFeed em que saiu
+        if (calouros.length) {
+            const refs = calouros.map(e => db.collection(COL_ENVIOS).doc(`${semestre}__${e.codmat}`));
+            for (let i = 0; i < refs.length; i += 200) (await db.getAll(...refs.slice(i, i + 200))).forEach(s => { if (s.exists) enviados.set(s.id.split('__')[1], s.data().dataFeed || ''); });
+        }
+        // pendentes da janela + os do próprio dia que já foram enviados (aparecem desmarcados, pra reenviar se quiser)
+        const pendentes = calouros.filter(e => !enviados.has(String(e.codmat)) || String(e.data_matricula || '').slice(0, 10) === hoje);
+        let parcelas = [];
+        if (pendentes.length) {
+            const f = await relay(`/matriculas-edubox/financeiro?semestre=${encodeURIComponent(semEdubox)}&codmats=${pendentes.map(e => e.codmat).join(',')}`, { timeoutMs: 60000 });
+            if (f && f.ok) parcelas = f.parcelas || [];
+        }
+        res.json({
+            semestre, hoje, desde,
+            alunos: pendentes.map(e => ({
+                codmat: String(e.codmat), nome: String(e.nome || '').trim().toUpperCase(), codcur: e.codcur,
+                curso: CURSO_EMAIL[e.codcur] || e.codcur, periodo: parseInt(e.periodo, 10) || null,
+                telefone: e.celular || e.telefone || '', dataMatricula: String(e.data_matricula || '').slice(0, 10),
+                enviadoEm: enviados.get(String(e.codmat)) || null,
+                parcelas: resumoParcelas(parcelas.filter(p => String(p.codmat) === String(e.codmat)))
+            })).sort((a, b) => a.dataMatricula.localeCompare(b.dataMatricula) || a.nome.localeCompare(b.nome, 'pt-BR')),
+            jaEnviados: enviados.size
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/envios/feed/enviado', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = String(req.body.semestre || '');
+        if (!validarSemestre(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
+        const alunos = (Array.isArray(req.body.alunos) ? req.body.alunos : []).filter(a => a && /^\d+$/.test(String(a.codmat))).slice(0, 300);
+        if (!alunos.length) return res.status(400).json({ error: 'Nenhum aluno marcado.' });
+        const agora = new Date().toISOString();
+        const dataFeed = /^\d{4}-\d{2}-\d{2}$/.test(req.body.dataFeed || '') ? req.body.dataFeed : hojeSPEnvios();
+        const quem = req.user.name || req.user.email || '';
+        const batch = db.batch();
+        alunos.forEach(a => batch.set(db.collection(COL_ENVIOS).doc(`${semestre}__${a.codmat}`), {
+            semestre, codmat: String(a.codmat), nome: String(a.nome || '').slice(0, 150), dataFeed, enviadoEm: agora, enviadoPor: quem
+        }));
+        await batch.commit();
+        res.json({ message: `${alunos.length} aluno(s) marcados como enviados no feed de ${dataFeed.split('-').reverse().slice(0, 2).join('/')}.` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/envios/buscar-aluno', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = String(req.query.semestre || '');
+        const q = nomeNorm(req.query.q || '');
+        if (!validarSemestre(semestre) || q.length < 3) return res.json([]);
+        const snap = await db.collection(COL_ALUNOS).where('nomeNorm', '>=', q).where('nomeNorm', '<', q + '').limit(40).get();
+        res.json(snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .filter(a => a.semestre === semestre)
+            .slice(0, 15)
+            .map(a => ({ id: a.id, nome: a.nome, curso: a.curso, cursoSlug: CURSO_SLUG[String(a.curso || '').toUpperCase()] || null, periodo: a.periodo || '', situacao: a.situacao || '', modulo: a.modulo })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/envios/coordenadores', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const snap = await db.collection('users').where('role', '==', 'coordenador').get();
+        const mapa = {};
+        snap.forEach(d => {
+            const u = d.data();
+            if (u.ativo === false || !/@fatecivaipora\.com\.br$/i.test(u.email || '')) return;
+            const cursos = Array.isArray(u.cursos) && u.cursos.length ? u.cursos : (u.curso ? [u.curso] : []);
+            cursos.forEach(c => { (mapa[c] = mapa[c] || []).includes(u.email) || mapa[c].push(u.email); });
+        });
+        res.json(mapa);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

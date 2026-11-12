@@ -1,5 +1,5 @@
 #!/bin/bash
-# Instala/atualiza a rota /orbita-diag/* (diagnostico SO LEITURA das matriculas do Edubox p/ o Orbita - 09/11/2026).
+# Instala/atualiza a rota /orbita-diag/* (diagnostico SO LEITURA do Edubox p/ o Orbita - 09/11/2026; v2 12/11/2026: colunas do financeiro).
 # Colar no Web Console do droplet (DigitalOcean), como root. Desfazer: cp /opt/edubox-relay/server.mjs.bak-diag /opt/edubox-relay/server.mjs && systemctl restart edubox-relay
 set -e
 cd /opt/edubox-relay
@@ -38,6 +38,21 @@ function diagColunas() {
               or table_name ~* '(contrat|assin|aceit|termo|ingres|formaing|tipoing)')
        order by table_name, ordinal_position
        limit 800`);
+    return { colunas: r.rows };
+  });
+}
+
+// colunas das tabelas do FINANCEIRO (tfi_*) e de qualquer tabela com observacao/plano/desconto no nome — so
+// nome/tipo das colunas, nenhum dado (12/11/2026: fechamento do dia das Matriculas — parcelas, desconto, vencimento)
+function diagColunasFinanceiro() {
+  return diagConsulta(async (c) => {
+    const r = await c.query(`
+      select table_name as tabela, column_name as coluna, data_type as tipo
+        from information_schema.columns
+       where table_schema = 'ivp'
+         and (table_name ~ '^tfi_' or table_name ~* '(obs|plano|descont|bolsa|financ)')
+       order by table_name, ordinal_position
+       limit 2500`);
     return { colunas: r.rows };
   });
 }
@@ -87,7 +102,8 @@ async function rotaOrbitaDiag(req, res) {
   if (!autenticadoOrbita(req)) { diagResponder(res, 401, { ok: false, erro: 'nao autorizado' }); return true; }
   if (req.method !== 'GET') { diagResponder(res, 405, { ok: false, erro: 'so GET' }); return true; }
   const semestres = String(u.searchParams.get('semestres') || '2027/1,2027-1').split(',').map(s => s.trim()).filter(s => /^\d{4}[/-][12]$/.test(s)).slice(0, 4);
-  if (u.pathname === '/orbita-diag/ping') { diagResponder(res, 200, { ok: true, rotas: 'orbita-diag', versao: 1 }); return true; }
+  if (u.pathname === '/orbita-diag/ping') { diagResponder(res, 200, { ok: true, rotas: 'orbita-diag', versao: 2 }); return true; }
+  if (u.pathname === '/orbita-diag/colunas-financeiro') { const r = await diagColunasFinanceiro(); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/colunas') { const r = await diagColunas(); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/resumo') { const r = await diagResumo(semestres); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/valores') {
@@ -111,7 +127,7 @@ const a = s.indexOf("const server = http.createServer(");
 if (a < 0) { console.error("ANCORA NAO ENCONTRADA - nada foi alterado"); process.exit(1); }
 const m = s.indexOf(MARCA), f = s.indexOf(FIM);
 if (m >= 0 && f > m && f < a) {
-  s = s.slice(0, m) + MARCA + " (v1) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(f + FIM.length + 1);
+  s = s.slice(0, m) + MARCA + " (v2) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(f + FIM.length + 1);
   console.log("bloco atualizado");
 } else {
   const g = s.indexOf("if (!autenticado(req))", a);
@@ -120,7 +136,7 @@ if (m >= 0 && f > m && f < a) {
   s = s.slice(0, ini) + recuo + "if (await rotaOrbitaDiag(req, res)) return; // Órbita — Diagnóstico matrículas\n" + s.slice(ini);
   const cands = [s.indexOf("// ---- Órbita — Comercial menores"), s.indexOf("// ---- Órbita — Cobrança conferência"), s.indexOf("// ---- Órbita — Comercial (v"), s.indexOf("// ---- Órbita — Automação AVA"), s.indexOf("const server = http.createServer(")].filter(x => x >= 0);
   const p = Math.min(...cands);
-  s = s.slice(0, p) + MARCA + " (v1) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(p);
+  s = s.slice(0, p) + MARCA + " (v2) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(p);
   console.log("bloco inserido");
 }
 fs.writeFileSync("server.mjs", s);
@@ -128,4 +144,4 @@ fs.writeFileSync("server.mjs", s);
 node --check server.mjs && chown relay:relay server.mjs && systemctl restart edubox-relay && sleep 2 && systemctl is-active edubox-relay
 TOKEN=$(grep -E '^ORBITA_TOKEN=' /opt/edubox-relay/.env | cut -d= -f2- | tr -d '"'"'"' ')
 curl -s "http://localhost:8443/orbita-diag/ping" -H "Authorization: Bearer $TOKEN"; echo
-curl -s "http://localhost:8443/orbita-diag/colunas" -H "Authorization: Bearer $TOKEN" | head -c 160; echo " ..."
+curl -s "http://localhost:8443/orbita-diag/colunas-financeiro" -H "Authorization: Bearer $TOKEN" | head -c 200; echo " ..."
