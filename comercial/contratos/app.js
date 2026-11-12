@@ -5,7 +5,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../.
 import { getEffectiveLevel } from '../../core/permissions.js';
 import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
 import { iniciarRotaColeta } from './rota.js?v=3';
-import { iniciarFeedDiario } from './feed-diario.js?v=6';
+import { iniciarFeedDiario } from './feed-diario.js?v=9';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -185,6 +185,7 @@ async function initApp(user, role) {
 // Semestres = lista cadastrada pelo próprio setor (começa em 2027.1; os
 // anteriores não aparecem). "+ Novo semestre" acrescenta. Busca só a lista
 // (1 doc) — os alunos continuam só depois de escolher o semestre.
+const SEMESTRE_PADRAO = '2027.1';
 async function montarSemestres(selecionar = '') {
   const sel = document.getElementById('sel-semestre');
   try {
@@ -199,6 +200,8 @@ async function montarSemestres(selecionar = '') {
   }
   sel.innerHTML = '<option value="">Selecione o semestre...</option>' +
     semestres.map(s => `<option value="${s}">${s}</option>`).join('');
+  // Abre já em 2027.1 (pedido 12/11/2026: "ficar escolhendo é ruim"); se não existir, pede pra escolher
+  if (!selecionar && semestres.includes(SEMESTRE_PADRAO)) selecionar = SEMESTRE_PADRAO;
   if (selecionar) {
     sel.value = selecionar;
     sel.dispatchEvent(new Event('change'));

@@ -24,7 +24,8 @@ export function iniciarFeedDiario(contexto) {
   $('btn-feed-diario').addEventListener('click', abrir);
   $('fd-voltar').addEventListener('click', fechar);
   $('fd-atualizar').addEventListener('click', carregar);
-  $('fd-imprimir').addEventListener('click', () => window.print());
+  $('fd-imprimir').addEventListener('click', imprimirRetrato);
+  $('fd-imagem').addEventListener('click', gerarImagem);
   $('fd-data').addEventListener('change', carregar);
   $('fd-semestre').addEventListener('change', carregar);
   $('fd-conteudo').addEventListener('click', (e) => {
@@ -32,6 +33,69 @@ export function iniciarFeedDiario(contexto) {
     if (e.target.closest('#fd-cancelar-vagas')) { editandoVagas = false; desenhar(); }
     if (e.target.closest('#fd-salvar-vagas')) salvarVagas(e.target.closest('#fd-salvar-vagas'));
   });
+}
+
+// Imprime em RETRATO numa página só (12/11/2026). O tema do Comercial põe @page em paisagem pra todos os
+// relatórios; aqui um @page só enquanto imprime vence (vem depois) e sai no afterprint.
+function imprimirRetrato() {
+  const st = document.createElement('style');
+  st.id = 'fd-page-retrato';
+  st.textContent = '@page { size: A4 portrait; margin: 9mm 10mm; }';
+  document.head.appendChild(st);
+  document.body.classList.add('fd-imprimindo');
+  const limpar = () => { st.remove(); document.body.classList.remove('fd-imprimindo'); window.removeEventListener('afterprint', limpar); };
+  window.addEventListener('afterprint', limpar);
+  window.print();
+}
+
+// Imagem do feed pra mandar no WhatsApp (12/11/2026): o relatório no layout de celular (cartões), em pé,
+// 1080 px de largura. No celular abre o "Compartilhar" (escolhe o WhatsApp); no computador baixa o PNG.
+let h2cPromessa = null;
+function carregarHtml2canvas() {
+  if (window.html2canvas) return Promise.resolve(window.html2canvas);
+  if (!h2cPromessa) h2cPromessa = new Promise((ok, falha) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+    sc.onload = () => ok(window.html2canvas);
+    sc.onerror = () => { h2cPromessa = null; falha(new Error('Não consegui carregar o gerador de imagem. Confira a internet e tente de novo.')); };
+    document.head.appendChild(sc);
+  });
+  return h2cPromessa;
+}
+async function gerarImagem() {
+  const folha = document.querySelector('#fd-conteudo .fd-folha');
+  if (!folha) return ctx.showToast('Espere o feed carregar.', 'error');
+  const btn = $('fd-imagem');
+  const rotulo = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando imagem…';
+  const caixa = document.createElement('div');
+  caixa.className = 'fd fd-foto';
+  caixa.appendChild(folha.cloneNode(true));
+  caixa.querySelectorAll('.fd-no-print').forEach(el => el.remove());
+  document.body.appendChild(caixa);
+  try {
+    const html2canvas = await carregarHtml2canvas();
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const canvas = await html2canvas(caixa.firstChild, { scale: 1080 / caixa.firstChild.offsetWidth, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const nome = `feed-diario-matriculas-${(dados && dados.data) || hojeISO()}.png`;
+    const arquivo = new File([blob], nome, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      try { await navigator.share({ files: [arquivo], title: 'Feed diário de matrículas' }); }
+      catch (e) { if (e.name !== 'AbortError') throw e; }
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      ctx.showToast('Imagem baixada. É só anexar no WhatsApp.');
+    }
+  } catch (err) {
+    ctx.showToast(err.message || 'Não foi possível gerar a imagem.', 'error');
+  } finally {
+    caixa.remove();
+    btn.disabled = false; btn.textContent = rotulo;
+  }
 }
 
 function abrir() {
@@ -72,11 +136,11 @@ function desenhar() {
   const linhas = visiveis.map(c => `
     <tr class="fd-l-${c.situacao}">
       <th scope="row">${esc(c.nome)}</th>
-      <td class="num"><b>${n(c.total)}</b>${c.hoje ? ` <span class="fd-mais">+${c.hoje} ${quando}</span>` : ''}</td>
-      <td class="num">${editandoVagas
+      <td class="num" data-rot="Matriculados"><b>${n(c.total)}</b>${c.hoje ? ` <span class="fd-mais">+${c.hoje} ${quando}</span>` : ''}</td>
+      <td class="num" data-rot="Vagas do edital">${editandoVagas
         ? `<input type="number" min="0" max="10000" step="1" class="fd-vaga-in" data-cod="${esc(c.codcur)}" value="${c.vagas ?? ''}" aria-label="Vagas do edital de ${esc(c.nome)}">`
         : (c.vagas ?? '<span class="fd-zero">—</span>')}</td>
-      <td class="num">${disponiveis(c)}</td>
+      <td class="num" data-rot="Disponíveis">${disponiveis(c)}</td>
       <td class="fd-sit">${situacaoTexto(c) ? `<span class="fd-selo fd-s-${c.situacao}">${esc(situacaoTexto(c))}</span>` : ''}</td>
     </tr>`).join('');
 
