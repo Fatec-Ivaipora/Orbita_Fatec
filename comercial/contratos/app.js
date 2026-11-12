@@ -5,7 +5,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../.
 import { getEffectiveLevel } from '../../core/permissions.js';
 import { opcaoEscolhida, imprimirRelatorio, avatar } from '../comercial-comum.js';
 import { iniciarRotaColeta } from './rota.js?v=3';
-import { iniciarFeedDiario } from './feed-diario.js?v=9';
+import { iniciarFeedDiario } from './feed-diario.js?v=10';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);

@@ -62,21 +62,44 @@ function carregarHtml2canvas() {
   });
   return h2cPromessa;
 }
+function htmlImagem(d) {
+  const esc = ctx.esc;
+  const ehHoje = d.data === hojeISO();
+  const [a, m, dd] = d.data.split('-');
+  const hora = new Date(d.consultadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const doDia = d.cursos.filter(c => c.hoje).sort((x, y) => y.hoje - x.hoje || x.nome.localeCompare(y.nome, 'pt-BR'));
+  const alertas = d.cursos.filter(c => ['lotado', 'reta', 'margem'].includes(c.situacao)).sort((x, y) => (x.restam ?? 0) - (y.restam ?? 0));
+  const linhas = d.cursos.filter(c => c.total || c.vagas);
+  const curto = (nome) => nome.replace('Arquitetura e Urbanismo', 'Arquitetura').replace('Medicina Veterinária', 'Med. Veterinária').replace('Ciências Contábeis', 'C. Contábeis');
+  return `<div class="fdi">
+    <div class="fdi-cab"><span class="fdi-marca"><span class="fdi-orb">F<i></i></span><b>ÓRBITA</b><em>FATEC</em></span><img src="/img/fatec-ivp-horizontal.png" alt="Fatec Ivaiporã"></div>
+    <h2>Feed diário de matrículas</h2>
+    <p class="fdi-sub">Calouros ${esc(semBR(d.semestre))} · ${dd}/${m}/${a} · Edubox às ${esc(hora)}</p>
+    <div class="fdi-hoje"><div class="fdi-hoje-n"><b>${n(d.totais.hoje)}</b><span>${d.totais.hoje === 1 ? 'matrícula' : 'matrículas'}<br>${ehHoje ? 'hoje' : 'no dia'}</span></div>
+      <div class="fdi-chips">${doDia.length ? doDia.map(c => `<span>${esc(curto(c.nome))} <b>+${c.hoje}</b></span>`).join('') : '<span class="fdi-nada">Nenhuma matrícula no dia</span>'}</div></div>
+    ${alertas.length ? `<div class="fdi-alertas">${alertas.map(c => `<p class="fdi-a-${c.situacao}"><b>${esc(curto(c.nome))}</b> ${esc(situacaoTexto(c).toLowerCase())} <span>${c.total} de ${c.limite}</span></p>`).join('')}</div>` : ''}
+    <table class="fdi-tab"><thead><tr><th>Curso</th><th>Matric.</th><th>Edital</th><th>Disp.</th></tr></thead><tbody>
+      ${linhas.map(c => `<tr class="fdi-l-${c.situacao}"><td>${esc(curto(c.nome))}</td><td><b>${n(c.total)}</b>${c.hoje ? `<i>+${c.hoje}</i>` : ''}</td><td>${c.vagas ?? '—'}</td><td><b>${c.limite === null ? '—' : Math.max(0, c.restam)}</b></td></tr>`).join('')}
+    </tbody><tfoot><tr><td>Total</td><td><b>${n(d.totais.total)}</b>${d.totais.hoje ? `<i>+${d.totais.hoje}</i>` : ''}</td><td></td><td></td></tr></tfoot></table>
+    <p class="fdi-rod">Disp. = vagas do edital + 10% − matriculados · Órbita Fatec</p>
+  </div>`;
+}
+
 async function gerarImagem() {
-  const folha = document.querySelector('#fd-conteudo .fd-folha');
-  if (!folha) return ctx.showToast('Espere o feed carregar.', 'error');
+  if (!dados) return ctx.showToast('Espere o feed carregar.', 'error');
   const btn = $('fd-imagem');
   const rotulo = btn.textContent;
   btn.disabled = true; btn.textContent = 'Gerando imagem…';
+  // imagem própria (12/11/2026): 360px de largura x 3 = 1080 px, feita pra caber numa tela de celular e
+  // continuar legível depois que o WhatsApp reduz
   const caixa = document.createElement('div');
-  caixa.className = 'fd fd-foto';
-  caixa.appendChild(folha.cloneNode(true));
-  caixa.querySelectorAll('.fd-no-print').forEach(el => el.remove());
+  caixa.className = 'fdi-caixa';
+  caixa.innerHTML = htmlImagem(dados);
   document.body.appendChild(caixa);
   try {
     const html2canvas = await carregarHtml2canvas();
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
-    const canvas = await html2canvas(caixa.firstChild, { scale: 1080 / caixa.firstChild.offsetWidth, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const canvas = await html2canvas(caixa.firstElementChild, { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false });
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     const nome = `feed-diario-matriculas-${(dados && dados.data) || hojeISO()}.png`;
     const arquivo = new File([blob], nome, { type: 'image/png' });

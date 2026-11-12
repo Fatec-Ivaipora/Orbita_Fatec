@@ -204,29 +204,38 @@ body.fd-aberto .layout-content > *:not(#feed-diario) { display: none !important;
   .fd-tabela tbody tr.fd-l-ok th, .fd-tabela tbody tr.fd-l-sem-vagas th { grid-column: 1 / 4; }
 }
 
-/* Imagem p/ WhatsApp (12/11/2026): cópia do feed fora da tela, 430px de largura, com o layout de celular */
-body .fd.fd-foto, body.fd-aberto .fd.fd-foto { display: block !important; position: fixed; left: -10000px; top: 0; width: 430px !important; max-width: 430px !important; margin: 0 !important; }
-.fd-foto .fd-folha { border-radius: 0; border: 0; }
-.fd-foto .fd-dia-feed { grid-template-columns: 1fr; }
-.fd-foto .fd-dia-total { border-right: 0; border-bottom: 1px solid var(--fd-linha); padding: 0 0 10px; }
-.fd-foto .fd-dia-cursos ul { grid-template-columns: 1fr 1fr; gap: 0 16px; }
-.fd-foto .fd-logo { height: 22px; }
-.fd-foto .fd-marca-nome { font-size: 1.05rem; }
-.fd-foto .fd-titulo h2 { font-size: 1.3rem; }
-.fd-foto .fd-folha { padding: 16px 14px; border-radius: 12px; }
-.fd-foto .fd-alertas ul { grid-template-columns: 1fr; }
-/* html2canvas pinta box-shadow inset como fundo cheio: na imagem a marca do curso lotado vira borda */
-.fd-foto .fd-num::before, .fd-foto .fd-alertas li { box-shadow: none; }
-/* Imagem: tabela compacta (1 linha por curso) pra imagem não ficar comprida demais no WhatsApp */
-.fd-foto .fd-tabela { min-width: 0; font-size: 12px; }
-.fd-foto .fd-tabela thead th { font-size: 9.5px; white-space: normal; line-height: 1.2; padding: 5px 4px; }
-.fd-foto .fd-tabela th, .fd-foto .fd-tabela td { padding: 5px 4px; }
-.fd-foto .fd-tabela th:last-child, .fd-foto .fd-tabela td.fd-sit, .fd-foto .fd-tabela tfoot td[colspan] { display: none; }
-.fd-foto .fd-tabela tbody th { font-size: 12px; }
-.fd-foto .fd-mais { display: block; margin: 0; font-size: 9px; }
-.fd-foto .fd-tabela tbody tr.fd-l-lotado { border-left: 0; }
-.fd-foto .fd-tabela tbody tr.fd-l-lotado th { box-shadow: none; color: var(--fd-lot); }
-.fd-foto .fd-tabela tbody tr.fd-l-reta th, .fd-foto .fd-tabela tbody tr.fd-l-reta td[data-rot="Disponíveis"] b { color: var(--fd-reta); }
-.fd-foto .fd-dia-feed { padding: 10px 14px; gap: 8px; }
-.fd-foto .fd-dia-total b { font-size: 2.1rem; }
-.fd-foto .fd-dia-cursos li { font-size: 0.86rem; padding: 3px 0; }
+/* Imagem p/ WhatsApp (12/11/2026, v2): desenho próprio, 360px x 3 = 1080 px, cabe numa tela de celular */
+.fdi-caixa { position: fixed; left: -10000px; top: 0; width: 360px; }
+.fdi { width: 360px; box-sizing: border-box; background: #fff; padding: 14px 14px 10px; color: #0d1b33; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+.fdi-cab { display: flex; justify-content: space-between; align-items: center; padding-bottom: 7px; border-bottom: 2px solid #12294d; }
+.fdi-cab img { height: 17px; width: auto; }
+.fdi-marca { display: flex; align-items: center; gap: 5px; font: 800 13px/1 'Outfit', sans-serif; letter-spacing: -0.03em; }
+.fdi-marca b { color: #031426; }
+.fdi-marca em { color: #0f4eb8; font-style: normal; }
+.fdi-orb { position: relative; width: 18px; height: 18px; border: 1.5px solid #e3e8f0; border-radius: 50%; display: inline-grid; place-items: center; font: 800 10px/1 'Outfit', sans-serif; color: #0f4eb8; }
+.fdi-orb i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #eb7025; top: -3px; left: 50%; margin-left: -2.5px; }
+.fdi h2 { font: 800 16px/1.15 'Archivo', system-ui, sans-serif; color: #12294d; margin: 8px 0 1px; letter-spacing: -0.01em; }
+.fdi-sub { font-size: 9.5px; color: #5b6a80; margin: 0 0 8px; }
+.fdi-hoje { display: flex; gap: 10px; align-items: center; background: #fff6ef; border-radius: 8px; padding: 7px 9px; margin-bottom: 7px; }
+.fdi-hoje-n { display: flex; align-items: center; gap: 5px; flex: none; }
+.fdi-hoje-n b { font: 800 26px/1 'Archivo', system-ui, sans-serif; color: #eb7025; }
+.fdi-hoje-n span { font-size: 9px; line-height: 1.15; color: #44536b; }
+.fdi-chips { display: flex; flex-wrap: wrap; gap: 3px 4px; }
+.fdi-chips span { font-size: 9.5px; background: #fff; border: 1px solid #f6d3bd; border-radius: 999px; padding: 1px 6px; white-space: nowrap; }
+.fdi-chips b { color: #eb7025; }
+.fdi-nada { color: #5b6a80; }
+.fdi-alertas { margin-bottom: 6px; }
+.fdi-alertas p { margin: 0 0 3px; font-size: 10px; padding: 3px 7px; border-radius: 6px; border-left: 3px solid #a8650b; background: #fdf0dd; }
+.fdi-alertas p span { float: right; color: #5b6a80; }
+.fdi-alertas .fdi-a-lotado { border-left-color: #c8392f; background: #fbe9e6; }
+.fdi-alertas .fdi-a-lotado b { color: #c8392f; }
+.fdi-tab { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.fdi-tab th { font-size: 8.5px; font-weight: 700; color: #5b6a80; text-align: right; padding: 2px 3px 3px; border-bottom: 1px solid #e3e8f0; }
+.fdi-tab th:first-child, .fdi-tab td:first-child { text-align: left; }
+.fdi-tab td { padding: 2.5px 3px; border-bottom: 1px solid #f1f4f8; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fdi-tab td:first-child { font-weight: 600; }
+.fdi-tab i { font-style: normal; font-size: 8.5px; font-weight: 700; color: #eb7025; margin-left: 3px; }
+.fdi-l-lotado td:first-child, .fdi-l-lotado td:last-child b { color: #c8392f; }
+.fdi-l-reta td:first-child, .fdi-l-reta td:last-child b { color: #a8650b; }
+.fdi-tab tfoot td { font-weight: 800; border-top: 1.5px solid #e3e8f0; border-bottom: 0; padding-top: 4px; }
+.fdi-rod { font-size: 8px; color: #8693a6; margin: 6px 0 0; }
