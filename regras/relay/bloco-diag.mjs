@@ -35,6 +35,21 @@ function diagColunas() {
   });
 }
 
+// colunas das tabelas do FINANCEIRO (tfi_*) e de qualquer tabela com observacao/plano/desconto no nome — so
+// nome/tipo das colunas, nenhum dado (12/11/2026: fechamento do dia das Matriculas — parcelas, desconto, vencimento)
+function diagColunasFinanceiro() {
+  return diagConsulta(async (c) => {
+    const r = await c.query(`
+      select table_name as tabela, column_name as coluna, data_type as tipo
+        from information_schema.columns
+       where table_schema = 'ivp'
+         and (table_name ~ '^tfi_' or table_name ~* '(obs|plano|descont|bolsa|financ)')
+       order by table_name, ordinal_position
+       limit 2500`);
+    return { colunas: r.rows };
+  });
+}
+
 // contagem por valor de UMA coluna (so tac_matricula / tac_ingresso), so das matriculas dos semestres pedidos.
 // Devolve valor + quantidade; nada de nome/CPF. A coluna e conferida no information_schema.
 function diagValores(tabela, coluna, semestres) {
@@ -80,7 +95,8 @@ async function rotaOrbitaDiag(req, res) {
   if (!autenticadoOrbita(req)) { diagResponder(res, 401, { ok: false, erro: 'nao autorizado' }); return true; }
   if (req.method !== 'GET') { diagResponder(res, 405, { ok: false, erro: 'so GET' }); return true; }
   const semestres = String(u.searchParams.get('semestres') || '2027/1,2027-1').split(',').map(s => s.trim()).filter(s => /^\d{4}[/-][12]$/.test(s)).slice(0, 4);
-  if (u.pathname === '/orbita-diag/ping') { diagResponder(res, 200, { ok: true, rotas: 'orbita-diag', versao: 1 }); return true; }
+  if (u.pathname === '/orbita-diag/ping') { diagResponder(res, 200, { ok: true, rotas: 'orbita-diag', versao: 2 }); return true; }
+  if (u.pathname === '/orbita-diag/colunas-financeiro') { const r = await diagColunasFinanceiro(); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/colunas') { const r = await diagColunas(); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/resumo') { const r = await diagResumo(semestres); diagResponder(res, r.ok ? 200 : 500, r); return true; }
   if (u.pathname === '/orbita-diag/valores') {

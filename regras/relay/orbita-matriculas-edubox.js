@@ -47,16 +47,50 @@ async function medLista(semestres) {
   }
 }
 
+// GET /matriculas-edubox/financeiro?semestre=2027/1&codmats=1,2,3 (12/11/2026, v2) — parcelas do semestre de cada
+// matrícula, pro e-mail "MATRÍCULAS dd/mm" (nº de parcelas, valor, % de desconto, 1º vencimento). Sem CPF.
+async function medFinanceiro(semestre, codmats) {
+  const client = novoClient();
+  try {
+    await client.connect();
+    await client.query('set search_path=ivp,public;');
+    await client.query("set statement_timeout = '30s';");
+    const r = await client.query(`
+      select c.matctr as codmat, c.parctr as parcela, c.venctr::text as vencimento, c.valctr::float as valor,
+             c.valbasctr::float as valor_base, c.desctr::float as desconto, trim(coalesce(c.stactr, '')) as status,
+             c.canctr as cancelada, trim(coalesce(pl.despla, '')) as plano, left(trim(coalesce(pl.obspla, '')), 300) as plano_obs,
+             (select string_agg(coalesce(d.perctd, 0)::text || ';' || coalesce(d.valctd, 0)::text || ';' || trim(coalesce(d.tilctd, '')), '|' order by d.ordctd)
+                from tfi_ctreceber_desacr d where d.ctrctd = c.codctr) as descontos
+        from tfi_ctreceber c
+        left join tfi_plano pl on pl.codpla = c.plactr
+       where c.matctr = any($1) and c.semctr = $2
+       order by c.matctr, c.venctr, c.parctr`, [codmats, semestre]);
+    return { ok: true, parcelas: r.rows };
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  } finally {
+    try { await client.end(); } catch (e) { /* já fechado */ }
+  }
+}
+
 async function rotaOrbitaMatriculasEdubox(req, res) {
   const u = new URL(req.url, 'http://relay');
   if (!u.pathname.startsWith('/matriculas-edubox/')) return false;
   if (!autenticadoOrbita(req)) { medResponder(res, 401, { ok: false, erro: 'nao autorizado' }); return true; }
   if (req.method !== 'GET') { medResponder(res, 405, { ok: false, erro: 'so GET' }); return true; }
-  if (u.pathname === '/matriculas-edubox/ping') { medResponder(res, 200, { ok: true, rotas: 'matriculas-edubox', versao: 1 }); return true; }
+  if (u.pathname === '/matriculas-edubox/ping') { medResponder(res, 200, { ok: true, rotas: 'matriculas-edubox', versao: 2 }); return true; }
   if (u.pathname === '/matriculas-edubox/lista') {
     const semestres = String(u.searchParams.get('semestres') || '').split(',').map(s => s.trim()).filter(s => /^\d{4}[/-][12]$/.test(s)).slice(0, 4);
     if (!semestres.length) { medResponder(res, 400, { ok: false, erro: 'semestres invalidos' }); return true; }
     const r = await medLista(semestres);
+    medResponder(res, r.ok ? 200 : 500, r);
+    return true;
+  }
+  if (u.pathname === '/matriculas-edubox/financeiro') {
+    const semestre = String(u.searchParams.get('semestre') || '').trim();
+    const codmats = String(u.searchParams.get('codmats') || '').split(',').map(x => parseInt(x, 10)).filter(x => Number.isInteger(x) && x > 0).slice(0, 400);
+    if (!/^\d{4}[/-][12]$/.test(semestre) || !codmats.length) { medResponder(res, 400, { ok: false, erro: 'semestre/codmats invalidos' }); return true; }
+    const r = await medFinanceiro(semestre, codmats);
     medResponder(res, r.ok ? 200 : 500, r);
     return true;
   }

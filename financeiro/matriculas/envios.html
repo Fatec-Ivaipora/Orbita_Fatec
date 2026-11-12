@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envios - Matrículas - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/matriculas/matriculas.css?v=108">
+    <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <link rel="stylesheet" href="/financeiro/matriculas/envios.css?v=2">
+</head>
+<body class="orb-v2">
+    <!-- Auth Guard Padrão -->
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content" id="matriculas-envios-root">
+                <div class="page-header">
+                    <div>
+                        <span class="cm-selo">Financeiro</span>
+                        <h1 class="page-title"><span class="cm-titulo-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></span>Envios</h1>
+                        <p class="page-subtitle">Fechamento do dia (e-mail e WhatsApp) e e-mails de trancamento e cancelamento, prontos para conferir e enviar</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a class="btn-secondary" href="/financeiro/matriculas/index.html">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+                            Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="ev-topo">
+                    <div class="ev-abas" role="tablist">
+                        <button type="button" class="ev-aba ativa" data-aba="feed" role="tab" aria-selected="true">Fechamento do dia</button>
+                        <button type="button" class="ev-aba" data-aba="trancamento" role="tab" aria-selected="false">Trancamento</button>
+                        <button type="button" class="ev-aba" data-aba="cancelamento" role="tab" aria-selected="false">Cancelamento</button>
+                    </div>
+                    <div class="ev-filtros">
+                        <label>Semestre <select id="ev-semestre" class="select-filter"></select></label>
+                        <label id="ev-dia-wrap">Dia do envio <input type="date" id="ev-dia" class="select-filter"></label>
+                        <button type="button" class="btn-secondary" id="ev-atualizar">Atualizar</button>
+                    </div>
+                </div>
+
+                <!-- ===== Fechamento do dia ===== -->
+                <section id="ev-painel-feed">
+                    <div class="card ev-card" id="ev-feed-lista"></div>
+                    <div class="ev-saidas hidden" id="ev-feed-saidas">
+                        <div class="card ev-card">
+                            <h2>E-mail <small><b id="ev-feed-qtd">0</b> matrícula(s)</small></h2>
+                            <label class="ev-campo">Assunto<input type="text" id="ev-email-assunto"></label>
+                            <p class="ev-para" id="ev-email-para"></p>
+                            <label class="ev-campo">Texto (pode editar antes de enviar)<textarea id="ev-email-texto" rows="14"></textarea></label>
+                            <div class="ev-botoes">
+                                <button type="button" class="btn-primary" id="ev-email-gmail">Abrir no Gmail</button>
+                                <button type="button" class="btn-secondary" id="ev-email-copiar">Copiar texto</button>
+                            </div>
+                        </div>
+                        <div class="card ev-card">
+                            <h2>Feed do WhatsApp</h2>
+                            <label class="ev-campo">Mensagem (pode editar antes de enviar)<textarea id="ev-zap-texto" rows="14"></textarea></label>
+                            <div class="ev-botoes">
+                                <button type="button" class="btn-primary" id="ev-zap-copiar">Copiar mensagem</button>
+                                <button type="button" class="btn-secondary" id="ev-zap-abrir">Abrir no WhatsApp</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ev-final hidden" id="ev-feed-final">
+                        <p>Depois de enviar o e-mail e o WhatsApp, marque como enviados: amanhã esses alunos não aparecem de novo.</p>
+                        <button type="button" class="btn-primary" id="ev-marcar-enviados">Marcar como enviados</button>
+                    </div>
+                </section>
+
+                <!-- ===== Trancamento / Cancelamento ===== -->
+                <section id="ev-painel-saida" class="hidden">
+                    <div class="ev-saidas">
+                        <div class="card ev-card">
+                            <h2 id="ev-saida-titulo">Trancamento de matrícula</h2>
+                            <label class="ev-campo">Buscar aluno nas Matrículas<input type="search" id="ev-s-busca" placeholder="Digite pelo menos 3 letras do nome" autocomplete="off"></label>
+                            <div id="ev-s-resultados" class="ev-resultados"></div>
+                            <div class="ev-grade">
+                                <label class="ev-campo ev-largo">Aluno(a)<input type="text" id="ev-s-nome"></label>
+                                <label class="ev-campo">Curso<input type="text" id="ev-s-curso"></label>
+                                <label class="ev-campo">Período<input type="text" id="ev-s-periodo" placeholder="1°"></label>
+                            </div>
+                            <label class="ev-campo">Motivo<textarea id="ev-s-motivo" rows="2" placeholder="Ex.: aluna solicitou o trancamento por motivos de trabalho."></textarea></label>
+                            <fieldset class="ev-escolha"><legend id="ev-taxa-rotulo">Efetuou o pagamento da taxa?</legend>
+                                <label><input type="radio" name="ev-taxa" value="sim"> Sim</label>
+                                <label><input type="radio" name="ev-taxa" value="nao" checked> Não</label>
+                            </fieldset>
+                            <fieldset class="ev-escolha"><legend>Possui pendências financeiras?</legend>
+                                <label><input type="radio" name="ev-pend" value="sim"> Sim</label>
+                                <label><input type="radio" name="ev-pend" value="nao" checked> Não</label>
+                            </fieldset>
+                            <button type="button" class="btn-link" id="ev-s-limpar">Limpar</button>
+                        </div>
+                        <div class="card ev-card">
+                            <h2>E-mail</h2>
+                            <label class="ev-campo">Assunto<input type="text" id="ev-s-assunto"></label>
+                            <p class="ev-para" id="ev-s-para"></p>
+                            <label class="ev-campo">Texto (pode editar antes de enviar)<textarea id="ev-s-texto" rows="16"></textarea></label>
+                            <p class="ev-dica">Os DDAs vão em anexo: anexe no Gmail antes de enviar.</p>
+                            <div class="ev-botoes">
+                                <button type="button" class="btn-primary" id="ev-s-gmail" disabled>Abrir no Gmail</button>
+                                <button type="button" class="btn-secondary" id="ev-s-copiar">Copiar texto</button>
+                                <button type="button" class="btn-link hidden" id="ev-s-refazer">Refazer texto pelos campos</button>
+                                <span class="ev-alerta" id="ev-s-falta"></span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="/financeiro/matriculas/app.js?v=133"></script>
+</body>
+</html>
