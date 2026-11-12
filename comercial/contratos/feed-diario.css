@@ -142,3 +142,91 @@ body.fd-aberto .layout-content > *:not(#feed-diario) { display: none !important;
   .fd-dia-total { border-right: 0; border-bottom: 1px solid var(--fd-linha); padding: 0 0 10px; }
 }
 @media print { body.fd-aberto .fd-dia-feed, body.fd-aberto .fd-dia-total b, body.fd-aberto .fd-mais { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* Impressão em retrato, 1 página (12/11/2026): tudo mais compacto só no papel */
+@media print {
+  body.fd-aberto .fd-folha { font-size: 11px; }
+  body.fd-aberto .fd-cab { padding-bottom: 8px; border-bottom-width: 1.5px; }
+  body.fd-aberto .fd-logo { height: 22px; }
+  body.fd-aberto .fd-marca-nome { font-size: 1rem; }
+  body.fd-aberto .fd-orbita { width: 24px; height: 24px; }
+  body.fd-aberto .fd-titulo { margin: 10px 0 8px; }
+  body.fd-aberto .fd-titulo h2 { font-size: 17px; }
+  body.fd-aberto .fd-titulo p { font-size: 10px; margin-top: 2px; }
+  body.fd-aberto .fd-dia-feed { padding: 8px 12px; margin-bottom: 8px; gap: 8px 14px; grid-template-columns: 120px 1fr; break-inside: avoid; }
+  body.fd-aberto .fd-dia-total { padding-right: 12px; }
+  body.fd-aberto .fd-dia-total b { font-size: 26px; }
+  body.fd-aberto .fd-dia-total span { font-size: 10px; }
+  body.fd-aberto .fd-dia-cursos ul { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 14px; }
+  body.fd-aberto .fd-dia-cursos li { font-size: 10.5px; padding: 2px 0; }
+  body.fd-aberto .fd-dia-cursos li b { font-size: 11px; }
+  body.fd-aberto .fd-alertas { padding: 6px 10px 8px; margin-bottom: 8px; break-inside: avoid; }
+  body.fd-aberto .fd-alertas h3 { font-size: 11px; margin-bottom: 4px; }
+  body.fd-aberto .fd-alertas ul { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 12px; }
+  body.fd-aberto .fd-alertas li b, body.fd-aberto .fd-alertas li span { font-size: 10.5px; }
+  body.fd-aberto .fd-alertas li small { font-size: 9px; }
+  body.fd-aberto .fd-sub { font-size: 11px; margin: 2px 0 4px; }
+  body.fd-aberto .fd-tabela { font-size: 10px; }
+  body.fd-aberto .fd-tabela th, body.fd-aberto .fd-tabela td { padding: 3.5px 6px; }
+  body.fd-aberto .fd-tabela thead th { font-size: 9px; }
+  body.fd-aberto .fd-selo { font-size: 9px; padding: 1px 7px; }
+  body.fd-aberto .fd-mais { font-size: 8.5px; }
+  body.fd-aberto .fd-rodape { margin-top: 8px; padding-top: 6px; font-size: 8.5px; }
+  body.fd-aberto .fd-folha, body.fd-aberto .fd-tabela-wrap { break-inside: avoid; }
+}
+
+/* Celular (12/11/2026): a tabela por curso vira cartões — curso + situação em cima, os 3 números embaixo */
+@media screen and (max-width: 600px) {
+  .fd-folha { padding: 16px 14px; border-radius: 12px; }
+  .fd-barra-topo { gap: 8px; }
+  .fd-barra-topo #fd-voltar { flex-basis: 100%; }
+  .fd-barra-topo .fd-campo { flex: 1 1 140px; }
+  .fd-barra-topo #fd-atualizar, .fd-barra-topo #fd-imprimir { flex: 1 1 140px; }
+  .fd-tabela-wrap { overflow: visible; }
+  .fd-tabela { min-width: 0; display: block; }
+  .fd-tabela thead { display: none; }
+  .fd-tabela tbody, .fd-tabela tfoot { display: block; }
+  .fd-tabela tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 10px 0 10px 8px; border-bottom: 1px solid var(--fd-linha2); }
+  .fd-tabela tbody th, .fd-tabela tbody td { border: 0; padding: 0; text-align: left; }
+  .fd-tabela tbody th { grid-column: 1 / 3; grid-row: 1; align-self: center; font-size: 0.95rem; }
+  .fd-tabela tbody td.fd-sit { grid-column: 3; grid-row: 1; text-align: right; align-self: center; white-space: normal; }
+  .fd-tabela tbody td.fd-sit .fd-selo { white-space: normal; text-align: center; }
+  .fd-tabela tbody td[data-rot] { grid-row: 2; font-size: 0.9rem; }
+  .fd-tabela tbody td[data-rot]::before { content: attr(data-rot); display: block; font-size: 0.68rem; font-weight: 600; color: var(--fd-mudo); margin-bottom: 1px; }
+  .fd-tabela tbody tr.fd-l-lotado { box-shadow: inset 3px 0 0 var(--fd-lot); }
+  .fd-tabela tbody tr.fd-l-lotado th { box-shadow: none; }
+  .fd-tabela tfoot tr { display: flex; justify-content: space-between; padding: 10px 0 0 8px; }
+  .fd-tabela tfoot th, .fd-tabela tfoot td { border: 0; padding: 0; }
+  .fd-tabela tfoot td[colspan] { display: none; }
+  .fd-alertas ul { grid-template-columns: 1fr; }
+  .fd-tabela tbody td.num[data-rot] { text-align: left; }
+  .fd-tabela tbody tr.fd-l-ok td.fd-sit, .fd-tabela tbody tr.fd-l-sem-vagas td.fd-sit { display: none; }
+  .fd-tabela tbody tr.fd-l-ok th, .fd-tabela tbody tr.fd-l-sem-vagas th { grid-column: 1 / 4; }
+}
+
+/* Imagem p/ WhatsApp (12/11/2026): cópia do feed fora da tela, 430px de largura, com o layout de celular */
+body .fd.fd-foto, body.fd-aberto .fd.fd-foto { display: block !important; position: fixed; left: -10000px; top: 0; width: 430px !important; max-width: 430px !important; margin: 0 !important; }
+.fd-foto .fd-folha { border-radius: 0; border: 0; }
+.fd-foto .fd-dia-feed { grid-template-columns: 1fr; }
+.fd-foto .fd-dia-total { border-right: 0; border-bottom: 1px solid var(--fd-linha); padding: 0 0 10px; }
+.fd-foto .fd-dia-cursos ul { grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.fd-foto .fd-logo { height: 22px; }
+.fd-foto .fd-marca-nome { font-size: 1.05rem; }
+.fd-foto .fd-titulo h2 { font-size: 1.3rem; }
+.fd-foto .fd-folha { padding: 16px 14px; border-radius: 12px; }
+.fd-foto .fd-alertas ul { grid-template-columns: 1fr; }
+/* html2canvas pinta box-shadow inset como fundo cheio: na imagem a marca do curso lotado vira borda */
+.fd-foto .fd-num::before, .fd-foto .fd-alertas li { box-shadow: none; }
+/* Imagem: tabela compacta (1 linha por curso) pra imagem não ficar comprida demais no WhatsApp */
+.fd-foto .fd-tabela { min-width: 0; font-size: 12px; }
+.fd-foto .fd-tabela thead th { font-size: 9.5px; white-space: normal; line-height: 1.2; padding: 5px 4px; }
+.fd-foto .fd-tabela th, .fd-foto .fd-tabela td { padding: 5px 4px; }
+.fd-foto .fd-tabela th:last-child, .fd-foto .fd-tabela td.fd-sit, .fd-foto .fd-tabela tfoot td[colspan] { display: none; }
+.fd-foto .fd-tabela tbody th { font-size: 12px; }
+.fd-foto .fd-mais { display: block; margin: 0; font-size: 9px; }
+.fd-foto .fd-tabela tbody tr.fd-l-lotado { border-left: 0; }
+.fd-foto .fd-tabela tbody tr.fd-l-lotado th { box-shadow: none; color: var(--fd-lot); }
+.fd-foto .fd-tabela tbody tr.fd-l-reta th, .fd-foto .fd-tabela tbody tr.fd-l-reta td[data-rot="Disponíveis"] b { color: var(--fd-reta); }
+.fd-foto .fd-dia-feed { padding: 10px 14px; gap: 8px; }
+.fd-foto .fd-dia-total b { font-size: 2.1rem; }
+.fd-foto .fd-dia-cursos li { font-size: 0.86rem; padding: 3px 0; }

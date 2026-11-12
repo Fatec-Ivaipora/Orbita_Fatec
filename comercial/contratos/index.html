@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/comercial/aula-experimental/aula-experimental.css?v=2">
     <link rel="stylesheet" href="/comercial/comercial-tema.css?v=2">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
-    <link rel="stylesheet" href="/comercial/contratos/feed-diario.css?v=3">
+    <link rel="stylesheet" href="/comercial/contratos/feed-diario.css?v=9">
 </head>
 <body class="orb-v2">
     <!-- Auth Guard Padrão -->
@@ -29,7 +29,8 @@
                         <label class="fd-campo">Semestre<select id="fd-semestre" class="select-filter"></select></label>
                         <label class="fd-campo">Dia<input type="date" id="fd-data" class="select-filter"></label>
                         <button type="button" class="btn-secondary" id="fd-atualizar">Atualizar</button>
-                        <button type="button" class="btn-primary" id="fd-imprimir">Imprimir / salvar PDF</button>
+                        <button type="button" class="btn-primary" id="fd-imagem" title="Gera uma imagem do feed para mandar no WhatsApp">Imagem p/ WhatsApp</button>
+                        <button type="button" class="btn-secondary" id="fd-imprimir">Imprimir / salvar PDF</button>
                     </div>
                     <div id="fd-conteudo"></div>
                 </section>
@@ -308,6 +309,6 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/comercial/contratos/app.js?v=15"></script>
+    <script type="module" src="/comercial/contratos/app.js?v=16"></script>
 </body>
 </html>
