@@ -273,7 +273,7 @@
 .bp-prev-lista { margin: 0 0 0.8rem; padding-left: 1.2rem; }
 .bp-prev-lista li { margin-bottom: 0.25rem; }
 .bp-prev-questao { background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem; }
-.bp-prev-questao p { margin: 0 0 0.4rem; }
+.bp-prev-questao p { margin: 0 0 0.4rem; white-space: pre-line; }   /* mantém as linhas do enunciado (I, II, III...) */
 .bp-prev-alternativa { padding-left: 1rem; }
 
 /* Gabarito editável direto na pré-visualização — clicar na alternativa

@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Banco de Provas: quebra de linha do enunciado na prova final e na visualização
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-quebra-linha
+- Arquivos alterados:
+  - `src/utils/gerarProvaDocx.js` (`paragrafo`): cada linha do texto vira uma linha no Word (quebra de linha), em vez de tudo corrido num parágrafo.
+  - `docencia/banco-provas/banco-provas.css` (+ `index.html` v22): a visualização da prova mantém as linhas do enunciado (`white-space: pre-line`).
+- Tipo: Correção
+- Motivo: questão de Fisioterapia com afirmativas I, II, III e IV (uma por linha) saía corrida na visualização e no arquivo da prova. O enunciado já era gravado com as quebras de linha; só a montagem juntava tudo.
+- Impacto: provas já cadastradas passam a sair formatadas, sem recadastrar questões. Vale para bimestral, exame e simulado.
+- Como testar: gerar a prova com uma questão de afirmativas em linhas separadas e conferir a visualização e o .docx.
+- Como reverter: reverter o commit.
+
 ### [2026-11-03] Importação do Banco de Provas sem fontes embutidas + coordenação edita as avaliações do próprio curso na Correção
 - Autor: Claude Code (a pedido do usuário)
 - Branch: `fix/coordenador-edita-avaliacoes-curso`

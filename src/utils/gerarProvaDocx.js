@@ -46,13 +46,16 @@ function paragrafo(texto, opts = {}) {
     // Justificado por padrão — pedido explícito (18/09): "precisa seguir o
     // padrão para avaliações, né, ABNT" (só títulos/cabeçalhos centralizados,
     // que já passam align explícito, ficam de fora disso).
+    // Quebra de linha do enunciado vira quebra de linha no Word (13/11/2026): afirmativas I, II, III...
+    // de uma linha cada saíam corridas no arquivo final.
+    const linhas = String(texto ?? '').split(/\r?\n/);
     return new Paragraph({
         alignment: opts.align || AlignmentType.JUSTIFIED,
         spacing: { after: opts.after ?? 120 },
         pageBreakBefore: !!opts.pageBreakBefore,
         keepNext: !!opts.keepNext,
         keepLines: !!opts.keepLines,
-        children: [new TextRun({ text: texto, bold: !!opts.bold, size: opts.size || 22 })]
+        children: linhas.map((linha, i) => new TextRun({ text: linha, bold: !!opts.bold, size: opts.size || 22, break: i ? 1 : 0 }))
     });
 }
 
