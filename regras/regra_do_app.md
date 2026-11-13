@@ -109,6 +109,17 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Banco de Provas: sem espaços esticados nas linhas com quebra (Word)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-quebra-espaco
+- Arquivos alterados:
+  - `src/utils/gerarProvaDocx.js`: os três documentos (prova, simulado e gabarito) saem com a opção de compatibilidade do Word `doNotExpandShiftReturn`.
+- Tipo: Correção
+- Motivo: depois do PR #185 as afirmativas I, II, III... saíam uma por linha, mas o texto justificado esticava as palavras da linha que termina na quebra até a margem, deixando espaços grandes.
+- Impacto: as linhas com quebra manual não são mais esticadas; o restante continua justificado.
+- Como testar: gerar a prova com uma questão de afirmativas em linhas separadas e abrir o .docx no Word.
+- Como reverter: reverter o commit.
+
 ### [2026-11-13] Banco de Provas: quebra de linha do enunciado na prova final e na visualização
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-quebra-linha

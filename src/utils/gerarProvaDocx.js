@@ -42,6 +42,11 @@ const ORIENTACOES = [
     'O gabarito da prova será disponibilizado no dia da vista de prova, mesmo momento em que o professor estabelecerá o prazo para recursos sobre eventuais questões que devam ser anuladas.'
 ];
 
+// Texto justificado + quebra de linha manual: o Word esticava as palavras da linha que termina na
+// quebra até a margem (espaços enormes nas afirmativas I, II, III...). Esta opção é a mesma do Word
+// "Não expandir espaços de caracteres em linhas que terminam com Shift+Enter" (13/11/2026).
+const COMPAT_WORD = { doNotExpandShiftReturn: true };
+
 function paragrafo(texto, opts = {}) {
     // Justificado por padrão — pedido explícito (18/09): "precisa seguir o
     // padrão para avaliações, né, ABNT" (só títulos/cabeçalhos centralizados,
@@ -380,6 +385,7 @@ async function gerarDocxBimestralOuExame(prova, questoes, opts) {
     children.push(paragrafo('Boa Prova!', { bold: true, align: AlignmentType.CENTER, after: 0 }));
 
     const doc = new Document({
+        compatibility: COMPAT_WORD,
         sections: [{
             headers: { default: criarCabecalhoInstitucional() },
             footers: { default: criarRodapeInstitucional() },
@@ -409,6 +415,7 @@ async function gerarDocxSimulado(prova, questoes, opts) {
     });
 
     const doc = new Document({
+        compatibility: COMPAT_WORD,
         sections: [
             {
                 headers: { default: criarCabecalhoInstitucional() },
@@ -610,6 +617,7 @@ async function gerarGabaritoDocx(prova, questoes, opts) {
     }
 
     const doc = new Document({
+        compatibility: COMPAT_WORD,
         sections: [{
             headers: { default: criarCabecalhoInstitucional() },
             footers: { default: criarRodapeInstitucional() },
