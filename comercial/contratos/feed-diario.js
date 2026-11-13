@@ -69,7 +69,7 @@ function htmlImagem(d) {
   const hora = new Date(d.consultadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const doDia = d.cursos.filter(c => c.hoje).sort((x, y) => y.hoje - x.hoje || x.nome.localeCompare(y.nome, 'pt-BR'));
   const alertas = d.cursos.filter(c => ['lotado', 'reta', 'margem'].includes(c.situacao)).sort((x, y) => (x.restam ?? 0) - (y.restam ?? 0));
-  const linhas = d.cursos.filter(c => c.total || c.vagas);
+  const linhas = d.cursos.filter(c => c.total || c.outros || c.vagas);
   const curto = (nome) => nome.replace('Arquitetura e Urbanismo', 'Arquitetura').replace('Medicina Veterinária', 'Med. Veterinária').replace('Ciências Contábeis', 'C. Contábeis');
   return `<div class="fdi">
     <div class="fdi-cab"><span class="fdi-marca"><span class="fdi-orb">F<i></i></span><b>ÓRBITA</b><em>FATEC</em></span><img src="/img/fatec-ivp-horizontal.png" alt="Fatec Ivaiporã"></div>
@@ -79,9 +79,9 @@ function htmlImagem(d) {
       <div class="fdi-chips">${doDia.length ? doDia.map(c => `<span>${esc(curto(c.nome))} <b>+${c.hoje}</b></span>`).join('') : '<span class="fdi-nada">Nenhuma matrícula no dia</span>'}</div></div>
     ${alertas.length ? `<div class="fdi-alertas">${alertas.map(c => `<p class="fdi-a-${c.situacao}"><b>${esc(curto(c.nome))}</b> ${esc(situacaoTexto(c).toLowerCase())} <span>${c.total} de ${c.limite}</span></p>`).join('')}</div>` : ''}
     <table class="fdi-tab"><thead><tr><th>Curso</th><th>Matric.</th><th>Edital</th><th>Disp.</th></tr></thead><tbody>
-      ${linhas.map(c => `<tr class="fdi-l-${c.situacao}"><td>${esc(curto(c.nome))}</td><td><b>${n(c.total)}</b>${c.hoje ? `<i>+${c.hoje}</i>` : ''}</td><td>${c.vagas ?? '—'}</td><td><b>${c.limite === null ? '—' : Math.max(0, c.restam)}</b></td></tr>`).join('')}
-    </tbody><tfoot><tr><td>Total</td><td><b>${n(d.totais.total)}</b>${d.totais.hoje ? `<i>+${d.totais.hoje}</i>` : ''}</td><td></td><td></td></tr></tfoot></table>
-    <p class="fdi-rod">Disp. = vagas do edital + 10% − matriculados · Órbita Fatec</p>
+      ${linhas.map(c => `<tr class="fdi-l-${c.situacao}"><td>${esc(curto(c.nome))}</td><td><b>${n(c.total)}</b>${c.hoje ? `<i>+${c.hoje}</i>` : ''}${c.outros ? `<small class="fdi-op">+${c.outros} outros per. = ${n(c.total + c.outros)}</small>` : ''}</td><td>${c.vagas ?? '—'}</td><td><b>${c.limite === null ? '—' : Math.max(0, c.restam)}</b></td></tr>`).join('')}
+    </tbody><tfoot><tr><td>Total</td><td colspan="3"><b>${n(d.totais.total)}</b> calouros${d.totais.outros ? ` + <b>${n(d.totais.outros)}</b> outros per. = <b>${n(d.totais.total + d.totais.outros)}</b>` : ''}${d.totais.hoje ? `<i>+${d.totais.hoje}</i>` : ''}</td></tr></tfoot></table>
+    <p class="fdi-rod">Disp. = vagas do edital + 10% − calouros do 1º período · Órbita Fatec</p>
   </div>`;
 }
 
@@ -154,12 +154,12 @@ function desenhar() {
   const hora = new Date(d.consultadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const doDia = d.cursos.filter(c => c.hoje).sort((a, b) => b.hoje - a.hoje || a.nome.localeCompare(b.nome, 'pt-BR'));
 
-  const visiveis = d.cursos.filter(c => editandoVagas || c.total || c.sairam || c.vagas);
+  const visiveis = d.cursos.filter(c => editandoVagas || c.total || c.outros || c.sairam || c.vagas);
   const disponiveis = (c) => (c.limite === null ? '<span class="fd-zero">—</span>' : c.restam > 0 ? `<b>${n(c.restam)}</b>` : '<b class="fd-esgotou">0</b>');
   const linhas = visiveis.map(c => `
     <tr class="fd-l-${c.situacao}">
       <th scope="row">${esc(c.nome)}</th>
-      <td class="num" data-rot="Matriculados"><b>${n(c.total)}</b>${c.hoje ? ` <span class="fd-mais">+${c.hoje} ${quando}</span>` : ''}</td>
+      <td class="num" data-rot="Matriculados"><b>${n(c.total)}</b>${c.outros ? ` <span class="fd-op">calouros + <b>${n(c.outros)}</b> outros per. = <b>${n(c.total + c.outros)}</b></span>` : ''}${c.hoje ? ` <span class="fd-mais">+${c.hoje} ${quando}</span>` : ''}</td>
       <td class="num" data-rot="Vagas do edital">${editandoVagas
         ? `<input type="number" min="0" max="10000" step="1" class="fd-vaga-in" data-cod="${esc(c.codcur)}" value="${c.vagas ?? ''}" aria-label="Vagas do edital de ${esc(c.nome)}">`
         : (c.vagas ?? '<span class="fd-zero">—</span>')}</td>
@@ -197,7 +197,7 @@ function desenhar() {
         <table class="fd-tabela">
           <thead><tr><th scope="col">Curso</th><th scope="col" class="num">Matriculados</th><th scope="col" class="num">Vagas do edital</th><th scope="col" class="num">Vagas disponíveis</th><th scope="col">Situação</th></tr></thead>
           <tbody>${linhas || '<tr><td colspan="5" class="fd-zero">Nenhum calouro neste semestre ainda.</td></tr>'}</tbody>
-          <tfoot><tr><th scope="row">Total</th><td class="num">${n(d.totais.total)}${d.totais.hoje ? ` <span class="fd-mais">+${n(d.totais.hoje)} ${quando}</span>` : ''}</td><td colspan="3"></td></tr></tfoot>
+          <tfoot><tr class="fd-total"><th scope="row">Total</th><td class="num" colspan="4"><b>${n(d.totais.total)}</b> calouros${d.totais.outros ? ` + <b>${n(d.totais.outros)}</b> outros períodos = <b>${n(d.totais.total + d.totais.outros)}</b> matrículas` : ''}${d.totais.hoje ? ` <span class="fd-mais">+${n(d.totais.hoje)} ${quando}</span>` : ''}</td></tr></tfoot>
         </table>
       </div>
       ${d.podeEditarVagas ? `<div class="fd-vagas-acoes fd-no-print">${editandoVagas
@@ -205,7 +205,7 @@ function desenhar() {
         : `<button type="button" class="btn-secondary" id="fd-editar-vagas">Editar vagas do edital</button>${d.vagasAtualizadasEm ? `<small>Vagas atualizadas em ${new Date(d.vagasAtualizadasEm).toLocaleDateString('pt-BR')}${d.vagasAtualizadasPor ? ` por ${esc(d.vagasAtualizadasPor)}` : ''}</small>` : ''}`}</div>` : ''}
 
       <footer class="fd-rodape">
-        <p>Calouro = ingresso em ${esc(semBR(d.semestre))}. Não conta quem cancelou, trancou, desistiu ou transferiu${d.totais.sairam ? ` (${n(d.totais.sairam)} até agora)` : ''}. Vagas disponíveis já contam a margem de 10% sobre as vagas do edital.</p>
+        <p>Calouro = ingresso em ${esc(semBR(d.semestre))} no 1º período. Outros períodos = aluno novo que entrou direto num período acima do 1º. Não conta quem cancelou, trancou, desistiu ou transferiu${d.totais.sairam ? ` (${n(d.totais.sairam)} até agora)` : ''}. Vagas disponíveis contam só os calouros do 1º período, já com a margem de 10% sobre as vagas do edital.</p>
         <p>Emitido em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} pelo Órbita · Contratos.</p>
       </footer>
     </article>`;

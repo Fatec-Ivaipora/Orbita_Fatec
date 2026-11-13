@@ -190,7 +190,7 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
         const cursos = new Map();
         const porDia = {};
         const curso = (cod) => {
-            if (!cursos.has(cod)) cursos.set(cod, { codcur: cod, nome: NOME_CURSO_FEED[cod] || cod, total: 0, hoje: 0, semana: 0, sairam: 0 });
+            if (!cursos.has(cod)) cursos.set(cod, { codcur: cod, nome: NOME_CURSO_FEED[cod] || cod, total: 0, outros: 0, hoje: 0, semana: 0, sairam: 0 });
             return cursos.get(cod);
         };
         const seteDiasAtras = new Date(new Date(`${data}T12:00:00`).getTime() - 6 * 86400000).toISOString().slice(0, 10);
@@ -200,7 +200,10 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
             const c = curso(e.codcur);
             const dia = String(e.data_matricula || '').slice(0, 10);
             if (SAIU_EDUBOX.test(e.situacao || '')) { c.sairam++; continue; }
-            c.total++;
+            // 12/11/2026: aluno novo que entrou direto num período acima do 1º (transferência, 2ª graduação) aparece à
+            // parte ("33 calouros + 2 outros períodos = 35") e não conta nas vagas do edital (que são do 1º período)
+            if (Number(e.periodo) > 1) c.outros++;
+            else c.total++;
             if (dia === data) c.hoje++;
             if (dia >= seteDiasAtras && dia <= data) c.semana++;
             if (dia && dia <= data) porDia[dia] = (porDia[dia] || 0) + 1;
@@ -227,7 +230,7 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
             cursos: lista,
             totais: {
                 hoje: lista.reduce((n, c) => n + c.hoje, 0), semana: lista.reduce((n, c) => n + c.semana, 0),
-                total: lista.reduce((n, c) => n + c.total, 0), sairam: lista.reduce((n, c) => n + c.sairam, 0),
+                total: lista.reduce((n, c) => n + c.total, 0), outros: lista.reduce((n, c) => n + c.outros, 0), sairam: lista.reduce((n, c) => n + c.sairam, 0),
                 vagas: lista.reduce((n, c) => n + (c.vagas || 0), 0), limite: lista.reduce((n, c) => n + (c.limite || 0), 0)
             },
             porDia: dias,
