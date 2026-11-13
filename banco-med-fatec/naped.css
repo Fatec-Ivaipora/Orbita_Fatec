@@ -1,0 +1,235 @@
+/* ÓRBITA — BANCO MED · identidade NAPED (13/11/2026)
+   Camada visual por cima de banco-med-fatec.css e avaliacoes.css, tirada do material oficial do NAPED
+   (Núcleo de Apoio Pedagógico da Medicina): campos azul-royal chapados, ciano só como destaque, títulos em caixa
+   alta pesada, linha fina ciano. O azul cheio é só da faixa do topo e dos períodos; o trabalho fica no branco. */
+:root {
+  --np-royal: #0052B8;
+  --np-royal-escuro: #003F8F;
+  --np-ciano: #00B3FF;          /* destaque, linhas e marcadores (não é cor de texto sobre branco) */
+  --np-ciano-texto: #A6E1FF;    /* texto claro sobre o royal (contraste AA) */
+  --np-ciano-tinta: #0067A8;    /* ciano escurecido para texto sobre branco */
+  --np-painel: #F7F7F7;
+  --np-tinta: #0B1F3F;
+  --np-tinta-2: #4A5A73;
+  --np-linha: #DCE3EC;
+  --np-display: 'Montserrat', 'Inter', system-ui, sans-serif;
+  /* as cores do módulo passam a ser as do NAPED */
+  --med-azul-escuro: var(--np-royal);
+  --med-azul-escuro-hover: var(--np-royal-escuro);
+  --med-azul-claro: var(--np-ciano);
+}
+
+::selection { background: var(--np-ciano); color: #002A5E; }
+#bmf-main { scrollbar-color: #9DB3D3 transparent; caret-color: var(--np-royal); }
+.mod-main { max-width: 1240px; padding-top: 0.5rem; }
+#bmf-main :focus-visible { outline-color: var(--np-royal); }
+
+/* ---------- faixa NAPED ---------- */
+.np-faixa {
+  background: var(--np-royal);
+  color: #fff;
+  padding: 1.6rem 2rem 0;
+  margin-bottom: 1.75rem;
+  box-shadow: inset 0 -2px 0 var(--np-ciano);
+}
+.np-faixa-topo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.75rem; align-items: center; }
+.np-logo { display: block; height: 58px; width: auto; }
+.np-faixa-titulo { border-left: 1px solid rgba(255, 255, 255, 0.28); padding-left: 1.75rem; min-width: 0; }
+.np-faixa-titulo h1 {
+  margin: 0; font-family: var(--np-display); font-weight: 800; text-transform: uppercase;
+  font-size: 1.45rem; line-height: 1.12; letter-spacing: 0.01em; color: #fff; text-wrap: balance;
+}
+.np-faixa-titulo p { margin: 0.35rem 0 0; font-size: 0.86rem; font-weight: 600; color: var(--np-ciano-texto); }
+.np-selo { display: block; height: 30px; width: auto; }
+
+.np-abas.bmf-tabs { display: flex; gap: 0.25rem; margin: 1.35rem 0 0; border-bottom: 0; border-top: 1px solid rgba(0, 179, 255, 0.5); overflow-x: auto; scrollbar-width: none; }
+.np-abas .bmf-tab-btn {
+  font-family: var(--np-display); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.78); padding: 0.95rem 1.1rem 0.85rem; margin-bottom: 0; white-space: nowrap;
+  border-bottom: 4px solid transparent; transition: color 0.15s, border-color 0.15s;
+}
+.np-abas .bmf-tab-btn:hover { color: #fff; }
+.np-abas .bmf-tab-btn.active { color: #fff; border-bottom-color: var(--np-ciano); }
+.np-abas .bmf-tab-btn:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.np-abas .bmf-tab-badge { background: #fff; color: var(--np-royal); }
+
+/* ---------- rodapé com os selos (como o material oficial) ---------- */
+.np-rodape { display: flex; justify-content: center; align-items: center; gap: 3.5rem; margin-top: 3.5rem; padding: 1.4rem 1rem; background: var(--np-royal); box-shadow: inset 0 2px 0 var(--np-ciano); }
+.np-rodape img { height: 24px; width: auto; display: block; }
+
+/* ---------- barras de ferramentas: claras (o azul cheio é só da faixa) ---------- */
+.bmf-toolbar, .av-toolbar.bmf-toolbar { background: var(--np-painel); border-radius: 6px; box-shadow: none; }
+.bmf-filters select, .bmf-filters input, .av-sem select, .av-busca {
+  border: 1px solid #CBD6E4; border-radius: 6px; background: #fff; color: var(--np-tinta); min-height: 40px;
+}
+.bmf-filters select:focus-visible, .bmf-filters input:focus-visible, .av-sem select:focus-visible, .av-busca:focus-visible { outline: 2px solid var(--np-royal); outline-offset: 1px; }
+.bmf-btn-on-blue-primary, .av-btn-branco { background: var(--np-royal); color: #fff; border: 0; border-radius: 6px; }
+.bmf-btn-on-blue-primary:hover, .av-btn-branco:hover { background: var(--np-royal-escuro); }
+.bmf-btn-on-blue-ghost, .av-btn-fantasma { background: #fff; color: var(--np-royal); border: 1px solid #B9CBE6; border-radius: 6px; }
+.bmf-btn-on-blue-ghost:hover, .av-btn-fantasma:hover { background: #EEF4FC; border-color: var(--np-royal); }
+.av-resumo { color: var(--np-tinta-2); }
+#bmf-main .btn-primary { background: var(--np-royal); border-radius: 6px; }
+#bmf-main .btn-primary:hover { background: var(--np-royal-escuro); }
+#bmf-main .btn-secondary, .av-modal .btn-secondary { border-radius: 6px; }
+
+/* Provas antigas juntaram em Avaliações: sem destino, a seleção em massa sai do banco */
+.bmf-q-row-check, #bmf-selecao-bar { display: none !important; }
+
+/* ---------- títulos em caixa alta NAPED ---------- */
+.av-ed-titulo h2, .bmf-modal-titulo, .av-modal-cab h2, .av-ed-plano h3, .av-sec legend, .av-mc-h, .bmf-revisao-cabecalho h2, .bmf-colinha-area h3 {
+  font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; color: var(--np-royal);
+}
+.av-ed-titulo h2 { font-size: 1.3rem; line-height: 1.15; }
+.av-ed-plano h3, .av-sec legend { font-size: 0.82rem; letter-spacing: 0.04em; }
+.av-modal-cab h2, .bmf-modal-titulo { font-size: 1rem; letter-spacing: 0.03em; }
+.av-check h3 { font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.82rem; background: var(--np-royal); box-shadow: inset 0 -2px 0 var(--np-ciano); }
+
+/* ---------- listas e grade: cantos retos, linha fina ---------- */
+.bmf-lista, .av-lista, .av-grade, .av-banco-lista, .av-crit-lista, .av-ed-plano, .bmf-pd-placar { border-radius: 8px; border-color: var(--np-linha); }
+.bmf-q-row:hover, .av-bq:hover { background: rgba(0, 82, 184, 0.04); }
+.av-grade-cab { background: var(--np-painel); color: var(--np-tinta-2); }
+.av-grade-bim { font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.74rem; color: var(--np-royal); }
+.av-grade-bim small { font-family: 'Inter', system-ui, sans-serif; text-transform: none; letter-spacing: 0; color: var(--np-tinta-2); }
+
+/* períodos como faixas royal, com o anel-ponto do estetoscópio do "E" do NAPED */
+.av-periodo {
+  display: flex; align-items: center; gap: 0.6rem;
+  background: var(--np-royal); color: #fff; border-top: 0;
+  font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.74rem;
+}
+.av-periodo::before {
+  content: ''; width: 13px; height: 13px; flex-shrink: 0; border-radius: 50%; box-sizing: border-box;
+  border: 3px solid var(--np-ciano); background: radial-gradient(circle, var(--np-ciano) 0 1.6px, transparent 2.2px);
+}
+.av-disc-info strong { color: var(--np-tinta); }
+.av-slot-vazio:hover { border-color: var(--np-royal); color: var(--np-royal); background: #EEF4FC; }
+
+/* número da questão e estado sem faixa colorida lateral */
+.av-q-n { background: #EAF1FB; color: var(--np-royal); font-family: var(--np-display); font-weight: 800; border-radius: 6px; }
+.av-q.av-q-erro { box-shadow: none; }
+.av-q.av-q-erro .av-q-n { background: #FDECEC; color: #B42318; }
+.av-prog-barra span { background: var(--np-royal); }
+.bmf-pd-barra span { background: var(--np-royal); }
+.av-fp.ativo { background: var(--np-royal); border-color: var(--np-royal); }
+.av-unid-n { font-family: var(--np-display); }
+.av-barra-esp { background: #BFE8FF; }
+.av-barra-qtd { background: var(--np-royal); }
+.av-obj-ok .av-obj-n { background: var(--np-royal); }
+
+/* modais: cabeçalho com a linha ciano */
+.av-modal-cab { box-shadow: inset 0 -2px 0 var(--np-ciano); }
+.av-modal, .modal-box { border-radius: 10px; }
+
+/* ---------- telas menores ---------- */
+@media (max-width: 860px) {
+  .np-faixa { padding: 1.2rem 1.1rem 0; }
+  .np-faixa-topo { grid-template-columns: 1fr; gap: 0.9rem; }
+  .np-faixa-titulo { border-left: 0; padding-left: 0; }
+  .np-faixa-titulo h1 { font-size: 1.15rem; }
+  .np-logo { height: 44px; }
+  .np-selo { display: none; }
+  .np-abas .bmf-tab-btn { padding: 0.85rem 0.8rem 0.75rem; font-size: 0.72rem; }
+  .np-rodape { gap: 2rem; }
+  .np-rodape img { height: 20px; }
+}
+
+/* rodada 2 (13/11/2026): barra branca com contorno (o painel claro sumia no fundo), busca mais larga,
+   etiquetas todas no mesmo estilo (as antigas eram caixa alta, as novas não) */
+.bmf-toolbar, .av-toolbar.bmf-toolbar { background: #fff; border: 1px solid var(--np-linha); }
+.av-busca { min-width: 360px; }
+.bmf-badge { text-transform: none; letter-spacing: 0; font-size: 0.72rem; font-weight: 700; }
+.bmf-pd-selo, .bmf-pd-cog, .av-tag, .av-selo { font-size: 0.72rem; font-weight: 700; }
+@media (max-width: 860px) { .av-busca { min-width: 0; } }
+
+/* checagem automática (13/11/2026): contraste AA nas etiquetas e textos secundários herdados, e sem faixa lateral */
+.bmf-resultado-resumo, .bmf-empty, .bmf-q-row-meta { color: var(--np-tinta-2); }
+.bmf-badge-facil { color: #22603F; }
+.bmf-badge-intermediaria { color: #7A4E00; }
+.bmf-colinha-area::before { display: none; }
+
+/* ---------- editor de questão em TELA CHEIA (13/11/2026) ----------
+   No AVA, adicionar questão abre a página inteira; aqui era uma janela de meia tela, apertada. */
+#bmf-modal-questao.modal-overlay { align-items: stretch; justify-content: stretch; padding: 0; backdrop-filter: none; }
+#bmf-modal-questao .modal-box {
+  width: 100vw; max-width: none; height: 100vh; max-height: none; border-radius: 0; padding: 0;
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: none; background: #F4F7FB;
+}
+#bmf-modal-questao .bmf-modal-titulo {
+  margin: 0; padding: 1.1rem 2rem; background: var(--np-royal); color: #fff; border: 0;
+  box-shadow: inset 0 -2px 0 var(--np-ciano); font-size: 1.05rem; flex-shrink: 0;
+}
+#bmf-form-questao {
+  flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start;
+  grid-template-columns: minmax(0, 1fr) 400px; column-gap: 1.75rem;
+  width: 100%; max-width: 1480px; margin: 0 auto; padding: 1.5rem 2rem 0; box-sizing: border-box;
+}
+#bmf-form-questao > .bmf-form-secao {
+  grid-column: 1; margin: 0 0 1.25rem; padding: 1.25rem 1.4rem; border: 1px solid var(--np-linha); border-radius: 8px; background: #fff;
+}
+#bmf-form-questao > .bmf-form-secao:first-of-type { grid-column: 2; grid-row: 1 / span 3; align-self: start; position: sticky; top: 0; }
+#bmf-form-questao .bmf-form-secao-titulo { font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.8rem; color: var(--np-royal); }
+#bmf-form-questao > .bmf-modal-acoes {
+  grid-column: 1 / -1; position: sticky; bottom: 0; margin: 0 -2rem; padding: 0.9rem 2rem; background: #fff;
+  border-top: 1px solid var(--np-linha); justify-content: flex-end;
+}
+#bmf-form-questao > .bmf-modal-acoes .btn { flex: 0 0 auto; min-width: 160px; }
+#bmf-form-questao textarea, #bmf-form-questao .bmf-rte { min-height: 180px; }
+@media (max-width: 1000px) {
+  #bmf-form-questao { grid-template-columns: 1fr; padding: 1rem 1rem 0; }
+  #bmf-form-questao > .bmf-form-secao:first-of-type { grid-column: 1; grid-row: auto; position: static; }
+  #bmf-form-questao > .bmf-modal-acoes { margin: 0 -1rem; padding: 0.8rem 1rem; }
+  #bmf-modal-questao .bmf-modal-titulo { padding: 1rem; }
+}
+
+/* editor da aba Avaliações também em tela cheia */
+.av-modal-fundo#av-modal-q { padding: 0; align-items: stretch; }
+#av-modal-q .av-modal { width: 100vw; max-width: none; height: 100vh; max-height: 100vh; border-radius: 0; }
+#av-modal-q .av-modal-cab { background: var(--np-royal); }
+#av-modal-q .av-modal-cab h2 { color: #fff; }
+#av-modal-q .av-modal-cab .av-icone-btn { background: transparent; border-color: rgba(255, 255, 255, 0.5); color: #fff; }
+#av-modal-q .av-mq-corpo { grid-template-columns: minmax(0, 1fr) 360px; }
+#av-modal-q .av-mq-form { max-width: 1100px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+
+/* ---------- estrutura mais forte (13/11/2026: "parece apagado, deixar os menus mais fortes") ---------- */
+/* editor: cada bloco é um cartão com cabeçalho royal, sobre o cinza da página */
+#av-modal-q .av-mq-form { background: #EEF2F7; }
+#av-modal-q .av-mq-corpo { background: #EEF2F7; }
+#av-modal-q .av-sec { background: #fff; border: 1px solid #C9D6E8; border-radius: 8px; padding: 0 1.25rem 1.1rem; margin: 0 0 1.25rem; overflow: hidden; }
+#av-modal-q .av-sec legend {
+  float: left; width: calc(100% + 2.5rem); margin: 0 -1.25rem 1rem; padding: 0.7rem 1.25rem; box-sizing: border-box;
+  background: var(--np-royal); color: #fff; font-size: 0.8rem; letter-spacing: 0.06em; box-shadow: inset 0 -2px 0 var(--np-ciano);
+}
+#av-modal-q .av-sec legend small { color: var(--np-ciano-texto); font-weight: 600; }
+#av-modal-q .av-sec legend + * { clear: both; }
+#av-modal-q .av-campo span, .av-modal .av-campo > span { color: var(--np-tinta); font-weight: 700; font-size: 0.82rem; }
+#av-modal-q .av-campo select, #av-modal-q .av-input, #av-modal-q .av-rico { border-color: #B9C8DC; }
+#av-modal-q .av-titulo-prev { background: #EAF1FB; color: var(--np-tinta); }
+#av-modal-q .av-alt { border-color: #C9D6E8; }
+#av-modal-q .av-check { background: #fff; border-left: 1px solid #C9D6E8; }
+
+/* tela da avaliação */
+.av-ed-cab { border-bottom: 2px solid var(--np-royal); }
+.av-toolbar .av-btn-fantasma { border: 1.5px solid var(--np-royal); font-weight: 700; }
+.av-q-n { background: var(--np-royal); color: #fff; }
+.av-q.av-q-erro .av-q-n { background: #B42318; color: #fff; }
+.av-lista { border-color: #C9D6E8; }
+.av-q { border-top-color: #DCE3EC; }
+.av-q-obj { color: var(--np-tinta); }
+.av-tag { background: #E8EEF6; color: #26364F; }
+.av-ed-plano { padding: 0 0 1.1rem; border-color: #C9D6E8; }
+.av-ed-plano > * { margin-left: 1.1rem; margin-right: 1.1rem; }
+.av-ed-plano h3 {
+  margin: 1.2rem 0 0.6rem; padding: 0.65rem 1.1rem; background: #EAF1FB; color: var(--np-royal);
+  border-top: 1px solid #C9D6E8; border-bottom: 1px solid #C9D6E8;
+}
+.av-ed-plano > .av-crit-origem { margin-top: 1.1rem; }
+.av-ed-plano h3 small { color: var(--np-tinta-2); }
+
+/* grade: casas "Montar" com contorno e texto royal, cabeçalho dos bimestres forte */
+.av-slot-vazio { border: 1.5px solid #B9CBE6; border-style: solid; background: #F7FAFE; color: var(--np-royal); }
+.av-slot-vazio:hover { background: #E3EDFA; border-color: var(--np-royal); }
+.av-grade-cab { background: #EAF1FB; border-bottom: 2px solid var(--np-royal); }
+.av-grade-cab > span:first-child { font-family: var(--np-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--np-royal); font-size: 0.74rem; }
+.av-grade-bim { font-size: 0.8rem; }
+.av-grade { border-color: #C9D6E8; }
+.av-disc { border-top-color: #DCE3EC; }

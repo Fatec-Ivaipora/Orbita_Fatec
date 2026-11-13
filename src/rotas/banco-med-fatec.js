@@ -12,7 +12,8 @@ const COL_PROVAS = 'banco_med_provas';
 const checkPermission = verifyToken.requireModulePermission('banco-med-fatec');
 
 const DIFICULDADES_VALIDAS = ['facil', 'media', 'intermediaria', 'dificil'];
-const TIPOS_VALIDOS = ['multichoice_unica', 'multichoice_multipla', 'verdadeiro_falso'];
+// 13/11/2026: sem 'multichoice_multipla' — toda questão da Medicina é de uma resposta (multichoice single do Open LMS)
+const TIPOS_VALIDOS = ['multichoice_unica', 'verdadeiro_falso'];
 
 // As 7 áreas de formação da Matriz de Referência do ENAMED — cortam
 // transversalmente período/disciplina (ex.: "Ginecologia e Obstetrícia" tem
@@ -47,7 +48,7 @@ function podeVerAutoria(role, user) {
 // visível, só não dá pra saber QUEM fez.
 function anonimizarQuestao(q, role, user) {
     if (podeVerAutoria(role, user)) return q;
-    const { elaboradoPor, criadoPor, criadoPorNome, ...resto } = q;
+    const { elaboradoPor, criadoPor, criadoPorNome, professorNome, ...resto } = q;
     return resto;
 }
 
@@ -698,6 +699,107 @@ router.get('/provas/:id/exportar', verifyToken, checkPermission, async (req, res
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// ==========================================
+// EDITOR PADRÃO NO BANCO (13/11/2026) — o "Nova Questão" e o editar do Banco usam o MESMO editor da montagem
+// da avaliação (professor, unidade e objetivo do plano, caso clínico, pergunta, alternativas com feedback,
+// feedback geral, referência, imagens/GIFs, checklist do padrão). Serve a todos que usam o Banco.
+// ==========================================
+const AV = () => require('./banco-med-avaliacoes')._interno;
+const semestreAtual = () => { const d = new Date(); return `${d.getFullYear()}.${d.getMonth() >= 6 ? 2 : 1}`; };
+
+router.get('/contexto/:categoriaId', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const cat = await db.collection(COL_CATEGORIAS).doc(req.params.categoriaId).get();
+        if (!cat.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        const c = cat.data();
+        const semestre = /^\d{4}\.[12]$/.test(req.query.semestre || '') ? req.query.semestre : semestreAtual();
+        const { listaDisciplinas, planoDaDisciplina, normNome } = AV();
+        const [lista, plano] = await Promise.all([
+            listaDisciplinas(semestre).catch(() => ({ disciplinas: [] })),
+            planoDaDisciplina(semestre, c.nome).catch(() => ({ unidades: [], objetivos: [], referencias: [] }))
+        ]);
+        const d = lista.disciplinas.find(x => normNome(x.nome) === normNome(c.nome));
+        res.json({ categoriaId: cat.id, disciplina: c.nome, sigla: c.nomeBreve || c.nome, periodo: c.periodo, professores: d ? d.professores : [], plano });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/questoes/:id/completa', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const s = await db.collection(COL_QUESTOES).doc(req.params.id).get();
+        if (!s.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+        const q = await AV().resumoComImagens({ id: s.id, ...s.data() });
+        const antiga = s.data().imagem;
+        if (q.temImagem && antiga && antiga.dataUrl) q.imagemAntiga = { nome: antiga.nome || 'imagem', dataUrl: antiga.dataUrl };
+        res.json(anonimizarQuestao(q, req.user.role, req.user));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/imagens/envio', verifyToken, checkPermission, async (req, res) => {
+    try { res.json(await AV().linkEnvioImagem(req.body)); }
+    catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+async function questaoPadraoDoBody(req) {
+    const categoriaId = String(req.body.categoriaId || '');
+    if (!categoriaId) { const e = new Error('Escolha a disciplina.'); e.status = 400; throw e; }
+    const cat = await db.collection(COL_CATEGORIAS).doc(categoriaId).get();
+    if (!cat.exists) { const e = new Error('Disciplina não encontrada.'); e.status = 400; throw e; }
+    const c = cat.data();
+    const { questaoDoBody, confirmarImagens, tokens } = AV();
+    const q = questaoDoBody(req.body, { sigla: c.nomeBreve || c.nome });
+    if (q.enunciadoHtml.replace(/<[^>]+>/g, '').trim().length < 5) { const e = new Error('Escreva o caso clínico e a pergunta.'); e.status = 400; throw e; }
+    return { q, c, categoriaId, confirmarImagens, tokens };
+}
+
+router.post('/questoes-padrao', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { q, c, categoriaId, confirmarImagens, tokens } = await questaoPadraoDoBody(req);
+        q.imagens = await confirmarImagens(req.body.imagens);
+        const quem = req.user.name || req.user.email || 'Professor';
+        const ref = db.collection(COL_QUESTOES).doc();
+        await ref.set({
+            ...q, categoriaId, periodo: c.periodo ?? null, status: 'publicada',
+            areaEnamed: (req.body.areaEnamed && AREAS_ENAMED.includes(req.body.areaEnamed)) ? req.body.areaEnamed : (c.areaEnamedPadrao || classificarAreaEnamed(q.titulo, q.enunciadoHtml, q.justificativa)),
+            tituloBusca: normalizarBusca(q.titulo), tituloBuscaTokens: tokens(q.titulo, c.nome),
+            elaboradoPor: q.professorNome || quem, criadoPor: req.user.uid, criadoPorNome: quem,
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+        res.status(201).json({ id: ref.id, padrao: q.padrao, message: 'Questão salva no banco.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+router.put('/questoes-padrao/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_QUESTOES).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+        const antes = snap.data();
+        // quem não vê autoria recebe a questão sem o nome do professor: salvar não pode apagar o autor
+        if (!podeVerAutoria(req.user.role, req.user)) req.body.professorNome = antes.professorNome || '';
+        const { q, c, categoriaId, confirmarImagens, tokens } = await questaoPadraoDoBody(req);
+        if (!req.body.imagem && antes.imagem && req.body.manterImagem !== false) q.imagem = antes.imagem;
+        q.imagens = req.body.imagens === undefined ? (antes.imagens || []) : await confirmarImagens(req.body.imagens);
+        const ficam = new Set(q.imagens.map(i => i.caminho));
+        const { bucket } = AV();
+        await Promise.all((antes.imagens || []).filter(i => !ficam.has(i.caminho)).map(i => bucket().file(i.caminho).delete({ ignoreNotFound: true })));
+        const quem = req.user.name || req.user.email || 'Professor';
+        await ref.update({
+            ...q, categoriaId, periodo: c.periodo ?? null,
+            tituloBusca: normalizarBusca(q.titulo), tituloBuscaTokens: tokens(q.titulo, c.nome),
+            elaboradoPor: q.professorNome || antes.elaboradoPor || quem,
+            padronizadaEm: q.padrao.ok ? new Date().toISOString() : null, padronizadaPor: q.padrao.ok ? quem : null,
+            updatedAt: new Date().toISOString()
+        });
+        let avs = 0;
+        if (antes.status === 'publicada') {
+            const { gabaritoMed, propagarGabarito } = require('./correcao-provas')._interno;
+            const gNovo = gabaritoMed({ alternativas: q.alternativas });
+            if (gNovo && gNovo !== gabaritoMed(antes)) avs = await propagarGabarito(req.params.id, gNovo, quem);
+        }
+        res.json({ padrao: q.padrao, message: avs ? `Questão atualizada (gabarito novo também em ${avs} avaliação(ões) da Correção de Provas).` : 'Questão atualizada.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // Avaliações por disciplina / semestre / bimestre / chamada (12/11/2026) — ver banco-med-avaliacoes.js

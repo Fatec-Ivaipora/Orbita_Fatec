@@ -127,35 +127,6 @@ ${answers}
 ${blocoTags(questao)}</question>`;
 }
 
-function questaoMultichoiceMultipla(questao) {
-    const corretas = questao.alternativas.filter(a => a.correta).length || 1;
-    const fracaoCorreta = (100 / corretas).toFixed(5).replace(/0+$/, '').replace(/\.$/, '');
-    const answers = questao.alternativas
-        .map(a => blocoAnswer(a.texto, a.correta ? fracaoCorreta : 0, a.feedback))
-        .join('\n');
-    return `<question type="multichoiceset">
-  <name>
-    <text>${xmlEscape(questao.titulo)}</text>
-  </name>
-${blocoQuestionText(questao)}
-${blocoGeneralFeedback(questao)}
-  <defaultgrade>1.0000000</defaultgrade>
-  <penalty>0.3333333</penalty>
-  <hidden>0</hidden>
-  <idnumber></idnumber>
-  <shuffleanswers>true</shuffleanswers>
-  <correctfeedback format="html">
-    <text>${cdata('<p>Sua resposta está correta.</p>')}</text>
-  </correctfeedback>
-  <incorrectfeedback format="html">
-    <text>${cdata('<p>Sua resposta está incorreta.</p>')}</text>
-  </incorrectfeedback>
-  <answernumbering>abc</answernumbering>
-  <showstandardinstruction>0</showstandardinstruction>
-${answers}
-${blocoTags(questao)}</question>`;
-}
-
 function questaoVerdadeiroFalso(questao) {
     const respostaCerta = questao.alternativas.find(a => a.correta);
     const valorCerto = (respostaCerta?.texto || '').trim().toLowerCase() === 'verdadeiro' || (respostaCerta?.texto || '').trim().toLowerCase() === 'true';
@@ -181,7 +152,7 @@ ${blocoTags(questao)}</question>`;
 }
 
 function questaoParaXml(questao) {
-    if (questao.tipoMoodle === 'multichoice_multipla') return questaoMultichoiceMultipla(questao);
+    // 13/11/2026: "várias respostas" não existe mais no banco da Medicina — sai sempre como uma resposta (single)
     if (questao.tipoMoodle === 'verdadeiro_falso') return questaoVerdadeiroFalso(questao);
     return questaoMultichoiceUnica(questao);
 }

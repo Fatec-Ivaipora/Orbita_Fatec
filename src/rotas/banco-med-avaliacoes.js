@@ -386,16 +386,18 @@ router.delete('/:id', async (req, res) => {
 });
 
 // link assinado pra subir UMA imagem direto pro Storage (o navegador faz o PUT)
+async function linkEnvioImagem(body) {
+    const mimeType = body && body.mimeType;
+    const tamanho = Number(body && body.tamanho);
+    const falha = (m) => { const e = new Error(m); e.status = 400; return e; };
+    if (!TIPOS_IMG.includes(mimeType)) throw falha('Envie imagem PNG, JPG, GIF ou WEBP.');
+    if (!(tamanho > 0) || tamanho > MAX_IMG) throw falha('Imagem muito grande (máx. 25 MB).');
+    const caminho = `${PASTA_IMG}${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${nomeArquivo(body.nome)}`;
+    const [url] = await bucket().file(caminho).getSignedUrl({ version: 'v4', action: 'write', expires: Date.now() + 15 * 60000, contentType: mimeType });
+    return { url, caminho };
+}
 router.post('/imagens/envio', async (req, res) => {
-    try {
-        const { mimeType } = req.body;
-        const tamanho = Number(req.body.tamanho);
-        if (!TIPOS_IMG.includes(mimeType)) return res.status(400).json({ error: 'Envie imagem PNG, JPG, GIF ou WEBP.' });
-        if (!(tamanho > 0) || tamanho > MAX_IMG) return res.status(400).json({ error: 'Imagem muito grande (máx. 25 MB).' });
-        const caminho = `${PASTA_IMG}${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${nomeArquivo(req.body.nome)}`;
-        const [url] = await bucket().file(caminho).getSignedUrl({ version: 'v4', action: 'write', expires: Date.now() + 15 * 60000, contentType: mimeType });
-        res.json({ url, caminho });
-    } catch (e) { erro(res, e); }
+    try { res.json(await linkEnvioImagem(req.body)); } catch (e) { erro(res, e); }
 });
 
 // imagem antiga (comprimida, dentro do documento) — só quando o editor abre a questão
@@ -649,5 +651,5 @@ router.get('/:id/xml', async (req, res) => {
 
 
 
-router._interno = { planoDaDisciplina, listaDisciplinas, itens, referencias, lerQuestoesDeLinhas };
+router._interno = { planoDaDisciplina, listaDisciplinas, itens, referencias, lerQuestoesDeLinhas, questaoDoBody, confirmarImagens, comLinks, linkEnvioImagem, resumoComImagens, tokens, normNome, bucket };
 module.exports = router;

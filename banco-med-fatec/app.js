@@ -9,7 +9,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes } from "./avaliacoes.js?v=6";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes } from "./avaliacoes.js?v=7";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -566,19 +566,27 @@ function renderQuestoes() {
   lista.forEach(q => {
     const row = document.createElement('div');
     row.className = 'bmf-q-row';
+    // 13/11/2026: mesma cara das questões da montagem da avaliação (crachá do professor, unidade,
+    // caso clínico x memorização, selo do padrão, objetivo e o começo do caso clínico)
+    const P = window.PadraoMed;
+    const pd = padraoDe(q);
+    const autor = q.professorNome || (podeVerAutoria() && q.elaboradoPor && q.elaboradoPor !== 'Importado do AVA' ? q.elaboradoPor : '');
+    const resumoEnun = P ? P.texto(q.casoClinico || q.enunciadoHtml || '') : '';
+    const nImgs = (q.imagens || []).length + (q.imagem && !(q.imagens || []).length ? 1 : 0);
     row.innerHTML = `
       <input type="checkbox" class="bmf-q-row-check" data-id="${q.id}" ${questoesSelecionadas.has(q.id) ? 'checked' : ''} aria-label="Selecionar questão">
       <div class="bmf-q-row-main">
-        <div class="bmf-q-row-badges">
-          <span class="bmf-badge bmf-badge-${q.dificuldade}">${DIFICULDADE_LABEL[q.dificuldade] || q.dificuldade}</span>
-          <span class="bmf-badge bmf-badge-tipo">${q.imagem ? ICONS.imagem : ''}${TIPO_LABEL[q.tipoMoodle] || q.tipoMoodle}</span>
-          ${q.areaEnamed ? `<span class="bmf-badge bmf-badge-area">${esc(q.areaEnamed)}</span>` : ''}
-          <span class="bmf-pd-cog ${padraoDe(q).aplicacao ? 'bmf-pd-caso' : ''}">${padraoDe(q).aplicacao ? 'Caso clínico' : 'Memorização'}</span>
-          ${padraoDe(q).ok ? '<span class="bmf-pd-selo bmf-pd-ok">No padrão</span>' : '<span class="bmf-pd-selo bmf-pd-falta">A padronizar</span>'}
+        <div class="av-q-topo">
+          ${autor ? chipProfessorHtml(autor) : ''}
+          <span class="av-tag">${q.unidade ? `Unidade ${esc(q.unidade)}` : 'Sem unidade'}</span>
+          <span class="av-tag ${pd.aplicacao ? 'av-tag-caso' : ''}">${pd.aplicacao ? 'Caso clínico' : 'Memorização'}</span>
+          ${nImgs ? `<span class="av-tag">${nImgs} imagem(ns)</span>` : ''}
+          ${pd.ok ? `<span class="av-selo av-selo-ok">No padrão</span>` : `<span class="av-selo av-selo-erro">A padronizar</span>`}
         </div>
-        <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
-        ${padraoDe(q).ok ? '' : `<div class="bmf-pd-faltas">Falta: ${esc(padraoDe(q).faltas.join(' · ') || 'ajustes')}</div>`}
-        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))}${podeVerAutoria() ? ` · por ${esc(q.elaboradoPor || '—')}` : ''}</div>
+        <p class="av-q-obj">${q.objetivo ? esc(q.objetivo) : esc(q.titulo || 'Questão')}</p>
+        <p class="av-q-enun">${esc(resumoEnun.slice(0, 220))}${resumoEnun.length > 220 ? '…' : ''}</p>
+        ${pd.ok ? '' : `<div class="bmf-pd-faltas">Falta: ${esc(pd.faltas.join(' · ') || 'ajustes')}</div>`}
+        <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} período · ` : ''}${esc(nomeCategoria(q.categoriaId))} · ${DIFICULDADE_LABEL[q.dificuldade] || q.dificuldade}${q.areaEnamed ? ` · ${esc(q.areaEnamed)}` : ''}</div>
       </div>
       <div class="bmf-q-row-actions">
         <button class="bmf-icon-btn bmf-btn-editar-questao action-execute" data-id="${q.id}" title="Editar questão">${ICONS.editar}</button>
@@ -589,7 +597,7 @@ function renderQuestoes() {
   });
 
   grid.querySelectorAll('.bmf-btn-editar-questao').forEach(btn => {
-    btn.addEventListener('click', () => abrirModalQuestao(btn.dataset.id));
+    btn.addEventListener('click', () => abrirEditorBanco({ questaoId: btn.dataset.id, categorias, aposSalvar: atualizarListaQuestoes }));
   });
   grid.querySelectorAll('.bmf-btn-excluir-questao').forEach(btn => {
     btn.addEventListener('click', () => excluirQuestao(btn.dataset.id));
@@ -1376,9 +1384,10 @@ async function questaoMoodleParaSchema(questionEl) {
   let tipoMoodle;
   if (tipo === 'truefalse') {
     tipoMoodle = 'verdadeiro_falso';
-  } else if (tipo === 'multichoiceset') {
-    tipoMoodle = 'multichoice_multipla';
   } else {
+    // 13/11/2026: no banco da Medicina toda questão é de UMA resposta (multichoice single do Open LMS).
+    // "Várias respostas" (multichoiceset) entra como uma resposta; se vier com mais de uma correta, o padrão
+    // acusa "marque só UMA" e a questão não vai pra avaliação até o professor escolher a certa.
     tipoMoodle = 'multichoice_unica';
   }
 
@@ -1747,7 +1756,8 @@ function bindEventos() {
     debounceBusca = setTimeout(atualizarListaQuestoes, 350);
   });
 
-  document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
+  // 13/11/2026: o "Nova Questão" abre o editor padrão (o mesmo da montagem da avaliação), já na disciplina filtrada
+  document.getElementById('bmf-btn-nova-questao').addEventListener('click', () => abrirEditorBanco({ categoriaId: document.getElementById('bmf-filtro-categoria').value || null, categorias, aposSalvar: atualizarListaQuestoes }));
   document.getElementById('bmf-btn-importar-ava').addEventListener('click', () => {
     document.getElementById('bmf-importar-ava-input').click();
   });
@@ -1909,9 +1919,13 @@ async function initApp(user, role) {
   if (!podeVerAutoria()) {
     document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título...';
   }
+  // o editor padrão de questão (avaliacoes.js) também serve ao Banco: precisa da API já no início
+  configurarAvaliacoes({ apiFetch, apiDownload, esc });
   await carregarTudo();
   // Aba Avaliações: só aparece se o servidor confirmar o acesso (adm, coordenação ou responsável pelas avaliações)
   const temAvaliacoes = await iniciarAvaliacoes({ apiFetch, apiDownload, esc });
+  // quem monta as avaliações (Bia / coordenação) começa nelas (13/11/2026)
+  if (temAvaliacoes) document.getElementById('bmf-tab-avaliacoes').click();
   if (temAvaliacoes && !podeVerAutoria()) {
     responsavelAvaliacoes = true;
     document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título ou autor...';
