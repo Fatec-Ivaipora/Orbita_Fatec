@@ -9,6 +9,10 @@
   <link rel="stylesheet" href="/core/layout.css">
   <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=16">
   <link rel="stylesheet" href="/banco-med-fatec/avaliacoes.css?v=5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/banco-med-fatec/naped.css?v=3">
 </head>
 
 <body>
@@ -27,17 +31,25 @@
       <div class="layout-content">
         <main id="bmf-main" class="mod-main">
 
-          <div class="bmf-brand">
-            <img src="/img/medfatec-logo.png" alt="MED FATEC">
-          </div>
-
-          <div class="bmf-tabs">
-            <button class="bmf-tab-btn active" data-tab="banco">Banco de Questões</button>
-            <button class="bmf-tab-btn" data-tab="provas">Provas</button>
-            <button class="bmf-tab-btn" data-tab="revisao">Revisão de Importação <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
-            <button class="bmf-tab-btn" data-tab="colinha">Questões ENAMED</button>
-            <button class="bmf-tab-btn" data-tab="avaliacoes" id="bmf-tab-avaliacoes" hidden>Avaliações</button>
-          </div>
+          <!-- Faixa NAPED (13/11/2026): identidade do Núcleo de Apoio Pedagógico da Medicina -->
+          <header class="np-faixa">
+            <div class="np-faixa-topo">
+              <img class="np-logo" src="/img/naped/naped-negativo.png" alt="NAPED — Núcleo de Apoio Pedagógico da Medicina" width="1200" height="361">
+              <div class="np-faixa-titulo">
+                <h1>Banco de questões da Medicina</h1>
+                <p>Avaliações, padrão das questões e desempenho por disciplina</p>
+              </div>
+              <img class="np-selo" src="/img/naped/medfatec-negativo.png" alt="MED FATEC" width="1090" height="183">
+            </div>
+            <nav class="bmf-tabs np-abas" aria-label="Seções do banco">
+              <button class="bmf-tab-btn" data-tab="avaliacoes" id="bmf-tab-avaliacoes" hidden>Avaliações</button>
+              <button class="bmf-tab-btn active" data-tab="banco">Banco de Questões</button>
+              <button class="bmf-tab-btn" data-tab="colinha">Simulado ENAMED</button>
+              <button class="bmf-tab-btn" data-tab="revisao">Importações <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
+              <!-- Provas antigas: juntaram em Avaliações (13/11/2026); a seção continua no DOM só pelo app.js -->
+              <button class="bmf-tab-btn" data-tab="provas" hidden>Provas</button>
+            </nav>
+          </header>
 
           <!-- ============ VIEW: BANCO DE QUESTÕES ============ -->
           <section id="bmf-view-banco" class="bmf-view">
@@ -185,6 +197,10 @@
           <!-- ============ VIEW: AVALIAÇÕES (responsável pelas avaliações / coordenação) ============ -->
           <section id="bmf-view-avaliacoes" class="bmf-view hidden" aria-label="Avaliações"></section>
 
+          <footer class="np-rodape">
+            <img src="/img/naped/medfatec-negativo.png" alt="MED FATEC" width="1090" height="183">
+            <img src="/img/naped/fatecivp-negativo.png" alt="Fatec Ivaiporã" width="864" height="183">
+          </footer>
         </main>
 
         <!-- ============ MODAL: QUESTÃO ============ -->
@@ -250,7 +266,6 @@
                     <label class="form-label">Tipo de questão <span style="color:red">*</span></label>
                     <select id="bmf-q-tipo" class="form-control" required>
                       <option value="multichoice_unica">Múltipla escolha — uma correta</option>
-                      <option value="multichoice_multipla">Múltipla escolha — várias corretas</option>
                       <option value="verdadeiro_falso">Verdadeiro / Falso</option>
                     </select>
                   </div>
@@ -493,7 +508,7 @@
   <script src="/banco-med-fatec/vendor/jszip-3.10.2.min.js"></script>
   <script src="/banco-med-fatec/vendor/mammoth-1.12.3.browser.min.js"></script>
   <script src="/banco-med-fatec/ler-word.js?v=1"></script>
-  <script type="module" src="/banco-med-fatec/app.js?v=37"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=39"></script>
 </body>
 
 </html>

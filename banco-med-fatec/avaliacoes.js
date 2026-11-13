@@ -382,6 +382,9 @@ const CHECKLIST = [
   { t: 'Referência bibliográfica', c: ['referencia'] }
 ];
 let editando = null; // id da questão ou null (nova)
+// Contexto do editor (13/11/2026): o MESMO editor serve à avaliação e ao Banco de Questões.
+// { modo, sigla, bimestre|null, plano, professores, titulo, salvar(f, id), aposSalvar(), envio, imagemAntiga(id)?, categorias?, categoriaId? }
+let ed = null;
 let imgsQuestao = [];          // [{ caminho, nome, url, mimeType }] — no Storage
 let imgAntiga = null, removerImagem = false; // imagem antiga (comprimida, dentro do documento)
 let enviandoImgs = 0;
@@ -393,6 +396,7 @@ function modalHtml() {
       <div class="av-mq-corpo">
         <form id="av-form-q" class="av-mq-form" novalidate>
           <fieldset class="av-sec"><legend>Identificação</legend>
+            <label class="av-campo" id="av-q-disc-campo" hidden><span>Disciplina</span><select id="av-q-disc"></select></label>
             <div class="av-campos3">
               <label class="av-campo"><span>Professor que elaborou</span><select id="av-q-prof"></select></label>
               <label class="av-campo"><span>Unidade do plano</span><select id="av-q-unid"></select></label>
@@ -451,13 +455,14 @@ function linhaAlt(i, a = {}) {
 }
 
 function preencherSelects(q) {
-  const { plano, professores, avaliacao: av } = atual;
+  const { plano, professores } = ed;
+  const bim = ed.bimestre || null;
   const profs = [...new Set([...(professores || []), ...(q.professorNome ? [q.professorNome] : [])])];
   $('#av-q-prof').innerHTML = `<option value="">Escolha…</option>${profs.map(n => `<option ${n === q.professorNome ? 'selected' : ''}>${esc(n)}</option>`).join('')}`;
   const unids = plano.unidades || [];
-  const doBim = unids.filter(u => u.bimestre === av.bimestre), outras = unids.filter(u => u.bimestre !== av.bimestre);
+  const doBim = bim ? unids.filter(u => u.bimestre === bim) : unids, outras = bim ? unids.filter(u => u.bimestre !== bim) : [];
   const opU = (u) => `<option value="${u.numero}" ${Number(q.unidade) === u.numero ? 'selected' : ''}>Unidade ${u.numero} (${u.ch}h) – ${esc(u.titulo)}</option>`;
-  $('#av-q-unid').innerHTML = `<option value="">Escolha…</option>${doBim.length ? `<optgroup label="${ordinal(av.bimestre)} bimestre">${doBim.map(opU).join('')}</optgroup>` : ''}${outras.length ? `<optgroup label="Outro bimestre">${outras.map(opU).join('')}</optgroup>` : ''}${!unids.length ? [1, 2, 3, 4].map(n => `<option value="${n}" ${Number(q.unidade) === n ? 'selected' : ''}>Unidade ${n}</option>`).join('') : ''}`;
+  $('#av-q-unid').innerHTML = `<option value="">Escolha…</option>${doBim.length ? `<optgroup label="${bim ? `${ordinal(bim)} bimestre` : 'Unidades do plano de ensino'}">${doBim.map(opU).join('')}</optgroup>` : ''}${outras.length ? `<optgroup label="Outro bimestre">${outras.map(opU).join('')}</optgroup>` : ''}${!unids.length ? [1, 2, 3, 4].map(n => `<option value="${n}" ${Number(q.unidade) === n ? 'selected' : ''}>Unidade ${n}</option>`).join('') : ''}`;
   const objs = plano.objetivos || [];
   const objOutro = q.objetivo && !objs.some(o => P.norm(o) === P.norm(q.objetivo));
   $('#av-q-obj').innerHTML = `<option value="">Escolha…</option>${objs.map(o => `<option ${P.norm(o) === P.norm(q.objetivo || '') ? 'selected' : ''}>${esc(o)}</option>`).join('')}<option value="__outro" ${objOutro ? 'selected' : ''}>Outro objetivo (escrever)</option>`;
@@ -471,10 +476,28 @@ function preencherSelects(q) {
 }
 
 function abrirQuestao(id) {
+  const q = id ? atual.questoes.find(x => x.id === id) : { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media', professorNome: filtroProfessor && filtroProfessor !== 'Sem professor' ? filtroProfessor : '' };
+  const avId = encodeURIComponent(atual.avaliacao.id);
+  ed = {
+    modo: 'avaliacao', sigla: atual.avaliacao.sigla, bimestre: atual.avaliacao.bimestre, plano: atual.plano, professores: atual.professores,
+    titulo: id ? (q.padronizadaEm || q.status === 'rascunho_avaliacao' ? 'Editar questão' : 'Padronizar questão do banco') : 'Nova questão',
+    salvar: (f, qid) => api(qid ? `${BASE}/${avId}/questoes/${encodeURIComponent(qid)}` : `${BASE}/${avId}/questoes`, { method: qid ? 'PUT' : 'POST', body: JSON.stringify(f) }),
+    aposSalvar: recarregarAtual, envio: `${BASE}/imagens/envio`,
+    imagemAntiga: (qid) => api(`${BASE}/${avId}/questoes/${encodeURIComponent(qid)}/imagem-antiga`)
+  };
+  abrirEditor(q, id);
+}
+function abrirEditor(q, id) {
   if (!$('#av-modal-q')) { document.body.insertAdjacentHTML('beforeend', modalHtml()); ligarModalQuestao(); }
   editando = id || null; imgAntiga = null; removerImagem = false; enviandoImgs = 0;
-  const q = id ? atual.questoes.find(x => x.id === id) : { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media', professorNome: filtroProfessor && filtroProfessor !== 'Sem professor' ? filtroProfessor : '' };
-  $('#av-mq-tit').textContent = id ? (q.padronizadaEm || q.status === 'rascunho_avaliacao' ? 'Editar questão' : 'Padronizar questão do banco') : 'Nova questão';
+  $('#av-mq-tit').textContent = ed.titulo;
+  // disciplina: só no Banco (na avaliação ela já vem da avaliação)
+  $('#av-q-disc-campo').hidden = ed.modo !== 'banco';
+  if (ed.modo === 'banco') {
+    const porPer = {};
+    (ed.categorias || []).forEach(c => { (porPer[c.periodo] = porPer[c.periodo] || []).push(c); });
+    $('#av-q-disc').innerHTML = `<option value="">Escolha a disciplina…</option>${Object.keys(porPer).sort((a, b) => a - b).map(pp => `<optgroup label="${ordinal(pp)} período">${porPer[pp].map(c => `<option value="${esc(c.id)}" ${c.id === ed.categoriaId ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</optgroup>`).join('')}`;
+  }
   preencherSelects(q);
   $('#av-q-dif').value = q.dificuldade || 'media';
   $('#av-q-caso').innerHTML = limpaHtml(q.casoClinico || q.enunciadoHtml || '');
@@ -485,7 +508,8 @@ function abrirQuestao(id) {
   $('#av-q-mais-alt').hidden = alts.length >= 5;
   imgsQuestao = (q.imagens || []).map(i => ({ caminho: i.caminho, nome: i.nome, url: i.url, mimeType: i.mimeType }));
   renderImgs();
-  if (q.temImagem && id) api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes/${encodeURIComponent(id)}/imagem-antiga`)
+  if (q.imagemAntiga) { imgAntiga = q.imagemAntiga; renderImgs(); }
+  else if (q.temImagem && id && ed.imagemAntiga) ed.imagemAntiga(id)
     .then(a => { if (a.dataUrl && editando === id) { imgAntiga = a; renderImgs(); } }).catch(() => {});
   $('#av-modal-q').hidden = false;
   document.body.classList.add('av-sem-rolagem');
@@ -520,8 +544,8 @@ function atualizarChecklist() {
     const det = msgs.filter(m => item.c.includes(m.cod)).map(m => m.msg);
     return `<li class="av-ck av-ck-${st}"><span class="av-ck-ic">${st === 'ok' ? ic('ok') : st === 'erro' ? ic('x') : ic('alerta')}</span><div>${esc(item.t)}${det.length ? `<small>${esc(det[0])}</small>` : ''}</div></li>`;
   }).join('');
-  $('#av-check-rodape').textContent = r.ok ? (r.avisos.length ? 'Pode salvar. As orientações em amarelo são recomendações.' : 'Questão no padrão.') : `${r.bloqueios.length} item(ns) em vermelho impedem finalizar a avaliação. Você pode salvar e terminar depois.`;
-  $('#av-q-titulo').textContent = P.tituloPadrao(f.professorNome || 'professor', atual.avaliacao.sigla, f.objetivo || 'objetivo');
+  $('#av-check-rodape').textContent = r.ok ? (r.avisos.length ? 'Pode salvar. As orientações em amarelo são recomendações.' : 'Questão no padrão.') : `${r.bloqueios.length} item(ns) em vermelho impedem a questão de entrar numa avaliação. Você pode salvar e terminar depois.`;
+  $('#av-q-titulo').textContent = P.tituloPadrao(f.professorNome || 'professor', ed.sigla || 'DISCIPLINA', f.objetivo || 'objetivo');
   document.querySelectorAll('#av-q-alts .av-alt').forEach((el, i) => { $('.av-alt-fb', el).placeholder = `Feedback: por que ${LETRAS[i]} está ${f.alternativas[i] && f.alternativas[i].correta ? 'correta' : 'incorreta'}`; el.classList.toggle('av-alt-certa', !!(f.alternativas[i] && f.alternativas[i].correta)); });
 }
 
@@ -534,11 +558,11 @@ async function salvarQuestao() {
   if (removerImagem) f.manterImagem = false;
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
-    const url = editando ? `${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes/${encodeURIComponent(editando)}` : `${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes`;
-    const r = await api(url, { method: editando ? 'PUT' : 'POST', body: JSON.stringify(f) });
+    if (ed.modo === 'banco' && !ed.categoriaId) { toast('Escolha a disciplina da questão.', 'erro'); return; }
+    const r = await ed.salvar(f, editando);
     fecharQuestao();
     toast(r.padrao && r.padrao.ok ? `${r.message} No padrão.` : r.message);
-    await recarregarAtual();
+    await ed.aposSalvar();
   } catch (e) { toast(e.message, 'erro'); }
   finally { btn.disabled = false; btn.textContent = 'Salvar questão'; }
 }
@@ -554,7 +578,7 @@ function renderImgs() {
 async function enviarImagem(file) {
   if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) throw new Error(`"${file.name}" não é imagem PNG, JPG, GIF ou WEBP.`);
   if (file.size > 25 * 1024 * 1024) throw new Error(`"${file.name}" passa de 25 MB.`);
-  const envio = await api(`${BASE}/imagens/envio`, { method: 'POST', body: JSON.stringify({ nome: file.name, mimeType: file.type, tamanho: file.size }) });
+  const envio = await api((ed && ed.envio) || `${BASE}/imagens/envio`, { method: 'POST', body: JSON.stringify({ nome: file.name, mimeType: file.type, tamanho: file.size }) });
   const r = await fetch(envio.url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
   if (!r.ok) throw new Error(`Não consegui enviar "${file.name}". Tente de novo.`);
   return { caminho: envio.caminho, nome: file.name.replace(/\.[^.]+$/, ''), url: URL.createObjectURL(file), mimeType: file.type };
@@ -571,6 +595,7 @@ function ligarModalQuestao() {
   });
   m.addEventListener('input', atualizarChecklist);
   m.addEventListener('change', (e) => {
+    if (e.target.id === 'av-q-disc') { trocarDisciplinaEditor(e.target.value); return; }
     if (e.target.id === 'av-q-obj') { $('#av-q-obj-outro').hidden = e.target.value !== '__outro'; if (e.target.value === '__outro') $('#av-q-obj-outro').focus(); }
     if (e.target.id === 'av-q-ref') { $('#av-q-ref-outra').hidden = e.target.value !== '__outra'; if (e.target.value === '__outra') $('#av-q-ref-outra').focus(); }
     atualizarChecklist();
@@ -869,10 +894,48 @@ async function salvarCriterios() {
 
 
 // ==========================================================================================
+// EDITOR PADRÃO NO BANCO DE QUESTÕES (13/11/2026) — mesmo editor da montagem da avaliação
+// ==========================================================================================
+const VAZIO_PLANO = { unidades: [], objetivos: [], referencias: [] };
+async function contextoDisciplina(categoriaId) {
+  if (!categoriaId) return { sigla: '', plano: VAZIO_PLANO, professores: [] };
+  try { return await api(`/banco-med-fatec/contexto/${encodeURIComponent(categoriaId)}`); }
+  catch (e) { toast(e.message, 'erro'); return { sigla: '', plano: VAZIO_PLANO, professores: [] }; }
+}
+async function trocarDisciplinaEditor(categoriaId) {
+  ed.categoriaId = categoriaId || null;
+  const ctx = await contextoDisciplina(categoriaId);
+  Object.assign(ed, { sigla: ctx.sigla, plano: ctx.plano || VAZIO_PLANO, professores: ctx.professores || [] });
+  const f = lerForm();
+  preencherSelects({ ...f, fonte: f.fonte });
+  atualizarChecklist();
+}
+export async function abrirEditorBanco({ questaoId = null, categoriaId = null, categorias = [], aposSalvar = async () => {} } = {}) {
+  let q = { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media' };
+  if (questaoId) {
+    try { q = await api(`/banco-med-fatec/questoes/${encodeURIComponent(questaoId)}/completa`); }
+    catch (e) { toast(e.message, 'erro'); return; }
+    categoriaId = q.categoriaId || categoriaId;
+  }
+  const ctx = await contextoDisciplina(categoriaId);
+  ed = {
+    modo: 'banco', categorias, categoriaId: categoriaId || null, sigla: ctx.sigla, bimestre: null,
+    plano: ctx.plano || VAZIO_PLANO, professores: ctx.professores || [],
+    titulo: questaoId ? (q.padronizadaEm ? 'Editar questão' : 'Padronizar questão') : 'Nova questão',
+    salvar: (f, qid) => api(qid ? `/banco-med-fatec/questoes-padrao/${encodeURIComponent(qid)}` : '/banco-med-fatec/questoes-padrao', { method: qid ? 'PUT' : 'POST', body: JSON.stringify({ ...f, categoriaId: ed.categoriaId }) }),
+    aposSalvar, envio: '/banco-med-fatec/imagens/envio'
+  };
+  abrirEditor(q, questaoId);
+}
+// crachá do professor (iniciais + cor), o mesmo da avaliação, pra lista do Banco
+export function chipProfessorHtml(nome) { return chipProfessor(nome); }
+
+// ==========================================================================================
 // INICIALIZAÇÃO
 // ==========================================================================================
+export function configurarAvaliacoes(opcoes) { ({ apiFetch: api, apiDownload: baixar, esc } = opcoes); }
 export async function iniciarAvaliacoes(opcoes) {
-  ({ apiFetch: api, apiDownload: baixar, esc } = opcoes);
+  configurarAvaliacoes(opcoes);
   // A página abre primeiro com o login guardado no navegador (token pode estar vencido) e só depois o Firebase
   // confirma: tenta de novo por alguns segundos e só desiste quando o servidor diz que não tem acesso.
   let liberado = false;
