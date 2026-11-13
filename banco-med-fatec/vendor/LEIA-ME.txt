@@ -1,0 +1,4 @@
+Bibliotecas de terceiros copiadas de node_modules (12/11/2026) para ler Word no navegador (aba Avaliacoes do Banco MED):
+- mammoth 1.12.3 (BSD-2-Clause) - https://github.com/mwilliamson/mammoth.js
+- jszip 3.10.2 (MIT) - https://github.com/Stuk/jszip
+Para atualizar: copiar de novo de node_modules/mammoth/mammoth.browser.min.js e node_modules/jszip/dist/jszip.min.js.

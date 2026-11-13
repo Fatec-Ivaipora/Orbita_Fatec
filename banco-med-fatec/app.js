@@ -9,6 +9,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes } from "./avaliacoes.js?v=6";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -23,8 +24,10 @@ let currentRole = null;
 // (14/09): professor ver o que outro professor cadastrou é antiético, ele só
 // pode ver o que ele mesmo lançou e o que tem disponível no banco (sem saber
 // de quem é). Espelha podeVerAutoria() do backend (src/rotas/banco-med-fatec.js).
+// + responsável pelas avaliações (users.avaliacoesMed, 12/11/2026), liberado quando a aba Avaliações confirma o acesso
+let responsavelAvaliacoes = false;
 function podeVerAutoria() {
-  return currentRole === 'adm_l1' || currentRole === 'coord_medicina';
+  return currentRole === 'adm_l1' || currentRole === 'coord_medicina' || responsavelAvaliacoes;
 }
 
 async function apiFetch(endpoint, options = {}) {
@@ -462,6 +465,43 @@ function questoesFiltradas() {
   });
 }
 
+// ---- Padrão da Medicina no banco (12/11/2026) — mesmas regras da aba Avaliações (banco-med-fatec/padrao.js) ----
+// "No padrão" = pronta pra entrar numa avaliação: conteúdo no padrão + professor, objetivo e unidade do plano.
+const PENDENCIA_CURTA = {
+  tipo: 'tipo "várias respostas"', gabarito: 'gabarito', qtd: 'nº de alternativas', vazia: 'alternativa vazia',
+  repetida: 'alternativa repetida', nenhuma: '"nenhuma/todas as alternativas"', enunciado: 'enunciado curto', feedback: 'feedback geral'
+};
+function padraoDe(q) {
+  if (!q._padrao) {
+    const P = window.PadraoMed;
+    const enunciado = q.casoClinico || q.pergunta ? q : { ...q, casoClinico: q.enunciadoHtml };
+    const r = P ? P.avaliarQuestao(enunciado) : { ok: false, bloqueios: [], avisos: [], aplicacao: false };
+    const ident = r.bloqueios.some(b => ['professor', 'objetivo', 'unidade'].includes(b.cod));
+    const conteudo = [...new Set(r.bloqueios.map(b => PENDENCIA_CURTA[b.cod]).filter(Boolean))];
+    q._padrao = { ok: r.ok, aplicacao: r.aplicacao, faltas: [...conteudo, ...(ident ? ['identificação (professor, objetivo, unidade)'] : [])] };
+  }
+  return q._padrao;
+}
+function filtroPadrao(lista) {
+  const f = document.getElementById('bmf-filtro-padrao')?.value;
+  if (!f) return lista;
+  return lista.filter(q => {
+    const p = padraoDe(q);
+    return f === 'ok' ? p.ok : f === 'falta' ? !p.ok : f === 'caso' ? p.aplicacao : !p.aplicacao;
+  });
+}
+function placarPadrao(lista) {
+  const ok = lista.filter(q => padraoDe(q).ok).length, caso = lista.filter(q => padraoDe(q).aplicacao).length, n = lista.length || 1;
+  const cat = document.getElementById('bmf-filtro-categoria').value;
+  return `<div class="bmf-pd-placar" aria-label="${ok} de ${lista.length} no padrão">
+    <div class="bmf-pd-placar-tit">${cat ? esc(nomeCategoria(cat)) : 'Questões listadas'}</div>
+    <div class="bmf-pd-placar-itens">
+      <span><b>${ok}</b> no padrão</span><span><b>${lista.length - ok}</b> a padronizar</span><span><b>${caso}</b> de caso clínico (${Math.round(100 * caso / n)}%)</span>
+    </div>
+    <div class="bmf-pd-barra"><span style="width:${100 * ok / n}%"></span></div>
+  </div>`;
+}
+
 function nomeCategoriaObj(id) {
   return categorias.find(c => c.id === id);
 }
@@ -494,7 +534,8 @@ function renderQuestoes() {
     return;
   }
 
-  const lista = questoesFiltradas();
+  const base = questoesFiltradas();
+  const lista = filtroPadrao(base);
 
   // Tira da seleção qualquer questão que não esteja mais na lista filtrada
   // (foi excluída, ou mudou de disciplina) — evita "selecionadas fantasmas".
@@ -514,11 +555,12 @@ function renderQuestoes() {
       : 'Nenhuma questão encontrada. Que tal cadastrar a primeira?';
   }
   vazio.classList.toggle('hidden', lista.length > 0);
-  contagemEl.classList.toggle('hidden', lista.length === 0);
-  if (lista.length) {
-    contagemEl.textContent = professorEscolhido === 'me'
+  contagemEl.classList.toggle('hidden', base.length === 0);
+  if (base.length) {
+    const texto = professorEscolhido === 'me'
       ? `Você criou ${lista.length} questão(ões) com esses filtros.`
       : `${lista.length} questão(ões) encontrada(s).`;
+    contagemEl.innerHTML = `${placarPadrao(base)}<span>${texto}</span>`;
   }
 
   lista.forEach(q => {
@@ -531,8 +573,11 @@ function renderQuestoes() {
           <span class="bmf-badge bmf-badge-${q.dificuldade}">${DIFICULDADE_LABEL[q.dificuldade] || q.dificuldade}</span>
           <span class="bmf-badge bmf-badge-tipo">${q.imagem ? ICONS.imagem : ''}${TIPO_LABEL[q.tipoMoodle] || q.tipoMoodle}</span>
           ${q.areaEnamed ? `<span class="bmf-badge bmf-badge-area">${esc(q.areaEnamed)}</span>` : ''}
+          <span class="bmf-pd-cog ${padraoDe(q).aplicacao ? 'bmf-pd-caso' : ''}">${padraoDe(q).aplicacao ? 'Caso clínico' : 'Memorização'}</span>
+          ${padraoDe(q).ok ? '<span class="bmf-pd-selo bmf-pd-ok">No padrão</span>' : '<span class="bmf-pd-selo bmf-pd-falta">A padronizar</span>'}
         </div>
         <div class="bmf-q-row-titulo">${esc(q.titulo)}</div>
+        ${padraoDe(q).ok ? '' : `<div class="bmf-pd-faltas">Falta: ${esc(padraoDe(q).faltas.join(' · ') || 'ajustes')}</div>`}
         <div class="bmf-q-row-meta">${q.periodo ? `${ordinal(q.periodo)} Período · ` : ''}${esc(nomeCategoria(q.categoriaId))}${podeVerAutoria() ? ` · por ${esc(q.elaboradoPor || '—')}` : ''}</div>
       </div>
       <div class="bmf-q-row-actions">
@@ -1681,6 +1726,8 @@ function bindEventos() {
       document.getElementById('bmf-view-revisao').classList.toggle('hidden', tab !== 'revisao');
       document.getElementById('bmf-view-colinha').classList.toggle('hidden', tab !== 'colinha');
       if (tab === 'colinha') carregarContagemAreaEnamed();
+      document.getElementById('bmf-view-avaliacoes').classList.toggle('hidden', tab !== 'avaliacoes');
+      if (tab === 'avaliacoes') abrirAbaAvaliacoes();
     });
   });
 
@@ -1691,6 +1738,8 @@ function bindEventos() {
   document.getElementById('bmf-filtro-area-enamed').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-categoria').addEventListener('change', atualizarListaQuestoes);
   document.getElementById('bmf-filtro-dificuldade').addEventListener('change', atualizarListaQuestoes);
+  // padrão só refina o que já está carregado (não vai ao Firestore)
+  document.getElementById('bmf-filtro-padrao').addEventListener('change', renderQuestoes);
   document.getElementById('bmf-filtro-professor').addEventListener('change', atualizarListaQuestoes);
   let debounceBusca;
   document.getElementById('bmf-filtro-busca').addEventListener('input', () => {
@@ -1861,6 +1910,15 @@ async function initApp(user, role) {
     document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título...';
   }
   await carregarTudo();
+  // Aba Avaliações: só aparece se o servidor confirmar o acesso (adm, coordenação ou responsável pelas avaliações)
+  const temAvaliacoes = await iniciarAvaliacoes({ apiFetch, apiDownload, esc });
+  if (temAvaliacoes && !podeVerAutoria()) {
+    responsavelAvaliacoes = true;
+    document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título ou autor...';
+    await carregarProfessores();
+    popularSelectFiltroProfessor();
+    renderQuestoes();
+  }
 }
 
 const cached = getCachedAuth();

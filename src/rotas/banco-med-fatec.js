@@ -38,15 +38,15 @@ const MAX_IMG_BASE64 = 950000;
 // consegue ver o que ele lançou e o que tem no banco disponível". O banco
 // continua compartilhado (todo professor usa as questões de todo mundo pra
 // montar prova), só a AUTORIA fica anônima pra quem não é coordenador/ADM.
-function podeVerAutoria(role) {
-    return role === 'adm_l1' || role === 'coord_medicina';
+function podeVerAutoria(role, user) {
+    return role === 'adm_l1' || role === 'coord_medicina' || !!(user && user.avaliacoesMed);
 }
 
 // Tira os campos de autoria da questão antes de mandar pra quem não pode ver
 // quem escreveu — a questão em si (enunciado/alternativas/etc.) continua
 // visível, só não dá pra saber QUEM fez.
-function anonimizarQuestao(q, role) {
-    if (podeVerAutoria(role)) return q;
+function anonimizarQuestao(q, role, user) {
+    if (podeVerAutoria(role, user)) return q;
     const { elaboradoPor, criadoPor, criadoPorNome, ...resto } = q;
     return resto;
 }
@@ -136,7 +136,7 @@ router.get('/areas-enamed', verifyToken, checkPermission, async (req, res) => {
 // de um colega específico, só pelas próprias questões ("Minhas questões",
 // que não precisa dessa lista).
 router.get('/professores', verifyToken, checkPermission, async (req, res) => {
-    if (!podeVerAutoria(req.user.role)) return res.status(403).json({ error: 'Só a coordenação pode ver o banco por professor.' });
+    if (!podeVerAutoria(req.user.role, req.user)) return res.status(403).json({ error: 'Só a coordenação pode ver o banco por professor.' });
     try {
         const snap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
         const professores = snap.docs
@@ -245,7 +245,7 @@ router.get('/questoes/contagem-area-enamed', verifyToken, checkPermission, async
 // criou (mesmo padrão count() agregado). Usado no relatório do coordenador
 // pra ver quanto cada professor já contribuiu pro banco — só coordenação/ADM.
 router.get('/questoes/contagem-professor', verifyToken, checkPermission, async (req, res) => {
-    if (!podeVerAutoria(req.user.role)) return res.status(403).json({ error: 'Só a coordenação pode ver o relatório por professor.' });
+    if (!podeVerAutoria(req.user.role, req.user)) return res.status(403).json({ error: 'Só a coordenação pode ver o relatório por professor.' });
     try {
         const professoresSnap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
         const contagens = [];
@@ -282,7 +282,7 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
             // "sem filtro nenhum") — um criadoPor de outra pessoa (ou
             // qualquer valor incorreto vindo do cliente) nunca deve resultar
             // em ver o banco inteiro sem restrição nenhuma.
-            const valor = podeVerAutoria(req.user.role) ? req.query.criadoPor : req.user.uid;
+            const valor = podeVerAutoria(req.user.role, req.user) ? req.query.criadoPor : req.user.uid;
             query = query.where('criadoPor', '==', valor);
         }
         if (req.query.status) query = query.where('status', '==', req.query.status);
@@ -295,7 +295,7 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         }
 
         const snap = await query.get();
-        const questoes = snap.docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role));
+        const questoes = snap.docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role, req.user));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
     } catch (err) {
@@ -699,5 +699,8 @@ router.get('/provas/:id/exportar', verifyToken, checkPermission, async (req, res
         res.status(500).json({ error: err.message });
     }
 });
+
+// Avaliações por disciplina / semestre / bimestre / chamada (12/11/2026) — ver banco-med-avaliacoes.js
+router.use('/avaliacoes', require('./banco-med-avaliacoes'));
 
 module.exports = router;

@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
   <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=16">
+  <link rel="stylesheet" href="/banco-med-fatec/avaliacoes.css?v=5">
 </head>
 
 <body>
@@ -35,6 +36,7 @@
             <button class="bmf-tab-btn" data-tab="provas">Provas</button>
             <button class="bmf-tab-btn" data-tab="revisao">Revisão de Importação <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
             <button class="bmf-tab-btn" data-tab="colinha">Questões ENAMED</button>
+            <button class="bmf-tab-btn" data-tab="avaliacoes" id="bmf-tab-avaliacoes" hidden>Avaliações</button>
           </div>
 
           <!-- ============ VIEW: BANCO DE QUESTÕES ============ -->
@@ -56,6 +58,13 @@
                   <option value="media">Média</option>
                   <option value="intermediaria">Intermediária</option>
                   <option value="dificil">Difícil</option>
+                </select>
+                <select id="bmf-filtro-padrao" aria-label="Padrão da questão">
+                  <option value="">Padrão: todas</option>
+                  <option value="ok">No padrão</option>
+                  <option value="falta">A padronizar</option>
+                  <option value="caso">Caso clínico</option>
+                  <option value="memo">Memorização</option>
                 </select>
                 <select id="bmf-filtro-professor">
                   <option value="">Todos os professores</option>
@@ -172,6 +181,9 @@
               </div>
             </div>
           </section>
+
+          <!-- ============ VIEW: AVALIAÇÕES (responsável pelas avaliações / coordenação) ============ -->
+          <section id="bmf-view-avaliacoes" class="bmf-view hidden" aria-label="Avaliações"></section>
 
         </main>
 
@@ -476,7 +488,12 @@
     </div>
   </div>
 
-  <script type="module" src="/banco-med-fatec/app.js?v=30"></script>
+  <script src="/banco-med-fatec/padrao.js?v=3"></script>
+  <script src="/banco-med-fatec/moodle-xml.js?v=1"></script>
+  <script src="/banco-med-fatec/vendor/jszip-3.10.2.min.js"></script>
+  <script src="/banco-med-fatec/vendor/mammoth-1.12.3.browser.min.js"></script>
+  <script src="/banco-med-fatec/ler-word.js?v=1"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=37"></script>
 </body>
 
 </html>
