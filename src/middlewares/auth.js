@@ -89,6 +89,7 @@ const verifyToken = async (req, res, next) => {
             req.user.chefeDeSetor = cached.chefeDeSetor;
             req.user.primeiroAcesso = cached.primeiroAcesso;
             req.user.matriculasSemestreMinimo = cached.matriculasSemestreMinimo;
+            req.user.avaliacoesMed = cached.avaliacoesMed;
         } else {
             const { db } = require('../firebase');
             const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -110,6 +111,9 @@ const verifyToken = async (req, res, next) => {
             // Trava de semestre nas Matrículas (ex.: robô da ODTech só de
             // 2027.1 em diante) — aplicada em src/rotas/matriculas.js.
             req.user.matriculasSemestreMinimo = userData.matriculasSemestreMinimo || null;
+            // Responsável pelas avaliações da Medicina (12/11/2026): monta e finaliza as provas de todas as
+            // disciplinas no Banco MED (aba Avaliações) e vê a autoria das questões, sem trocar o cargo.
+            req.user.avaliacoesMed = userData.avaliacoesMed === true;
             if (req.user.primeiroAcesso && await senhaTrocadaDepoisDaMarcacao(req.user.uid, userData)) {
                 await db.collection('users').doc(req.user.uid).update({ primeiroAcesso: false });
                 req.user.primeiroAcesso = false;
@@ -121,6 +125,7 @@ const verifyToken = async (req, res, next) => {
                 chefeDeSetor: req.user.chefeDeSetor,
                 primeiroAcesso: req.user.primeiroAcesso,
                 matriculasSemestreMinimo: req.user.matriculasSemestreMinimo,
+                avaliacoesMed: req.user.avaliacoesMed,
                 lastFetched: now
             });
         }

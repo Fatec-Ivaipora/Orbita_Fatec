@@ -196,4 +196,5 @@ async function parseProvaDocx(buffer, alternativasPorQuestao) {
     return montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, (linha, proximoEsperado) => marcadorPorNumeroSolto(linha, proximoEsperado));
 }
 
-module.exports = { parseProvaDocx };
+// extrairParagrafosDoArquivo: também usado pelas Avaliações da Medicina (leitor por letra a-e, 12/11/2026)
+module.exports = { parseProvaDocx, extrairParagrafosDoArquivo };

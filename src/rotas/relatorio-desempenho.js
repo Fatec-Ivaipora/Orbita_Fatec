@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
-const { parseEstatisticas, analisar, sugerirCabecalho, ErroDeLeitura } = require('../utils/parseEstatisticasAva');
+const { parseEstatisticas, analisar, sugerirCabecalho, ErroDeLeitura, calibracao, CALIBRACAO_PADRAO, SITUACOES } = require('../utils/parseEstatisticasAva');
 
 const COL = 'banco_med_relatorios';
 const checkPermission = verifyToken.requireModulePermission('relatorio-desempenho');
@@ -17,8 +17,23 @@ const MAX_DOC_BYTES = 950000;
 // desempenho é uma leitura da prova DAQUELE professor, então cada um enxerga
 // só os seus. Coordenação da Medicina e ADM N1 enxergam todos, pra conseguir
 // olhar a disciplina como um todo.
-function apenasProprios(role) {
-    return role !== 'adm_l1' && role !== 'coord_medicina';
+function apenasProprios(role, user) {
+    // + a responsável pelas avaliações da Medicina (users.avaliacoesMed, 12/11/2026) vê todos
+    return role !== 'adm_l1' && role !== 'coord_medicina' && !(user && user.avaliacoesMed);
+}
+const podeCalibrar = (user) => user.role === 'adm_l1' || user.role === 'coord_medicina' || user.avaliacoesMed === true;
+
+// ---- Calibração da lista de revisão (12/11/2026) — cortes em banco_med_config/desempenho ----
+// Padrão em src/utils/parseEstatisticasAva.js (CALIBRACAO_PADRAO). Ao salvar, os relatórios já gravados são
+// recalculados (a classificação fica guardada no documento pra listagem não ler as questões).
+const DOC_CAL = () => db.collection('banco_med_config').doc('desempenho');
+let calCache = null;
+async function lerCalibracao() {
+    if (calCache && Date.now() - calCache.em < 60000) return calCache.valor;
+    const s = await DOC_CAL().get();
+    const valor = calibracao(s.exists ? s.data().calibracao : null);
+    calCache = { em: Date.now(), valor, meta: s.exists ? { por: s.data().atualizadoPor, em: s.data().atualizadoEm } : null };
+    return valor;
 }
 
 // Campos que o docente pode corrigir no cabeçalho depois de gerado
@@ -39,7 +54,9 @@ function montarResumo(analise) {
         facilidadeMedia: analise.resumo.facilidadeMedia,
         boasOuExcelentes: analise.resumo.boasOuExcelentes,
         paraRevisar: analise.resumo.paraRevisar,
-        comAlternativas: analise.resumo.comAlternativas
+        comAlternativas: analise.resumo.comAlternativas,
+        porSituacao: analise.resumo.porSituacao,
+        faceis: analise.resumo.faceis
     };
 }
 
@@ -106,7 +123,7 @@ router.post('/', verifyToken, checkPermission, async (req, res) => {
 
         // O parser devolve uma Promise só no caminho do PDF (pdf-parse é async).
         const lido = await Promise.resolve(parseEstatisticas(buffer, nomeArquivo));
-        const analise = analisar(lido.questoes);
+        const analise = analisar(lido.questoes, await lerCalibracao());
 
         const meta = lido.meta || {};
         const agora = new Date().toISOString();
@@ -163,7 +180,7 @@ router.post('/', verifyToken, checkPermission, async (req, res) => {
 router.get('/', verifyToken, checkPermission, async (req, res) => {
     try {
         let query = db.collection(COL);
-        if (apenasProprios(req.user.role)) {
+        if (apenasProprios(req.user.role, req.user)) {
             query = query.where('criadoPor', '==', req.user.uid);
         }
         const snap = await query.select(...CAMPOS_LISTA).get();
@@ -176,13 +193,44 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// ---- GET /calibracao — cortes atuais (e o padrão) ----
+router.get('/calibracao', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const valor = await lerCalibracao();
+        res.json({ calibracao: valor, padrao: CALIBRACAO_PADRAO, situacoes: SITUACOES, podeEditar: podeCalibrar(req.user), atualizado: calCache && calCache.meta });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- PUT /calibracao — só a responsável pelas avaliações / coordenação / ADM; recalcula os relatórios ----
+router.put('/calibracao', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!podeCalibrar(req.user)) return res.status(403).json({ error: 'Só a responsável pelas avaliações e a coordenação de Medicina ajustam a calibração.' });
+        const valor = calibracao(req.body && req.body.calibracao);
+        const agora = new Date().toISOString();
+        await DOC_CAL().set({ calibracao: valor, atualizadoPor: req.user.name || req.user.email || 'Usuário', atualizadoEm: agora });
+        calCache = null;
+        const snap = await db.collection(COL).get();
+        let n = 0;
+        for (let i = 0; i < snap.docs.length; i += 400) {
+            const batch = db.batch();
+            snap.docs.slice(i, i + 400).forEach(d => {
+                const analise = analisar(d.data().questoes || [], valor);
+                batch.update(d.ref, { questoes: analise.questoes, resumo: montarResumo(analise), recalculadoEm: agora });
+                n++;
+            });
+            await batch.commit();
+        }
+        res.json({ message: `Calibração salva. ${n} relatório(s) recalculado(s).`, calibracao: valor });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ---- GET /:id  — relatório completo ----
 router.get('/:id', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection(COL).doc(req.params.id).get();
         if (!snap.exists) return res.status(404).json({ error: 'Relatório não encontrado.' });
         const dados = snap.data();
-        if (apenasProprios(req.user.role) && dados.criadoPor !== req.user.uid) {
+        if (apenasProprios(req.user.role, req.user) && dados.criadoPor !== req.user.uid) {
             return res.status(403).json({ error: 'Este relatório é de outro professor.' });
         }
         res.json({ id: snap.id, ...dados });
@@ -197,7 +245,7 @@ router.put('/:id', verifyToken, checkPermission, async (req, res) => {
         const ref = db.collection(COL).doc(req.params.id);
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ error: 'Relatório não encontrado.' });
-        if (apenasProprios(req.user.role) && snap.data().criadoPor !== req.user.uid) {
+        if (apenasProprios(req.user.role, req.user) && snap.data().criadoPor !== req.user.uid) {
             return res.status(403).json({ error: 'Este relatório é de outro professor.' });
         }
 
@@ -218,7 +266,7 @@ router.delete('/:id', verifyToken, checkPermission, async (req, res) => {
         const ref = db.collection(COL).doc(req.params.id);
         const snap = await ref.get();
         if (!snap.exists) return res.status(404).json({ error: 'Relatório não encontrado.' });
-        if (apenasProprios(req.user.role) && snap.data().criadoPor !== req.user.uid) {
+        if (apenasProprios(req.user.role, req.user) && snap.data().criadoPor !== req.user.uid) {
             return res.status(403).json({ error: 'Este relatório é de outro professor.' });
         }
         await ref.delete();

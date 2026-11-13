@@ -37,9 +37,39 @@ const FAIXAS = [
     { nome: 'Excelente', min: 50, max: Infinity }
 ];
 
-const LIMITE_REVISAO = 20;        // abaixo disso a questão entra na lista de revisão
+const LIMITE_REVISAO = 20;        // (legado) faixa "Fraca" da discriminação
 const FACILIDADE_MUITO_ALTA = 85; // acima disso "quase todos acertaram"
 const FACILIDADE_MUITO_BAIXA = 30;
+
+// ---- Calibração da lista de revisão (12/11/2026) -----------------
+// Antes: tudo com discriminação < 20 ia pra revisão, sem olhar a facilidade — questão fácil (a turma
+// dominou o conteúdo) tem discriminação baixa por natureza e caía como "ruim" (36% das questões nos 12
+// relatórios da Medicina; a coordenação via ~80% como problema). Base: documentação do relatório de
+// estatísticas do Moodle (discriminação negativa = provavelmente inválida; máxima discriminação só com
+// facilidade 30–70%; eficiência discriminativa < 15% = conferir) + literatura de análise de itens
+// (itens muito fáceis têm discriminação baixa naturalmente). Os cortes são ajustáveis pela responsável
+// pelas avaliações (banco_med_config/desempenho) — estes são o padrão.
+const CALIBRACAO_PADRAO = {
+    facil: 85,          // facilidade >= isto: "fácil — conteúdo dominado" (não é erro), salvo discriminação negativa
+    muitoDificil: 30,   // facilidade < isto e discriminação < atencaoDisc: conferir gabarito/conteúdo
+    quaseNinguem: 5,    // facilidade <= isto: revisar já (quase ninguém acertou)
+    revisarDisc: 15,    // dificuldade média: revisar se discriminação < isto ...
+    revisarEfic: 15,    // ... e eficiência discriminativa < isto (quando o AVA informa)
+    atencaoDisc: 20     // discriminação < isto (sem cair nas regras acima): atenção, pode manter
+};
+const SITUACOES = {
+    'revisar-ja': 'Revisar já',
+    conferir: 'Conferir gabarito/conteúdo',
+    revisar: 'Revisar',
+    atencao: 'Atenção',
+    facil: 'Fácil — conteúdo dominado',
+    boa: 'Boa'
+};
+function calibracao(c) {
+    const out = { ...CALIBRACAO_PADRAO };
+    Object.keys(out).forEach(k => { const n = Number(c && c[k]); if (Number.isFinite(n) && n >= -100 && n <= 100) out[k] = n; });
+    return out;
+}
 
 // ---- Normalização de texto e números ----------------------------
 
@@ -653,16 +683,32 @@ function classificar(discriminacao) {
     return faixa ? faixa.nome : 'Excelente';
 }
 
-function precisaRevisao(q) {
-    if (!temNumero(q.discriminacao)) return true;
-    return q.discriminacao < LIMITE_REVISAO;
+function situacaoDa(q, lim) {
+    lim = calibracao(lim);
+    const d = q.discriminacao, f = q.facilidade, e = q.eficiencia;
+    if (temNumero(f) && f <= lim.quaseNinguem) return 'revisar-ja';
+    if (!temNumero(d)) return temNumero(f) && f >= lim.facil ? 'facil' : 'conferir';
+    if (d < 0) return temNumero(f) && f >= 95 ? 'facil' : 'revisar-ja';
+    if (temNumero(f) && f >= lim.facil) return 'facil';
+    if (temNumero(f) && f < lim.muitoDificil && d < lim.atencaoDisc) return 'conferir';
+    if (d < lim.revisarDisc && (!temNumero(e) || e < lim.revisarEfic)) return 'revisar';
+    if (d < lim.atencaoDisc) return 'atencao';
+    return 'boa';
+}
+function precisaRevisao(q, lim) {
+    return ['revisar-ja', 'conferir', 'revisar'].includes(situacaoDa(q, lim));
 }
 
 const fmt = v => temNumero(v) ? v.toFixed(2).replace('.', ',') + '%' : '—';
 
-function motivoRevisao(q) {
+function motivoRevisao(q, lim) {
     const d = q.discriminacao;
     const f = q.facilidade;
+    const sit = situacaoDa(q, lim);
+    if (sit === 'revisar' && temNumero(d)) {
+        return `Dificuldade média (${fmt(f)} de acerto), mas a questão não separa quem sabe de quem não sabe ` +
+               `(discriminação ${fmt(d)}${temNumero(q.eficiencia) ? `, eficiência ${fmt(q.eficiencia)}` : ''}): conferir enunciado e alternativas.`;
+    }
 
     if (!temNumero(d)) {
         if (temNumero(f) && f >= 99.5) {
@@ -720,21 +766,27 @@ function media(valores) {
 /**
  * Enriquece as questões com classificação/motivo e devolve o resumo da prova.
  */
-function analisar(questoes) {
+function analisar(questoes, lim) {
     const contagens = {};
     FAIXAS.forEach(f => { contagens[f.nome] = 0; });
+    const porSituacao = {};
+    Object.keys(SITUACOES).forEach(k => { porSituacao[k] = 0; });
 
     const enriquecidas = questoes.map(q => {
         const classificacao = classificar(q.discriminacao);
         contagens[classificacao]++;
-        const revisar = precisaRevisao(q);
+        const situacao = situacaoDa(q, lim);
+        porSituacao[situacao]++;
+        const revisar = precisaRevisao(q, lim);
         const forte = distratorForte(q);
         const dominante = distratorDominante(q);
         return {
             ...q,
             classificacao,
+            situacao,
+            situacaoTexto: SITUACOES[situacao],
             revisar,
-            motivo: revisar ? motivoRevisao(q) : null,
+            motivo: revisar ? motivoRevisao(q, lim) : null,
             // Um distrator que bateu o gabarito merece leitura à parte da
             // discriminação: a questão pode até discriminar bem e ainda
             // assim estar ensinando a coisa errada pra turma inteira.
@@ -754,6 +806,9 @@ function analisar(questoes) {
         facilidadeMedia: media(enriquecidas.map(q => q.facilidade)),
         boasOuExcelentes: contagens['Boa'] + contagens['Excelente'],
         paraRevisar: enriquecidas.filter(q => q.revisar).length,
+        porSituacao,
+        faceis: porSituacao.facil,
+        calibracao: calibracao(lim),
         comAlternativas: enriquecidas.filter(q => q.alternativas.length > 0).length,
         comDistratorDominante: enriquecidas.filter(q => q.alertaDistrator).length
     };
@@ -772,5 +827,9 @@ module.exports = {
     distratorDominante,
     ErroDeLeitura,
     FAIXAS,
-    LIMITE_REVISAO
+    LIMITE_REVISAO,
+    CALIBRACAO_PADRAO,
+    SITUACOES,
+    situacaoDa,
+    calibracao
 };

@@ -219,13 +219,14 @@ export function montarRelatorioHTML(r) {
     <div class="rd-rev" style="border-left-color:${CORES_HEX[q.classificacao]}">
       <div class="rd-rev-top">
         <b>Q${q.n}</b>
+        ${q.situacaoTexto ? `<span class="rd-situacao rd-sit-${q.situacao}">${esc(q.situacaoTexto)}</span>` : ''}
         <span class="tag" style="--c:${CORES_HEX[q.classificacao]};background:var(--c)">${q.classificacao}</span>
         <span class="rd-rev-num">discriminação ${pct(q.discriminacao)} · facilidade ${pct(q.facilidade)}</span>
       </div>
       <div class="rd-rev-nome">${esc(q.nome)}</div>
       <p class="rd-rev-motivo">${esc(q.motivo || '')}</p>
     </div>`).join('')
-    : `<p class="rd-secao-nota">Nenhuma questão ficou abaixo de ${LIMITE_REVISAO}% de discriminação. Prova bem calibrada.</p>`;
+    : `<p class="rd-secao-nota">Nenhuma questão precisa de revisão. Prova bem calibrada.</p>`;
 
   const linhasTabela = qs.map(q => `
     <tr>
@@ -345,6 +346,7 @@ export function montarRelatorioHTML(r) {
         <div class="rd-card"><div class="v">${pct(resumo.facilidadeMedia)}</div><div class="r">Facilidade média</div></div>
         <div class="rd-card"><div class="v">${resumo.boasOuExcelentes || 0}</div><div class="r">Boas ou excelentes</div></div>
         <div class="rd-card alerta"><div class="v">${resumo.paraRevisar || 0}</div><div class="r">Para revisar</div></div>
+        <div class="rd-card"><div class="v">${resumo.faceis != null ? resumo.faceis : qs.filter(q => q.situacao === 'facil').length}</div><div class="r">Fáceis — conteúdo dominado</div></div>
         <div class="rd-card"><div class="v" style="color:${alfa ? alfa.cor : 'inherit'}">${alfa ? alfa.texto : '—'}</div><div class="r">Alfa de Cronbach${alfa ? ' · ' + alfa.rotulo : ''}</div></div>
       </div>
     </section>
@@ -375,8 +377,8 @@ export function montarRelatorioHTML(r) {
 
     <section class="rd-secao rd-quebra">
       <h2>Questões que merecem revisão</h2>
-      <p class="rd-secao-nota">Discriminação abaixo de ${LIMITE_REVISAO}% (ou negativa): a questão separa mal quem domina
-        de quem não domina o conteúdo. Vale conferir enunciado, gabarito e distratores.</p>
+      <p class="rd-secao-nota">Questões com discriminação negativa, que quase ninguém acertou, ou de dificuldade média que não separam
+        quem domina de quem não domina o conteúdo. Questões fáceis (a turma dominou) não entram aqui. Vale conferir enunciado, gabarito e distratores.</p>
       <div class="rd-2col">${blocosRevisao}</div>
     </section>
 

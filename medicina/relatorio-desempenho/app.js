@@ -16,7 +16,7 @@ import { escapeHTML as esc } from "../../core/security.js";
 import { getEffectiveLevel } from "../../core/permissions.js";
 import {
   montarRelatorioHTML, identificacaoTurma, CORES_HEX, pct, dataCurta
-} from "./relatorio-render.js?v=5";
+} from "./relatorio-render.js?v=6";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -501,8 +501,55 @@ function imprimir(apenasResumo) {
   setTimeout(() => document.body.classList.remove('rd-print-resumo'), 0);
 }
 
+// ---------------- Calibração da lista de revisão (12/11/2026) ----------------
+// A responsável pelas avaliações / coordenação ajusta os cortes; ao salvar, todos os relatórios são recalculados.
+const CAMPOS_CAL = [
+  ['facil', 'Fácil — conteúdo dominado: acerto a partir de (%)', 'Não vai para revisão (só se a discriminação for negativa).'],
+  ['quaseNinguem', 'Revisar já: acerto até (%)', 'Quase ninguém acertou — conferir gabarito.'],
+  ['muitoDificil', 'Muito difícil: acerto abaixo de (%)', 'Com discriminação baixa: conferir gabarito/conteúdo.'],
+  ['revisarDisc', 'Revisar: discriminação abaixo de (%)', 'Na faixa de dificuldade média.'],
+  ['revisarEfic', '…e eficiência discriminativa abaixo de (%)', 'Quando o AVA informa a eficiência.'],
+  ['atencaoDisc', 'Atenção (pode manter): discriminação abaixo de (%)', 'Fraca, mas sem motivo para trocar.']
+];
+async function modalCalibracao() {
+  let c;
+  try { c = await apiFetch(`/${MODULO}/calibracao`); } catch (err) { alert(err.message); return; }
+  const quem = c.atualizado && c.atualizado.por ? `Ajustada por ${esc(c.atualizado.por)} em ${new Date(c.atualizado.em).toLocaleDateString('pt-BR')}.` : 'Usando os cortes padrão.';
+  abrirModal(`
+    <div class="modal-box">
+      <h3>Calibração da lista de revisão</h3>
+      <p class="modal-sub">${quem} Discriminação negativa sempre vai para revisão.</p>
+      <div class="rd-cal-grade">
+        ${CAMPOS_CAL.map(([k, rot, dica]) => `<label class="rd-cal-campo"><span>${rot}</span>
+          <input type="number" min="0" max="100" step="1" data-cal="${k}" value="${c.calibracao[k]}" ${c.podeEditar ? '' : 'disabled'}>
+          <small>${dica} Padrão: ${c.padrao[k]}.</small></label>`).join('')}
+      </div>
+      <div class="modal-acoes">
+        ${c.podeEditar ? '<button class="btn btn-secondary" id="rd-cal-padrao">Voltar ao padrão</button>' : ''}
+        <button class="btn btn-secondary" id="rd-cal-fechar">Fechar</button>
+        ${c.podeEditar ? '<button class="btn btn-primary" id="rd-cal-salvar">Salvar e recalcular</button>' : ''}
+      </div>
+    </div>`);
+  el('rd-cal-fechar').onclick = fecharModal;
+  if (!c.podeEditar) return;
+  el('rd-cal-padrao').onclick = () => document.querySelectorAll('[data-cal]').forEach(i => { i.value = c.padrao[i.dataset.cal]; });
+  el('rd-cal-salvar').onclick = async () => {
+    const calibracao = {};
+    document.querySelectorAll('[data-cal]').forEach(i => { calibracao[i.dataset.cal] = Number(i.value); });
+    el('rd-cal-salvar').disabled = true; el('rd-cal-salvar').textContent = 'Recalculando…';
+    try {
+      const r = await apiFetch(`/${MODULO}/calibracao`, { method: 'PUT', body: JSON.stringify({ calibracao }) });
+      fecharModal();
+      await carregarLista();
+      alert(r.message);
+    } catch (err) { alert(err.message); el('rd-cal-salvar').disabled = false; el('rd-cal-salvar').textContent = 'Salvar e recalcular'; }
+  };
+}
+
 function ligarEventos() {
   el('rd-btn-novo').onclick = modalNovo;
+  el('rd-btn-calibracao').onclick = modalCalibracao;
+  apiFetch(`/${MODULO}/calibracao`).then(c => { if (c.podeEditar) el('rd-btn-calibracao').classList.remove('hidden'); }).catch(() => {});
   el('rd-btn-ajuda').onclick = modalAjuda;
   el('rd-btn-voltar').onclick = voltarParaLista;
   el('rd-btn-imprimir').onclick = () => imprimir(false);

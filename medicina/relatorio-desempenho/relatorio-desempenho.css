@@ -419,3 +419,13 @@ details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
   .rd-doc-topo { padding-bottom: 0.45rem; margin-bottom: 0.6rem; }
   .rd-doc-logo { height: 30px; }
 }
+
+/* ---- calibração da lista de revisão (12/11/2026) ---- */
+.rd-situacao { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; background: #FEF2F2; color: #B91C1C; }
+.rd-sit-conferir { background: #FFFBEB; color: #92400E; }
+.rd-sit-revisar { background: #FFF7ED; color: #9A3412; }
+.rd-cal-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem 1rem; margin: 0.6rem 0 1rem; }
+.rd-cal-campo { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.82rem; font-weight: 700; color: #334155; }
+.rd-cal-campo input { min-height: 38px; border: 1px solid #CBD5E1; border-radius: 10px; padding: 0 0.7rem; font: inherit; font-weight: 600; }
+.rd-cal-campo small { font-weight: 500; color: #64748B; font-size: 0.74rem; line-height: 1.35; }
+@media (max-width: 640px) { .rd-cal-grade { grid-template-columns: 1fr; } }
