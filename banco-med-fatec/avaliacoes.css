@@ -177,8 +177,13 @@ body.av-sem-rolagem { overflow: hidden; }
 .av-campo select:focus, .av-input:focus, .av-rico:focus { outline: 2px solid var(--med-azul-claro); outline-offset: 0; border-color: var(--med-azul-claro); }
 textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-pergunta { font-weight: 700; }
-.av-titulo-prev { margin: 0.2rem 0 0; padding: 0.5rem 0.75rem; border-radius: 10px; background: var(--av-fundo); font-size: 0.8rem; color: var(--av-tinta-2); }
-.av-titulo-prev::before { content: 'Título no AVA: '; font-weight: 800; color: var(--av-tinta); }
+/* título no AVA: "Prof. Nome –" pronto + o nome que o professor dá à questão (13/11/2026) */
+.av-titulo-linha { display: flex; align-items: stretch; border: 1px solid var(--av-linha, #cfd8e3); border-radius: 10px; overflow: hidden; background: #fff; }
+.av-titulo-linha:focus-within { outline: 2px solid var(--av-foco, #0052B8); outline-offset: 1px; }
+.av-titulo-pre { display: flex; align-items: center; padding: 0 0.75rem; background: var(--av-fundo); font-weight: 800; color: var(--av-tinta); white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--av-linha, #cfd8e3); }
+.av-titulo-linha .av-input { border: 0; border-radius: 0; flex: 1; min-width: 0; outline: none; box-shadow: none; }
+#av-q-prof:disabled { opacity: 1; background: var(--av-fundo); font-weight: 700; cursor: not-allowed; appearance: none; -webkit-appearance: none; color: var(--av-tinta); }
+@media (max-width: 600px) { .av-titulo-linha { flex-direction: column; } .av-titulo-pre { max-width: none; padding: 0.45rem 0.75rem; border-right: 0; border-bottom: 1px solid var(--av-linha, #cfd8e3); } }
 .av-rico { min-height: 90px; padding: 0.7rem 0.85rem; border: 1px solid #CBD5E1; border-radius: 10px; font-size: 0.92rem; line-height: 1.55; color: var(--av-tinta); background: #fff; margin-bottom: 0.6rem; overflow-wrap: anywhere; }
 .av-rico:empty::before { content: attr(data-ph); color: #94A3B8; }
 .av-rico table { border-collapse: collapse; margin: 0.4rem 0; font-size: 0.85rem; }
@@ -309,3 +314,109 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-img-linha .av-nota { margin: 0; }
 .av-previa-imgs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.3rem 0; }
 .av-previa-imgs img { height: 70px; max-width: 140px; object-fit: contain; border: 1px solid var(--av-linha); border-radius: 8px; background: #fff; }
+
+/* tamanho da prova e divisão entre professores (13/11/2026) */
+.av-mc-qtd { display: flex; align-items: flex-end; gap: 0.8rem; flex-wrap: wrap; }
+.av-mc-qtd .av-campo { width: 180px; margin-bottom: 0; }
+.av-mc-profs { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.5rem 0.8rem; margin-top: 0.8rem; }
+.av-mc-prof { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.4rem 0.35rem 0; border-bottom: 1px solid var(--av-linha); }
+.av-mc-prof .av-mc-prof-n { width: 70px; min-height: 34px; text-align: center; }
+.av-profs li.av-prof-ok b { color: var(--av-ok); }
+.av-profs li.av-prof-falta b { color: var(--av-aviso); }
+.av-profs b small { font-weight: 600; color: var(--av-tinta-2); }
+
+/* prévia do modelo de prova (13/11/2026) */
+.av-previa-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.3rem; }
+.av-previa-alts .av-previa-certa { color: var(--av-ok); font-weight: 700; }
+.av-modelo-baixar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin: 0.4rem 0 0.9rem; padding: 0.75rem 0.9rem; background: #EAF1FB; border-radius: 8px; }
+.av-modelo-baixar .av-nota { margin: 0; flex: 1 1 320px; }
+
+@media (max-width: 600px) { .av-img-linha { flex-wrap: wrap; } }
+
+/* corretor de português e ABNT no editor (13/11/2026) */
+.av-pt { margin: 0.4rem 0.8rem 0; padding-top: 0.7rem; border-top: 1px solid var(--av-linha); }
+.av-pt-cab { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.4rem; }
+.av-pt h4 { margin: 0; font-size: 0.85rem; color: var(--av-tinta); }
+.av-pt h4 span { color: var(--av-erro); }
+.av-pt-tudo, .av-pt-btn { border: 1px solid var(--med-azul, #0052B8); background: #fff; color: var(--med-azul, #0052B8); font: inherit; font-size: 0.74rem; font-weight: 700; border-radius: 8px; padding: 0.25rem 0.6rem; cursor: pointer; }
+.av-pt-tudo { background: var(--med-azul, #0052B8); color: #fff; }
+.av-pt-tudo:hover, .av-pt-btn:hover { filter: brightness(0.95); }
+.av-pt-tudo:focus-visible, .av-pt-btn:focus-visible { outline: 2px solid var(--med-azul, #0052B8); outline-offset: 2px; }
+#av-pt-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.av-pt-item { display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.5rem; padding: 0.45rem 0.55rem; background: #fff; border: 1px solid var(--av-linha); border-radius: 8px; font-size: 0.78rem; }
+.av-pt-campo { font-weight: 800; color: var(--av-tinta-2); font-size: 0.7rem; grid-column: 1; }
+.av-pt-troca { grid-column: 1; overflow-wrap: anywhere; }
+.av-pt-troca del { color: var(--av-erro); text-decoration: line-through; }
+.av-pt-troca ins { color: var(--av-ok); text-decoration: none; font-weight: 700; }
+.av-pt-item small { grid-column: 1; color: var(--av-tinta-2); line-height: 1.3; }
+.av-pt-btn { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+.av-pt-ok { font-size: 0.78rem; color: var(--av-tinta-2); padding: 0.3rem 0.2rem; }
+
+/* Conferência CADAM (13/11/2026) */
+.av-conf-modal { max-width: 980px; width: min(980px, 100%); max-height: min(92vh, 1000px); display: flex; flex-direction: column; }
+.av-conf-acoes { display: flex; align-items: center; gap: 0.5rem; }
+.av-conf-imprimir { background: transparent; color: #fff; border-color: rgba(255,255,255,0.7); }
+.av-conf-corpo { overflow: auto; padding: 1rem 1.3rem 1.5rem; background: #EEF2F7; }
+.av-conf-sub { margin: 0 0 0.7rem; font-size: 0.86rem; color: var(--av-tinta-2); font-weight: 600; }
+.av-conf-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; }
+.av-conf-nums > div { background: #fff; border: 1px solid var(--av-linha); border-radius: 10px; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; }
+.av-conf-nums b { font-size: 1.35rem; color: var(--av-tinta); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.av-conf-nums span { font-size: 0.74rem; color: var(--av-tinta-2); font-weight: 600; }
+.av-conf-n-ok b { color: var(--av-ok); } .av-conf-n-aj b { color: #B45309; } .av-conf-n-rf b { color: var(--av-erro); }
+.av-conf-nota { margin: 0.7rem 0 1rem; font-size: 0.76rem; color: var(--av-tinta-2); line-height: 1.45; max-width: 75ch; }
+.av-conf-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.av-conf-q { background: #fff; border: 1px solid var(--av-linha); border-left: 5px solid var(--av-ok); border-radius: 10px; padding: 0.75rem 0.95rem; }
+.av-conf-ajustar { border-left-color: #D97706; } .av-conf-refazer { border-left-color: var(--av-erro); }
+.av-conf-q-cab { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.av-conf-num { font-weight: 800; color: var(--av-tinta); }
+.av-conf-sit { font-size: 0.72rem; font-weight: 800; padding: 0.1rem 0.5rem; border-radius: 999px; background: #DCFCE7; color: #166534; }
+.av-conf-ajustar .av-conf-sit { background: #FEF3C7; color: #92400E; } .av-conf-refazer .av-conf-sit { background: #FEE2E2; color: #991B1B; }
+.av-conf-prof { font-size: 0.74rem; color: var(--av-tinta-2); font-weight: 700; }
+.av-conf-editar { margin-left: auto; }
+.av-conf-tit { margin: 0.4rem 0 0.15rem; font-weight: 700; font-size: 0.86rem; color: var(--av-tinta); }
+.av-conf-enun { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--av-tinta-2); }
+.av-conf-q h5 { margin: 0.55rem 0 0.2rem; font-size: 0.74rem; }
+.av-conf-h-erro { color: var(--av-erro); } .av-conf-h-aviso { color: #92400E; } .av-conf-h-pt { color: var(--med-azul, #0052B8); }
+.av-conf-q ul { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; line-height: 1.45; color: var(--av-tinta); }
+.av-conf-pt del { color: var(--av-erro); } .av-conf-pt ins { color: var(--av-ok); text-decoration: none; font-weight: 700; }
+.av-conf-pt small { color: var(--av-tinta-2); }
+.av-conf-campo { font-weight: 700; color: var(--av-tinta-2); font-size: 0.74rem; }
+.av-conf-okmsg { margin: 0.3rem 0 0; font-size: 0.8rem; color: var(--av-ok); font-weight: 700; }
+.av-conf-provas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.av-conf-provas button { width: 100%; text-align: left; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; padding: 0.75rem 0.95rem; background: #fff; border: 1px solid var(--av-linha); border-radius: 10px; cursor: pointer; font: inherit; }
+.av-conf-provas button:hover { border-color: var(--med-azul, #0052B8); }
+.av-conf-provas button:focus-visible { outline: 2px solid var(--med-azul, #0052B8); outline-offset: 2px; }
+.av-conf-provas b { color: var(--av-tinta); } .av-conf-provas span { font-size: 0.8rem; color: var(--av-tinta-2); }
+@media (max-width: 600px) { .av-conf-corpo { padding: 0.8rem; } .av-conf-editar { margin-left: 0; } }
+@media print {
+  body.av-imprimindo-conf > *:not(#av-conf) { display: none !important; }
+  body.av-imprimindo-conf #av-conf { position: static; background: none; display: block; }
+  body.av-imprimindo-conf .av-conf-modal { max-height: none; box-shadow: none; width: 100%; }
+  body.av-imprimindo-conf .av-conf-corpo { overflow: visible; background: #fff; }
+  body.av-imprimindo-conf .av-conf-acoes, body.av-imprimindo-conf .av-conf-editar, body.av-imprimindo-conf [data-conf-lista] { display: none !important; }
+  body.av-imprimindo-conf .av-conf-q { break-inside: avoid; }
+}
+
+/* cota do professor na prova (13/11/2026) */
+.av-parte { flex-basis: 100%; font-size: 0.8rem; font-weight: 600; }
+.av-parte b { font-variant-numeric: tabular-nums; }
+.av-parte-falta { color: #92400E; } .av-parte-ok { color: var(--av-ok); } .av-parte-sem { color: var(--av-tinta-2); font-weight: 500; }
+.av-conf-cota { margin: 0.2rem 0 0.6rem; padding: 0.55rem 0.8rem; background: #fff; border: 1px solid var(--av-linha); border-radius: 10px; display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
+.av-conf-cota .av-parte { flex-basis: auto; font-size: 0.9rem; }
+.av-conf-cota-prova { font-size: 0.78rem; color: var(--av-tinta-2); }
+
+/* progresso da disciplina (13/11/2026) */
+.av-slot-barra { display: block; width: 78%; height: 4px; border-radius: 4px; background: rgba(15,23,42,0.12); overflow: hidden; margin: 0.15rem 0 0.05rem; }
+.av-slot-barra > i { display: block; height: 100%; background: currentColor; border-radius: 4px; }
+.av-pg-tabela { overflow-x: auto; background: #fff; border: 1px solid var(--av-linha); border-radius: 10px; }
+.av-pg-tabela table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+.av-pg-tabela th, .av-pg-tabela td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--av-linha); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.av-pg-tabela thead th { background: var(--av-fundo); font-size: 0.76rem; color: var(--av-tinta-2); }
+.av-pg-tabela th small, .av-pg-tabela td small { display: block; font-weight: 500; font-size: 0.7rem; color: var(--av-tinta-2); }
+.av-pg-tabela tbody th, .av-pg-tabela tfoot th { text-align: left; font-weight: 700; color: var(--av-tinta); }
+.av-pg-tabela tbody th small { display: inline; color: var(--av-tinta-2); }
+.av-pg-tabela tfoot td, .av-pg-tabela tfoot th { background: var(--av-fundo); font-weight: 800; border-bottom: 0; }
+.av-pg-ok { color: #166534; background: #DCFCE7; font-weight: 700; }
+.av-pg-meio { color: #92400E; background: #FEF3C7; font-weight: 700; }
+.av-pg-zero { color: #991B1B; background: #FEE2E2; font-weight: 700; }
+.av-pg-livre { color: var(--av-tinta-2); }

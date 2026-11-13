@@ -145,14 +145,17 @@ router.get('/professores', verifyToken, checkPermission, async (req, res) => {
             .sort((a, b) => a.nome.localeCompare(b.nome));
         res.json(professores);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
 router.get('/categorias', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection(COL_CATEGORIAS).get();
-        const categorias = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        let categorias = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // professor de Medicina vê só o banco das disciplinas que dá no semestre (13/11/2026)
+        const prof = await disciplinasDoProfessor(req);
+        if (prof) categorias = categorias.filter(c => prof.categoriaIds.includes(c.id));
         // Ordena por período (1º a 12º) e, dentro do mesmo período, por nome —
         // reflete a grade real do curso (série/semestre), não ordem alfabética solta.
         categorias.sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome));
@@ -170,7 +173,7 @@ router.get('/categorias', verifyToken, checkPermission, async (req, res) => {
 
         res.json(categorias);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -194,7 +197,7 @@ router.post('/categorias', verifyToken, checkPermission, async (req, res) => {
         });
         res.status(201).json({ message: 'Categoria criada!', id: newDoc.id });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -209,16 +212,13 @@ router.post('/categorias', verifyToken, checkPermission, async (req, res) => {
 router.get('/questoes/contagem-dificuldade', verifyToken, checkPermission, async (req, res) => {
     try {
         const contagens = {};
+        const prof = await disciplinasDoProfessor(req);
         await Promise.all(DIFICULDADES_VALIDAS.map(async (dif) => {
-            const agg = await db.collection(COL_QUESTOES)
-                .where('dificuldade', '==', dif)
-                .where('status', '==', 'publicada')
-                .count().get();
-            contagens[dif] = agg.data().count;
+            contagens[dif] = await contarPorDisciplinas(prof, q => q.where('dificuldade', '==', dif).where('status', '==', 'publicada'));
         }));
         res.json(contagens);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -229,16 +229,13 @@ router.get('/questoes/contagem-dificuldade', verifyToken, checkPermission, async
 router.get('/questoes/contagem-area-enamed', verifyToken, checkPermission, async (req, res) => {
     try {
         const contagens = {};
+        const prof = await disciplinasDoProfessor(req);
         await Promise.all(AREAS_ENAMED.map(async (area) => {
-            const agg = await db.collection(COL_QUESTOES)
-                .where('areaEnamed', '==', area)
-                .where('status', '==', 'publicada')
-                .count().get();
-            contagens[area] = agg.data().count;
+            contagens[area] = await contarPorDisciplinas(prof, q => q.where('areaEnamed', '==', area).where('status', '==', 'publicada'));
         }));
         res.json(contagens);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -260,7 +257,7 @@ router.get('/questoes/contagem-professor', verifyToken, checkPermission, async (
         contagens.sort((a, b) => b.total - a.total);
         res.json(contagens);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -272,7 +269,10 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
     try {
         let query = db.collection(COL_QUESTOES);
         if (req.query.periodo) query = query.where('periodo', '==', parseInt(req.query.periodo, 10));
-        if (req.query.categoriaId) query = query.where('categoriaId', '==', req.query.categoriaId);
+        // professor: uma consulta por disciplina DELE (nunca as demais) — mesmo formato de consulta que já existia
+        const prof = await disciplinasDoProfessor(req);
+        const soDisciplinas = prof ? (req.query.categoriaId ? prof.categoriaIds.filter(id => id === req.query.categoriaId) : prof.categoriaIds) : null;
+        if (!prof && req.query.categoriaId) query = query.where('categoriaId', '==', req.query.categoriaId);
         if (req.query.areaEnamed) query = query.where('areaEnamed', '==', req.query.areaEnamed);
         if (req.query.dificuldade) query = query.where('dificuldade', '==', req.query.dificuldade);
         if (req.query.criadoPor) {
@@ -295,12 +295,14 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
             if (primeiraPalavra) query = query.where('tituloBuscaTokens', 'array-contains', primeiraPalavra);
         }
 
-        const snap = await query.get();
-        const questoes = snap.docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role, req.user));
+        const docs = soDisciplinas
+            ? (await Promise.all(soDisciplinas.map(id => query.where('categoriaId', '==', id).get()))).flatMap(sn => sn.docs)
+            : (await query.get()).docs;
+        const questoes = docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role, req.user));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -310,6 +312,7 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
+        await exigeDisciplinaDoProfessor(req, categoriaId);
         const { periodo, areaEnamedPadrao, nome: nomeDaCategoria } = await dadosDaCategoria(categoriaId);
 
         const newDoc = db.collection(COL_QUESTOES).doc();
@@ -339,7 +342,7 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
         });
         res.status(201).json({ message: 'Questão salva no banco!', id: newDoc.id });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -353,6 +356,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         if (erro) return res.status(400).json({ error: erro });
 
         const { titulo, categoriaId, dificuldade, tipoMoodle, enunciadoHtml, alternativas, justificativa, fonte, imagem, areaEnamed } = req.body;
+        await exigeDisciplinaDoProfessor(req, snap.data().categoriaId);
+        await exigeDisciplinaDoProfessor(req, categoriaId);
         const { periodo, areaEnamedPadrao, nome: nomeDaCategoria } = await dadosDaCategoria(categoriaId);
 
         await docRef.update({
@@ -377,16 +382,21 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         const avs = gNovo && gNovo !== gabaritoMed(snap.data()) ? await propagarGabarito(req.params.id, gNovo, req.user.name || req.user.email) : 0;
         res.json({ message: avs ? `Questão atualizada! (gabarito novo também em ${avs} avaliação(ões) da Correção de Provas)` : 'Questão atualizada!', avaliacoesAtualizadas: avs });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
 router.delete('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
     try {
+        if (ehProfessorRestrito(req.user)) {
+            const sn = await db.collection(COL_QUESTOES).doc(req.params.id).get();
+            if (!sn.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+            await exigeDisciplinaDoProfessor(req, sn.data().categoriaId);
+        }
         await db.collection(COL_QUESTOES).doc(req.params.id).delete();
         res.json({ message: 'Questão removida do banco.' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -485,7 +495,7 @@ router.post('/questoes/importar-lote', verifyToken, checkPermission, async (req,
 
         res.status(201).json({ loteId, criadas: validas.length, duplicadas, erros });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -526,7 +536,7 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
 
         res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -546,7 +556,7 @@ router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req
 
         res.json({ message: 'Lote descartado.', removidas: snap.size });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -572,7 +582,7 @@ router.get('/provas', verifyToken, checkPermission, async (req, res) => {
         provas.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(provas);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -587,6 +597,10 @@ router.post('/provas', verifyToken, checkPermission, async (req, res) => {
         // "enamed": simulado que cruza várias disciplinas/períodos, agrupado
         // pela área de formação do ENAMED em vez de uma categoria só.
         const tipo = req.body.tipo === 'enamed' ? 'enamed' : 'disciplina';
+        if (ehProfessorRestrito(req.user)) {
+            if (tipo === 'enamed') return res.status(403).json({ error: 'O simulado ENAMED usa o banco de todas as disciplinas: quem monta é a coordenação.' });
+            await exigeDisciplinaDoProfessor(req, req.body.categoriaId);
+        }
         if (tipo === 'enamed') {
             if (!req.body.areaEnamed || !AREAS_ENAMED.includes(req.body.areaEnamed)) {
                 return res.status(400).json({ error: 'Selecione a área ENAMED da prova.' });
@@ -611,7 +625,7 @@ router.post('/provas', verifyToken, checkPermission, async (req, res) => {
         });
         res.status(201).json({ message: 'Prova criada!', id: newDoc.id });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -626,6 +640,7 @@ router.put('/provas/:id', verifyToken, checkPermission, async (req, res) => {
 
         const nome = String(req.body.nome || '').trim();
         if (!nome) return res.status(400).json({ error: 'Informe o nome da prova.' });
+        if (req.body.categoriaId) await exigeDisciplinaDoProfessor(req, req.body.categoriaId);
 
         await docRef.update({
             nome,
@@ -636,7 +651,7 @@ router.put('/provas/:id', verifyToken, checkPermission, async (req, res) => {
         });
         res.json({ message: 'Prova atualizada!' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -653,7 +668,7 @@ router.delete('/provas/:id', verifyToken, checkPermission, async (req, res) => {
         await docRef.delete();
         res.json({ message: 'Prova removida.' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -697,7 +712,7 @@ router.get('/provas/:id/exportar', verifyToken, checkPermission, async (req, res
         res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
         res.send(xml);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -709,8 +724,103 @@ router.get('/provas/:id/exportar', verifyToken, checkPermission, async (req, res
 const AV = () => require('./banco-med-avaliacoes')._interno;
 const semestreAtual = () => { const d = new Date(); return `${d.getFullYear()}.${d.getMonth() >= 6 ? 2 : 1}`; };
 
+// Professor de Medicina (13/11/2026): escreve questão só nas disciplinas que dá no semestre (diários do Edubox)
+// e o nome dele vem do PERFIL — fica fixo no título "Prof. Nome – …", ninguém digita. Quem vê autoria
+// (coordenação, ADM, responsável pelas avaliações) continua escolhendo professor e disciplina livremente.
+function ehProfessorRestrito(user) { return user.role === 'professor_medicina' && !podeVerAutoria(user.role, user); }
+const perfilCache = new Map();
+async function perfilProfessor(user) {
+    const c = perfilCache.get(user.uid);
+    if (c && Date.now() - c.em < 5 * 60000) return c.valor;
+    const snap = await db.collection('users').doc(user.uid).get();
+    const nome = String((snap.exists && (snap.data().name || snap.data().nome)) || user.name || '').replace(/\s+/g, ' ').trim();
+    const { listaDisciplinas, normNome } = AV();
+    const { fonte, disciplinas } = await listaDisciplinas(semestreAtual());
+    const minhas = nome ? disciplinas.filter(d => d.professores.some(p => normNome(p) === normNome(nome))) : [];
+    const valor = { restrito: true, nome, semestre: fonte, categoriaIds: minhas.map(d => d.categoriaId).filter(Boolean), disciplinas: minhas.map(d => d.nome) };
+    perfilCache.set(user.uid, { em: Date.now(), valor });
+    return valor;
+}
+// null = não é professor restrito (vê tudo); senão o perfil com as disciplinas dele
+async function disciplinasDoProfessor(req) { return ehProfessorRestrito(req.user) ? perfilProfessor(req.user) : null; }
+async function contarPorDisciplinas(prof, filtro) {
+    if (!prof) return (await filtro(db.collection(COL_QUESTOES)).count().get()).data().count;
+    const ns = await Promise.all(prof.categoriaIds.map(id => filtro(db.collection(COL_QUESTOES).where('categoriaId', '==', id)).count().get()));
+    return ns.reduce((a, n) => a + n.data().count, 0);
+}
+async function exigeDisciplinaDoProfessor(req, categoriaId) {
+    if (!ehProfessorRestrito(req.user)) return null;
+    const p = await perfilProfessor(req.user);
+    if (!p.categoriaIds.includes(String(categoriaId || ''))) {
+        const e = new Error(`Você só tem acesso ao banco das disciplinas em que é professor(a) em ${p.semestre}.`); e.status = 403; throw e;
+    }
+    return p;
+}
+router.get('/eu-professor', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.json({ restrito: false });
+        res.json(await perfilProfessor(req.user));
+    } catch (err) { res.status(500).json({ error: 'Não consegui buscar suas disciplinas no Edubox agora. Tente de novo em instantes.' }); }
+});
+
+// ---------- Conferência CADAM do professor (13/11/2026) ----------
+// O professor confere, no padrão da aula CADAM (+ português e ABNT), as questões DELE nas provas das disciplinas
+// dele — em montagem ou já finalizadas. Nunca recebe as questões dos colegas. A Bia/coordenação conferem a prova
+// inteira pela aba Avaliações.
+const COL_AVALIACOES = 'banco_med_avaliacoes';
+// cota do professor na prova (critérios da disciplina, definidos pela responsável) + quantas ele já fez
+async function minhaParte(av, prof, uid, critCache) {
+    if (!critCache.has(av.chave)) critCache.set(av.chave, db.collection('banco_med_criterios').doc(String(av.chave || '-')).get().then(s => (s.exists ? s.data() : {})).catch(() => ({})));
+    const crit = await critCache.get(av.chave);
+    const n = AV().normNome;
+    const ent = Object.entries(crit.porProfessor || {}).find(([nome]) => n(nome) === n(prof.nome));
+    const ids = av.questoesIds || [];
+    const docs = ids.length ? await db.getAll(...ids.map(id => db.collection(COL_QUESTOES).doc(id))) : [];
+    const feitas = docs.filter(d => d.exists && minhaQuestao(d.data(), prof, uid)).length;
+    return { meta: ent ? Number(ent[1]) : null, feitas, qtdProva: crit.qtdQuestoes || null };
+}
+const minhaQuestao = (q, prof, uid) => AV().normNome(q.professorNome || q.elaboradoPor) === AV().normNome(prof.nome) || (!q.professorNome && q.criadoPor === uid);
+router.get('/conferencia', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação confere a prova inteira pela aba Avaliações.' });
+        const prof = await perfilProfessor(req.user);
+        const snaps = await Promise.all(prof.categoriaIds.map(id => db.collection(COL_AVALIACOES).where('categoriaId', '==', id).get()));
+        const critCache = new Map();
+        const lista = (await Promise.all(snaps.flatMap(sn => sn.docs).map(async d => {
+            const a = d.data();
+            const parte = await minhaParte(a, prof, req.user.uid, critCache);
+            return { id: d.id, disciplina: a.disciplina, sigla: a.sigla, semestre: a.semestre, bimestre: a.bimestre, chamada: a.chamada, status: a.status, totalProva: (a.questoesIds || []).length, ...parte };
+        }))).sort((a, b) => String(b.semestre).localeCompare(String(a.semestre)) || (b.bimestre - a.bimestre) || (a.chamada - b.chamada) || String(a.disciplina).localeCompare(String(b.disciplina)));
+        res.json({ professor: prof.nome, semestre: prof.semestre, avaliacoes: lista });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+router.get('/conferencia/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação confere a prova inteira pela aba Avaliações.' });
+        const snap = await db.collection(COL_AVALIACOES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Avaliação não encontrada.' });
+        const av = snap.data();
+        const prof = await exigeDisciplinaDoProfessor(req, av.categoriaId);
+        const ids = av.questoesIds || [];
+        const docs = ids.length ? await db.getAll(...ids.map(id => db.collection(COL_QUESTOES).doc(id))) : [];
+        const minhas = [];
+        for (let i = 0; i < docs.length; i++) {
+            const d = docs[i];
+            if (!d.exists) continue;
+            const q = { id: d.id, ...d.data() };
+            if (minhaQuestao(q, prof, req.user.uid)) minhas.push({ numero: i + 1, ...(await AV().resumoComImagens(q)) });
+        }
+        res.json({
+            avaliacao: { id: snap.id, disciplina: av.disciplina, sigla: av.sigla, semestre: av.semestre, bimestre: av.bimestre, chamada: av.chamada, status: av.status, categoriaId: av.categoriaId },
+            totalProva: ids.length, professor: prof.nome, questoes: minhas,
+            ...(await minhaParte(av, prof, req.user.uid, new Map()).then(p => ({ meta: p.meta, qtdProva: p.qtdProva })))
+        });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 router.get('/contexto/:categoriaId', verifyToken, checkPermission, async (req, res) => {
     try {
+        const prof = await exigeDisciplinaDoProfessor(req, req.params.categoriaId);
         const cat = await db.collection(COL_CATEGORIAS).doc(req.params.categoriaId).get();
         if (!cat.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
         const c = cat.data();
@@ -721,19 +831,20 @@ router.get('/contexto/:categoriaId', verifyToken, checkPermission, async (req, r
             planoDaDisciplina(semestre, c.nome).catch(() => ({ unidades: [], objetivos: [], referencias: [] }))
         ]);
         const d = lista.disciplinas.find(x => normNome(x.nome) === normNome(c.nome));
-        res.json({ categoriaId: cat.id, disciplina: c.nome, sigla: c.nomeBreve || c.nome, periodo: c.periodo, professores: d ? d.professores : [], plano });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+        res.json({ categoriaId: cat.id, disciplina: c.nome, sigla: c.nomeBreve || c.nome, periodo: c.periodo, professores: prof ? [prof.nome] : (d ? d.professores : []), plano });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 router.get('/questoes/:id/completa', verifyToken, checkPermission, async (req, res) => {
     try {
         const s = await db.collection(COL_QUESTOES).doc(req.params.id).get();
         if (!s.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
+        await exigeDisciplinaDoProfessor(req, s.data().categoriaId);
         const q = await AV().resumoComImagens({ id: s.id, ...s.data() });
         const antiga = s.data().imagem;
         if (q.temImagem && antiga && antiga.dataUrl) q.imagemAntiga = { nome: antiga.nome || 'imagem', dataUrl: antiga.dataUrl };
         res.json(anonimizarQuestao(q, req.user.role, req.user));
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 router.post('/imagens/envio', verifyToken, checkPermission, async (req, res) => {
@@ -755,6 +866,8 @@ async function questaoPadraoDoBody(req) {
 
 router.post('/questoes-padrao', verifyToken, checkPermission, async (req, res) => {
     try {
+        const prof = await exigeDisciplinaDoProfessor(req, req.body.categoriaId);
+        if (prof) req.body.professorNome = prof.nome;
         const { q, c, categoriaId, confirmarImagens, tokens } = await questaoPadraoDoBody(req);
         q.imagens = await confirmarImagens(req.body.imagens);
         const quem = req.user.name || req.user.email || 'Professor';
@@ -778,6 +891,8 @@ router.put('/questoes-padrao/:id', verifyToken, checkPermission, async (req, res
         const antes = snap.data();
         // quem não vê autoria recebe a questão sem o nome do professor: salvar não pode apagar o autor
         if (!podeVerAutoria(req.user.role, req.user)) req.body.professorNome = antes.professorNome || '';
+        const prof = await exigeDisciplinaDoProfessor(req, req.body.categoriaId);
+        if (prof && antes.criadoPor === req.user.uid) req.body.professorNome = prof.nome;
         const { q, c, categoriaId, confirmarImagens, tokens } = await questaoPadraoDoBody(req);
         if (!req.body.imagem && antes.imagem && req.body.manterImagem !== false) q.imagem = antes.imagem;
         q.imagens = req.body.imagens === undefined ? (antes.imagens || []) : await confirmarImagens(req.body.imagens);
