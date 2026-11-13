@@ -101,8 +101,10 @@ function slotHtml(disc, bim, ch) {
   const rotulo = `${ordinal(bim)} bimestre, ${ch}ª chamada`;
   if (!av) return `<button type="button" class="av-slot av-slot-vazio" data-criar="${esc(disc.chave)}" data-bim="${bim}" data-ch="${ch}" aria-label="Montar ${rotulo}">${ic('mais')}<span>Montar</span><em class="av-slot-ch">${ch}ª chamada</em></button>`;
   const fin = av.status === 'finalizada';
-  return `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes} questões">
-    ${fin ? ic('cadeado') : ic('editar')}<span><b>${av.totalQuestoes}</b> ${av.totalQuestoes === 1 ? 'questão' : 'questões'}</span><small>${fin ? 'Finalizada' : 'Em montagem'}</small><em class="av-slot-ch">${ch}ª chamada</em></button>`;
+  const plan = Number(disc.qtdQuestoes) || 0;
+  const pct = plan ? Math.min(100, Math.round(100 * av.totalQuestoes / plan)) : 0;
+  return `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes}${plan ? ` de ${plan}` : ''} questões">
+    ${fin ? ic('cadeado') : ic('editar')}<span><b>${av.totalQuestoes}</b>${plan ? ` de ${plan}` : ` ${av.totalQuestoes === 1 ? 'questão' : 'questões'}`}</span>${plan ? `<i class="av-slot-barra" aria-hidden="true"><i style="width:${pct}%"></i></i>` : ''}<small>${fin ? 'Finalizada' : 'Em montagem'}</small><em class="av-slot-ch">${ch}ª chamada</em></button>`;
 }
 
 function renderGrade() {
@@ -125,7 +127,7 @@ function renderGrade() {
           <div class="av-disc" role="row">
             <div class="av-disc-info" role="cell">
               <strong>${esc(d.nome)}</strong>
-              <span class="av-disc-meta">${esc(d.sigla || '')} · <button type="button" class="av-link" data-criterios="${esc(d.chave)}">${d.criteriosDefinidos ? 'Critérios definidos' : 'Critérios: padrão'}</button></span>
+              <span class="av-disc-meta">${esc(d.sigla || '')} · <button type="button" class="av-link" data-criterios="${esc(d.chave)}">${d.criteriosDefinidos ? 'Critérios definidos' : 'Critérios: padrão'}</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button></span>
 
               <span class="av-disc-profs" aria-label="Professores: ${esc(d.professores.join(', '))}">${d.professores.map(n => avatar(n)).join('')}</span>
             </div>
@@ -189,6 +191,7 @@ function renderEditor() {
           <span class="av-status ${fin ? 'av-status-fin' : 'av-status-rasc'}">${fin ? 'Finalizada' : 'Em montagem'}</span></p>
       </div>
       <div class="av-ed-acoes">
+        <button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>
         ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
                  <button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>`
               : `<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
@@ -211,7 +214,7 @@ function renderEditor() {
 
         <div class="av-prog" aria-label="${prontas} de ${questoes.length} questões no padrão">
           <div class="av-prog-barra"><span style="width:${questoes.length ? Math.round(100 * prontas / questoes.length) : 0}%"></span></div>
-          <span><b>${prontas}</b> de <b>${questoes.length}</b> no padrão${analise.avisos ? ` · ${analise.avisos} orientação(ões)` : ''}</span>
+          <span>${analise.planejado ? `<b>${questoes.length}</b> de <b>${analise.planejado}</b> questões · ` : ''}<b>${prontas}</b> de <b>${questoes.length}</b> no padrão${analise.avisos ? ` · ${analise.avisos} orientação(ões)` : ''}</span>
         </div>
 
         ${profsNaProva.length > 1 ? `<div class="av-filtro-prof" role="group" aria-label="Filtrar por professor">
@@ -282,8 +285,8 @@ function painelPlano(plano, analise, av) {
     <h3>Objetivos do plano <small>${analise.objetivos.filter(o => o.qtd).length} de ${analise.objetivos.length}</small></h3>
     <ul class="av-objs">${analise.objetivos.map(o => `<li class="${o.qtd ? 'av-obj-ok' : ''}"><span class="av-obj-n">${o.qtd || '–'}</span>${esc(o.objetivo)}</li>`).join('')}</ul>
 
-    <h3>Professores da disciplina</h3>
-    <ul class="av-profs">${atual.professores.map(n => `<li>${chipProfessor(n)}<b>${analise.professores[n] || 0}</b></li>`).join('')}</ul>`;
+    <h3>Professores da disciplina${analise.planejado ? ` <small>prova de ${analise.planejado}</small>` : ''}</h3>
+    <ul class="av-profs">${atual.professores.map(n => { const m = (analise.porProfessor || []).find(x => P.norm(x.nome) === P.norm(n)); const f = analise.professores[n] || 0; return `<li class="${m ? (f >= m.meta ? 'av-prof-ok' : 'av-prof-falta') : ''}">${chipProfessor(n)}<b>${f}${m ? `<small> de ${m.meta}</small>` : ''}</b></li>`; }).join('')}</ul>`;
 }
 
 // ---------- ações do editor ----------
@@ -377,8 +380,9 @@ const CHECKLIST = [
   { t: 'Uma única alternativa correta', c: ['gabarito', 'tipo'] },
   { t: 'Sem "nenhuma" ou "todas as alternativas"', c: ['nenhuma'] },
   { t: 'Correta sem pista (tamanho, palavra repetida, termo absoluto)', c: ['longa', 'pista', 'absoluto', 'afirmativas'] },
+  { t: 'Sem opinião nem termo vago ("seria", "pode", "é possível")', c: ['opiniao', 'pode'] },
+  { t: 'Um assunto por questão', c: ['dois-assuntos'] },
   { t: 'Feedback geral da resposta', c: ['feedback'] },
-  { t: 'Feedback em cada alternativa', c: ['feedback-alt'] },
   { t: 'Referência bibliográfica', c: ['referencia'] }
 ];
 let editando = null; // id da questão ou null (nova)
@@ -403,18 +407,20 @@ function modalHtml() {
               <label class="av-campo"><span>Dificuldade</span><select id="av-q-dif"><option value="facil">Fácil</option><option value="media" selected>Média</option><option value="intermediaria">Intermediária</option><option value="dificil">Difícil</option></select></label>
             </div>
             <label class="av-campo"><span>Objetivo do plano de ensino que a questão avalia</span><select id="av-q-obj"></select></label>
-            <input type="text" id="av-q-obj-outro" class="av-input" maxlength="400" placeholder="Escreva o objetivo" hidden>
-            <p class="av-titulo-prev" id="av-q-titulo" aria-live="polite"></p>
+            <input type="text" id="av-q-obj-outro" class="av-input" spellcheck="true" lang="pt-BR" maxlength="400" placeholder="Escreva o objetivo" hidden>
+            <label class="av-campo"><span>Título da questão no AVA</span>
+              <span class="av-titulo-linha"><span class="av-titulo-pre" id="av-q-titulo-pre">Prof. –</span><input type="text" id="av-q-nome" class="av-input" spellcheck="true" lang="pt-BR" maxlength="160" placeholder="Nome da questão (tema ou objetivo)"></span>
+            </label>
           </fieldset>
 
           <fieldset class="av-sec"><legend>Caso clínico</legend>
-            <div id="av-q-caso" class="av-rico av-prontuario" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Caso clínico" data-ph="Paciente, idade, sexo, queixa, história, achados do exame e dos exames complementares…"></div>
+            <div id="av-q-caso" class="av-rico av-prontuario" contenteditable="true" spellcheck="true" lang="pt-BR" role="textbox" aria-multiline="true" aria-label="Caso clínico" data-ph="Paciente, idade, sexo, queixa, história, achados do exame e dos exames complementares…"></div>
             <div class="av-imgs" id="av-q-imgs" aria-live="polite"></div>
             <div class="av-img-linha">
               <label class="av-btn-img"><input type="file" id="av-q-img" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>+ Adicionar imagem ou GIF</label>
               <span class="av-nota">ECG, raio-X, foto, GIF animado (ex.: sinal em Libras). Vai ao AVA no tamanho original.</span>
             </div>
-            <label class="av-campo"><span>Pergunta</span><input type="text" id="av-q-perg" class="av-input av-pergunta" maxlength="600" placeholder="Ex.: Qual a conduta mais adequada neste momento?"></label>
+            <label class="av-campo"><span>Pergunta</span><input type="text" id="av-q-perg" class="av-input av-pergunta" spellcheck="true" lang="pt-BR" maxlength="600" placeholder="Ex.: Qual a conduta mais adequada neste momento?"></label>
           </fieldset>
 
           <fieldset class="av-sec"><legend>Alternativas <small>marque a correta</small></legend>
@@ -424,9 +430,9 @@ function modalHtml() {
 
           <fieldset class="av-sec"><legend>Feedback e referência</legend>
             <label class="av-campo"><span>Feedback geral (por que a correta é a correta)</span></label>
-            <div id="av-q-just" class="av-rico" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Feedback geral" data-ph="Explicação que o aluno vê depois da prova…"></div>
+            <div id="av-q-just" class="av-rico" contenteditable="true" spellcheck="true" lang="pt-BR" role="textbox" aria-multiline="true" aria-label="Feedback geral" data-ph="Explicação que o aluno vê depois da prova…"></div>
             <label class="av-campo"><span>Referência</span><select id="av-q-ref"></select></label>
-            <input type="text" id="av-q-ref-outra" class="av-input" maxlength="600" placeholder="Autor. Título. Edição. Editora, ano." hidden>
+            <input type="text" id="av-q-ref-outra" class="av-input" spellcheck="true" lang="pt-BR" maxlength="600" placeholder="Autor. Título. Edição. Editora, ano." hidden>
           </fieldset>
         </form>
 
@@ -434,6 +440,10 @@ function modalHtml() {
           <h3>Checklist do padrão</h3>
           <ol id="av-check-lista"></ol>
           <p class="av-check-rodape" id="av-check-rodape"></p>
+          <section class="av-pt" aria-labelledby="av-pt-tit">
+            <div class="av-pt-cab"><h4 id="av-pt-tit">Português e ABNT <span id="av-pt-n"></span></h4><button type="button" class="av-pt-tudo" id="av-pt-tudo" hidden>Corrigir tudo</button></div>
+            <ul id="av-pt-lista" aria-live="polite"></ul>
+          </section>
         </aside>
       </div>
       <footer class="av-modal-rodape">
@@ -447,8 +457,7 @@ function linhaAlt(i, a = {}) {
   return `<div class="av-alt" data-i="${i}">
     <label class="av-alt-letra"><input type="radio" name="av-correta" value="${i}" ${a.correta ? 'checked' : ''} aria-label="Alternativa ${LETRAS[i]} é a correta"><span>${LETRAS[i]}</span></label>
     <div class="av-alt-campos">
-      <input type="text" class="av-input av-alt-txt" maxlength="1500" placeholder="Texto da alternativa ${LETRAS[i]}" value="${esc(P.texto(a.texto || ''))}">
-      <input type="text" class="av-input av-alt-fb" maxlength="1500" placeholder="Feedback: por que está ${a.correta ? 'correta' : 'incorreta'}" value="${esc(htmlParaTexto(a.feedback || ''))}">
+      <input type="text" class="av-input av-alt-txt" spellcheck="true" lang="pt-BR" maxlength="1500" placeholder="Texto da alternativa ${LETRAS[i]}" value="${esc(P.texto(a.texto || ''))}">
     </div>
     ${i === 4 ? `<button type="button" class="av-icone-btn" data-tirar-alt aria-label="Tirar a alternativa E">${ic('x')}</button>` : ''}
   </div>`;
@@ -459,6 +468,9 @@ function preencherSelects(q) {
   const bim = ed.bimestre || null;
   const profs = [...new Set([...(professores || []), ...(q.professorNome ? [q.professorNome] : [])])];
   $('#av-q-prof').innerHTML = `<option value="">Escolha…</option>${profs.map(n => `<option ${n === q.professorNome ? 'selected' : ''}>${esc(n)}</option>`).join('')}`;
+  // professor logado: o nome vem do perfil e não se troca
+  if (ed.travaProfessor) { $('#av-q-prof').innerHTML = `<option>${esc(ed.travaProfessor)}</option>`; }
+  $('#av-q-prof').disabled = !!ed.travaProfessor;
   const unids = plano.unidades || [];
   const doBim = bim ? unids.filter(u => u.bimestre === bim) : unids, outras = bim ? unids.filter(u => u.bimestre !== bim) : [];
   const opU = (u) => `<option value="${u.numero}" ${Number(q.unidade) === u.numero ? 'selected' : ''}>Unidade ${u.numero} (${u.ch}h) – ${esc(u.titulo)}</option>`;
@@ -479,7 +491,7 @@ function abrirQuestao(id) {
   const q = id ? atual.questoes.find(x => x.id === id) : { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media', professorNome: filtroProfessor && filtroProfessor !== 'Sem professor' ? filtroProfessor : '' };
   const avId = encodeURIComponent(atual.avaliacao.id);
   ed = {
-    modo: 'avaliacao', sigla: atual.avaliacao.sigla, bimestre: atual.avaliacao.bimestre, plano: atual.plano, professores: atual.professores,
+    modo: 'avaliacao', travaProfessor: null, sigla: atual.avaliacao.sigla, bimestre: atual.avaliacao.bimestre, plano: atual.plano, professores: atual.professores,
     titulo: id ? (q.padronizadaEm || q.status === 'rascunho_avaliacao' ? 'Editar questão' : 'Padronizar questão do banco') : 'Nova questão',
     salvar: (f, qid) => api(qid ? `${BASE}/${avId}/questoes/${encodeURIComponent(qid)}` : `${BASE}/${avId}/questoes`, { method: qid ? 'PUT' : 'POST', body: JSON.stringify(f) }),
     aposSalvar: recarregarAtual, envio: `${BASE}/imagens/envio`,
@@ -500,6 +512,7 @@ function abrirEditor(q, id) {
   }
   preencherSelects(q);
   $('#av-q-dif').value = q.dificuldade || 'media';
+  $('#av-q-nome').value = q.nomeQuestao || '';
   $('#av-q-caso').innerHTML = limpaHtml(q.casoClinico || q.enunciadoHtml || '');
   $('#av-q-perg').value = q.pergunta || '';
   $('#av-q-just').innerHTML = limpaHtml(q.justificativa || '');
@@ -526,9 +539,10 @@ function lerForm() {
     unidade: $('#av-q-unid').value,
     dificuldade: $('#av-q-dif').value,
     objetivo: objSel === '__outro' ? $('#av-q-obj-outro').value.trim() : objSel,
+    nomeQuestao: $('#av-q-nome').value.replace(/\s+/g, ' ').trim(),
     casoClinico: limpaHtml($('#av-q-caso').innerHTML).trim(),
     pergunta: $('#av-q-perg').value.trim(),
-    alternativas: [...document.querySelectorAll('#av-q-alts .av-alt')].map((el, i) => ({ texto: $('.av-alt-txt', el).value.trim(), feedback: $('.av-alt-fb', el).value.trim(), correta: i === correta })),
+    alternativas: [...document.querySelectorAll('#av-q-alts .av-alt')].map((el, i) => ({ texto: $('.av-alt-txt', el).value.trim(), correta: i === correta })),
     justificativa: limpaHtml($('#av-q-just').innerHTML).trim(),
     fonte: refSel === '__outra' ? $('#av-q-ref-outra').value.trim() : refSel
   };
@@ -545,8 +559,66 @@ function atualizarChecklist() {
     return `<li class="av-ck av-ck-${st}"><span class="av-ck-ic">${st === 'ok' ? ic('ok') : st === 'erro' ? ic('x') : ic('alerta')}</span><div>${esc(item.t)}${det.length ? `<small>${esc(det[0])}</small>` : ''}</div></li>`;
   }).join('');
   $('#av-check-rodape').textContent = r.ok ? (r.avisos.length ? 'Pode salvar. As orientações em amarelo são recomendações.' : 'Questão no padrão.') : `${r.bloqueios.length} item(ns) em vermelho impedem a questão de entrar numa avaliação. Você pode salvar e terminar depois.`;
-  $('#av-q-titulo').textContent = P.tituloPadrao(f.professorNome || 'professor', ed.sigla || 'DISCIPLINA', f.objetivo || 'objetivo');
-  document.querySelectorAll('#av-q-alts .av-alt').forEach((el, i) => { $('.av-alt-fb', el).placeholder = `Feedback: por que ${LETRAS[i]} está ${f.alternativas[i] && f.alternativas[i].correta ? 'correta' : 'incorreta'}`; el.classList.toggle('av-alt-certa', !!(f.alternativas[i] && f.alternativas[i].correta)); });
+  $('#av-q-titulo-pre').textContent = f.professorNome ? `Prof. ${f.professorNome} –` : 'Prof. (escolha o professor) –';
+  $('#av-q-nome').placeholder = f.objetivo ? `Se deixar vazio: ${f.objetivo.slice(0, 90)}` : 'Nome da questão (tema ou objetivo)';
+  document.querySelectorAll('#av-q-alts .av-alt').forEach((el, i) => { el.classList.toggle('av-alt-certa', !!(f.alternativas[i] && f.alternativas[i].correta)); });
+  renderPortugues();
+}
+
+// ---------- corretor de português e ABNT (13/11/2026) — só regras, sem IA (revisao-pt.js) ----------
+let ptAchados = [];
+function camposTexto() {
+  const c = [{ nome: 'Caso clínico', el: $('#av-q-caso'), rico: true }, { nome: 'Pergunta', el: $('#av-q-perg'), opts: { pergunta: true } }];
+  document.querySelectorAll('#av-q-alts .av-alt-txt').forEach((el, i) => c.push({ nome: `Alternativa ${LETRAS[i]}`, el }));
+  c.push({ nome: 'Feedback', el: $('#av-q-just'), rico: true }, { nome: 'Título', el: $('#av-q-nome') });
+  return c;
+}
+function nosDeTexto(el) {
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), out = [];
+  for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.trim()) out.push(n);
+  return out;
+}
+function juntarAchados() {
+  const RV = window.RevisaoPt;
+  if (!RV) return [];
+  const lista = [];
+  camposTexto().forEach(c => {
+    if (!c.el) return;
+    if (c.rico) {
+      nosDeTexto(c.el).forEach((no, k) => RV.achar(no.data, { maiuscula: k === 0 }).forEach(a => lista.push({ campo: c.nome, ...a,
+        aplicar: () => { no.data = RV.aplicar(no.data, a); }, tudo: () => { no.data = RV.corrigirTudo(no.data, { maiuscula: k === 0 }); } })));
+    } else {
+      RV.achar(c.el.value, c.opts).forEach(a => lista.push({ campo: c.nome, ...a,
+        aplicar: () => { c.el.value = RV.aplicar(c.el.value, a); }, tudo: () => { c.el.value = RV.corrigirTudo(c.el.value, c.opts); } }));
+    }
+  });
+  // referência: a escrita na mão corrige no campo; a do plano de ensino vira "Outra referência" já corrigida
+  const sel = $('#av-q-ref');
+  const outra = sel && sel.value === '__outra';
+  const ref = outra ? $('#av-q-ref-outra').value : (sel ? sel.value : '');
+  RV.abnt(ref).forEach(a => lista.push({ campo: 'Referência', ...a,
+    aplicar: () => { const novo = RV.aplicar(ref, a); sel.value = '__outra'; $('#av-q-ref-outra').hidden = false; $('#av-q-ref-outra').value = novo; },
+    tudo: () => { const v = outra ? $('#av-q-ref-outra').value : ref; const novo = RV.aplicarTodos(v, RV.abnt(v)); sel.value = '__outra'; $('#av-q-ref-outra').hidden = false; $('#av-q-ref-outra').value = novo; } }));
+  // alternativas com pontuação desigual
+  const alts = [...document.querySelectorAll('#av-q-alts .av-alt-txt')].map(e => e.value.trim()).filter(Boolean);
+  const comPonto = alts.filter(a => /\.$/.test(a)).length;
+  if (comPonto && comPonto < alts.length) lista.push({ campo: 'Alternativas', de: '', para: '', motivo: 'Pontuação desigual: ou todas terminam com ponto, ou nenhuma.' });
+  return lista;
+}
+function renderPortugues() {
+  const ul = $('#av-pt-lista');
+  if (!ul) return;
+  ptAchados = juntarAchados();
+  const corrigiveis = ptAchados.filter(a => a.para).length;
+  $('#av-pt-n').textContent = ptAchados.length ? `(${ptAchados.length})` : '';
+  $('#av-pt-tudo').hidden = corrigiveis < 2;
+  if (!ptAchados.length) { ul.innerHTML = '<li class="av-pt-ok">Nenhum erro encontrado pelas regras. Confira também as palavras sublinhadas em vermelho no texto.</li>'; return; }
+  ul.innerHTML = ptAchados.slice(0, 40).map((a, i) => `<li class="av-pt-item">
+      <div class="av-pt-campo">${esc(a.campo)}</div>
+      ${a.de || a.para ? `<div class="av-pt-troca">${a.de ? `<del>${esc(a.de.trim() || '␣')}</del>` : ''}${a.para ? ` <span aria-hidden="true">→</span> <ins>${esc(a.para.trim() || '␣')}</ins>` : ''}</div>` : ''}
+      <small>${esc(a.motivo)}</small>
+      ${a.para ? `<button type="button" class="av-pt-btn" data-pt="${i}">Corrigir</button>` : ''}
+    </li>`).join('') + (ptAchados.length > 40 ? `<li class="av-pt-ok">… e mais ${ptAchados.length - 40}. Corrija estes primeiro.</li>` : '');
 }
 
 async function salvarQuestao() {
@@ -592,6 +664,9 @@ function ligarModalQuestao() {
     const ti = e.target.closest('[data-tirar-img]');
     if (ti) { imgsQuestao.splice(Number(ti.dataset.tirarImg), 1); renderImgs(); }
     if (e.target.closest('[data-tirar-antiga]')) { removerImagem = true; renderImgs(); }
+    const bt = e.target.closest('[data-pt]');
+    if (bt) { const a = ptAchados[Number(bt.dataset.pt)]; if (a) { a.aplicar(); atualizarChecklist(); } }
+    if (e.target.closest('#av-pt-tudo')) { const feitos = new Set(); ptAchados.filter(a => a.para).forEach(a => { const k = a.campo; if (!feitos.has(k)) { feitos.add(k); a.tudo(); } }); atualizarChecklist(); toast('Correções aplicadas. Confira o texto antes de salvar.', 'ok'); }
   });
   m.addEventListener('input', atualizarChecklist);
   m.addEventListener('change', (e) => {
@@ -633,6 +708,7 @@ function abrirImportar() {
         <header class="av-modal-cab"><h2 id="av-mi-tit">Importar questões</h2><button type="button" class="av-icone-btn" data-fechar-imp aria-label="Fechar">${ic('x')}</button></header>
         <div class="av-modal-corpo">
           <p class="av-nota">Questões numeradas ("Questão 1", "1.", "1)") com alternativas a) a e). Uma linha "Gabarito: C" depois da questão já marca a correta. No Word (.docx), as imagens e GIFs vêm junto com a questão.</p>
+          <p class="av-modelo-baixar"><a class="btn btn-secondary av-btn" href="/banco-med-fatec/modelo-questoes-medicina.docx" download>Baixar o modelo de questões (Word)</a><span class="av-nota">Questão 01 → linha Disciplina – Tema – Dificuldade → Enunciado → alternativas (a <b>correta pintada de amarelo</b>) → Feedback da Questão → Referência Bibliográfica.</span></p>
           <div class="av-campos2">
             <label class="av-campo"><span>Arquivo Word ou PDF</span><input type="file" id="av-imp-arq" accept=".docx,.doc,.pdf"></label>
             <label class="av-campo"><span>Professor de todas as questões</span><select id="av-imp-prof"></select></label>
@@ -653,7 +729,7 @@ function abrirImportar() {
     m.addEventListener('click', (e) => { if (e.target.closest('[data-fechar-imp]') || e.target === m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
     $('#av-imp-ler').addEventListener('click', lerImportacao);
     $('#av-imp-salvar').addEventListener('click', salvarImportacao);
-    m.addEventListener('change', (e) => { if (e.target.matches('.av-imp-gab')) previaImport[Number(e.target.dataset.i)].gabarito = e.target.value || null; });
+    m.addEventListener('change', (e) => { if (e.target.matches('.av-imp-gab')) { previaImport[Number(e.target.dataset.i)].gabarito = e.target.value || null; mostrarPrevia(''); } });
   }
   $('#av-imp-prof').innerHTML = `<option value="">Definir depois</option>${atual.professores.map(n => `<option>${esc(n)}</option>`).join('')}`;
   $('#av-imp-unid').innerHTML = `<option value="">Definir depois</option>${(atual.plano.unidades || []).filter(u => u.bimestre === atual.avaliacao.bimestre).map(u => `<option value="${u.numero}">Unidade ${u.numero} – ${esc(u.titulo)}</option>`).join('')}`;
@@ -667,6 +743,9 @@ async function lerImportacao() {
   try {
     // Word .docx: lido aqui no navegador, com as imagens (Word com GIF passa do limite de envio do servidor)
     if (arq && /\.docx$/i.test(arq.name)) {
+      // 1º o modelo de prova da Medicina (Questão / Enunciado / Feedback / Referência, correta em amarelo)
+      const doModelo = await window.LerWord.lerModelo(arq);
+      if (doModelo && doModelo.length) { previaImport = doModelo; mostrarPrevia(''); return; }
       const itens = await window.LerWord.ler(arq);
       previaImport = P.lerQuestoesDeLinhas(itens);
       if (!previaImport.length) throw new Error('Não encontrei questões objetivas. As questões precisam estar numeradas ("Questão 1", "1.", "2)") com as alternativas a), b), c)...');
@@ -690,9 +769,9 @@ function mostrarPrevia(aviso) {
     const nImg = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length, 0);
     $('#av-imp-previa').innerHTML = `
       <p class="av-nota"><b>${previaImport.length}</b> questão(ões) encontrada(s)${nImg ? `, com <b>${nImg}</b> imagem(ns)` : ''}.${semGab ? ` ${semGab} sem gabarito: marque abaixo.` : ''} ${aviso ? esc(aviso) : ''}</p>
-      <ol class="av-previa">${previaImport.map((q, i) => `<li><p>${esc(q.enunciado.slice(0, 220))}${q.enunciado.length > 220 ? '…' : ''}</p>
+      <ol class="av-previa">${previaImport.map((q, i) => `<li>${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa ? '<span class="av-selo av-selo-ok">Feedback</span>' : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
         ${(q.imagens || []).length ? `<div class="av-previa-imgs">${q.imagens.map(im => `<img src="${im.dataUrl}" alt="">`).join('')}</div>` : ''}
-        <div class="av-previa-alts">${q.alternativas.map((a, j) => `<span><b>${LETRAS[j]})</b> ${esc(String(a).slice(0, 70))}</span>`).join('')}</div>
+        <div class="av-previa-alts">${q.alternativas.map((a, j) => `<span class="${q.gabarito === LETRAS[j] ? 'av-previa-certa' : ''}"><b>${LETRAS[j]})</b> ${esc(String(a).slice(0, 90))}</span>`).join('')}</div>
         <label class="av-previa-gab">Correta <select class="av-imp-gab" data-i="${i}"><option value="">?</option>${q.alternativas.map((a, j) => `<option ${q.gabarito === LETRAS[j] ? 'selected' : ''}>${LETRAS[j]}</option>`).join('')}</select></label></li>`).join('')}</ol>`;
     $('#av-imp-salvar').disabled = !previaImport.length;
   }
@@ -716,7 +795,8 @@ async function salvarImportacao() {
         const env = await enviarImagem(await dataUrlParaArquivo(im.dataUrl, `questao-${q.numero}-${j + 1}`));
         imagens.push({ caminho: env.caminho, nome: env.nome });
       }
-      questoes.push({ numero: q.numero, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, imagens });
+      questoes.push({ numero: q.numero, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, imagens,
+        ...(q.pergunta !== undefined && q.casoHtml !== undefined ? { casoHtml: q.casoHtml, pergunta: q.pergunta, justificativa: q.justificativa, fonte: q.fonte, dificuldade: q.dificuldade, tema: q.tema } : {}) });
     }
     btn.textContent = 'Importando…';
     const r = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/importar`, { method: 'POST', body: JSON.stringify({ questoes, professorNome: $('#av-imp-prof').value, unidade: $('#av-imp-unid').value }) });
@@ -820,6 +900,7 @@ export async function abrirCriterios(chave, depois) {
       if (e.target.closest('[data-padrao-crit]')) preencherCriterios(true);
     });
     m.addEventListener('input', resumoPesos);
+    m.addEventListener('click', (e) => { if (e.target.closest('[data-dividir]')) dividirIgualmente(); });
     m.addEventListener('change', async (e) => {
       resumoPesos();
     });
@@ -834,12 +915,20 @@ export async function abrirCriterios(chave, depois) {
 }
 
 function preencherCriterios(voltarPadrao) {
-  const c = critAtual, cr = voltarPadrao ? { bimestres: {}, pesos: {}, limites: {} } : c.criterios;
+  const c = critAtual, cr = voltarPadrao ? { bimestres: {}, pesos: {}, limites: {}, qtdQuestoes: null, porProfessor: {} } : c.criterios;
   const lim = { ...c.padrao, ...(cr.limites || {}) };
   const quemDefiniu = c.criterios.definidos ? `Definidos por ${esc(c.criterios.definidoPor)} em ${dataBR(c.criterios.definidoEm)}.` : 'Ainda não definidos: as avaliações desta disciplina usam o padrão (peso = carga horária, metade das unidades em cada bimestre).';
   $('#av-mc-tit').textContent = `Critérios — ${c.disciplina}`;
   $('#av-mc-corpo').innerHTML = `
     <p class="av-nota">${quemDefiniu}</p>
+
+    <h3 class="av-mc-h">Tamanho da prova e divisão entre os professores</h3>
+    <div class="av-mc-qtd">
+      <label class="av-campo"><span>Questões por prova</span><input type="number" id="av-mc-total" class="av-input" min="0" max="300" value="${cr.qtdQuestoes || ''}" placeholder="ex.: 20"></label>
+      <button type="button" class="btn btn-secondary av-btn" data-dividir>Dividir igualmente</button>
+    </div>
+    ${(c.professores || []).length ? `<div class="av-mc-profs">${c.professores.map(n => `<label class="av-mc-prof">${chipProfessor(n)}<input type="number" class="av-input av-mc-prof-n" data-prof="${esc(n)}" min="0" max="300" value="${(cr.porProfessor || {})[n] || ''}" placeholder="0" aria-label="Questões de ${esc(n)}"></label>`).join('')}</div>
+    <p class="av-nota" id="av-mc-soma"></p>` : '<p class="av-nota">O Edubox não tem professores lançados nesta disciplina.</p>'}
 
     <h3 class="av-mc-h">Unidades do plano de ensino <small>Edubox ${esc(c.semestreFonte || '')}</small></h3>
     ${c.unidades.length ? `<table class="av-mc-tab">
@@ -866,11 +955,28 @@ function preencherCriterios(voltarPadrao) {
   resumoPesos();
 }
 
+function resumoCotas() {
+  const el = $('#av-mc-soma'); if (!el) return;
+  const qtd = Number(($('#av-mc-total') || {}).value) || 0;
+  const soma = [...document.querySelectorAll('.av-mc-prof-n')].reduce((t, i) => t + (Number(i.value) || 0), 0);
+  el.textContent = !qtd ? 'Defina quantas questões a prova tem para dividir entre os professores.' : soma === qtd ? `A divisão soma as ${qtd} questões da prova.` : `A divisão soma ${soma} de ${qtd} questões.`;
+  el.classList.toggle('av-nota-aviso', !!qtd && soma !== qtd);
+}
+function dividirIgualmente() {
+  const qtd = Number(($('#av-mc-total') || {}).value) || 0;
+  const campos = [...document.querySelectorAll('.av-mc-prof-n')];
+  if (!qtd || !campos.length) { toast('Defina primeiro quantas questões a prova tem.', 'aviso'); return; }
+  const base = Math.floor(qtd / campos.length), resto = qtd % campos.length;
+  campos.forEach((c, i) => { c.value = base + (i < resto ? 1 : 0); });
+  resumoPesos();
+}
 function resumoPesos() {
+  resumoCotas();
   [1, 2].forEach(b => {
     const linhas = [...document.querySelectorAll('#av-mc-corpo .av-mc-tab tbody tr')].filter(tr => Number(tr.querySelector('.av-mc-bim').value) === b);
     const total = linhas.reduce((s, tr) => s + (Number(tr.querySelector('.av-mc-peso').value) || 0), 0);
-    linhas.forEach(tr => { const p = Number(tr.querySelector('.av-mc-peso').value) || 0; tr.querySelector('.av-mc-pct').textContent = total ? `${Math.round(100 * p / total)}% do ${b}º bimestre` : ''; });
+    const qtd = Number(($('#av-mc-total') || {}).value) || 0;
+    linhas.forEach(tr => { const p = Number(tr.querySelector('.av-mc-peso').value) || 0; tr.querySelector('.av-mc-pct').textContent = total ? `${Math.round(100 * p / total)}% do ${b}º bimestre${qtd ? ` = ${Math.round(qtd * p / total * 10) / 10} questões` : ''}` : ''; });
   });
 }
 
@@ -883,7 +989,10 @@ async function salvarCriterios() {
   const limites = { minCaso: Number($('#av-mc-caso').value), abaixo: Number($('#av-mc-abaixo').value), acima: Number($('#av-mc-acima').value) };
   const btn = $('#av-mc-salvar'); btn.disabled = true;
   try {
-    const r = await api(`${CRIT}/${encodeURIComponent(critAtual.chave)}`, { method: 'PUT', body: JSON.stringify({ bimestres, pesos, limites, semestre }) });
+    const porProfessor = {};
+    document.querySelectorAll('.av-mc-prof-n').forEach(i => { if (Number(i.value) > 0) porProfessor[i.dataset.prof] = Number(i.value); });
+    const qtdQuestoes = Number(($('#av-mc-total') || {}).value) || null;
+    const r = await api(`${CRIT}/${encodeURIComponent(critAtual.chave)}`, { method: 'PUT', body: JSON.stringify({ bimestres, pesos, limites, qtdQuestoes, porProfessor, semestre }) });
     $('#av-modal-crit').hidden = true; document.body.classList.remove('av-sem-rolagem');
     toast(r.message);
     const d = disciplinas.find(x => x.chave === critAtual.chave); if (d) d.criteriosDefinidos = true;
@@ -910,16 +1019,34 @@ async function trocarDisciplinaEditor(categoriaId) {
   preencherSelects({ ...f, fonte: f.fonte });
   atualizarChecklist();
 }
+// professor de Medicina: só as disciplinas que ele dá no semestre (Edubox) e o nome do perfil fixo no título
+let euProfessor = null;
+async function perfilProfessor() {
+  if (!euProfessor) euProfessor = await api('/banco-med-fatec/eu-professor');
+  return euProfessor;
+}
 export async function abrirEditorBanco({ questaoId = null, categoriaId = null, categorias = [], aposSalvar = async () => {} } = {}) {
   let q = { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media' };
+  let eu;
+  try { eu = await perfilProfessor(); } catch (e) { toast(e.message, 'erro'); return; }
+  if (eu.restrito) {
+    categorias = categorias.filter(c => eu.categoriaIds.includes(c.id));
+    if (!categorias.length) { toast(`Você não aparece como professor(a) de nenhuma disciplina de Medicina em ${eu.semestre} no Edubox. Fale com a coordenação.`, 'erro'); return; }
+  }
   if (questaoId) {
     try { q = await api(`/banco-med-fatec/questoes/${encodeURIComponent(questaoId)}/completa`); }
     catch (e) { toast(e.message, 'erro'); return; }
     categoriaId = q.categoriaId || categoriaId;
+    if (eu.restrito && !eu.categoriaIds.includes(categoriaId)) { toast(`Esta questão é de uma disciplina em que você não é professor(a) em ${eu.semestre}.`, 'erro'); return; }
+  }
+  if (eu.restrito) {
+    if (!eu.categoriaIds.includes(categoriaId)) categoriaId = categorias.length === 1 ? categorias[0].id : null;
+    if (!questaoId) q.professorNome = eu.nome;
   }
   const ctx = await contextoDisciplina(categoriaId);
   ed = {
     modo: 'banco', categorias, categoriaId: categoriaId || null, sigla: ctx.sigla, bimestre: null,
+    travaProfessor: eu.restrito ? (q.professorNome || eu.nome) : null,
     plano: ctx.plano || VAZIO_PLANO, professores: ctx.professores || [],
     titulo: questaoId ? (q.padronizadaEm ? 'Editar questão' : 'Padronizar questão') : 'Nova questão',
     salvar: (f, qid) => api(qid ? `/banco-med-fatec/questoes-padrao/${encodeURIComponent(qid)}` : '/banco-med-fatec/questoes-padrao', { method: qid ? 'PUT' : 'POST', body: JSON.stringify({ ...f, categoriaId: ed.categoriaId }) }),
@@ -927,6 +1054,162 @@ export async function abrirEditorBanco({ questaoId = null, categoriaId = null, c
   };
   abrirEditor(q, questaoId);
 }
+
+// ==========================================================================================
+// CONFERÊNCIA CADAM (13/11/2026) — relatório da prova no padrão da aula "Avaliação CADAM" + português + ABNT.
+// Só regras (padrao.js + revisao-pt.js), sem IA. O professor vê SÓ as questões dele (o servidor filtra);
+// a Bia / coordenação veem a prova inteira pela aba Avaliações.
+// ==========================================================================================
+const SIT = { ok: 'Aprovada', ajustar: 'Ajustar', refazer: 'Refazer' };
+function conferirQuestao(q) {
+  // o enunciado é sempre caso + pergunta (como no editor)
+  if (q.casoClinico || q.pergunta) q = { ...q, enunciadoHtml: `${q.casoClinico || ''} ${q.pergunta || ''}` };
+  const pd = P.avaliarQuestao(q);
+  const pt = window.RevisaoPt ? window.RevisaoPt.revisarQuestao(q, P.texto) : [];
+  const sit = !pd.ok ? 'refazer' : (pd.avisos.length || pt.length) ? 'ajustar' : 'ok';
+  return { q, pd, pt, sit };
+}
+function minutosProva(itens) {
+  // CADAM: caso clínico 5 min, múltipla escolha direta 3 min (+ 15 a 20 min de revisão)
+  return itens.reduce((s, x) => s + (x.pd.aplicacao ? 5 : 3), 0);
+}
+function relatorioHtml({ sub, questoes, totalProva, deQuem, editar }) {
+  const itens = questoes.map(conferirQuestao);
+  const conta = (k) => itens.filter(x => x.sit === k).length;
+  const erros = itens.reduce((s, x) => s + x.pt.length, 0);
+  const min = minutosProva(itens);
+  const lista = itens.map(({ q, pd, pt, sit }) => `
+    <li class="av-conf-q av-conf-${sit}">
+      <div class="av-conf-q-cab">
+        <span class="av-conf-num">Questão ${q.numero}</span>
+        <span class="av-conf-sit">${SIT[sit]}</span>
+        ${deQuem ? `<span class="av-conf-prof">${esc(q.professorNome || 'Sem professor')}</span>` : ''}
+        ${editar ? `<button type="button" class="av-pt-btn av-conf-editar" data-conf-editar="${esc(q.id)}">Abrir e corrigir</button>` : ''}
+      </div>
+      <p class="av-conf-tit">${esc(q.nomeQuestao || q.objetivo || q.titulo || '')}</p>
+      <p class="av-conf-enun">${esc(P.texto(q.pergunta || q.casoClinico || q.enunciadoHtml).slice(0, 220))}</p>
+      ${pd.bloqueios.length ? `<h5 class="av-conf-h-erro">Fora do padrão (precisa corrigir)</h5><ul>${pd.bloqueios.map(b => `<li>${esc(b.msg)}</li>`).join('')}</ul>` : ''}
+      ${pd.avisos.length ? `<h5 class="av-conf-h-aviso">Recomendações CADAM</h5><ul>${pd.avisos.map(a => `<li>${esc(a.msg)}</li>`).join('')}</ul>` : ''}
+      ${pt.length ? `<h5 class="av-conf-h-pt">Português e ABNT</h5><ul class="av-conf-pt">${pt.map(a => `<li><span class="av-conf-campo">${esc(a.campo)}</span> ${a.de ? `<del>${esc(a.de.trim())}</del>` : ''}${a.para ? ` → <ins>${esc(a.para.trim())}</ins>` : ''} <small>${esc(a.motivo)}</small></li>`).join('')}</ul>` : ''}
+      ${sit === 'ok' ? '<p class="av-conf-okmsg">Questão no padrão, sem erros de português encontrados.</p>' : ''}
+    </li>`).join('');
+  return `
+    <div class="av-conf-topo">
+      <p class="av-conf-sub">${sub}</p>
+      <div class="av-conf-nums">
+        <div><b>${questoes.length}</b><span>${deQuem ? 'questões na prova' : `questões suas (de ${totalProva} da prova)`}</span></div>
+        <div class="av-conf-n-ok"><b>${conta('ok')}</b><span>aprovadas</span></div>
+        <div class="av-conf-n-aj"><b>${conta('ajustar')}</b><span>ajustar</span></div>
+        <div class="av-conf-n-rf"><b>${conta('refazer')}</b><span>refazer</span></div>
+        <div><b>${erros}</b><span>apontamentos de português e ABNT</span></div>
+        <div><b>~${min + (questoes.length ? 15 : 0)} min</b><span>tempo de prova${deQuem ? '' : ' (sua parte)'}</span></div>
+      </div>
+      <p class="av-conf-nota">Padrão da aula CADAM: um assunto por questão, formato simples, sem opinião, sem pista, sem enunciado negativo, uma só correta, caso clínico com os dados necessários, feedback e referência. Português e ABNT conferidos por regras — leia também o texto com atenção.</p>
+    </div>
+    ${questoes.length ? `<ol class="av-conf-lista">${lista}</ol>` : `<p class="av-vazio">${deQuem ? 'A prova ainda não tem questões.' : 'Nenhuma questão sua nesta prova ainda.'}</p>`}`;
+}
+let confEditar = null;
+function modalConf() {
+  if (!$('#av-conf')) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="av-modal-fundo" id="av-conf" hidden>
+      <div class="av-modal av-conf-modal" role="dialog" aria-modal="true" aria-labelledby="av-conf-tit">
+        <header class="av-modal-cab"><h2 id="av-conf-tit">Conferência CADAM</h2>
+          <div class="av-conf-acoes"><button type="button" class="av-pt-btn av-conf-imprimir" data-conf-imprimir>Imprimir</button>
+          <button type="button" class="av-icone-btn" data-conf-fechar aria-label="Fechar">${ic('x')}</button></div></header>
+        <div class="av-conf-corpo" id="av-conf-corpo"></div>
+      </div></div>`);
+    const m = $('#av-conf');
+    m.addEventListener('click', (e) => {
+      if (e.target.closest('[data-conf-fechar]') || e.target === m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); return; }
+      if (e.target.closest('[data-conf-imprimir]')) { document.body.classList.add('av-imprimindo-conf'); window.print(); setTimeout(() => document.body.classList.remove('av-imprimindo-conf'), 500); return; }
+      const ed2 = e.target.closest('[data-conf-editar]');
+      if (ed2 && confEditar) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); confEditar(ed2.dataset.confEditar); return; }
+      const av = e.target.closest('[data-conf-av]');
+      if (av) abrirConferenciaDaProva(av.dataset.confAv);
+      if (e.target.closest('[data-conf-lista]')) abrirConferenciaProfessor();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !m.hidden) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
+  }
+  const m = $('#av-conf');
+  m.hidden = false; document.body.classList.add('av-sem-rolagem');
+  return m;
+}
+// "Sua parte" na prova: a cota que a responsável definiu pra ele e quantas ele já fez
+function parteHtml(a) {
+  if (!a.meta) return `<span class="av-parte av-parte-sem">${a.feitas ? `Você tem ${a.feitas} questão(ões) nesta prova` : 'Sua cota ainda não foi definida'}</span>`;
+  const falta = a.meta - a.feitas;
+  return `<span class="av-parte ${falta > 0 ? 'av-parte-falta' : 'av-parte-ok'}">Sua parte: <b>${a.feitas} de ${a.meta}</b> questões${falta > 0 ? ` · faltam ${falta}` : falta < 0 ? ` · ${-falta} a mais` : ' · completa'}</span>`;
+}
+// Progresso da disciplina (Bia / coordenação): professor × prova, feitas de cota
+async function abrirProgresso(chave) {
+  modalConf();
+  confEditar = null;
+  $('#av-conf-tit').textContent = 'Progresso da disciplina';
+  $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Contando as questões de cada professor…</p>';
+  try {
+    const r = await api(`${BASE}/progresso/${encodeURIComponent(chave)}?semestre=${encodeURIComponent(semestre)}`);
+    const cel = (feitas, meta) => meta ? `<td class="${feitas >= meta ? 'av-pg-ok' : feitas ? 'av-pg-meio' : 'av-pg-zero'}">${feitas} de ${meta}${feitas > meta ? ` <small>(+${feitas - meta})</small>` : ''}</td>` : `<td class="av-pg-livre">${feitas || '–'}</td>`;
+    const completos = (i) => r.professores.filter(p => p.meta && p.feitas[i] >= p.meta).length;
+    const comCota = r.professores.filter(p => p.meta).length;
+    $('#av-conf-corpo').innerHTML = `
+      <p class="av-conf-sub">${esc(r.disciplina)} · ${esc(r.semestre)}${r.qtdQuestoes ? ` · prova de ${r.qtdQuestoes} questões` : ''}</p>
+      ${!r.provas.length ? '<p class="av-vazio">Nenhuma prova montada ainda nesta disciplina.</p>' : `
+      ${!comCota ? '<p class="av-conf-nota">A divisão entre os professores ainda não foi definida nos critérios da disciplina — a tabela mostra só quantas cada um já fez.</p>' : ''}
+      <div class="av-pg-tabela"><table>
+        <thead><tr><th scope="col">Professor</th>${r.provas.map(p => `<th scope="col">${ordinal(p.bimestre)} bim · ${p.chamada}ª ch.<small>${p.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</small></th>`).join('')}</tr></thead>
+        <tbody>${r.professores.map(pr => `<tr><th scope="row">${esc(pr.nome)}${pr.meta ? '' : ' <small>sem cota</small>'}</th>${pr.feitas.map(f => cel(f, pr.meta)).join('')}</tr>`).join('')}
+          ${r.provas.some(p => p.semProfessor) ? `<tr><th scope="row"><i>Sem professor informado</i></th>${r.provas.map(p => `<td class="${p.semProfessor ? 'av-pg-zero' : 'av-pg-livre'}">${p.semProfessor || '–'}</td>`).join('')}</tr>` : ''}
+        </tbody>
+        <tfoot><tr><th scope="row">Total da prova</th>${r.provas.map((p, i) => `<td>${p.total}${r.qtdQuestoes ? ` de ${r.qtdQuestoes}` : ''}${comCota ? `<small>${completos(i)} de ${comCota} professores completos</small>` : ''}</td>`).join('')}</tr></tfoot>
+      </table></div>`}`;
+  } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
+}
+const subProva = (a) => `${esc(a.disciplina)} · ${ordinal(a.bimestre)} bimestre · ${a.chamada}ª chamada · ${esc(a.semestre)} · ${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}`;
+
+// Bia / coordenação: a prova aberta na aba Avaliações, inteira
+function conferirProvaAberta() {
+  if (!atual) return;
+  modalConf();
+  const fin = atual.avaliacao.status === 'finalizada';
+  confEditar = fin ? null : (id) => abrirQuestao(id);
+  $('#av-conf-tit').textContent = 'Conferência CADAM da prova';
+  $('#av-conf-corpo').innerHTML = relatorioHtml({ sub: subProva(atual.avaliacao), questoes: atual.questoes.map((q, i) => ({ ...q, numero: i + 1 })), totalProva: atual.questoes.length, deQuem: true, editar: !fin });
+}
+// Professor: as provas das disciplinas dele e, em cada uma, só as questões dele
+export async function abrirConferenciaProfessor() {
+  modalConf();
+  $('#av-conf-tit').textContent = 'Conferir minhas provas';
+  $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Carregando suas provas…</p>';
+  try {
+    const r = await api('/banco-med-fatec/conferencia');
+    $('#av-conf-corpo').innerHTML = r.avaliacoes.length
+      ? `<p class="av-conf-sub">${esc(r.professor)} · provas das suas disciplinas. Você confere só as questões que elaborou.</p>
+         <ul class="av-conf-provas">${r.avaliacoes.map(a => `<li><button type="button" data-conf-av="${esc(a.id)}"><b>${esc(a.disciplina)}</b><span>${ordinal(a.bimestre)} bimestre · ${a.chamada}ª chamada · ${esc(a.semestre)}</span><span class="av-status ${a.status === 'finalizada' ? 'av-status-fin' : 'av-status-rasc'}">${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</span>${parteHtml(a)}</button></li>`).join('')}</ul>`
+      : `<p class="av-vazio">Ainda não há prova montada nas suas disciplinas de ${esc(r.semestre)}.</p>`;
+  } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
+}
+async function abrirConferenciaDaProva(id) {
+  $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Conferindo…</p>';
+  try {
+    const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}`);
+    const a = r.avaliacao;
+    $('#av-conf-tit').textContent = 'Conferência CADAM das minhas questões';
+    confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
+    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button><p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: true });
+  } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
+}
+// botão no Banco, só para o professor (quem vê tudo confere pela aba Avaliações)
+export async function prepararConferenciaProfessor() {
+  try {
+    const eu = await perfilProfessor();
+    if (!eu.restrito || document.getElementById('bmf-btn-conferencia')) return;
+    const nova = document.getElementById('bmf-btn-nova-questao');
+    if (!nova) return;
+    nova.insertAdjacentHTML('beforebegin', '<button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-conferencia" type="button"><svg class="bmf-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Conferir minhas provas</span></button>');
+    document.getElementById('bmf-btn-conferencia').addEventListener('click', abrirConferenciaProfessor);
+  } catch (e) { /* sem botão se o Edubox não respondeu */ }
+}
+
 // crachá do professor (iniciais + cor), o mesmo da avaliação, pra lista do Banco
 export function chipProfessorHtml(nome) { return chipProfessor(nome); }
 
@@ -967,6 +1250,7 @@ export async function iniciarAvaliacoes(opcoes) {
   $('#av-busca').addEventListener('input', () => carregouGrade && renderGrade());
   view.addEventListener('click', (e) => {
     const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
     if (t.dataset.criar) return criarAvaliacao(t.dataset.criar, Number(t.dataset.bim), Number(t.dataset.ch));
     if (t.dataset.abrir) return abrirAvaliacao(t.dataset.abrir);
     if (t.hasAttribute('data-voltar')) return voltarGrade();
@@ -981,6 +1265,7 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.hasAttribute('data-reabrir')) return reabrir();
     if (t.hasAttribute('data-excluir-av')) return excluirAvaliacao();
     if (t.hasAttribute('data-xml')) return baixarXml();
+    if (t.hasAttribute('data-conferir')) return conferirProvaAberta();
     if (t.dataset.fp !== undefined) { filtroProfessor = t.dataset.fp; renderEditor(); }
     if (t.dataset.criterios) return abrirCriterios(t.dataset.criterios, carregarGrade);
     if (t.hasAttribute('data-criterios-av')) return abrirCriterios(atual.avaliacao.chave, recarregarAtual);

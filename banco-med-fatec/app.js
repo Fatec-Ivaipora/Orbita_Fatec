@@ -9,7 +9,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes } from "./avaliacoes.js?v=7";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=15";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -1922,6 +1922,7 @@ async function initApp(user, role) {
   // o editor padrão de questão (avaliacoes.js) também serve ao Banco: precisa da API já no início
   configurarAvaliacoes({ apiFetch, apiDownload, esc });
   await carregarTudo();
+  prepararConferenciaProfessor(); // professor: "Conferir minhas provas" (Conferência CADAM só das questões dele)
   // Aba Avaliações: só aparece se o servidor confirmar o acesso (adm, coordenação ou responsável pelas avaliações)
   const temAvaliacoes = await iniciarAvaliacoes({ apiFetch, apiDownload, esc });
   // quem monta as avaliações (Bia / coordenação) começa nelas (13/11/2026)

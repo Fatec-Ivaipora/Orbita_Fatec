@@ -199,6 +199,8 @@ function questaoDoBody(b, av) {
     const q = {
         professorNome: String(b.professorNome || '').trim().slice(0, 120),
         objetivo: String(b.objetivo || '').trim().slice(0, 400),
+        // 13/11/2026: o professor dá o nome da questão; o "Prof. Nome –" do título vem pronto (não é digitado)
+        nomeQuestao: String(b.nomeQuestao || '').replace(/\s+/g, ' ').trim().slice(0, 160),
         unidade: parseInt(b.unidade, 10) || null,
         casoClinico: String(b.casoClinico || ''),
         pergunta: String(b.pergunta || '').trim().slice(0, 600),
@@ -210,7 +212,7 @@ function questaoDoBody(b, av) {
         imagem: (b.imagem && b.imagem.dataUrl && b.imagem.dataUrl.length <= MAX_IMG_BASE64) ? { nome: b.imagem.nome || 'imagem', dataUrl: b.imagem.dataUrl } : null
     };
     q.enunciadoHtml = montarEnunciado(q.casoClinico, q.pergunta);
-    q.titulo = Padrao.tituloPadrao(q.professorNome || 'a definir', av.sigla, q.objetivo || 'objetivo a definir');
+    q.titulo = Padrao.tituloPadrao(q.professorNome || 'a definir', av.sigla, q.nomeQuestao || q.objetivo || 'objetivo a definir');
     q.padrao = Padrao.avaliarQuestao(q);
     return q;
 }
@@ -259,7 +261,7 @@ function resumoCriterios(c) {
     if (!c) return { definidos: false };
     return {
         definidos: !!c.definidoEm,
-        bimestres: c.bimestres || {}, pesos: c.pesos || {}, limites: c.limites || {},
+        bimestres: c.bimestres || {}, pesos: c.pesos || {}, limites: c.limites || {}, qtdQuestoes: c.qtdQuestoes || null, porProfessor: c.porProfessor || {},
         definidoPor: c.definidoPor || '', definidoEm: c.definidoEm || null
     };
 }
@@ -274,7 +276,10 @@ function limparCriterios(b) {
         abaixo: num(l.abaixo, 0, 100) ?? P0.abaixo,
         acima: num(l.acima, 100, 500) ?? P0.acima
     };
-    return { bimestres, pesos, limites };
+    const qtd = num(b.qtdQuestoes, 0, 300);
+    const porProfessor = {};
+    Object.entries(b.porProfessor || {}).forEach(([nome, n]) => { const k = String(nome).trim().slice(0, 120); const x = num(n, 0, 300); if (k && x) porProfessor[k] = x; });
+    return { bimestres, pesos, limites, qtdQuestoes: qtd || null, porProfessor };
 }
 
 // ==========================================================================================
@@ -294,7 +299,7 @@ router.get('/criterios/:chave', async (req, res) => {
         if (!nome) return res.status(404).json({ error: 'Disciplina não encontrada.' });
         const plano = await planoDaDisciplina(semestre, nome);
         res.json({
-            chave: req.params.chave, disciplina: nome, sigla: d ? d.sigla : (crit && crit.sigla), padrao: Padrao.CRITERIOS_PADRAO,
+            chave: req.params.chave, disciplina: nome, sigla: d ? d.sigla : (crit && crit.sigla), padrao: Padrao.CRITERIOS_PADRAO, professores: d ? d.professores : [],
             unidades: plano.unidades || [], semestreFonte: plano.semestreFonte, planoEncontrado: !!plano.encontrado,
             criterios: resumoCriterios(crit)
         });
@@ -318,7 +323,7 @@ router.get('/disciplinas', async (req, res) => {
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : null;
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
         const [l, crits] = await Promise.all([listaDisciplinas(semestre), todosCriterios()]);
-        res.json({ ...l, disciplinas: l.disciplinas.map(d => { const c = crits.get(d.chave); return { ...d, criteriosDefinidos: !!(c && c.definidoEm) }; }) });
+        res.json({ ...l, disciplinas: l.disciplinas.map(d => { const c = crits.get(d.chave); return { ...d, criteriosDefinidos: !!(c && c.definidoEm), qtdQuestoes: (c && c.qtdQuestoes) || null, cotas: c && c.porProfessor ? Object.keys(c.porProfessor).length : 0 }; }) });
     } catch (e) { erro(res, e); }
 });
 
@@ -330,6 +335,41 @@ router.get('/', async (req, res) => {
         const lista = snap.docs.map(d => { const x = d.data(); return { id: d.id, ...x, totalQuestoes: (x.questoesIds || []).length }; })
             .sort((a, b) => (a.periodo - b.periodo) || a.disciplina.localeCompare(b.disciplina) || a.bimestre - b.bimestre || a.chamada - b.chamada);
         res.json(lista);
+    } catch (e) { erro(res, e); }
+});
+
+// Progresso da disciplina (13/11/2026): cada professor × cada prova do semestre — quantas fez da cota dele.
+// Só quando a pessoa pede (lê as questões das provas daquela disciplina).
+router.get('/progresso/:chave', async (req, res) => {
+    try {
+        const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : null;
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+        const [{ disciplinas }, crit, snap] = await Promise.all([
+            listaDisciplinas(semestre), lerCriterios(req.params.chave),
+            db.collection(COL_AV).where('chave', '==', req.params.chave).get()
+        ]);
+        const d = disciplinas.find(x => x.chave === req.params.chave);
+        const avs = snap.docs.map(x => ({ id: x.id, ...x.data() })).filter(a => a.semestre === semestre)
+            .sort((a, b) => a.bimestre - b.bimestre || a.chamada - b.chamada);
+        const metas = (crit && crit.porProfessor) || {};
+        const nomes = new Map();
+        const addNome = (n) => { if (n && !nomes.has(normNome(n))) nomes.set(normNome(n), n); };
+        Object.keys(metas).forEach(addNome);
+        (d ? d.professores : []).forEach(addNome);
+        const provas = await Promise.all(avs.map(async a => {
+            const qs = await lerQuestoes(a.questoesIds || []);
+            const porProf = {};
+            let sem = 0;
+            qs.forEach(q => { const n = q.professorNome || q.elaboradoPor; if (!n) { sem++; return; } addNome(n); porProf[normNome(n)] = (porProf[normNome(n)] || 0) + 1; });
+            return { id: a.id, bimestre: a.bimestre, chamada: a.chamada, status: a.status, total: qs.length, porProf, semProfessor: sem };
+        }));
+        const metaDe = (k) => { const e = Object.entries(metas).find(([n]) => normNome(n) === k); return e ? Number(e[1]) : null; };
+        const professores = [...nomes.entries()].map(([k, nome]) => ({ nome, meta: metaDe(k), feitas: provas.map(p => p.porProf[k] || 0) }))
+            .sort((a, b) => (b.meta || 0) - (a.meta || 0) || a.nome.localeCompare(b.nome));
+        res.json({
+            disciplina: d ? d.nome : (crit && crit.disciplina) || req.params.chave, semestre, qtdQuestoes: (crit && crit.qtdQuestoes) || null,
+            provas: provas.map(({ porProf, ...p }) => p), professores
+        });
     } catch (e) { erro(res, e); }
 });
 
@@ -580,12 +620,32 @@ router.post('/:id/importar', async (req, res) => {
         const batch = db.batch();
         const ids = [];
         const imagensPorQuestao = await Promise.all(lista.map(x => confirmarImagens(x.imagens)));
+        // modelo de prova da Medicina (13/11/2026): o arquivo já traz caso, pergunta, feedback, referência, dificuldade
+        // e o tema da linha de título. O tema sugere a unidade e o objetivo do plano de ensino.
+        const plano = lista.some(x => x.tema) ? await planoDaDisciplina(av.semestre, av.disciplina).catch(() => null) : null;
+        const palavras = (t) => normNome(t).toLowerCase().split(' ').filter(w => w.length >= 4);
+        const pelaTema = (tema, itens, texto) => {
+            const ws = palavras(tema); if (!ws.length || !itens.length) return null;
+            const nota = (it) => ws.filter(w => normNome(texto(it)).toLowerCase().includes(w)).length;
+            const melhor = itens.map(it => ({ it, n: nota(it) })).sort((a, b) => b.n - a.n)[0];
+            return melhor && melhor.n >= Math.ceil(ws.length / 2) ? melhor.it : null;
+        };
         lista.forEach((x, ix) => {
             const letra = String(x.gabarito || '').toUpperCase();
+            const doModelo = !!(x.casoHtml !== undefined || x.pergunta);
+            const unid = x.tema && plano ? pelaTema(x.tema, (plano.unidades || []).filter(u => u.bimestre === av.bimestre).concat((plano.unidades || []).filter(u => u.bimestre !== av.bimestre)), u => `${u.titulo} ${u.conteudo}`) : null;
+            const obj = x.tema && plano ? pelaTema(x.tema, plano.objetivos || [], o => o) : null;
             const q = questaoDoBody({
-                ...comuns, casoClinico: String(x.enunciado || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>'), pergunta: '',
+                ...comuns,
+                dificuldade: x.dificuldade || comuns.dificuldade,
+                unidade: comuns.unidade || (unid && unid.numero) || '',
+                objetivo: obj || x.tema || '',
+                nomeQuestao: String(x.tema || '').slice(0, 160),
+                casoClinico: doModelo ? String(x.casoHtml || '') : String(x.enunciado || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>'),
+                pergunta: doModelo ? String(x.pergunta || '') : '',
                 alternativas: (x.alternativas || []).map((t, i) => ({ texto: String(t || ''), correta: Padrao.LETRAS[i] === letra })),
-                justificativa: '', fonte: ''
+                justificativa: doModelo ? String(x.justificativa || '') : '',
+                fonte: doModelo ? String(x.fonte || '').slice(0, 600) : ''
             }, av);
             const ref = db.collection(COL_Q).doc();
             ids.push(ref.id);
@@ -599,7 +659,7 @@ router.post('/:id/importar', async (req, res) => {
         });
         batch.update(db.collection(COL_AV).doc(av.id), { questoesIds: admin.firestore.FieldValue.arrayUnion(...ids), updatedAt: agora() });
         await batch.commit();
-        res.status(201).json({ criadas: ids.length, message: `${ids.length} questão(ões) importada(s). Complete objetivo, pergunta e feedback de cada uma.` });
+        res.status(201).json({ criadas: ids.length, message: `${ids.length} questão(ões) importada(s). Confira no checklist o que falta em cada uma.` });
     } catch (e) { erro(res, e); }
 });
 

@@ -22,6 +22,9 @@ const RE_NEGATIVO = /\b(exceto|incorret[ao]s?|fals[ao]s?|nao (e|esta|sao|estao|c
 const RE_PERGUNTA = /(\?\s*$)|\b(assinale|marque|indique|aponte|qual|quais|identifique|escolha|selecione|conduta|diagnostico mais provavel|proximo passo)\b/;
 const RE_CASO = /\b(paciente|anos de idade|\d+\s*anos|\d+\s*meses|\d+\s*dias de vida|sexo|masculino|feminino|homem|mulher|gestante|crianca|lactente|recem-nascido|idos[ao]|adolescente|procura|comparece|chega|admitid[ao]|atendid[ao]|refere|relata|queixa|apresenta-se|ao exame)\b/;
 const RE_ABSOLUTO = /\b(sempre|nunca|jamais|exclusivamente)\b/;
+// aula CADAM (13/11/2026): sem opinião/interpretação e sem "pode"/"é possível" (pistas)
+const RE_OPINIAO = /\b(deveria|deveriam|poderia|poderiam|seria|seriam|na (sua|tua) opiniao|em sua opiniao|segundo (os )?especialistas|voce acha|acredita-se)\b/;
+const RE_PODE = /\b(pode|podem|podera|poderao|e possivel|sao possiveis|eventualmente|geralmente|frequentemente|raramente)\b/;
 const RE_REFERENCIA = /\b(19|20)\d{2}\b|\bed\.|editora|disponivel em|https?:|\bet al\b/;
 const RE_AFIRMATIVAS = /^(apenas |somente )?(i|ii|iii|iv|v)(\s*(,|e)\s*(i|ii|iii|iv|v))*\.?( (esta|estao) corretas?\.?)?$/;
 const PALAVRAS_COMUNS = new Set(['paciente', 'pacientes', 'alternativa', 'alternativas', 'correta', 'corretas', 'seguinte', 'seguintes', 'apresenta', 'segundo', 'quadro', 'clinico', 'clinica', 'sobre', 'quanto', 'considerando', 'durante', 'atendimento', 'medico', 'medica', 'presenca', 'relacao', 'possivel', 'principal', 'principais', 'devido', 'importante', 'tambem', 'pode', 'podem', 'deve', 'devem', 'sendo', 'quando', 'entre', 'outros', 'outras', 'atraves', 'acordo']);
@@ -58,6 +61,10 @@ function avaliarQuestao(q, opts) {
         if (!q.unidade) B('unidade', 'Escolha a unidade do plano de ensino.');
     }
 
+    if (RE_OPINIAO.test(enunciado)) A('opiniao', `Pergunta de opinião/interpretação ("${enunciado.match(RE_OPINIAO)[1]}"). Pergunte o que é correto, não o que "seria".`);
+    const comPode = alts.map((a, i) => RE_PODE.test(a.n) ? `${LETRAS[i]} ("${a.n.match(RE_PODE)[1]}")` : null).filter(Boolean);
+    if (comPode.length) A('pode', `Termo vago nas alternativas (${comPode.join(', ')}): "pode", "é possível", "geralmente" viram pista. Afirme com precisão.`);
+    if ((pergunta.match(/\?/g) || []).length >= 2 || /\?.*\b(e|alem disso|tambem)\b.*\?/.test(pergunta) || /\b(qual|quais)\b[^?]*\be (qual|quais|como|por que)\b/.test(pergunta)) A('dois-assuntos', 'A pergunta cobra duas coisas. Um aspecto por questão (divida em duas).');
     if (RE_NEGATIVO.test(enunciado)) A('negativo', 'Enunciado negativo (EXCETO / INCORRETA / NÃO). Prefira perguntar pela alternativa correta.');
     if (enunciado.length >= 40 && !RE_PERGUNTA.test(pergunta)) A('pergunta', 'Termine o enunciado com uma pergunta direta (ex.: "Qual a conduta mais adequada?").');
     if (!ehAplicacao(q)) A('memorizacao', 'Questão de memorização: não há situação clínica. O padrão da Medicina prioriza caso clínico.');
@@ -74,8 +81,7 @@ function avaliarQuestao(q, opts) {
         if (absolutas.length && !RE_ABSOLUTO.test(c.n)) A('absoluto', `Termo absoluto nas erradas (${absolutas.join(', ')}) — denuncia que estão erradas.`);
     }
     if (alts.filter(a => RE_AFIRMATIVAS.test(a.n)).length >= 2) A('afirmativas', 'Formato de afirmativas combinadas (I, II, III). O padrão recomenda resposta direta.');
-    const semFeedback = alts.filter(a => !texto(a.feedback)).length;
-    if (alts.length && semFeedback) A('feedback-alt', semFeedback === alts.length ? 'Nenhuma alternativa tem feedback próprio.' : `${semFeedback} alternativa(s) sem feedback próprio.`);
+    // 13/11/2026: feedback é só o geral da questão — sem feedback por alternativa
     if (!String(q.fonte || '').trim() && !RE_REFERENCIA.test(norm(q.justificativa))) A('referencia', 'Sem referência bibliográfica.');
     return { ok: !bloqueios.length, bloqueios, avisos, aplicacao: ehAplicacao(q) };
 }
@@ -129,9 +135,11 @@ function lerQuestoesDeLinhas(itens) {
     }).filter(q => q.enunciado && q.alternativas.length >= 2);
 }
 
+// Título no AVA (13/11/2026): "Prof. Nome – título do objetivo" (a disciplina já é a pasta do banco no AVA).
+// O parâmetro sigla ficou só pra não quebrar quem chama.
 function tituloPadrao(professor, sigla, objetivo) {
     const curto = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
-    return `Prof. ${curto(professor, 60)} – ${String(sigla || '').trim()} – ${curto(objetivo, 140)}`;
+    return `Prof. ${curto(professor, 60)} – ${curto(objetivo, 160)}`;
 }
 
 // Análise da avaliação inteira contra o plano de ensino (unidades do bimestre + objetivos).
@@ -150,14 +158,18 @@ function aplicarCriterios(plano, crit) {
 function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     const lim = { ...CRITERIOS_PADRAO, ...((criterios && criterios.limites) || {}) };
     const total = questoes.length;
+    // 13/11/2026: tamanho da prova e divisão entre os professores (os professores da disciplina dividem a prova).
+    // Com o total definido, o esperado de cada unidade sai dele (e não das questões que já entraram).
+    const planejado = Number(criterios && criterios.qtdQuestoes) > 0 ? Number(criterios.qtdQuestoes) : 0;
+    const base = planejado || total;
     const unidadesBim = ((plano && plano.unidades) || []).filter(u => !bimestre || u.bimestre === bimestre);
     const pesoDe = (u) => (u.peso !== undefined ? Number(u.peso) : Number(u.ch)) || 0;
     const pesoTotal = unidadesBim.reduce((s, u) => s + pesoDe(u), 0);
     const porUnidade = unidadesBim.map(u => {
         const qtd = questoes.filter(q => Number(q.unidade) === u.numero).length;
-        const esperado = pesoTotal ? total * pesoDe(u) / pesoTotal : total / (unidadesBim.length || 1);
+        const esperado = pesoTotal ? base * pesoDe(u) / pesoTotal : base / (unidadesBim.length || 1);
         let situacao = 'ok';
-        if (total >= 4 && esperado > 0) {
+        if (base >= 4 && esperado > 0) {
             if (qtd === 0 && esperado >= 1) situacao = 'sem';
             else if (qtd < esperado * lim.abaixo / 100) situacao = 'abaixo';
             else if (qtd > esperado * lim.acima / 100 && qtd - esperado >= 2) situacao = 'acima';
@@ -178,7 +190,14 @@ function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     const repetidas = Object.values(enunciados).filter(l => l.length > 1);
     const peloPeso = (criterios && criterios.pesos && Object.keys(criterios.pesos).length) ? 'pelo peso definido' : 'pela carga horária';
     const pendencias = [];
-    if (!total) pendencias.push('A avaliação ainda não tem questões.');
+    if (!total) pendencias.push(planejado ? `A avaliação ainda não tem questões (a prova é de ${planejado}).` : 'A avaliação ainda não tem questões.');
+    else if (planejado && total < planejado) pendencias.push(`Faltam ${planejado - total} questão(ões) para completar as ${planejado} da prova.`);
+    else if (planejado && total > planejado) pendencias.push(`A prova tem ${total - planejado} questão(ões) a mais que as ${planejado} combinadas.`);
+    // cota de cada professor
+    const metas = (criterios && criterios.porProfessor) || {};
+    const porProfessor = Object.entries(metas).filter(([, n]) => Number(n) > 0).map(([nome, n]) => ({ nome, meta: Number(n), feitas: questoes.filter(q => norm(q.professorNome) === norm(nome)).length }));
+    porProfessor.filter(x => x.feitas < x.meta).forEach(x => pendencias.push(`${x.nome}: ${x.feitas} de ${x.meta} questões.`));
+    porProfessor.filter(x => x.feitas > x.meta).forEach(x => pendencias.push(`${x.nome} passou da cota: ${x.feitas} de ${x.meta}.`));
     porUnidade.filter(u => u.situacao === 'sem').forEach(u => pendencias.push(`Unidade ${u.numero} não tem nenhuma questão.`));
     porUnidade.filter(u => u.situacao === 'abaixo').forEach(u => pendencias.push(`Unidade ${u.numero} tem ${u.qtd} questão(ões); ${peloPeso} seriam cerca de ${Math.round(u.esperado)}.`));
     porUnidade.filter(u => u.situacao === 'acima').forEach(u => pendencias.push(`Unidade ${u.numero} concentra ${u.qtd} questões; ${peloPeso} seriam cerca de ${Math.round(u.esperado)}.`));
@@ -187,7 +206,7 @@ function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     repetidas.forEach(l => pendencias.push(`Questões ${l.join(', ')} têm o mesmo enunciado.`));
     return {
         total, porUnidade, foraDoBimestre, objetivos, professores, dificuldade,
-        aplicacao, memorizacao: total - aplicacao, limites: lim,
+        aplicacao, memorizacao: total - aplicacao, limites: lim, planejado, porProfessor,
         comBloqueio: avaliacoes.filter(a => !a.ok).length,
         avisos: avaliacoes.reduce((s, a) => s + a.avisos.length, 0),
         repetidas, pendencias
