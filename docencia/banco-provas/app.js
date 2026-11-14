@@ -7,7 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
-import { separarImagensDoDocx, enviarImagem, distribuirImagens, tirarMarcacao, MARCA } from './imagens.js?v=1';
+import { separarImagensDoDocx, enviarImagem, distribuirImagens, tirarMarcacao, MARCA } from './imagens.js?v=2';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
