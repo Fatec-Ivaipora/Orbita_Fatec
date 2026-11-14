@@ -1002,7 +1002,7 @@ async function analisarImportacao(e) {
     const enviadas = new Map();
     for (const im of imgsWord) {
       btn.textContent = `Enviando imagens (${enviadas.size + 1} de ${imgsWord.length})...`;
-      enviadas.set(im.n, await enviarImagem(apiFetch, im.blob, im.nome));
+      enviadas.set(im.n, { ...(await enviarImagem(apiFetch, im.blob, im.nome)), flutuante: im.flutuante });
     }
     btn.textContent = 'Analisando...';
     const arquivoBase64 = await arquivoParaBase64(await semFontesEmbutidas(semImagens));
