@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const { parseProvaDocx } = require('../utils/parseProvaDocx');
+const IMG = require('../utils/banco-provas-imagens');
 const { gerarProvaDocx, gerarGabaritoDocx, gerarPreviewHtml } = require('../utils/gerarProvaDocx');
 
 const checkPermission = verifyToken.requireModulePermission('banco-provas');
@@ -255,6 +256,12 @@ function validarQuestao(body) {
 // ==========================================
 
 // SEMPRE exige pelo menos um filtro — nunca lê a coleção inteira.
+// POST /imagens/envio — link pra subir UMA imagem da questão direto pro Storage (13/11/2026). O
+// navegador faz o PUT; depois a questão é salva com imagens: [{ caminho, nome }], conferidas no servidor.
+router.post('/imagens/envio', verifyToken, checkPermission, async (req, res) => {
+    try { res.json(await IMG.linkEnvio(req.body)); } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
     try {
         const curso = normalizarTexto(req.query.curso);
@@ -375,7 +382,9 @@ router.post('/questoes', verifyToken, checkPermission, async (req, res) => {
 
         const { tipo, enunciadoHtml, gabarito } = req.body;
         const alternativas = alternativasComLetra(req.body.alternativas);
+        const imagens = await IMG.confirmar(req.body.imagens);
         const docRef = await db.collection(COL_QUESTOES).add({
+            imagens,
             disciplinaId: disciplinaId || null,
             curso, periodo, bimestre, chamada,
             semestre: normalizarTexto(req.body.semestre) || null,
@@ -424,8 +433,11 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         const periodo = geral ? null : await periodoDaDisciplina(disciplinaId);
         const { tipo, enunciadoHtml, gabarito } = req.body;
         const alternativas = alternativasComLetra(req.body.alternativas);
+        // sem o campo imagens (ex.: edição rápida na visualização da prova), as imagens ficam como estão
+        const imagens = req.body.imagens === undefined ? (atual.imagens || []) : await IMG.confirmar(req.body.imagens);
 
         await ref.update({
+            imagens,
             disciplinaId: disciplinaId || null,
             periodo,
             bimestre: req.body.bimestre ? parseInt(req.body.bimestre, 10) : null,
@@ -438,6 +450,8 @@ router.put('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
             valor: req.body.valor !== undefined && req.body.valor !== '' ? Number(req.body.valor) : null,
             professorNome: normalizarTexto(req.body.professorNome) || null
         });
+        const ficam = new Set(imagens.map(i => i.caminho));
+        await IMG.apagar((atual.imagens || []).filter(i => !ficam.has(i.caminho)));
         const avs = tipo === 'objetiva' && atual.gabarito !== gabarito ? await require('./correcao-provas')._interno.propagarGabarito(req.params.id, gabarito, req.user.name || req.user.email) : 0;
         res.json({ message: avs ? `Questão atualizada (gabarito novo também em ${avs} avaliação(ões) da Correção de Provas).` : 'Questão atualizada.', avaliacoesAtualizadas: avs });
     } catch (err) {
@@ -494,6 +508,7 @@ router.delete('/questoes/:id', verifyToken, checkPermission, async (req, res) =>
         if (erroDono) return res.status(403).json({ error: erroDono });
 
         await ref.delete();
+        await IMG.apagar(atual.imagens);
         res.json({ message: 'Questão excluída.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -526,6 +541,19 @@ router.post('/questoes/analisar-docx', verifyToken, checkPermission, async (req,
         } catch (err) {
             return res.status(400).json({ error: 'Não consegui ler esse arquivo — confirme que é um documento Word (.docx ou .doc).' });
         }
+        // Escolheu 4 alternativas mas o arquivo tem "E)": a alternativa A ia pro enunciado e as letras
+        // andavam uma casa (13/11/2026, prova de Fisioterapia). Lê de novo com 5 e avisa.
+        let alternativasUsadas = alternativasPorQuestao, avisoTroca = '';
+        const comAviso = (lista) => lista.filter(q => (q.avisoAlternativas || []).length).length;
+        if (alternativasPorQuestao === 4 && brutas.some(q => (q.avisoAlternativas || []).some(a => a.includes('"E)"')))) {
+            try {
+                const com5 = await parseProvaDocx(buffer, 5);
+                if (!com5.some(q => q.erro) && comAviso(com5) < comAviso(brutas)) {
+                    brutas = com5; alternativasUsadas = 5;
+                    avisoTroca = 'As questões desse arquivo têm 5 alternativas (A a E), então li com 5.';
+                }
+            } catch (e) { /* fica a leitura com 4 */ }
+        }
         if (!brutas.length) return res.status(400).json({ error: 'Não encontrei nenhuma questão nesse arquivo (procurei por "Questão 1", "Questão 2"...).' });
 
         const comErroDeLeitura = brutas.filter(q => q.erro);
@@ -540,7 +568,7 @@ router.post('/questoes/analisar-docx', verifyToken, checkPermission, async (req,
         if (!questoes.length) return res.status(400).json({ error: 'As questões desse arquivo estão sem texto (só o número).' });
         const aviso = vazias.length ? `${vazias.length} questão(ões) sem texto no arquivo ficaram de fora (nº ${vazias.map(q => q.numero).join(', ')}${vazias[0].categoriaSugeridaTexto ? ` — ${vazias[0].categoriaSugeridaTexto}` : ''}).` : '';
 
-        res.json({ questoes, alternativasPorQuestao, aviso });
+        res.json({ questoes, alternativasPorQuestao: alternativasUsadas, aviso: [avisoTroca, aviso].filter(Boolean).join(' ') });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -578,15 +606,17 @@ router.post('/questoes/importar-docx', verifyToken, checkPermission, async (req,
         const padraoBimestre = padraoChamada === 'exame' ? null : ([1, 2].includes(parseInt(padrao.bimestre, 10)) ? parseInt(padrao.bimestre, 10) : null);
         const padraoSemestre = /^\d{4}\.[12]$/.test(normalizarTexto(padrao.semestre) || '') ? normalizarTexto(padrao.semestre) : null;
 
+        const imagensPorQuestao = await Promise.all(questoes.map(q => IMG.confirmar(q.imagens)));
         const loteId = db.collection(COL_QUESTOES).doc().id;
         const batch = db.batch();
-        questoes.forEach(q => {
+        questoes.forEach((q, iq) => {
             const dissertativa = q.tipo === 'dissertativa';
             const ref = db.collection(COL_QUESTOES).doc();
             batch.set(ref, {
                 curso, disciplinaId: null, periodo: null, bimestre: padraoBimestre, chamada: padraoChamada, semestre: padraoSemestre,
                 tipo: dissertativa ? 'dissertativa' : 'objetiva',
                 enunciadoHtml: q.enunciado,
+                imagens: imagensPorQuestao[iq],
                 alternativas: dissertativa ? null : (q.alternativas || []).map((texto, i) => ({ letra: LETRAS_VALIDAS[i], texto })),
                 gabarito: dissertativa ? null : q.gabarito,
                 dificuldade: 'media',
@@ -738,6 +768,7 @@ router.delete('/questoes/lote/:loteId', verifyToken, checkPermission, async (req
         const batch = db.batch();
         snap.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
+        await IMG.apagar(snap.docs.flatMap(d => d.data().imagens || []));
         res.json({ message: 'Lote descartado.', removidas: snap.size });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -918,6 +949,7 @@ router.get('/provas/:id/preview', verifyToken, checkPermission, async (req, res)
         if (!dados) return;
         const { prova, questoes, opts } = dados;
 
+        await Promise.all(questoes.map(async q => { if ((q.imagens || []).length) q._imagens = await IMG.comLinks(q.imagens); }));
         const html = await gerarPreviewHtml(prova, questoes, opts);
         res.json({ html, nome: prova.nome });
     } catch (err) {
@@ -934,6 +966,7 @@ router.get('/provas/:id/exportar-docx', verifyToken, checkPermission, async (req
         if (!dados) return;
         const { prova, questoes, opts } = dados;
 
+        await Promise.all(questoes.map(async q => { if ((q.imagens || []).length) q._imagens = await IMG.baixar(q.imagens); }));
         const buffer = await gerarProvaDocx(prova, questoes, opts);
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -971,6 +1004,7 @@ router.get('/questoes/:id', verifyToken, checkPermission, async (req, res) => {
         if (!snap.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
         const q = snap.data();
         if (q.curso) { const e = await checarAcessoCurso(req, q.curso); if (e) return res.status(403).json({ error: e }); }
+        if ((q.imagens || []).length) q.imagens = await IMG.comLinks(q.imagens);
         res.json({ id: snap.id, ...q });
     } catch (err) {
         res.status(500).json({ error: err.message });

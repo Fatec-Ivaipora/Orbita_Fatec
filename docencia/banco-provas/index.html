@@ -6,7 +6,7 @@
     <title>Banco de Provas - Órbita FATEC</title>
     <link rel="icon" type="image/png" href="/img/favicon.png">
     <link rel="stylesheet" href="/core/layout.css">
-    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=22">
+    <link rel="stylesheet" href="/docencia/banco-provas/banco-provas.css?v=23">
     <link rel="stylesheet" href="/core/orbita.css?v=3">
 </head>
 <body class="orb-v2">
@@ -268,6 +268,11 @@
                 <div class="form-group">
                     <label>Enunciado</label>
                     <textarea id="questao-enunciado" required maxlength="4000" rows="4" placeholder="Texto da questão..."></textarea>
+                    <div class="bp-imgs-editor">
+                        <div id="questao-imagens-lista" class="bp-imgs-lista"></div>
+                        <label class="bp-img-add">Adicionar imagem<input type="file" id="questao-imagem-arquivo" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden></label>
+                        <small class="bp-img-dica">Também dá para colar a imagem (Ctrl+V) no enunciado. Ela entra onde está o cursor, marcada como [[IMAGEM 1]]. Mude a marcação de lugar para mudar onde a imagem aparece na prova.</small>
+                    </div>
                 </div>
 
                 <div id="questao-bloco-alternativas">
@@ -509,6 +514,6 @@
 
     <!-- JSZip: tira as fontes embutidas do .docx antes de enviar (mesma versão do CPA) -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script type="module" src="/docencia/banco-provas/app.js?v=31"></script>
+    <script type="module" src="/docencia/banco-provas/app.js?v=32"></script>
 </body>
 </html>

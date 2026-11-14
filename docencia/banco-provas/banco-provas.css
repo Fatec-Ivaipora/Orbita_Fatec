@@ -449,3 +449,17 @@ body.orb-v2 .modal-actions { border-top: 1px solid var(--orb-linha2, #EEF2F7); p
 body .bp-link-acoes .btn-secondary.bp-link-excluir { color: #c8392f; border-color: #f3c4bd; }
 body .bp-link-acoes .btn-secondary.bp-link-excluir:hover { background: #fbe9e6; border-color: #c8392f; }
 body .bp-link-acoes .btn-secondary.bp-link-excluir[data-confirma] { background: #c8392f; color: #fff; border-color: #c8392f; }
+
+/* imagens da questão (13/11/2026) */
+.bp-prev-img { display: block; max-width: 100%; max-height: 360px; margin: 0.5rem auto; }
+.bp-prev-img-falta { color: #b91c1c; font-size: 0.85rem; }
+.bp-imgs-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-top: 0.5rem; }
+.bp-imgs-lista { display: flex; flex-wrap: wrap; gap: 0.5rem; width: 100%; }
+.bp-imgs-lista:empty { display: none; }
+.bp-img-item { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 120px; padding: 6px; border: 1px solid var(--border-color); border-radius: 8px; background: #fff; font-size: 0.75rem; }
+.bp-img-item img { width: 100%; height: 72px; object-fit: contain; }
+.bp-img-sem { width: 100%; height: 72px; display: flex; align-items: center; justify-content: center; color: #64748b; background: #f8fafc; }
+.bp-img-tirar { border: 0; background: none; color: #b91c1c; font: inherit; font-weight: 600; cursor: pointer; }
+.bp-img-add { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.bp-img-add:hover { background: #f1f5f9; }
+.bp-img-dica { flex: 1 1 260px; color: #64748b; font-size: 0.78rem; }
