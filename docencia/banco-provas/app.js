@@ -7,7 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
-import { separarImagensDoDocx, enviarImagem, distribuirImagens, tirarMarcacao, MARCA } from './imagens.js?v=1';
+import { separarImagensDoDocx, enviarImagem, distribuirImagens, tirarMarcacao, MARCA } from './imagens.js?v=2';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -1002,7 +1002,7 @@ async function analisarImportacao(e) {
     const enviadas = new Map();
     for (const im of imgsWord) {
       btn.textContent = `Enviando imagens (${enviadas.size + 1} de ${imgsWord.length})...`;
-      enviadas.set(im.n, await enviarImagem(apiFetch, im.blob, im.nome));
+      enviadas.set(im.n, { ...(await enviarImagem(apiFetch, im.blob, im.nome)), flutuante: im.flutuante });
     }
     btn.textContent = 'Analisando...';
     const arquivoBase64 = await arquivoParaBase64(await semFontesEmbutidas(semImagens));

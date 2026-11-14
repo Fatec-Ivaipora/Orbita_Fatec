@@ -16,6 +16,7 @@ const LETRAS_ALTERNATIVA = ['A', 'B', 'C', 'D', 'E'];
 // Letra minúscula também ("a) ... b) ... c) ...", simulado da Biomedicina, 13/11/2026), mas só quando as
 // letras vêm em sequência a, b, c... — um "c)" solto numa frase não corta nada.
 function expandirLinhaConcatenada(linha) {
+    if (linha.startsWith('\u0001')) return [linha];   // título do Word (ver montarQuestoesDeLinhas)
     const marcadores = linha.match(/(?<![\p{L}\p{N}])[A-E]\)/gu);
     if (marcadores && marcadores.length >= 2) return linha.split(/(?<![\p{L}\p{N}])(?=[A-E]\))/u).map(p => p.trim()).filter(Boolean);
     const minusculas = [...linha.matchAll(/(?<![\p{L}\p{N}])([a-e])\)/gu)];
@@ -71,7 +72,11 @@ function tituloAntesDaQuestao(linha, proxima) {
     if (/[0-9+=−%<>²³₂₃₄]/.test(t)) return false;
     if (/^\(?[A-Ea-e]\s*[\)\.\-–]/.test(t)) return false;
     if (!/^\p{Lu}/u.test(t) || FRASES_IGNORADAS_COMO_SECAO.has(t)) return false;
+    // resposta com algarismo romano ("I e II", "II, III e IV") e sigla curta sozinha ("NDA", "DNA") também não
+    // são disciplina (simulados da Biomedicina, 13/11/2026)
+    if (/^[IVX]+(?:\s*(?:,|e)\s*[IVX]+)*$/.test(t)) return false;
     const palavras = t.split(/\s+/);
+    if (palavras.length === 1 && t.replace(/[^\p{L}]/gu, '').length < 5) return false;
     if (palavras.length > 8) return false;
     if (!palavras.filter(w => w.replace(/[^\p{L}]/gu, '').length >= 4).every(w => /^\p{Lu}/u.test(w))) return false;
     return marcadorPorPalavra((proxima || '').trim()) !== null;
@@ -133,7 +138,12 @@ function limparInicioBloco(linhas) {
         .trim();
     // Sobra de digitação colada no número ("Questão 08l") não vira começo do enunciado.
     if (semNumero.length <= 1) semNumero = '';
-    return [semNumero, ...linhas.slice(1)].filter(Boolean);
+    const out = [semNumero, ...linhas.slice(1)].filter(Boolean);
+    // "Questão 01" seguido da numeração automática do Word repetindo o número ("1 - (UNESCO...)",
+    // simulados da Biomedicina, 13/11/2026): o número repetido sai do começo do enunciado
+    const num = (/^Quest(?:ã|a)o\s*0*(\d+)/i.exec(linhas[0]) || [])[1];
+    if (num && !semNumero && out.length) out[0] = out[0].replace(new RegExp('^0*' + num + '\\s*[-–—.)]\\s+'), '');
+    return out.filter(Boolean);
 }
 
 // Frases fixas de "chrome" da prova impressa (instruções, título de seção
@@ -239,8 +249,15 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
         });
     }
 
+    // Título do Word (estilo Título 1, 2...: vem com \u0001 na frente, 13/11/2026): quando o arquivo marca as
+    // disciplinas assim, só eles contam como disciplina — nada de adivinhar título pela posição ou pela caixa
+    // alta (uma resposta como "Malária" virava disciplina).
+    const MARCA_TITULO = '\u0001';
+    const sem = (l) => (l && l.startsWith(MARCA_TITULO) ? l.slice(1) : l);
+    const usaTitulosDoWord = linhasBrutas.some(l => l.startsWith(MARCA_TITULO) && detectarMarcador(sem(l), 0) === null && marcadorPorPalavra(sem(l)) === null);
     for (let i = 0; i < linhasBrutas.length; i++) {
-        const linha = linhasBrutas[i];
+        const tituloDoWord = linhasBrutas[i].startsWith(MARCA_TITULO);
+        const linha = sem(linhasBrutas[i]);
         if (pareceInicioDissertativas(linha)) {
             fecharBloco();
             blocoAtual = null;
@@ -259,8 +276,8 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
             proximoEsperado = numeroMarcador + 1;
             continue;
         }
-        const ehTituloForte = pareceCabecalhoDeSecao(linha);
-        let ehTitulo = ehTituloForte || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]) || tituloAntesDaQuestao(linha, linhasBrutas[i + 1]);
+        const ehTituloForte = usaTitulosDoWord ? tituloDoWord : pareceCabecalhoDeSecao(linha);
+        let ehTitulo = ehTituloForte || (!usaTitulosDoWord && (tituloDeUmaPalavra(linha, sem(linhasBrutas[i + 1])) || tituloAntesDaQuestao(linha, sem(linhasBrutas[i + 1]))));
         // Título reconhecido só pela posição (logo antes do "Questão N") pode ser a última alternativa SEM letra
         // ("Adipócitos", simulado da Biomedicina, 13/11/2026): só vale como disciplina se a questão já tem o
         // enunciado e todas as alternativas sem essa linha. Senão, é alternativa.

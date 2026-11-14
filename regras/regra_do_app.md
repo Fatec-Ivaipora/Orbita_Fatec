@@ -109,6 +109,21 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Banco de Provas: Word com "Questão N" e disciplina em estilo de Título
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-leitura-titulos
+- Arquivos alterados:
+  - `src/utils/parseProvaDocx.js` (`extrairParagrafosHtml`): lê também os parágrafos com estilo de Título do Word (<h1>..<h6> no mammoth). Antes eles sumiam: "Questão 01" em Título 2 e a disciplina em Título 1 não eram lidos e só as 5 primeiras questões (numeração automática) entravam.
+  - `docencia/banco-provas/parse-linhas.js`: resposta em algarismo romano ("I e II") e sigla curta sozinha ("NDA") não viram disciplina; o número repetido pela lista automática logo depois de "Questão N" ("1 - (UNESCO...") sai do começo do enunciado.
+  - Quando o Word marca as disciplinas com estilo de Título, só esses títulos contam como disciplina (sem adivinhar pela posição ou pela caixa alta — "Malária", uma resposta, virava disciplina).
+  - Caixa de texto repetida em toda página (título "SIMULADO FATEC – 2º BIMESTRE...") sai do texto (`semCaixasDeTextoRepetidas`).
+  - `docencia/banco-provas/imagens.js`: grupo de figuras do Word (radiografia + números por cima) vira UMA imagem montada no navegador, com cada peça no lugar; figura flutuante ancorada na questão seguinte volta para a anterior quando a anterior pede a imagem ("Observe a imagem a seguir") e não tem nenhuma; figurinha flutuante menor que 1 cm fora de grupo é descartada (sobra de edição).
+- Tipo: Correção
+- Motivo: simulados do 2º bimestre da Biomedicina (4º, 6º e 8º períodos) só liam as questões de Conhecimentos Gerais.
+- Impacto: os 3 simulados passam a ler as 40 questões, com as disciplinas do arquivo e as imagens nas questões certas. Os 9 arquivos de teste anteriores saem iguais.
+- Como testar: importar "bio 4°P 2026.2" com 5 alternativas — 40 questões, 5 disciplinas de 8.
+- Como reverter: reverter o commit.
+
 ### [2026-11-13] Banco de Provas: leitura do Word — alternativas em minúscula coladas, em tabela e sem letra
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-leitura-simulado

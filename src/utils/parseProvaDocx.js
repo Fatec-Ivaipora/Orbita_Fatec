@@ -55,10 +55,34 @@ function ehDocxZip(buffer) {
     return buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4B;
 }
 
-async function extrairParagrafosDoArquivo(buffer) {
+// Caixa de texto repetida em toda página ("SIMULADO FATEC – 2º BIMESTRE – 8°PERÍODO", 13/11/2026) é título de
+// página: o mammoth lia como parágrafo no meio do enunciado. Sai do texto quando aparece 3 vezes ou mais.
+async function semCaixasDeTextoRepetidas(buffer) {
+    try {
+        const zip = await JSZip.loadAsync(buffer);
+        const arq = zip.file('word/document.xml');
+        if (!arq) return buffer;
+        const doc = await arq.async('string');
+        const textoDe = (x) => [...x.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map(m => m[1]).join('').replace(/\s+/g, ' ').trim();
+        const conta = new Map();
+        for (const [, corpo] of doc.matchAll(/<w:txbxContent>([\s\S]*?)<\/w:txbxContent>/g)) {
+            const t = textoDe(corpo);
+            if (t) conta.set(t, (conta.get(t) || 0) + 1);
+        }
+        const repetidas = new Set([...conta].filter(([, n]) => n >= 3).map(([t]) => t));
+        if (!repetidas.size) return buffer;
+        zip.file('word/document.xml', doc.replace(/<w:txbxContent>([\s\S]*?)<\/w:txbxContent>/g, (todo, corpo) => (repetidas.has(textoDe(corpo)) ? '<w:txbxContent><w:p/></w:txbxContent>' : todo)));
+        return await zip.generateAsync({ type: 'nodebuffer' });
+    } catch (e) { return buffer; }
+}
+
+// opcoes.marcarTitulos: parágrafo com estilo de Título do Word volta com TITULO_DO_WORD na frente (só o
+// Banco de Provas usa; as Avaliações da Medicina leem sem marca)
+const TITULO_DO_WORD = '\u0001';
+async function extrairParagrafosDoArquivo(buffer, opcoes = {}) {
     if (ehDocxZip(buffer)) {
-        const { value: html } = await mammoth.convertToHtml({ buffer: await escreverNumeracaoAutomatica(buffer) });
-        return extrairParagrafosHtml(html);
+        const { value: html } = await mammoth.convertToHtml({ buffer: await escreverNumeracaoAutomatica(await semCaixasDeTextoRepetidas(buffer)) });
+        return extrairParagrafosHtml(html, !!opcoes.marcarTitulos);
     }
     const extractor = new WordExtractor();
     const doc = await extractor.extract(buffer);
@@ -175,17 +199,20 @@ function tabelasEmLinhas(html) {
     });
 }
 
-function extrairParagrafosHtml(html) {
+function extrairParagrafosHtml(html, marcarTitulos) {
     html = tabelasEmLinhas(html);
     const paragrafos = [];
     // Item de lista termina no próximo item ou numa sublista: em lista de
     // vários níveis (questão no nível 1, alternativas a/b/c no nível 2) o
     // mammoth põe a sublista DENTRO do item da questão, e ler até o </li>
     // juntava a questão com a 1ª alternativa (16/10/2026).
-    const regex = /<p[^>]*>([\s\S]*?)<\/p>|<li[^>]*>([\s\S]*?)(?=<\/?(?:li|ol|ul)\b)/g;
+    // Parágrafo com estilo de Título no Word vira <h1>..<h6> (13/11/2026, simulados da Biomedicina com
+    // "Questão 01" em Título 2 e a disciplina em Título 1): antes eles sumiam e só as 5 primeiras questões
+    // (numeração automática) eram lidas.
+    const regex = /<p[^>]*>([\s\S]*?)<\/p>|<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>|<li[^>]*>([\s\S]*?)(?=<\/?(?:li|ol|ul)\b)/g;
     let m;
     while ((m = regex.exec(html))) {
-        const bruto = m[1] !== undefined ? m[1] : m[2];
+        const bruto = m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : m[3]);
         const texto = bruto
             .replace(/<br\s*\/?>/gi, ' ')
             .replace(/<[^>]+>/g, '')
@@ -193,7 +220,7 @@ function extrairParagrafosHtml(html) {
             .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
             .replace(/\s+/g, ' ')
             .trim();
-        if (texto) paragrafos.push(texto);
+        if (texto) paragrafos.push(marcarTitulos && m[2] !== undefined ? TITULO_DO_WORD + texto : texto);
     }
     return paragrafos;
 }
@@ -208,11 +235,11 @@ function extrairParagrafosHtml(html) {
  * @returns {Promise<{numero:number, categoriaSugeridaTexto:string|null, enunciado:string, alternativas:string[]}[]>}
  */
 async function parseProvaDocx(buffer, alternativasPorQuestao) {
-    const linhasBrutas = (await extrairParagrafosDoArquivo(buffer)).flatMap(expandirLinhaConcatenada);
+    const linhasBrutas = (await extrairParagrafosDoArquivo(buffer, { marcarTitulos: true })).flatMap(expandirLinhaConcatenada);
 
     // Tenta primeiro a convenção "Questão N" (mais confiável, sem risco de
     // falso positivo); só cai pra número solto se não achar nenhuma.
-    const temMarcadorPorPalavra = linhasBrutas.some(l => marcadorPorPalavra(l) !== null);
+    const temMarcadorPorPalavra = linhasBrutas.some(l => marcadorPorPalavra(l.replace(TITULO_DO_WORD, '')) !== null);
     if (temMarcadorPorPalavra) {
         return montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, (linha) => marcadorPorPalavra(linha));
     }
