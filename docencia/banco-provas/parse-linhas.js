@@ -11,10 +11,12 @@ const LETRAS_ALTERNATIVA = ['A', 'B', 'C', 'D', 'E'];
 // Quebra uma linha que concatenou várias alternativas sem quebra de
 // parágrafo — só quebra se achar pelo menos 2 marcadores "X)" (A a E), pra
 // não arriscar cortar uma frase comum do enunciado.
+// Letra grudada em outra letra ou número não é alternativa: "(SIFA)." tem um "A)" no fim (13/11/2026,
+// prova de Fisioterapia: a alternativa E era cortada em duas e as letras andavam uma casa).
 function expandirLinhaConcatenada(linha) {
-    const marcadores = linha.match(/[A-E]\)/g);
+    const marcadores = linha.match(/(?<![\p{L}\p{N}])[A-E]\)/gu);
     if (!marcadores || marcadores.length < 2) return [linha];
-    return linha.split(/(?=[A-E]\))/).map(p => p.trim()).filter(Boolean);
+    return linha.split(/(?<![\p{L}\p{N}])(?=[A-E]\))/u).map(p => p.trim()).filter(Boolean);
 }
 
 // CAIXA ALTA "de verdade": só letras (com acento) e espaço — nada de dígito

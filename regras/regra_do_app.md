@@ -109,6 +109,24 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Banco de Provas: imagens nas questões (Word e colar no Órbita)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/banco-provas-imagens
+- Arquivos criados:
+  - `src/utils/banco-provas-imagens.js`: link de envio, conferência, links de leitura, download e exclusão das imagens no Firebase Storage (pasta `banco-provas/imagens/`), tamanho da imagem e leitura das marcações `[[IMAGEM n]]`. Só PNG, JPG e GIF (formatos que o Word aceita), até 10 MB e 10 por questão.
+  - `docencia/banco-provas/imagens.js`: no navegador, tira as imagens do Word antes do envio (cada uma vira `[[IMAGEM n]]` no lugar onde estava), sobe direto pro Storage, distribui por questão e converte WEBP/BMP em PNG.
+- Arquivos alterados:
+  - `src/rotas/banco-provas.js`: `POST /imagens/envio`; questão guarda `imagens: [{ caminho, nome, mimeType, tamanho }]` (criar, editar, importar); excluir questão ou descartar lote apaga as imagens; `GET /questoes/:id` devolve as imagens com link; a visualização e o Word da prova recebem as imagens.
+  - `src/utils/gerarProvaDocx.js`: a imagem entra no Word no lugar da marcação (centralizada, até a largura da página; metade no simulado de 2 colunas) e na pré-visualização como `<img>`.
+  - `docencia/banco-provas/app.js`, `index.html` (v32/v23), `banco-provas.css`: editor da questão com "Adicionar imagem" e Ctrl+V no enunciado; importação do Word com envio das imagens e aviso das figuras que não dá para usar (EMF/WMF, equação).
+  - `docencia/banco-provas/parse-linhas.js` (`expandirLinhaConcatenada`): letra grudada em outra letra ou número não conta mais como alternativa. "(SIFA)." tinha um "A)" no fim, a alternativa E era cortada em duas e as letras andavam uma casa (prova de Fisioterapia).
+  - `src/rotas/banco-provas.js` (`/questoes/analisar-docx`): se a pessoa escolheu 4 alternativas e o arquivo tem "E)", lê de novo com 5 e avisa (antes a alternativa A ia pro enunciado e todas as letras ficavam erradas).
+- Tipo: Nova funcionalidade + correção
+- Motivo: pedido do usuário e do coordenador de Fisioterapia — disciplinas que precisam de imagem na questão. Mesmo esquema do Banco MED (Storage por link assinado). De quebra, o Word com imagens deixa de passar do limite de envio (~3 MB), porque as imagens não vão mais no arquivo enviado.
+- Impacto: questões sem imagem continuam iguais. O link do professor (envio sem login) ainda não leva imagens.
+- Como testar: importar um Word com imagem no enunciado, conferir `[[IMAGEM 1]]` na revisão, publicar e gerar a prova (visualização e .docx). Na questão, colar uma imagem com Ctrl+V no enunciado.
+- Como reverter: reverter o commit (as imagens já enviadas ficam no Storage sem uso).
+
 ### [2026-11-13] Banco de Provas: sem espaços esticados nas linhas com quebra (Word)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-quebra-espaco

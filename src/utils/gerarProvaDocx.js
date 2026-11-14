@@ -13,6 +13,7 @@ const {
     AlignmentType, WidthType, BorderStyle, HeadingLevel, ImageRun, Header, Footer,
     HeightRule, VerticalAlignTable
 } = require('docx');
+const { pedacos, dimensoes, MARCA } = require('./banco-provas-imagens');
 
 const DISCIPLINA_GERAL_ID = 'geral';
 
@@ -62,6 +63,36 @@ function paragrafo(texto, opts = {}) {
         keepLines: !!opts.keepLines,
         children: linhas.map((linha, i) => new TextRun({ text: linha, bold: !!opts.bold, size: opts.size || 22, break: i ? 1 : 0 }))
     });
+}
+
+// Texto da questão com as imagens no lugar de [[IMAGEM n]] (13/11/2026). q._imagens vem da rota de
+// exportação já com o arquivo (buffer); imagem que não carregou simplesmente não aparece. Sem marcação
+// nenhuma, sai exatamente como antes (um parágrafo só).
+const TIPO_DOCX = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif' };
+function paragrafosComImagens(texto, opts, imagens, larguraMax = 600) {
+    const out = [];
+    let pendente = '';
+    const fecharTexto = () => {
+        const t = pendente.replace(/^[ \t]*\r?\n|\r?\n[ \t]*$/g, '');
+        if (t.trim()) out.push(paragrafo(t, opts));
+        pendente = '';
+    };
+    for (const p of pedacos(texto)) {
+        if (p.texto !== undefined) { pendente += p.texto; continue; }
+        const im = (imagens || [])[p.imagem];
+        if (!im || !im.buffer) continue;
+        fecharTexto();
+        const d = dimensoes(im.buffer) || { w: larguraMax, h: Math.round(larguraMax * 0.6) };
+        const escala = Math.min(1, larguraMax / d.w, 480 / d.h);
+        out.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 80 },
+            children: [new ImageRun({ type: TIPO_DOCX[im.mimeType] || 'png', data: im.buffer, transformation: { width: Math.max(1, Math.round(d.w * escala)), height: Math.max(1, Math.round(d.h * escala)) } })]
+        }));
+    }
+    fecharTexto();
+    if (!out.length) out.push(paragrafo(String(texto || '').replace(MARCA, '').trim(), opts));
+    return out;
 }
 
 function celulaTexto(texto, opts = {}) {
@@ -269,7 +300,7 @@ const letraDe = (alt, i) => (alt && alt.letra) || ['A', 'B', 'C', 'D', 'E'][i];
 
 function blocoQuestaoObjetiva(numero, q) {
     const alternativas = q.alternativas || [];
-    const paras = [paragrafo(`${numero}. ${q.enunciadoHtml}`, { bold: false, after: 80 })];
+    const paras = paragrafosComImagens(`${numero}. ${q.enunciadoHtml}`, { bold: false, after: 80 }, q._imagens);
     alternativas.forEach((alt, i) => {
         paras.push(paragrafo(`${letraDe(alt, i)}) ${alt.texto}`, { size: 20, after: 40 }));
     });
@@ -299,7 +330,7 @@ function blocoQuestaoObjetivaSimulado(numero, q) {
         // (18/09): "trava o número da questão junto do texto pra não
         // acontecer isso". O resto (alternativas) continua livre pra fluir.
         paragrafo(`Questão ${String(numero).padStart(2, '0')}`, { bold: true, after: 60, keepNext: true }),
-        paragrafo(q.enunciadoHtml, { bold: false, after: 80 })
+        ...paragrafosComImagens(q.enunciadoHtml, { bold: false, after: 80 }, q._imagens, 300)
     ];
     alternativas.forEach((alt, i) => {
         paras.push(paragrafo(`${letraDe(alt, i)}) ${alt.texto}`, { size: 20, after: 40 }));
@@ -311,7 +342,7 @@ function blocoQuestaoObjetivaSimulado(numero, q) {
 }
 
 function blocoQuestaoDissertativa(numero, q) {
-    const paras = [paragrafo(`${numero}. ${q.enunciadoHtml}`, { after: 100 })];
+    const paras = paragrafosComImagens(`${numero}. ${q.enunciadoHtml}`, { after: 100 }, q._imagens);
     for (let i = 0; i < 8; i++) {
         paras.push(new Paragraph({
             border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '999999', space: 1 } },
@@ -442,6 +473,17 @@ function escHtml(s) {
 // botão (data-letra); o clique é tratado no frontend (app.js), que chama
 // PUT /questoes/:id/gabarito e atualiza a questão de verdade no banco — o
 // HTML aqui só marca visualmente qual é a correta AGORA.
+// enunciado na pré-visualização, com as imagens no lugar de [[IMAGEM n]] (q._imagens com url assinada)
+function htmlEnunciado(q) {
+    return pedacos(q.enunciadoHtml).map(p => {
+        if (p.texto !== undefined) return escHtml(p.texto);
+        const im = (q._imagens || [])[p.imagem];
+        return im && im.url
+            ? `<img class="bp-prev-img" src="${escHtml(im.url)}" alt="Imagem ${p.imagem + 1} da questão">`
+            : `<span class="bp-prev-img-falta">[imagem ${p.imagem + 1} não encontrada]</span>`;
+    }).join('');
+}
+
 function htmlGabaritoEditavel(q) {
     return `<div class="bp-prev-gabarito-editor">${(q.alternativas || []).map((alt, i) => `
         <button type="button" class="bp-prev-alt-btn${letraDe(alt, i) === q.gabarito ? ' bp-prev-alt-correta' : ''}" data-letra="${escHtml(letraDe(alt, i))}">${escHtml(letraDe(alt, i))}) ${escHtml(alt.texto)}</button>`).join('')}</div>`;
@@ -502,7 +544,7 @@ function previewHtmlBimestralOuExame(prova, questoes, opts) {
         <p class="bp-prev-negrito bp-prev-centro">QUESTÕES OBJETIVAS${valorObjetivas ? ` (${valorObjetivas.toFixed(2)} no total)` : ''}</p>
         ${objetivas.map((q, i) => `
             <div class="bp-prev-questao" data-questao-id="${escHtml(q.id)}">
-                <p>${i + 1}. ${escHtml(q.enunciadoHtml)}</p>
+                <p>${i + 1}. ${htmlEnunciado(q)}</p>
                 ${htmlGabaritoEditavel(q)}
             </div>`).join('')}` : '';
 
@@ -510,7 +552,7 @@ function previewHtmlBimestralOuExame(prova, questoes, opts) {
         <p class="bp-prev-negrito bp-prev-centro">QUESTÕES DISSERTATIVAS${valorDissertativas ? ` (${valorDissertativas.toFixed(2)} no total)` : ''}</p>
         ${dissertativas.map((q, i) => `
             <div class="bp-prev-questao">
-                <p>${i + 1}. ${escHtml(q.enunciadoHtml)}</p>
+                <p>${i + 1}. ${htmlEnunciado(q)}</p>
                 ${Array.from({ length: 4 }, () => '<div class="bp-prev-linha-resposta"></div>').join('')}
             </div>`).join('')}` : '';
 
@@ -536,7 +578,7 @@ function previewHtmlSimulado(prova, questoes, opts) {
         blocos.push(`
             <div class="bp-prev-questao" data-questao-id="${escHtml(questao.id)}">
                 <p class="bp-prev-negrito">Questão ${String(numero).padStart(2, '0')}</p>
-                <p>${escHtml(questao.enunciadoHtml)}</p>
+                <p>${htmlEnunciado(questao)}</p>
                 ${htmlGabaritoEditavel(questao)}
             </div>`);
     });
@@ -613,7 +655,7 @@ async function gerarGabaritoDocx(prova, questoes, opts) {
     if (dissertativas.length) {
         children.push(paragrafo('', { after: 200 }));
         children.push(paragrafo('QUESTÕES DISSERTATIVAS (correção manual, sem gabarito fechado)', { bold: true, after: 100 }));
-        dissertativas.forEach((q, i) => children.push(paragrafo(`${i + 1}. ${String(q.enunciadoHtml || '').slice(0, 140)}`, { size: 20, after: 60 })));
+        dissertativas.forEach((q, i) => children.push(paragrafo(`${i + 1}. ${String(q.enunciadoHtml || '').replace(MARCA, '[imagem]').slice(0, 140)}`, { size: 20, after: 60 })));
     }
 
     const doc = new Document({

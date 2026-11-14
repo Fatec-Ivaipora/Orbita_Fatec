@@ -7,6 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../../core/layout.js';
+import { separarImagensDoDocx, enviarImagem, distribuirImagens, tirarMarcacao, MARCA } from './imagens.js?v=1';
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -440,8 +441,41 @@ function ajustarEditorPorTipo() {
   document.getElementById('questao-bloco-alternativas').classList.toggle('hidden', tipo !== 'objetiva');
 }
 
+// ---------- imagens da questão no editor (13/11/2026) ----------
+// editorImagens: [{ caminho, nome, url }] na ordem de [[IMAGEM 1]], [[IMAGEM 2]]...
+let editorImagens = [];
+function renderImagensEditor() {
+  const lista = document.getElementById('questao-imagens-lista');
+  if (!lista) return;
+  lista.innerHTML = editorImagens.map((im, i) => `
+    <div class="bp-img-item">
+      ${im.url ? `<img src="${esc(im.url)}" alt="Imagem ${i + 1}">` : '<div class="bp-img-sem">sem prévia</div>'}
+      <span>[[IMAGEM ${i + 1}]]</span>
+      <button type="button" class="bp-img-tirar" data-tirar-img="${i}" aria-label="Tirar a imagem ${i + 1}">Tirar</button>
+    </div>`).join('');
+}
+// sobe a imagem e coloca a marcação onde está o cursor do enunciado
+async function adicionarImagemNoEnunciado(blob, nome) {
+  if (editorImagens.length >= 10) { showToast('No máximo 10 imagens por questão.', 'error'); return; }
+  const campo = document.getElementById('questao-enunciado');
+  const ini = campo.selectionStart ?? campo.value.length, fim = campo.selectionEnd ?? ini;
+  showToast('Enviando a imagem...');
+  try {
+    const im = await enviarImagem(apiFetch, blob, nome);
+    editorImagens.push(im);
+    const marca = `[[IMAGEM ${editorImagens.length}]]`;
+    const antes = campo.value.slice(0, ini), depois = campo.value.slice(fim);
+    const sep1 = antes && !antes.endsWith('\n') ? '\n' : '', sep2 = depois && !depois.startsWith('\n') ? '\n' : '';
+    campo.value = antes + sep1 + marca + sep2 + depois;
+    renderImagensEditor();
+    showToast('Imagem adicionada.');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
 function abrirModalQuestao(id) {
   document.getElementById('form-questao').reset();
+  editorImagens = [];
+  renderImagensEditor();
   document.getElementById('questao-id').value = id || '';
   document.getElementById('modal-questao-title').textContent = id ? 'Editar Questão' : 'Nova Questão';
   document.getElementById('questao-alternativas-lista').innerHTML = '';
@@ -457,6 +491,15 @@ function abrirModalQuestao(id) {
       document.getElementById('questao-tipo').value = q.tipo;
       document.getElementById('questao-dificuldade').value = q.dificuldade || 'media';
       document.getElementById('questao-enunciado').value = q.enunciadoHtml;
+      if ((q.imagens || []).length) {
+        editorImagens = q.imagens.map(im => ({ caminho: im.caminho, nome: im.nome, url: null }));
+        renderImagensEditor();
+        apiFetch(`/banco-provas/questoes/${id}`).then(c => {
+          if (document.getElementById('questao-id').value !== id) return;
+          editorImagens = (c.imagens || []).map(im => ({ caminho: im.caminho, nome: im.nome, url: im.url }));
+          renderImagensEditor();
+        }).catch(() => {});
+      }
       document.getElementById('questao-valor').value = q.valor ?? '';
       document.getElementById('questao-professor').value = q.professorNome || '';
       if (q.tipo === 'objetiva') {
@@ -509,9 +552,13 @@ async function salvarQuestao(e) {
     tipo,
     dificuldade: document.getElementById('questao-dificuldade').value,
     enunciadoHtml: document.getElementById('questao-enunciado').value.trim(),
+    imagens: editorImagens.map(({ caminho, nome }) => ({ caminho, nome })),
     valor: document.getElementById('questao-valor').value,
     professorNome: document.getElementById('questao-professor').value.trim()
   };
+  // imagem sem marcação no texto vai pro fim do enunciado (senão ela não apareceria na prova)
+  const usadas = new Set([...payload.enunciadoHtml.matchAll(MARCA)].map(m => Number(m[1])));
+  editorImagens.forEach((_, i) => { if (!usadas.has(i + 1)) payload.enunciadoHtml += `\n[[IMAGEM ${i + 1}]]`; });
   if (tipo === 'objetiva') {
     payload.alternativas = lerAlternativasDoForm().filter(a => a.texto);
     payload.gabarito = lerGabaritoDoForm();
@@ -950,7 +997,15 @@ async function analisarImportacao(e) {
   btn.disabled = true;
   btn.textContent = 'Analisando...';
   try {
-    const arquivoBase64 = await arquivoParaBase64(await semFontesEmbutidas(arquivo));
+    // imagens saem do Word e sobem direto pro Storage; no texto fica [[IMAGEM n]] (13/11/2026)
+    const { arquivo: semImagens, imagens: imgsWord, ignoradas } = await separarImagensDoDocx(arquivo);
+    const enviadas = new Map();
+    for (const im of imgsWord) {
+      btn.textContent = `Enviando imagens (${enviadas.size + 1} de ${imgsWord.length})...`;
+      enviadas.set(im.n, await enviarImagem(apiFetch, im.blob, im.nome));
+    }
+    btn.textContent = 'Analisando...';
+    const arquivoBase64 = await arquivoParaBase64(await semFontesEmbutidas(semImagens));
     if (arquivoBase64.length > LIMITE_ENVIO_BASE64) {
       throw new Error('O arquivo é grande demais para importar (passa de ~3 MB). Normalmente são imagens pesadas: '
         + 'diminua as imagens ou divida a prova em dois arquivos e importe um de cada vez.');
@@ -960,8 +1015,14 @@ async function analisarImportacao(e) {
       method: 'POST',
       body: JSON.stringify({ arquivoBase64, alternativasPorQuestao: importarAlternativasPorQuestao })
     });
-    importarQuestoesAnalisadas = resp.questoes.map(q => ({ ...q, gabarito: null }));
+    // o servidor pode ter lido com 5 alternativas (arquivo com "E)" e 4 escolhidas)
+    if (resp.alternativasPorQuestao && resp.alternativasPorQuestao !== importarAlternativasPorQuestao) {
+      importarAlternativasPorQuestao = resp.alternativasPorQuestao;
+      document.getElementById('importar-alternativas').value = String(resp.alternativasPorQuestao);
+    }
+    importarQuestoesAnalisadas = distribuirImagens(resp.questoes, enviadas).map(q => ({ ...q, gabarito: null }));
     if (resp.aviso) showToast(resp.aviso);
+    if (ignoradas) showToast(`${ignoradas} figura(s) do Word em formato que não dá para usar (desenho, equação ou EMF/WMF) ficaram de fora. Salve a figura como imagem PNG ou JPG ou adicione na questão depois.`, 'error');
     document.getElementById('importar-etapa-arquivo').classList.add('hidden');
     document.getElementById('importar-etapa-gabarito').classList.remove('hidden');
     document.getElementById('importar-rascunho-aviso').classList.remove('hidden');
@@ -1768,6 +1829,26 @@ function bindEventos() {
   document.getElementById('bp-btn-nova-questao').addEventListener('click', () => abrirModalQuestao(null));
   document.getElementById('btn-cancelar-questao').addEventListener('click', fecharModalQuestao);
   document.getElementById('form-questao').addEventListener('submit', salvarQuestao);
+  // imagem colada (Ctrl+V) no enunciado ou escolhida no botão (13/11/2026)
+  document.getElementById('questao-enunciado').addEventListener('paste', (e) => {
+    const arqs = [...(e.clipboardData?.items || [])].filter(it => it.kind === 'file' && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
+    if (!arqs.length) return;
+    e.preventDefault();
+    arqs.reduce((p, f, i) => p.then(() => adicionarImagemNoEnunciado(f, f.name && f.name !== 'image.png' ? f.name : `imagem-colada-${i + 1}.png`)), Promise.resolve());
+  });
+  document.getElementById('questao-imagem-arquivo').addEventListener('change', async (e) => {
+    for (const f of [...e.target.files]) await adicionarImagemNoEnunciado(f, f.name);
+    e.target.value = '';
+  });
+  document.getElementById('questao-imagens-lista').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tirar-img]');
+    if (!b) return;
+    const k = Number(b.dataset.tirarImg);
+    editorImagens.splice(k, 1);
+    const campo = document.getElementById('questao-enunciado');
+    campo.value = tirarMarcacao(campo.value, k);
+    renderImagensEditor();
+  });
   document.getElementById('questao-tipo').addEventListener('change', ajustarEditorPorTipo);
   document.getElementById('btn-add-alternativa').addEventListener('click', () => adicionarLinhaAlternativa());
 
