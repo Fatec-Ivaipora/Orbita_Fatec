@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Banco de Provas: leitura do Word — alternativas em minúscula coladas, em tabela e sem letra
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-leitura-simulado
+- Arquivos alterados:
+  - `docencia/banco-provas/parse-linhas.js`: separa alternativas coladas numa linha com letra minúscula ("a) ... b) ... c) ...", só com as letras em sequência); um título reconhecido só pela posição antes de "Questão N" vira disciplina apenas se a questão já tem o enunciado e todas as alternativas sem essa linha (senão é a última alternativa sem letra, como "Adipócitos"); título com número ou sinal de fórmula ("NH4+ em NO2−") não vale.
+  - `src/utils/parseProvaDocx.js`: cada linha de tabela do Word vira uma linha de texto com as células separadas por " | " (alternativas em tabela).
+- Tipo: Correção
+- Motivo: simulado do 2º período de Biomedicina dava erro nas questões 10, 34 e 38 e criava as disciplinas falsas "Adipócitos" e "DNA".
+- Impacto: conferido com 9 arquivos reais (simulados de Biomedicina, Enfermagem, Agro, geral, Fisioterapia e avaliações): os que já funcionavam saem iguais; o de Biomedicina e o de Agro passaram a sair sem erro e com as disciplinas certas.
+- Como testar: importar o "SIMULADO 2°P 2026.2" com 5 alternativas — 40 questões, 6 disciplinas, só a questão 35 com aviso (a tabela dela tem 4 alternativas).
+- Como reverter: reverter o commit.
+
 ### [2026-11-13] Banco de Provas: imagens nas questões (Word e colar no Órbita)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/banco-provas-imagens

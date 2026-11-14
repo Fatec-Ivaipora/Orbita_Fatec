@@ -153,7 +153,30 @@ async function escreverNumeracaoAutomatica(buffer) {
     }
 }
 
+// Tabela: cada LINHA da tabela vira uma linha de texto, células separadas por " | " (13/11/2026,
+// simulado da Biomedicina com alternativas em tabela: cada célula virava uma linha solta e a última
+// célula, "DNA", ainda era lida como título de disciplina). Célula que é só a letra ("a)") vai na frente.
+const textoDeHtml = (bruto) => bruto
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+const paraHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function tabelasEmLinhas(html) {
+    return html.replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g, (_, corpo) => {
+        const celulas = [...corpo.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/g)].map(c => textoDeHtml(c[1])).filter(Boolean);
+        if (!celulas.length) return '';
+        const letra = /^\(?[A-Ea-e]\s*[\).\-–]?$/.test(celulas[0]) && celulas.length > 1;
+        const linha = letra ? `${celulas[0]} ${celulas.slice(1).join(' | ')}` : celulas.join(' | ');
+        return `<p>${paraHtml(linha)}</p>`;
+    });
+}
+
 function extrairParagrafosHtml(html) {
+    html = tabelasEmLinhas(html);
     const paragrafos = [];
     // Item de lista termina no próximo item ou numa sublista: em lista de
     // vários níveis (questão no nível 1, alternativas a/b/c no nível 2) o

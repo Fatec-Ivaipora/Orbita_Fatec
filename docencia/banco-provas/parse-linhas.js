@@ -13,10 +13,19 @@ const LETRAS_ALTERNATIVA = ['A', 'B', 'C', 'D', 'E'];
 // não arriscar cortar uma frase comum do enunciado.
 // Letra grudada em outra letra ou número não é alternativa: "(SIFA)." tem um "A)" no fim (13/11/2026,
 // prova de Fisioterapia: a alternativa E era cortada em duas e as letras andavam uma casa).
+// Letra minúscula também ("a) ... b) ... c) ...", simulado da Biomedicina, 13/11/2026), mas só quando as
+// letras vêm em sequência a, b, c... — um "c)" solto numa frase não corta nada.
 function expandirLinhaConcatenada(linha) {
     const marcadores = linha.match(/(?<![\p{L}\p{N}])[A-E]\)/gu);
-    if (!marcadores || marcadores.length < 2) return [linha];
-    return linha.split(/(?<![\p{L}\p{N}])(?=[A-E]\))/u).map(p => p.trim()).filter(Boolean);
+    if (marcadores && marcadores.length >= 2) return linha.split(/(?<![\p{L}\p{N}])(?=[A-E]\))/u).map(p => p.trim()).filter(Boolean);
+    const minusculas = [...linha.matchAll(/(?<![\p{L}\p{N}])([a-e])\)/gu)];
+    if (minusculas.length < 2 || minusculas[0][1] !== 'a') return [linha];
+    if (!minusculas.every((m, i) => m[1].charCodeAt(0) === 97 + i)) return [linha];
+    const partes = [];
+    let ultimo = 0;
+    minusculas.forEach(m => { partes.push(linha.slice(ultimo, m.index)); ultimo = m.index; });
+    partes.push(linha.slice(ultimo));
+    return partes.map(p => p.trim()).filter(Boolean);
 }
 
 // CAIXA ALTA "de verdade": só letras (com acento) e espaço — nada de dígito
@@ -58,6 +67,8 @@ function tituloAntesDaQuestao(linha, proxima) {
     const t = (linha || '').trim();
     if (t.length < 3 || t.length > 80 || /^Quest(ã|a)o\b/i.test(t)) return false;
     if (/[.;:,?!)]$/.test(t)) return false;
+    // número ou sinal de fórmula é resposta, não nome de disciplina ("NH4+ em NO2−", simulado de Agro, 13/11/2026)
+    if (/[0-9+=−%<>²³₂₃₄]/.test(t)) return false;
     if (/^\(?[A-Ea-e]\s*[\)\.\-–]/.test(t)) return false;
     if (!/^\p{Lu}/u.test(t) || FRASES_IGNORADAS_COMO_SECAO.has(t)) return false;
     const palavras = t.split(/\s+/);
@@ -248,7 +259,13 @@ function montarQuestoesDeLinhas(linhasBrutas, alternativasPorQuestao, detectarMa
             proximoEsperado = numeroMarcador + 1;
             continue;
         }
-        const ehTitulo = pareceCabecalhoDeSecao(linha) || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]) || tituloAntesDaQuestao(linha, linhasBrutas[i + 1]);
+        const ehTituloForte = pareceCabecalhoDeSecao(linha);
+        let ehTitulo = ehTituloForte || tituloDeUmaPalavra(linha, linhasBrutas[i + 1]) || tituloAntesDaQuestao(linha, linhasBrutas[i + 1]);
+        // Título reconhecido só pela posição (logo antes do "Questão N") pode ser a última alternativa SEM letra
+        // ("Adipócitos", simulado da Biomedicina, 13/11/2026): só vale como disciplina se a questão já tem o
+        // enunciado e todas as alternativas sem essa linha. Senão, é alternativa.
+        if (ehTitulo && !ehTituloForte && blocoAtual && blocoAtual.modo === 'objetiva'
+            && limparInicioBloco(blocoAtual.linhas).length <= alternativasPorQuestao) ehTitulo = false;
         if (!blocoAtual && ehTitulo) {
             disciplinaAtual = linha;
             continue;
