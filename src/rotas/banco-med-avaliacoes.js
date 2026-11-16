@@ -542,7 +542,8 @@ router.get('/:id', async (req, res) => {
         const resumo = await Promise.all(questoes.map(resumoComImagens));
         const plano = Padrao.aplicarCriterios(planoEdubox, crit);
         const papel = !req.prof ? 'editor' : (ehTitularAv(req, av.chave) ? 'titular' : 'adjunto');
-        res.json({ avaliacao: av, papel, eu: req.prof ? req.prof.nome : null, totalNaProva: todasQ.length, questoes: resumo, plano, professores: d ? d.professores : [], criterios: resumoCriterios(crit), analise: Padrao.analisarAvaliacao(resumo, plano, av.bimestre, crit) });
+        const meuEnvio = req.prof ? ((av.envios || {})[chaveEnvio(req.prof.nome)] || {}) : null;
+        res.json({ avaliacao: av, papel, eu: req.prof ? req.prof.nome : null, meuEnvio, totalNaProva: todasQ.length, questoes: resumo, plano, professores: d ? d.professores : [], criterios: resumoCriterios(crit), analise: Padrao.analisarAvaliacao(resumo, plano, av.bimestre, crit) });
     } catch (e) { erro(res, e); }
 });
 
@@ -862,8 +863,9 @@ router.post('/:id/finalizar', async (req, res) => {
 
 router.post('/:id/reabrir', async (req, res) => {
     try {
-        exigeEditorAv(req, 'reabrem uma prova finalizada');
         const av = await lerAvaliacao(req.params.id);
+        // o titular também reabre a prova da disciplina dele (16/11/2026): o professor corrige sem depender de ninguém
+        exigeTitularAv(req, av.chave, 'reabre a prova');
         await db.collection(COL_AV).doc(av.id).update({ status: 'rascunho', reabertaEm: agora(), reabertaPor: quem(req), updatedAt: agora() });
         res.json({ message: 'Avaliação reaberta para ajustes.' });
     } catch (e) { erro(res, e); }

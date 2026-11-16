@@ -868,6 +868,16 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
         const extrasSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
         const extras = extrasSnap.docs.map(d => ({ id: d.id, ...d.data() }))
             .filter(q => q.usoProva && q.usoProva !== usoDaProva && q.status === 'publicada' && !ids.includes(q.id) && minhaQuestao(q, prof, req.user.uid) && (q.usoProva === 'exame' || !q.bimestre || !av.bimestre || q.bimestre === av.bimestre));
+        // 16/11/2026: o professor monta e sobe no AVA sem esperar a Ana Beatriz — então o arquivo só sai quando
+        // as questões dele passam na Conferência CADAM (nada "a corrigir"); as orientações não bloqueiam.
+        const PadraoMed = require('../../banco-med-fatec/padrao.js');
+        const posicao = new Map(ids.map((id, i) => [id, i + 1]));
+        const foraDaProva = daProva.filter(q => !PadraoMed.avaliarQuestao(q).ok).map(q => posicao.get(q.id)).sort((a, b) => a - b);
+        const foraExtras = extras.filter(q => !PadraoMed.avaliarQuestao(q).ok).length;
+        if (foraDaProva.length || foraExtras) {
+            const partes = [foraDaProva.length ? `nº ${foraDaProva.join(', ')} da prova` : '', foraExtras ? `${foraExtras} das questões a mais (2ª chamada, exame…)` : ''].filter(Boolean).join(' e ');
+            return res.status(400).json({ error: `Ainda há questão sua com item a corrigir na Conferência CADAM (${partes}). Corrija e baixe de novo: o arquivo do AVA só sai com as suas questões no padrão.` });
+        }
         const { comLinks, USOS_PROVA } = AV();
         const base = [av.disciplina, av.semestre, ...(av.tipo === 'exame' ? [] : [`${av.bimestre}º Bimestre`])].map(x => String(x).replace(/\//g, '-')).join('/');
         const raiz = [av.disciplina, av.semestre].map(x => String(x).replace(/\//g, '-')).join('/');
