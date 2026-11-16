@@ -531,3 +531,14 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-q-marcada { outline: 2px solid #B42318; outline-offset: -2px; background: #FFF7F6; }
 .av-q:has(.av-q-sel) { grid-template-columns: 22px 34px minmax(0, 1fr) auto; }
 @media (max-width: 860px) { .av-q:has(.av-q-sel) { grid-template-columns: 22px 30px 1fr; } }
+
+/* Progresso sem cortar (16/11/2026): janela mais larga, tabela compacta, 1ª coluna fixa ao rolar */
+.av-conf-modal { max-width: 1180px; width: min(1180px, 100%); }
+.av-pg-tabela { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; }
+.av-pg-tabela table { width: max-content; min-width: 100%; }
+.av-pg-tabela th, .av-pg-tabela td { padding: 0.5rem 0.6rem; }
+.av-pg-tabela tbody th, .av-pg-tabela tfoot th, .av-pg-tabela thead th:first-child { position: sticky; left: 0; z-index: 1; background: #fff; white-space: normal; min-width: 190px; max-width: 240px; box-shadow: 1px 0 0 var(--av-linha); }
+.av-pg-tabela thead th:first-child, .av-pg-tabela tfoot th { background: var(--av-fundo); }
+.av-pg-tabela td small, .av-pg-tabela th small { white-space: normal; max-width: 150px; margin: 0 auto; }
+.av-pg-dica { display: none; margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--av-tinta-2); }
+@media (max-width: 1100px) { .av-pg-dica { display: block; } }
