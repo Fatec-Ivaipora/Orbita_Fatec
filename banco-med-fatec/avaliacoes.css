@@ -486,3 +486,48 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-envio-prova { margin: 0 0 0.9rem; }
 .av-envio-acoes { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; }
 .av-envio-acoes .av-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+/* "Corrigir tudo" de português e ABNT na Conferência CADAM (16/11/2026) */
+.av-pt-tudo-barra { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: center; margin: 0.6rem 0; padding: 0.6rem 0.8rem; background: #EAF2FD; border-radius: 8px; }
+.av-pt-tudo-barra span { font-size: 0.82rem; color: #0A2463; }
+.av-pt-tudo { background: #0052B8 !important; color: #fff !important; border-color: #0052B8 !important; }
+
+/* prévia do "Corrigir tudo" (16/11/2026) */
+.av-pt-previa-topo { position: sticky; top: 0; z-index: 1; background: #fff; padding: 0.4rem 0 0.7rem; border-bottom: 1px solid #D6E2F2; margin-bottom: 0.6rem; }
+.av-pt-previa-topo p { margin: 0 0 0.5rem; color: #0A2463; font-size: 0.9rem; }
+.av-pt-previa-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.av-pt-previa { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.av-pt-previa > li { border: 1px solid #D6E2F2; border-radius: 10px; padding: 0.6rem 0.8rem; }
+.av-pt-previa-q { display: flex; gap: 0.45rem; align-items: center; cursor: pointer; color: #0A2463; }
+.av-pt-previa-q input { width: 18px; height: 18px; accent-color: #0052B8; }
+.av-pt-previa-campo { margin-top: 0.35rem; font-size: 0.86rem; }
+.av-pt-previa-campo ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.av-pt-previa del { color: #B42318; background: #FDECEC; text-decoration: line-through; }
+.av-pt-previa ins { color: #0F7B4F; background: #E7F6EE; text-decoration: none; font-weight: 600; }
+.av-pt-previa small { color: #55657F; margin-left: 0.3rem; }
+
+/* português e ABNT na lista da prova (16/11/2026) */
+.av-q-pt summary { color: #0052B8; }
+.av-q-pt del { color: #B42318; background: #FDECEC; }
+.av-q-pt ins { color: #0F7B4F; background: #E7F6EE; text-decoration: none; font-weight: 600; }
+.av-q-pt small { color: #55657F; }
+.av-q-pt .av-pt-btn { margin-top: 0.4rem; }
+
+/* questão repetida na prévia da importação (16/11/2026) */
+.av-previa-rep { margin: 0 0 0.35rem; padding: 0.35rem 0.6rem; background: #FDECEC; border-left: 4px solid #B42318; border-radius: 6px; color: #7A1A12; font-size: 0.84rem; font-weight: 600; }
+
+.av-previa-incluir { display: inline-flex; gap: 0.4rem; align-items: center; font-size: 0.84rem; font-weight: 600; color: #0A2463; margin-bottom: 0.3rem; cursor: pointer; }
+.av-previa-incluir input { width: 17px; height: 17px; accent-color: #0052B8; }
+
+/* apagar questões com seleção e confirmação clara (16/11/2026) */
+.av-sel { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between; padding: 0.55rem 0.8rem; margin: 0 0 0.6rem; border: 1px dashed #C9DBF2; border-radius: 10px; color: #4F6D8F; font-size: 0.86rem; }
+.av-sel-ativa { border-style: solid; border-color: #0052B8; background: #EAF2FD; color: #0A2463; }
+.av-sel-confirma { border: 2px solid #B42318; background: #FDECEC; color: #7A1A12; }
+.av-sel-confirma p { margin: 0; flex: 1 1 320px; }
+.av-sel-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.av-btn-perigo { background: #B42318 !important; border-color: #B42318 !important; color: #fff !important; }
+.av-q-sel { display: flex; align-items: flex-start; padding-top: 0.15rem; cursor: pointer; }
+.av-q-sel input { width: 18px; height: 18px; accent-color: #B42318; cursor: pointer; }
+.av-q-marcada { outline: 2px solid #B42318; outline-offset: -2px; background: #FFF7F6; }
+.av-q:has(.av-q-sel) { grid-template-columns: 22px 34px minmax(0, 1fr) auto; }
+@media (max-width: 860px) { .av-q:has(.av-q-sel) { grid-template-columns: 22px 30px 1fr; } }

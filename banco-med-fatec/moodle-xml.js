@@ -77,6 +77,23 @@ function blocoGeneralFeedback(questao) {
   </generalfeedback>`;
 }
 
+// Nome da questão no AVA (16/11/2026): começa pela prova e pelo número — "[2ºB 2ªCH 03] Prof. Nome – tema" —
+// para achar no banco do AVA e no "Adicionar ao questionário" de qual prova cada questão é (1ª/2ª chamada, exame…).
+// O título "Prof. Nome – objetivo" se repete em todas as questões do mesmo objetivo: no AVA o nome leva o COMEÇO
+// DO ENUNCIADO, que é diferente em cada questão.
+function textoPlano(h) {
+    return String(h || '').replace(/[​-‍﻿]/g, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+function nomeNoAva(questao) {
+    if (!questao.prefixoAva) return questao.titulo || '';
+    const n = questao.numeroAva ? ' ' + String(questao.numeroAva).padStart(2, '0') : '';
+    const partes = String(questao.elaboradoPor || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const prof = partes.length ? `Prof. ${partes.length > 1 ? `${partes[0]} ${partes[partes.length - 1]}` : partes[0]}` : '';
+    const t = textoPlano(questao.casoClinico || questao.pergunta || questao.enunciadoHtml);
+    const trecho = t.length > 90 ? t.slice(0, 90).replace(/\s+\S*$/, '') + '…' : t;
+    return `[${questao.prefixoAva}${n}] ${[prof, trecho || questao.titulo || ''].filter(Boolean).join(' – ')}`;
+}
+
 function blocoTags(questao) {
     const tags = [];
     if (questao.dificuldade) tags.push(`dificuldade:${DIFICULDADE_LABEL[questao.dificuldade] || questao.dificuldade}`);
@@ -105,7 +122,7 @@ function questaoMultichoiceUnica(questao) {
         .join('\n');
     return `<question type="multichoice">
   <name>
-    <text>${xmlEscape(questao.titulo)}</text>
+    <text>${xmlEscape(nomeNoAva(questao))}</text>
   </name>
 ${blocoQuestionText(questao)}
 ${blocoGeneralFeedback(questao)}
@@ -136,7 +153,7 @@ function questaoVerdadeiroFalso(questao) {
     const valorCerto = (respostaCerta?.texto || '').trim().toLowerCase() === 'verdadeiro' || (respostaCerta?.texto || '').trim().toLowerCase() === 'true';
     return `<question type="truefalse">
   <name>
-    <text>${xmlEscape(questao.titulo)}</text>
+    <text>${xmlEscape(nomeNoAva(questao))}</text>
   </name>
 ${blocoQuestionText(questao)}
 ${blocoGeneralFeedback(questao)}
@@ -188,7 +205,7 @@ function gerarMoodleXmlGrupos(grupos) {
     <text>${cdata(`Categoria gerada pelo Órbita — BANCO MED-FATEC ('${g.categoria}').`)}</text>
   </info>
   <idnumber></idnumber>
-</question>`, ...g.questoes.map(q => questaoParaXml({ ...q, provaRotulo: q.provaRotulo || g.rotulo }))].join('\n\n')).join('\n\n');
+</question>`, ...g.questoes.map((q, i) => questaoParaXml({ ...q, provaRotulo: q.provaRotulo || g.rotulo, prefixoAva: q.prefixoAva || g.prefixo, numeroAva: q.numeroAva || (i + 1) }))].join('\n\n')).join('\n\n');
     return `<?xml version="1.0" encoding="UTF-8"?>\n<quiz>\n${corpo}\n</quiz>\n`;
 }
 

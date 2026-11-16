@@ -11,11 +11,15 @@
 const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 
 function texto(html) {
-    return String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<\/(p|div|li)>/gi, ' ').replace(/<[^>]+>/g, ' ')
+    return String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<\/(p|div|li)>/gi, ' ')
+        // 16/11/2026: marcação dentro da frase (itálico, negrito…) some sem virar espaço — senão "(DSM-5-TR)</i>." vira "(DSM-5-TR) ."
+        .replace(/<\/?(i|em|b|strong|u|s|span|sup|sub|a|mark|font|small)\b[^>]*>/gi, '').replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         .replace(/\s+/g, ' ').trim();
 }
 function norm(s) { return texto(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+// repetidas (16/11/2026): "Dopamina;" = "dopamina." = "DOPAMINA" — ignora caixa, acento, pontuação e espaços
+function chaveComparar(s) { return norm(s).replace(/[^a-z0-9]+/g, ' ').trim(); }
 
 const RE_NENHUMA_TODAS = /\b(nenhuma (das )?(alternativas?|anteriores|acima)|nenhuma (alternativa )?esta correta|todas (as )?(alternativas )?(anteriores|acima|estao (in)?corretas|sao (in)?corretas|corretas|incorretas))\b/;
 const RE_NEGATIVO = /\b(exceto|incorret[ao]s?|fals[ao]s?|nao (e|esta|sao|estao|corresponde|constitui|representa|apresenta|se aplica|faz parte)\b)/;
@@ -41,7 +45,7 @@ function avaliarQuestao(q, opts) {
     const bloqueios = [], avisos = [];
     const B = (cod, msg) => bloqueios.push({ cod, msg });
     const A = (cod, msg) => avisos.push({ cod, msg });
-    const alts = (q.alternativas || []).map(a => ({ ...a, t: texto(a.texto), n: norm(a.texto) }));
+    const alts = (q.alternativas || []).map(a => ({ ...a, t: texto(a.texto), n: norm(a.texto), k: chaveComparar(a.texto) }));
     const corretas = alts.filter(a => a.correta);
     const enunciado = norm(q.enunciadoHtml);
     const pergunta = norm(q.pergunta || q.enunciadoHtml);
@@ -52,7 +56,7 @@ function avaliarQuestao(q, opts) {
     if (alts.length !== 4) B('qtd', alts.length > 4 ? `A questão tem ${alts.length} alternativas; na Medicina são 4 (A a D). Tire a que sobra.` : `A questão tem ${alts.length} alternativa(s); na Medicina são 4 (A a D).`);
     if (alts.some(a => !a.t)) B('vazia', 'Há alternativa sem texto.');
     const vistas = new Set();
-    alts.forEach((a, i) => { if (a.n && vistas.has(a.n)) B('repetida', `A alternativa ${LETRAS[i]} repete outra.`); vistas.add(a.n); });
+    alts.forEach((a, i) => { const j = alts.findIndex((b, x) => x < i && b.k && b.k === a.k); if (a.k && j >= 0) B('repetida', `A alternativa ${LETRAS[i]} repete a ${LETRAS[j]} (mesmo texto, mesmo com maiúscula/minúscula ou pontuação diferente).`); vistas.add(a.k); });
     alts.forEach((a, i) => { if (RE_NENHUMA_TODAS.test(a.n)) B('nenhuma', `Alternativa ${LETRAS[i]}: "nenhuma/todas as alternativas" não é usado no padrão.`); });
     if (enunciado.length < 40) B('enunciado', 'O enunciado está curto demais.');
     // 16/11/2026: o feedback pode ser só uma imagem (gráfico, tabela, figura)
@@ -291,7 +295,7 @@ function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     const avaliacoes = questoes.map(q => avaliarQuestao(q));
     const aplicacao = avaliacoes.filter(a => a.aplicacao).length;
     const enunciados = {};
-    questoes.forEach((q, i) => { const k = norm(q.enunciadoHtml); if (k) (enunciados[k] = enunciados[k] || []).push(i + 1); });
+    questoes.forEach((q, i) => { const k = chaveComparar(q.enunciadoHtml); if (k) (enunciados[k] = enunciados[k] || []).push(i + 1); });
     const repetidas = Object.values(enunciados).filter(l => l.length > 1);
     const peloPeso = (criterios && criterios.pesos && Object.keys(criterios.pesos).length) ? 'pelo peso definido' : 'pela carga horária';
     const pendencias = [];
@@ -318,5 +322,5 @@ function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     };
 }
 
-return { LETRAS, texto, norm, lerQuestoesDeLinhas, lerPorNivel, ehFormatoNivel, avaliarQuestao, analisarAvaliacao, aplicarCriterios, CRITERIOS_PADRAO, tituloPadrao, ehAplicacao };
+return { LETRAS, texto, norm, chaveComparar, lerQuestoesDeLinhas, lerPorNivel, ehFormatoNivel, avaliarQuestao, analisarAvaliacao, aplicarCriterios, CRITERIOS_PADRAO, tituloPadrao, ehAplicacao };
 }));

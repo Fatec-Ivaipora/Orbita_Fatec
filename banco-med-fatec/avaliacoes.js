@@ -13,6 +13,9 @@ let disciplinas = [], avaliacoes = [];
 let atual = null;            // { avaliacao, questoes, plano, professores, analise }
 let filtroProfessor = '';
 let carregouGrade = false;
+// apagar questões (16/11/2026): seleção com caixinha + confirmação clara na própria tela
+let selecionadas = new Set();
+let confirmandoApagar = false;
 // quem usa a aba (16/11/2026): editor (Ana / coordenação / ADM) ou professor (titular nas disciplinas de professor.titulares)
 let meuPapel = { editor: true, professor: null };
 const souEditor = () => !!meuPapel.editor;
@@ -166,6 +169,7 @@ async function abrirAvaliacao(id) {
   try {
     atual = await api(`${BASE}/${encodeURIComponent(id)}`);
     filtroProfessor = '';
+    selecionadas = new Set(); confirmandoApagar = false;
     renderEditor();
     window.scrollTo({ top: 0 });
   } catch (e) { ed.innerHTML = `<div class="av-vazio">${esc(e.message)} <button type="button" class="av-link" data-voltar>Voltar</button></div>`; }
@@ -204,7 +208,7 @@ function renderEditor() {
         <button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>
         ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
                  ${souTitular(av.chave) ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
-              : souTitular(av.chave) ? `<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
+              : souTitular(av.chave) ? `${souEditor() ? `<button type="button" class="btn btn-secondary av-btn" data-xml-como-esta ${questoes.length ? '' : 'disabled'} title="Baixa as questões como estão, sem finalizar nem padronizar">${ic('baixar')}Baixar para o AVA (como está)</button>` : ''}<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
                  <button type="button" class="av-icone-btn av-perigo" data-excluir-av title="Excluir avaliação" aria-label="Excluir avaliação">${ic('lixo')}</button>` : ''}
       </div>
     </header>
@@ -217,6 +221,7 @@ function renderEditor() {
             <button type="button" class="btn av-btn-branco" data-nova>${ic('mais')}Escrever questão</button>
             <button type="button" class="btn av-btn-fantasma" data-importar>${ic('importar')}Importar Word, PDF ou texto</button>
             <button type="button" class="btn av-btn-fantasma" data-banco>${ic('banco')}Pegar do banco</button>
+            ${(() => { const n = questoes.reduce((s, q) => s + conferirQuestao(q).pt.filter(a => a.para).length, 0); return n ? `<button type="button" class="btn av-btn-fantasma" data-pt-tudo-prova="${esc(av.id)}">Corrigir português e ABNT (${n})</button>` : ''; })()}
           </div>
         </div>`}
 
@@ -234,6 +239,7 @@ function renderEditor() {
           ${profsNaProva.map(([n, c]) => `<button type="button" class="av-fp ${filtroProfessor === n ? 'ativo' : ''}" data-fp="${esc(n)}">${n === 'Sem professor' ? '' : avatar(n)}${esc(primeiroUltimo(n))} <b>${c}</b></button>`).join('')}
         </div>` : ''}
 
+        ${!fin && questoes.length ? `<div id="av-sel-barra">${barraSelecaoHtml()}</div>` : ''}
         <ol class="av-lista">
           ${visiveis.length ? visiveis.map(({ q, n }) => linhaQuestao(q, n, fin, questoes.length)).join('') : `<li class="av-vazio">${questoes.length ? 'Nenhuma questão deste professor.' : 'Nenhuma questão ainda. Escreva no modelo, importe do Word/PDF ou pegue do banco da disciplina.'}</li>`}
         </ol>
@@ -262,8 +268,11 @@ function envioNaProvaHtml(av, questoes) {
 
 function linhaQuestao(q, n, fin, total) {
   const p = q.padrao;
+  // português e ABNT na própria lista (16/11/2026): o professor vê e corrige sem abrir a questão
+  const pt = conferirQuestao(q).pt, ptFix = pt.filter(a => a.para).length;
   const status = p.ok ? `<span class="av-selo av-selo-ok">${ic('ok')}No padrão</span>` : `<span class="av-selo av-selo-erro">${ic('alerta')}${p.bloqueios.length} a corrigir</span>`;
-  return `<li class="av-q ${p.ok ? '' : 'av-q-erro'}">
+  return `<li class="av-q ${p.ok ? '' : 'av-q-erro'} ${selecionadas.has(q.id) ? 'av-q-marcada' : ''}">
+    ${fin ? '' : `<label class="av-q-sel" title="Selecionar para apagar"><input type="checkbox" data-sel-q="${esc(q.id)}" ${selecionadas.has(q.id) ? 'checked' : ''} aria-label="Selecionar a questão ${n} para apagar"></label>`}
     <span class="av-q-n">${n}</span>
     <div class="av-q-corpo">
       <div class="av-q-topo">${chipProfessor(q.professorNome)}<span class="av-tag">${esc(rotuloUnidade(q.unidade))}</span>
@@ -272,6 +281,9 @@ function linhaQuestao(q, n, fin, total) {
       <p class="av-q-enun">${esc(P.texto(q.casoClinico || q.enunciadoHtml).slice(0, 240))}${P.texto(q.casoClinico || q.enunciadoHtml).length > 240 ? '…' : ''}</p>
       ${(!p.ok || p.avisos.length) ? `<details class="av-q-det"><summary>${p.bloqueios.length ? `${p.bloqueios.length} a corrigir` : ''}${p.bloqueios.length && p.avisos.length ? ' · ' : ''}${p.avisos.length ? `${p.avisos.length} orientação(ões)` : ''}</summary>
         <ul>${p.bloqueios.map(b => `<li class="av-b">${esc(b.msg)}</li>`).join('')}${p.avisos.map(a => `<li class="av-a">${esc(a.msg)}</li>`).join('')}</ul></details>` : ''}
+      ${pt.length ? `<details class="av-q-det av-q-pt"><summary>${pt.length} de português e ABNT${ptFix ? ` · ${ptFix} com correção automática` : ''}</summary>
+        <ul>${pt.map(a => `<li><span class="av-conf-campo">${esc(a.campo)}</span> ${a.de ? `<del>${esc(a.de.trim())}</del>` : ''}${a.para ? ` → <ins>${esc(a.para.trim())}</ins>` : ''} <small>${esc(a.motivo)}</small></li>`).join('')}</ul>
+        ${!fin && ptFix ? `<button type="button" class="av-pt-btn av-pt-tudo" data-pt-tudo-q="${esc(q.id)}" data-av="${esc(atual.avaliacao.id)}">Corrigir (ver antes de aplicar)</button>` : ''}</details>` : ''}
     </div>
     ${fin ? '' : `<div class="av-q-acoes">
       ${souTitular(atual.avaliacao.chave) ? `<button type="button" class="av-icone-btn" data-subir="${esc(q.id)}" ${n === 1 ? 'disabled' : ''} aria-label="Subir questão ${n}">${ic('cima')}</button>
@@ -325,7 +337,37 @@ async function moverQuestao(id, delta) {
   try { await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/ordem`, { method: 'PUT', body: JSON.stringify({ questoesIds: ids }) }); await recarregarAtual(); }
   catch (e) { toast(e.message, 'erro'); }
 }
+function barraSelecaoHtml() {
+  const n = selecionadas.size, total = atual.questoes.length;
+  if (confirmandoApagar && n) {
+    const sel = atual.questoes.filter(q => selecionadas.has(q.id));
+    const novas = sel.filter(q => q.status === 'rascunho_avaliacao').length, doBanco = n - novas;
+    return `<div class="av-sel av-sel-confirma" role="alertdialog" aria-live="assertive">
+      <p><b>Apagar ${n === 1 ? '1 questão' : `${n} questões`}?</b> ${novas ? (novas === 1 ? '1 foi escrita ou importada nesta prova e será <b>apagada de vez</b>.' : `${novas} foram escritas ou importadas nesta prova e serão <b>apagadas de vez</b>.`) : ''} ${doBanco ? (doBanco === 1 ? '1 veio do banco: só sai da prova e continua no banco da disciplina.' : `${doBanco} vieram do banco: só saem da prova e continuam no banco da disciplina.`) : ''}</p>
+      <div class="av-sel-acoes"><button type="button" class="btn av-btn av-btn-perigo" data-apagar-sim>Sim, apagar ${n}</button><button type="button" class="btn btn-secondary av-btn" data-apagar-cancelar>Cancelar</button></div></div>`;
+  }
+  return `<div class="av-sel ${n ? 'av-sel-ativa' : ''}">
+    <span>${n ? `<b>${n}</b> de ${total} ${n === 1 ? 'selecionada' : 'selecionadas'}` : 'Marque as questões que quer apagar'}</span>
+    <div class="av-sel-acoes">${n < total ? '<button type="button" class="av-link" data-sel-todas>Selecionar todas</button>' : ''}
+      ${n ? `<button type="button" class="av-link" data-sel-limpar>Limpar seleção</button><button type="button" class="btn av-btn av-btn-perigo" data-apagar-sel>${ic('lixo')}Apagar selecionadas</button>` : ''}</div></div>`;
+}
+function atualizarSelecao() {
+  const b = $('#av-sel-barra'); if (b) b.innerHTML = barraSelecaoHtml();
+  document.querySelectorAll('[data-sel-q]').forEach(c => { c.checked = selecionadas.has(c.dataset.selQ); c.closest('.av-q').classList.toggle('av-q-marcada', c.checked); });
+  if (confirmandoApagar) { const s = $('#av-sel-barra'); if (s) s.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+}
+async function apagarSelecionadas() {
+  const btn = document.querySelector('[data-apagar-sim]'); if (btn) { btn.disabled = true; btn.textContent = 'Apagando…'; }
+  try {
+    const r = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes/apagar`, { method: 'POST', body: JSON.stringify({ ids: [...selecionadas] }) });
+    selecionadas = new Set(); confirmandoApagar = false;
+    await recarregarAtual();
+    toast(r.message);
+  } catch (e) { toast(e.message, 'erro'); confirmandoApagar = false; atualizarSelecao(); }
+}
 async function retirarQuestao(id) {
+  // a lixeira da questão usa a mesma confirmação clara (16/11/2026)
+  selecionadas = new Set([id]); confirmandoApagar = true; atualizarSelecao(); return;
   const q = atual.questoes.find(x => x.id === id);
   const nova = q && q.status === 'rascunho_avaliacao';
   if (!confirmar(nova ? 'Excluir esta questão? Ela foi escrita nesta avaliação e ainda não está no banco.' : 'Retirar esta questão da avaliação? Ela continua no banco da disciplina.')) return;
@@ -391,11 +433,18 @@ function baixarTexto(texto, nome) {
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
-async function baixarXml() {
-  const btn = document.querySelector('[data-xml]');
+async function baixarXml(comoEsta) {
+  const btn = document.querySelector(comoEsta ? '[data-xml-como-esta]' : '[data-xml]');
+  // sem finalizar: avisa o que está fora do padrão, mas baixa do jeito que veio (16/11/2026)
+  if (comoEsta) {
+    const semCorreta = atual.questoes.filter(q => !(q.alternativas || []).some(a => a.correta)).length;
+    const fora = atual.questoes.filter(q => !q.padrao.ok).length;
+    if (semCorreta) toast(`${semCorreta} questão(ões) sem alternativa correta marcada: o AVA não importa questão sem correta. Marque a correta antes.`, 'aviso');
+    else if (fora) toast(`Baixando como está: ${fora} questão(ões) fora do padrão CADAM seguem sem alteração.`, 'aviso');
+  }
   if (btn) { btn.disabled = true; btn.dataset.txt = btn.innerHTML; btn.textContent = 'Montando o arquivo…'; }
   try {
-    const dados = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/exportar`);
+    const dados = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/exportar${comoEsta ? '?rascunho=1' : ''}`);
     const questoes = await prepararParaXml(dados.questoes);
     for (const [i, q] of questoes.entries()) {
       if (q.temImagemAntiga) {
@@ -403,7 +452,10 @@ async function baixarXml() {
         if (a.dataUrl) q.imagem = { nome: `q${i + 1}-${nomeSeguro(a.nome)}`, dataUrl: a.dataUrl };
       }
     }
-    const xml = window.MoodleXml.gerarMoodleXml(dados.pasta, questoes);
+    // nome no AVA com a prova e o número: [2ºB 1ªCH 01], [EXAME 05]…
+    const a = atual.avaliacao;
+    const prefixo = a.tipo === 'exame' ? 'EXAME' : `${a.bimestre}ºB ${a.chamada === 2 ? '2ª' : '1ª'}CH`;
+    const xml = window.MoodleXml.gerarMoodleXml(dados.pasta, questoes.map((q, i) => ({ ...q, prefixoAva: prefixo, numeroAva: i + 1 })));
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([xml], { type: 'application/xml;charset=utf-8' }));
     link.download = dados.nomeArquivo;
@@ -682,6 +734,7 @@ function atualizarChecklist() {
 
 // ---------- corretor de português e ABNT (13/11/2026) — só regras, sem IA (revisao-pt.js) ----------
 let ptAchados = [];
+let confRecarregar = null; // reabre a Conferência CADAM depois do "Corrigir tudo"
 function camposTexto() {
   const c = [{ nome: 'Caso clínico', el: $('#av-q-caso'), rico: true }, { nome: 'Pergunta', el: $('#av-q-perg'), opts: { pergunta: true } }];
   document.querySelectorAll('#av-q-alts .av-alt-txt').forEach((el, i) => c.push({ nome: `Alternativa ${LETRAS[i]}`, el }));
@@ -911,6 +964,16 @@ function abrirImportar() {
   $('#av-imp-arq').value = ''; $('#av-imp-txt').value = ''; $('#av-imp-previa').innerHTML = ''; previaImport = []; $('#av-imp-salvar').disabled = true;
   m.hidden = false; document.body.classList.add('av-sem-rolagem');
 }
+// Word lido no navegador: confere no servidor se alguma questão já existe (16/11/2026)
+async function repetidasWord() {
+  try {
+    const chave = (x) => P.chaveComparar(x.casoHtml !== undefined || x.pergunta ? `${x.casoHtml || ''} ${x.pergunta || ''}` : (x.enunciado || ''));
+    const r = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/importar/repetidas`, { method: 'POST', body: JSON.stringify({ chaves: previaImport.map(chave) }) });
+    (r.repetidas || []).forEach((rep, i) => { if (rep && previaImport[i]) previaImport[i].repetida = rep; });
+    const n = (r.repetidas || []).filter(Boolean).length;
+    return n ? `${n} questão(ões) repetida(s): veja a marca em cada uma.` : '';
+  } catch (e) { return ''; }
+}
 async function lerImportacao() {
   const arq = $('#av-imp-arq').files[0], txt = $('#av-imp-txt').value.trim();
   if (!arq && !txt) { toast('Escolha o arquivo ou cole o texto.', 'erro'); return; }
@@ -920,11 +983,11 @@ async function lerImportacao() {
     if (arq && /\.docx$/i.test(arq.name)) {
       // 1º o modelo de prova da Medicina (Questão / Enunciado / Feedback / Referência, correta em amarelo)
       const doModelo = await window.LerWord.lerModelo(arq);
-      if (doModelo && doModelo.length) { previaImport = doModelo; mostrarPrevia(''); return; }
+      if (doModelo && doModelo.length) { previaImport = doModelo; mostrarPrevia(await repetidasWord()); return; }
       const itens = await window.LerWord.ler(arq);
       previaImport = P.lerQuestoesDeLinhas(itens);
       if (!previaImport.length) throw new Error('Não encontrei questões objetivas. As questões precisam estar numeradas ("Questão 1", "1.", "2)") com as alternativas a), b), c)...');
-      mostrarPrevia('');
+      mostrarPrevia(await repetidasWord());
       return;
     }
     const body = { texto: txt };
@@ -946,7 +1009,7 @@ function mostrarPrevia(aviso) {
     const nImg = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length, 0);
     $('#av-imp-previa').innerHTML = `
       <p class="av-nota"><b>${previaImport.length}</b> questão(ões) encontrada(s)${nImg ? `, com <b>${nImg}</b> imagem(ns)` : ''}.${semGab ? ` ${semGab} sem gabarito: marque abaixo.` : ''} ${aviso ? esc(aviso) : ''}</p>
-      <ol class="av-previa">${previaImport.map((q, i) => `<li>${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa || (q.imagensFeedback || []).length ? `<span class="av-selo av-selo-ok">Feedback${(q.imagensFeedback || []).length ? ` (${q.imagensFeedback.length} imagem${q.imagensFeedback.length > 1 ? 's' : ''})` : ''}</span>` : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.provaWord ? `<span class="av-tag av-tag-prova av-uso-${usoDoTextoTela(q.provaWord)}">${esc(q.provaWord)}</span>` : ''}${q.unidadeWord ? `<span class="av-tag">Unidade ${esc(q.unidadeWord)}</span>` : ''}${q.objetivoWord ? `<span class="av-tag">Objetivo ${esc(q.objetivoWord.slice(0, 40))}</span>` : ''}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
+      <ol class="av-previa">${previaImport.map((q, i) => `<li><label class="av-previa-incluir"><input type="checkbox" data-previa-incluir="${i}" ${q.incluir === false || (q.incluir === undefined && q.repetida) ? '' : 'checked'}> Importar esta questão</label>${q.repetida ? `<p class="av-previa-rep">Questão repetida: ${esc(q.repetida)}. Ela vem desmarcada; marque se quiser importar mesmo assim.</p>` : ''}${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa || (q.imagensFeedback || []).length ? `<span class="av-selo av-selo-ok">Feedback${(q.imagensFeedback || []).length ? ` (${q.imagensFeedback.length} imagem${q.imagensFeedback.length > 1 ? 's' : ''})` : ''}</span>` : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.provaWord ? `<span class="av-tag av-tag-prova av-uso-${usoDoTextoTela(q.provaWord)}">${esc(q.provaWord)}</span>` : ''}${q.unidadeWord ? `<span class="av-tag">Unidade ${esc(q.unidadeWord)}</span>` : ''}${q.objetivoWord ? `<span class="av-tag">Objetivo ${esc(q.objetivoWord.slice(0, 40))}</span>` : ''}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
         ${(q.imagens || []).length ? `<div class="av-previa-imgs">${q.imagens.map(im => `<img src="${im.dataUrl}" alt="">`).join('')}</div>` : ''}
         <div class="av-previa-alts">${q.alternativas.map((a, j) => `<span class="${q.gabarito === LETRAS[j] ? 'av-previa-certa' : ''}"><b>${LETRAS[j]})</b> ${esc(String(a).slice(0, 90))}</span>`).join('')}</div>
         <label class="av-previa-gab">Correta <select class="av-imp-gab" data-i="${i}"><option value="">?</option>${q.alternativas.map((a, j) => `<option ${q.gabarito === LETRAS[j] ? 'selected' : ''}>${LETRAS[j]}</option>`).join('')}</select></label></li>`).join('')}</ol>`;
@@ -962,10 +1025,13 @@ async function salvarImportacao() {
   const btn = $('#av-imp-salvar'); btn.disabled = true;
   try {
     // sobe as imagens do Word pro Storage antes; a questão só leva o caminho
-    const total = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length + (q.imagensFeedback || []).length, 0);
+    // só as marcadas na prévia (as repetidas vêm desmarcadas) — 16/11/2026
+    const escolhidas = previaImport.filter((q, i) => { const c = document.querySelector(`[data-previa-incluir="${i}"]`); return c ? c.checked : true; });
+    if (!escolhidas.length) { toast('Marque ao menos uma questão para importar.', 'aviso'); btn.disabled = false; return; }
+    const total = escolhidas.reduce((s2, q) => s2 + (q.imagens || []).length + (q.imagensFeedback || []).length, 0);
     let feitas = 0;
     const questoes = [];
-    for (const q of previaImport) {
+    for (const q of escolhidas) {
       const imagens = [];
       for (const [j, im] of (q.imagens || []).slice(0, 8).entries()) {
         btn.textContent = `Enviando imagens ${++feitas}/${total}…`;
@@ -1261,8 +1327,9 @@ function minutosProva(itens) {
   // CADAM: caso clínico 5 min, múltipla escolha direta 3 min (+ 15 a 20 min de revisão)
   return itens.reduce((s, x) => s + (x.pd.aplicacao ? 5 : 3), 0);
 }
-function relatorioHtml({ sub, questoes, totalProva, deQuem, editar }) {
+function relatorioHtml({ sub, questoes, totalProva, deQuem, editar, avId }) {
   const itens = questoes.map(conferirQuestao);
+  const corrigiveis = itens.reduce((s, x) => s + x.pt.filter(a => a.para).length, 0);
   const conta = (k) => itens.filter(x => x.sit === k).length;
   const erros = itens.reduce((s, x) => s + x.pt.length, 0);
   const min = minutosProva(itens);
@@ -1272,6 +1339,7 @@ function relatorioHtml({ sub, questoes, totalProva, deQuem, editar }) {
         <span class="av-conf-num">Questão ${q.numero}</span>
         <span class="av-conf-sit">${SIT[sit]}</span>
         ${deQuem ? `<span class="av-conf-prof">${esc(q.professorNome || 'Sem professor')}</span>` : ''}
+        ${editar && avId && pt.some(a => a.para) ? `<button type="button" class="av-pt-btn av-pt-tudo" data-pt-tudo-q="${esc(q.id)}" data-av="${esc(avId)}">Ver correções de português e ABNT</button>` : ''}
         ${editar ? `<button type="button" class="av-pt-btn av-conf-editar" data-conf-editar="${esc(q.id)}">Abrir e corrigir</button>` : ''}
       </div>
       <p class="av-conf-tit">${esc(q.nomeQuestao || q.objetivo || q.titulo || '')}</p>
@@ -1292,6 +1360,7 @@ function relatorioHtml({ sub, questoes, totalProva, deQuem, editar }) {
         <div><b>${erros}</b><span>apontamentos de português e ABNT</span></div>
         <div><b>~${min + (questoes.length ? 15 : 0)} min</b><span>tempo de prova${deQuem ? '' : ' (sua parte)'}</span></div>
       </div>
+      ${editar && avId && corrigiveis ? `<div class="av-pt-tudo-barra"><button type="button" class="btn btn-primary av-btn" data-pt-tudo-prova="${esc(avId)}">Corrigir tudo de português e ABNT (${corrigiveis})</button><span>Mostra antes cada correção (antes → depois) para você conferir; só muda o que você deixar marcado. O que precisa de decisão (ex.: referência sem ano) continua apontado.</span></div>` : ''}
       <p class="av-conf-nota">Padrão da aula CADAM: um assunto por questão, formato simples, sem opinião, sem pista, sem enunciado negativo, uma só correta, caso clínico com os dados necessários, feedback e referência. Português e ABNT conferidos por regras — leia também o texto com atenção.</p>
     </div>
     ${questoes.length ? `<ol class="av-conf-lista">${lista}</ol>` : `<p class="av-vazio">${deQuem ? 'A prova ainda não tem questões.' : 'Nenhuma questão sua nesta prova ainda.'}</p>`}`;
@@ -1314,6 +1383,11 @@ function modalConf() {
       if (ed2 && confEditar) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); confEditar(ed2.dataset.confEditar); return; }
       const px = e.target.closest('[data-prof-xml]');
       if (px) { baixarXmlProfessor(px.dataset.profXml, px); return; }
+      const ptq = e.target.closest('[data-pt-tudo-q], [data-pt-tudo-prova]');
+      if (ptq) { corrigirPtTudo(ptq); return; }
+      const pta = e.target.closest('[data-pt-aplicar]');
+      if (pta) { aplicarPtMarcadas(pta); return; }
+      if (e.target.closest('[data-pt-voltar]') && confRecarregar) { confRecarregar(); return; }
       const av = e.target.closest('[data-conf-av]');
       if (av) abrirConferenciaDaProva(av.dataset.confAv);
       if (e.target.closest('[data-conf-lista]')) abrirConferenciaProfessor();
@@ -1390,7 +1464,8 @@ function conferirProvaAberta() {
   const fin = atual.avaliacao.status === 'finalizada';
   confEditar = fin ? null : (id) => abrirQuestao(id);
   $('#av-conf-tit').textContent = 'Conferência CADAM da prova';
-  $('#av-conf-corpo').innerHTML = relatorioHtml({ sub: subProva(atual.avaliacao), questoes: atual.questoes.map((q, i) => ({ ...q, numero: i + 1 })), totalProva: atual.questoes.length, deQuem: true, editar: !fin });
+  confRecarregar = async () => { await recarregarAtual(); conferirProvaAberta(); };
+  $('#av-conf-corpo').innerHTML = relatorioHtml({ sub: subProva(atual.avaliacao), questoes: atual.questoes.map((q, i) => ({ ...q, numero: i + 1 })), totalProva: atual.questoes.length, deQuem: atual.papel !== 'adjunto', editar: !fin, avId: atual.avaliacao.id });
 }
 // Professor: as provas das disciplinas dele e, em cada uma, só as questões dele
 export async function abrirConferenciaProfessor() {
@@ -1411,13 +1486,14 @@ async function abrirConferenciaDaProva(id) {
     const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}`);
     const a = r.avaliacao;
     $('#av-conf-tit').textContent = 'Conferência CADAM das minhas questões';
+    confRecarregar = () => abrirConferenciaDaProva(id);
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
     const env = r.envio || {};
     const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</label>`; };
     const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Baixe o arquivo com as suas questões (as da prova e as a mais, de 2ª chamada, exame, dependência e adaptação, cada uma na sua categoria) e importe no banco de questões do AVA. Depois marque cada etapa.</p>
       <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button>
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
-    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: true });
+    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: a.status !== 'finalizada', avId: id });
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
 // botão no Banco, só para o professor (quem vê tudo confere pela aba Avaliações)
@@ -1460,6 +1536,32 @@ function abrirModeloProfessor(eu) {
     try { await baixar(`/banco-med-fatec/modelo/${encodeURIComponent($('#av-mod-disc').value)}?bimestre=${$('#av-mod-bim').value}&semestre=${encodeURIComponent(eu.semestre || '')}`); toast('Modelo baixado.'); }
     catch (e) { toast(e.message, 'erro'); } finally { b.disabled = false; b.textContent = t; }
   };
+}
+// "Corrigir tudo" com PRÉVIA (16/11/2026): nada muda sem a pessoa ver cada correção (antes → depois) e confirmar
+async function corrigirPtTudo(btn) {
+  const umaQ = btn.dataset.ptTudoQ, avId = btn.dataset.av || btn.dataset.ptTudoProva;
+  const txt = btn.textContent; btn.disabled = true; btn.textContent = 'Preparando a prévia…';
+  try {
+    const r = await api(`${BASE}/${encodeURIComponent(avId)}/corrigir-pt/previa`, { method: 'POST', body: JSON.stringify({ ids: umaQ ? [umaQ] : [] }) });
+    if (!r.itens.length) { toast('Não há correção automática para fazer.', 'aviso'); btn.disabled = false; btn.textContent = txt; return; }
+    const total = r.itens.reduce((s, it) => s + it.campos.reduce((t, c) => t + c.mudancas.length, 0), 0);
+    $('#av-conf-tit').textContent = 'Conferir as correções antes de aplicar';
+    $('#av-conf-corpo').innerHTML = `
+      <div class="av-pt-previa-topo"><p><b>${total}</b> correção(ões) em <b>${r.itens.length}</b> questão(ões). Confira o antes → depois. <b>Só as questões marcadas serão alteradas</b>; a alternativa correta e o resto da questão não mudam.</p>
+        <div class="av-pt-previa-acoes"><button type="button" class="btn btn-primary av-btn" data-pt-aplicar="${esc(avId)}">Aplicar nas marcadas</button><button type="button" class="btn btn-secondary av-btn" data-pt-voltar>Voltar sem alterar</button></div></div>
+      <ol class="av-pt-previa">${r.itens.map(it => `<li><label class="av-pt-previa-q"><input type="checkbox" data-pt-q="${esc(it.id)}" checked> <b>Questão ${it.numero}</b>${it.professor ? ` · ${esc(it.professor)}` : ''}</label>
+        ${it.campos.map(c => `<div class="av-pt-previa-campo"><span class="av-conf-campo">${esc(c.campo)}</span><ul>${c.mudancas.map(m => `<li>${m.de ? `<del>${esc(m.de.trim())}</del> → <ins>${esc(String(m.para).trim())}</ins> ` : ''}<small>${esc(m.motivo)}</small></li>`).join('')}</ul></div>`).join('')}</li>`).join('')}</ol>`;
+  } catch (e) { toast(e.message, 'erro'); btn.disabled = false; btn.textContent = txt; }
+}
+async function aplicarPtMarcadas(btn) {
+  const ids = [...document.querySelectorAll('[data-pt-q]:checked')].map(c => c.dataset.ptQ);
+  if (!ids.length) { toast('Marque ao menos uma questão.', 'aviso'); return; }
+  btn.disabled = true; btn.textContent = 'Aplicando…';
+  try {
+    const r = await api(`${BASE}/${encodeURIComponent(btn.dataset.ptAplicar)}/corrigir-pt`, { method: 'POST', body: JSON.stringify({ ids }) });
+    toast(r.message);
+    if (confRecarregar) await confRecarregar();
+  } catch (e) { toast(e.message, 'erro'); btn.disabled = false; btn.textContent = 'Aplicar nas marcadas'; }
 }
 async function baixarXmlProfessor(id, btn) {
   const t = btn.textContent; btn.disabled = true; btn.textContent = 'Montando o arquivo…';
@@ -1571,6 +1673,11 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
     if (t.dataset.divisao) return abrirDivisao(t.dataset.divisao);
     if (t.dataset.profXml) return baixarXmlProfessor(t.dataset.profXml, t);
+    if (t.dataset.ptTudoQ || t.dataset.ptTudoProva) {
+      modalConf();
+      confRecarregar = async () => { await recarregarAtual(); const m = $('#av-conf'); if (m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } };
+      return corrigirPtTudo(t);
+    }
     if (t.dataset.criar) return criarAvaliacao(t.dataset.criar, Number(t.dataset.bim), Number(t.dataset.ch), t.dataset.tipo);
     if (t.dataset.abrir) return abrirAvaliacao(t.dataset.abrir);
     if (t.hasAttribute('data-voltar')) return voltarGrade();
@@ -1579,12 +1686,17 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.hasAttribute('data-banco')) return abrirBanco();
     if (t.dataset.editar) return abrirQuestao(t.dataset.editar);
     if (t.dataset.retirar) return retirarQuestao(t.dataset.retirar);
+    if (t.hasAttribute('data-sel-todas')) { atual.questoes.forEach(q => selecionadas.add(q.id)); confirmandoApagar = false; return atualizarSelecao(); }
+    if (t.hasAttribute('data-sel-limpar') || t.hasAttribute('data-apagar-cancelar')) { selecionadas = new Set(); confirmandoApagar = false; return atualizarSelecao(); }
+    if (t.hasAttribute('data-apagar-sel')) { confirmandoApagar = true; return atualizarSelecao(); }
+    if (t.hasAttribute('data-apagar-sim')) return apagarSelecionadas();
     if (t.dataset.subir) return moverQuestao(t.dataset.subir, -1);
     if (t.dataset.descer) return moverQuestao(t.dataset.descer, 1);
     if (t.hasAttribute('data-finalizar')) return finalizar();
     if (t.hasAttribute('data-reabrir')) return reabrir();
     if (t.hasAttribute('data-excluir-av')) return excluirAvaliacao();
     if (t.hasAttribute('data-xml')) return baixarXml();
+    if (t.hasAttribute('data-xml-como-esta')) return baixarXml(true);
     if (t.hasAttribute('data-conferir')) return conferirProvaAberta();
     if (t.dataset.fp !== undefined) { filtroProfessor = t.dataset.fp; renderEditor(); }
     if (t.dataset.criterios) return abrirCriterios(t.dataset.criterios, carregarGrade);
@@ -1592,6 +1704,8 @@ export async function iniciarAvaliacoes(opcoes) {
   });
   // marcações "subi no AVA" / "coloquei no questionário" dentro da prova
   view.addEventListener('change', async (e) => {
+    const s = e.target.closest('[data-sel-q]');
+    if (s) { if (s.checked) selecionadas.add(s.dataset.selQ); else selecionadas.delete(s.dataset.selQ); confirmandoApagar = false; return atualizarSelecao(); }
     const c = e.target.closest('[data-envio]'); if (!c) return;
     c.disabled = true;
     try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await recarregarAtual(); }
