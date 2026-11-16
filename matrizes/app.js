@@ -585,7 +585,16 @@ function renderHorario() {
       const aulas = aulasLinha(c, g, l);
       const comDia = aulas.filter(a => a.dia);
       if (!comDia.length) { pendentes.push({ d, profs: [...new Set(aulas.map(a => a.professor))] }); return; }
-      comDia.forEach(a => linhas.push({ a, d }));
+      // dois professores na mesma disciplina, dia e horário (ex.: estágio) = uma linha só "Prof. A e Prof. B" (16/11/2026)
+      const juntas = new Map();
+      comDia.forEach(a => {
+        const k = a.dia + '|' + a.inicio + '|' + a.fim;
+        const j = juntas.get(k);
+        if (!j) { juntas.set(k, { ...a, profs: [a.professor], salas: a.sala ? [a.sala] : [] }); return; }
+        if (!j.profs.includes(a.professor)) j.profs.push(a.professor);
+        if (a.sala && !j.salas.includes(a.sala)) j.salas.push(a.sala);
+      });
+      juntas.forEach(j => linhas.push({ a: { ...j, professor: j.profs.join(' e '), sala: j.salas.join(' / ') }, d }));
     });
     semHorario += pendentes.length;
     linhas.sort((x, y) => ordem(x.a) - ordem(y.a));

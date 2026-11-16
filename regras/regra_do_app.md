@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Matrizes e Horários — dois professores na mesma disciplina (estágio)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/matrizes-dois-professores
+- Arquivos alterados: matrizes/app.js, matrizes/index.html, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: a Pedagogia pediu dois professores nos estágios (5º período: Estágio Supervisionado na Educação Infantil; 7º: Estágio Supervisionado nas disciplinas pedagógicas do Ensino Médio).
+- Impacto: o sistema já aceitava várias linhas (professor + dia/horário) por disciplina e não aponta conflito entre professores diferentes da mesma disciplina; agora o botão diz "+ Adicionar professor ou horário", o modal explica como pôr dois professores e o Horário de Aulas impresso junta na mesma linha os professores da mesma disciplina, dia e horário ("Prof. A e Prof. B", salas "/").
+- Como testar: Matrizes → Pedagogia → Editar o estágio → "+ Adicionar professor ou horário" com o mesmo dia/horário → salvar → Horário de Aulas.
+- Como reverter: reverter os arquivos acima (os dados continuam como linhas separadas).
+
 ### [2026-11-16] Banco MED: feedback em imagem e modelo do Word por disciplina (unidades e objetivos do plano)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-med-feedback-imagem
