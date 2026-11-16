@@ -13,6 +13,9 @@ let disciplinas = [], avaliacoes = [];
 let atual = null;            // { avaliacao, questoes, plano, professores, analise }
 let filtroProfessor = '';
 let carregouGrade = false;
+// apagar questões (16/11/2026): seleção com caixinha + confirmação clara na própria tela
+let selecionadas = new Set();
+let confirmandoApagar = false;
 // quem usa a aba (16/11/2026): editor (Ana / coordenação / ADM) ou professor (titular nas disciplinas de professor.titulares)
 let meuPapel = { editor: true, professor: null };
 const souEditor = () => !!meuPapel.editor;
@@ -166,6 +169,7 @@ async function abrirAvaliacao(id) {
   try {
     atual = await api(`${BASE}/${encodeURIComponent(id)}`);
     filtroProfessor = '';
+    selecionadas = new Set(); confirmandoApagar = false;
     renderEditor();
     window.scrollTo({ top: 0 });
   } catch (e) { ed.innerHTML = `<div class="av-vazio">${esc(e.message)} <button type="button" class="av-link" data-voltar>Voltar</button></div>`; }
@@ -235,6 +239,7 @@ function renderEditor() {
           ${profsNaProva.map(([n, c]) => `<button type="button" class="av-fp ${filtroProfessor === n ? 'ativo' : ''}" data-fp="${esc(n)}">${n === 'Sem professor' ? '' : avatar(n)}${esc(primeiroUltimo(n))} <b>${c}</b></button>`).join('')}
         </div>` : ''}
 
+        ${!fin && questoes.length ? `<div id="av-sel-barra">${barraSelecaoHtml()}</div>` : ''}
         <ol class="av-lista">
           ${visiveis.length ? visiveis.map(({ q, n }) => linhaQuestao(q, n, fin, questoes.length)).join('') : `<li class="av-vazio">${questoes.length ? 'Nenhuma questão deste professor.' : 'Nenhuma questão ainda. Escreva no modelo, importe do Word/PDF ou pegue do banco da disciplina.'}</li>`}
         </ol>
@@ -266,7 +271,8 @@ function linhaQuestao(q, n, fin, total) {
   // português e ABNT na própria lista (16/11/2026): o professor vê e corrige sem abrir a questão
   const pt = conferirQuestao(q).pt, ptFix = pt.filter(a => a.para).length;
   const status = p.ok ? `<span class="av-selo av-selo-ok">${ic('ok')}No padrão</span>` : `<span class="av-selo av-selo-erro">${ic('alerta')}${p.bloqueios.length} a corrigir</span>`;
-  return `<li class="av-q ${p.ok ? '' : 'av-q-erro'}">
+  return `<li class="av-q ${p.ok ? '' : 'av-q-erro'} ${selecionadas.has(q.id) ? 'av-q-marcada' : ''}">
+    ${fin ? '' : `<label class="av-q-sel" title="Selecionar para apagar"><input type="checkbox" data-sel-q="${esc(q.id)}" ${selecionadas.has(q.id) ? 'checked' : ''} aria-label="Selecionar a questão ${n} para apagar"></label>`}
     <span class="av-q-n">${n}</span>
     <div class="av-q-corpo">
       <div class="av-q-topo">${chipProfessor(q.professorNome)}<span class="av-tag">${esc(rotuloUnidade(q.unidade))}</span>
@@ -331,7 +337,37 @@ async function moverQuestao(id, delta) {
   try { await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/ordem`, { method: 'PUT', body: JSON.stringify({ questoesIds: ids }) }); await recarregarAtual(); }
   catch (e) { toast(e.message, 'erro'); }
 }
+function barraSelecaoHtml() {
+  const n = selecionadas.size, total = atual.questoes.length;
+  if (confirmandoApagar && n) {
+    const sel = atual.questoes.filter(q => selecionadas.has(q.id));
+    const novas = sel.filter(q => q.status === 'rascunho_avaliacao').length, doBanco = n - novas;
+    return `<div class="av-sel av-sel-confirma" role="alertdialog" aria-live="assertive">
+      <p><b>Apagar ${n === 1 ? '1 questão' : `${n} questões`}?</b> ${novas ? (novas === 1 ? '1 foi escrita ou importada nesta prova e será <b>apagada de vez</b>.' : `${novas} foram escritas ou importadas nesta prova e serão <b>apagadas de vez</b>.`) : ''} ${doBanco ? (doBanco === 1 ? '1 veio do banco: só sai da prova e continua no banco da disciplina.' : `${doBanco} vieram do banco: só saem da prova e continuam no banco da disciplina.`) : ''}</p>
+      <div class="av-sel-acoes"><button type="button" class="btn av-btn av-btn-perigo" data-apagar-sim>Sim, apagar ${n}</button><button type="button" class="btn btn-secondary av-btn" data-apagar-cancelar>Cancelar</button></div></div>`;
+  }
+  return `<div class="av-sel ${n ? 'av-sel-ativa' : ''}">
+    <span>${n ? `<b>${n}</b> de ${total} ${n === 1 ? 'selecionada' : 'selecionadas'}` : 'Marque as questões que quer apagar'}</span>
+    <div class="av-sel-acoes">${n < total ? '<button type="button" class="av-link" data-sel-todas>Selecionar todas</button>' : ''}
+      ${n ? `<button type="button" class="av-link" data-sel-limpar>Limpar seleção</button><button type="button" class="btn av-btn av-btn-perigo" data-apagar-sel>${ic('lixo')}Apagar selecionadas</button>` : ''}</div></div>`;
+}
+function atualizarSelecao() {
+  const b = $('#av-sel-barra'); if (b) b.innerHTML = barraSelecaoHtml();
+  document.querySelectorAll('[data-sel-q]').forEach(c => { c.checked = selecionadas.has(c.dataset.selQ); c.closest('.av-q').classList.toggle('av-q-marcada', c.checked); });
+  if (confirmandoApagar) { const s = $('#av-sel-barra'); if (s) s.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+}
+async function apagarSelecionadas() {
+  const btn = document.querySelector('[data-apagar-sim]'); if (btn) { btn.disabled = true; btn.textContent = 'Apagando…'; }
+  try {
+    const r = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes/apagar`, { method: 'POST', body: JSON.stringify({ ids: [...selecionadas] }) });
+    selecionadas = new Set(); confirmandoApagar = false;
+    await recarregarAtual();
+    toast(r.message);
+  } catch (e) { toast(e.message, 'erro'); confirmandoApagar = false; atualizarSelecao(); }
+}
 async function retirarQuestao(id) {
+  // a lixeira da questão usa a mesma confirmação clara (16/11/2026)
+  selecionadas = new Set([id]); confirmandoApagar = true; atualizarSelecao(); return;
   const q = atual.questoes.find(x => x.id === id);
   const nova = q && q.status === 'rascunho_avaliacao';
   if (!confirmar(nova ? 'Excluir esta questão? Ela foi escrita nesta avaliação e ainda não está no banco.' : 'Retirar esta questão da avaliação? Ela continua no banco da disciplina.')) return;
@@ -1650,6 +1686,10 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.hasAttribute('data-banco')) return abrirBanco();
     if (t.dataset.editar) return abrirQuestao(t.dataset.editar);
     if (t.dataset.retirar) return retirarQuestao(t.dataset.retirar);
+    if (t.hasAttribute('data-sel-todas')) { atual.questoes.forEach(q => selecionadas.add(q.id)); confirmandoApagar = false; return atualizarSelecao(); }
+    if (t.hasAttribute('data-sel-limpar') || t.hasAttribute('data-apagar-cancelar')) { selecionadas = new Set(); confirmandoApagar = false; return atualizarSelecao(); }
+    if (t.hasAttribute('data-apagar-sel')) { confirmandoApagar = true; return atualizarSelecao(); }
+    if (t.hasAttribute('data-apagar-sim')) return apagarSelecionadas();
     if (t.dataset.subir) return moverQuestao(t.dataset.subir, -1);
     if (t.dataset.descer) return moverQuestao(t.dataset.descer, 1);
     if (t.hasAttribute('data-finalizar')) return finalizar();
@@ -1664,6 +1704,8 @@ export async function iniciarAvaliacoes(opcoes) {
   });
   // marcações "subi no AVA" / "coloquei no questionário" dentro da prova
   view.addEventListener('change', async (e) => {
+    const s = e.target.closest('[data-sel-q]');
+    if (s) { if (s.checked) selecionadas.add(s.dataset.selQ); else selecionadas.delete(s.dataset.selQ); confirmandoApagar = false; return atualizarSelecao(); }
     const c = e.target.closest('[data-envio]'); if (!c) return;
     c.disabled = true;
     try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await recarregarAtual(); }

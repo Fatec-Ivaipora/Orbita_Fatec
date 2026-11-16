@@ -692,6 +692,30 @@ router.delete('/:id/questoes/:qid', async (req, res) => {
     } catch (e) { erro(res, e); }
 });
 
+// apagar várias questões de uma vez (16/11/2026): as escritas/importadas nesta prova são apagadas de vez;
+// as que vieram do banco só saem da prova. Professor adjunto só apaga as próprias.
+router.post('/:id/questoes/apagar', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        exigeRascunho(av);
+        const pedidas = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).filter(id => (av.questoesIds || []).includes(id)));
+        if (!pedidas.size) return res.status(400).json({ error: 'Selecione ao menos uma questão desta prova.' });
+        const qs = await lerQuestoes([...pedidas]);
+        const podem = visiveis(req, av, qs);
+        if (podem.length < qs.length) throw negar('Você apaga só as suas questões. O titular da disciplina apaga as de todos.');
+        const batch = db.batch();
+        let apagadas = 0, retiradas = 0;
+        podem.forEach(q => {
+            if (q.status === 'rascunho_avaliacao' && q.avaliacaoId === av.id) { batch.delete(db.collection(COL_Q).doc(q.id)); apagadas++; } else retiradas++;
+        });
+        batch.update(db.collection(COL_AV).doc(av.id), { questoesIds: admin.firestore.FieldValue.arrayRemove(...podem.map(q => q.id)), updatedAt: agora() });
+        await batch.commit();
+        const partes = [apagadas ? `${apagadas} apagada(s)` : '', retiradas ? `${retiradas} retirada(s) da prova (continuam no banco)` : ''].filter(Boolean).join(' e ');
+        res.json({ apagadas, retiradas, message: `Pronto: ${partes}.` });
+    } catch (e) { erro(res, e); }
+});
+
 router.put('/:id/ordem', async (req, res) => {
     try {
         const av = await lerAvaliacao(req.params.id);
