@@ -257,6 +257,13 @@ function wireEventos() {
     el.addEventListener(el.type === 'text' ? 'input' : 'change', renderTudo);
   });
 
+  // celular (13/11/2026): os filtros extras ficam recolhidos atrás do botão "Filtros"
+  const btnFiltros = document.getElementById('btn-mais-filtros');
+  if (btnFiltros) btnFiltros.addEventListener('click', () => {
+    const barra = document.querySelector('.filters-bar');
+    const aberto = barra.classList.toggle('filtros-abertos');
+    btnFiltros.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+  });
   document.getElementById('cursos-bar').addEventListener('click', (e) => {
     const chip = e.target.closest('.curso-chip');
     if (!chip) return;
@@ -555,15 +562,15 @@ function renderTabela(base, f = {}) {
       : tipo === 'sem' ? '<span class="ct-periodo sem" title="Sem matrícula no Relatório de Matrículas: conferir com o Financeiro">sem matrícula</span>' : '';
     return `
       <tr class="${r.matriculaId ? 'ct-linha-matricula' : ''}">
-        <td class="ct-sub">${i + 1}</td>
-        <td><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${tipoTag}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
-        <td>${fmtData(r.dataMatricula) || '<span class="ct-vazio">—</span>'}</td>
-        <td>${esc(r.curso) || '<span class="ct-vazio">—</span>'}</td>
-        <td>${esc(r.cidade) || '<span class="ct-vazio">—</span>'}</td>
-        <td>${zap ? `<a class="ct-zap" href="${zap}" target="_blank" rel="noopener" title="Abrir no WhatsApp">${esc(r.contato)}</a>` : (esc(r.contato) || '<span class="ct-vazio">—</span>')}</td>
-        <td class="ct-obs-link" data-historico="${r.id}" title="Ver histórico completo"><div class="ct-obs">${esc(obsCurta) || '<span class="ct-vazio">—</span>'}</div>${temMais ? `<span class="ct-obs-mais">ver histórico (${linhasObs.length})</span>` : ''}</td>
-        <td>${fmtData(r.vencimentoBoleto) || '<span class="ct-vazio">—</span>'}</td>
-        <td>${contrato}</td>
+        <td class="ct-sub ct-td-num">${i + 1}</td>
+        <td class="ct-td-nome"><span class="cm-pessoa">${avatar(r.nome)}<span class="ct-nome">${esc(r.nome)}</span></span>${r.menor18 ? '<span class="ct-menor" title="Menor de 18 — contrato pelo responsável">-18</span>' : ''}${tipoTag}${daMatricula ? `<div class="ct-matricula-linha">${daMatricula}${r.matriculaSituacao && !r.matriculaRemovida ? `<span class="ct-sub">${esc(r.matriculaSituacao)}</span>` : ''}</div>` : ''}</td>
+        <td class="ct-td-mat" data-rotulo="Matrícula">${fmtData(r.dataMatricula) || '<span class="ct-vazio">—</span>'}</td>
+        <td class="ct-td-curso" data-rotulo="Curso">${esc(r.curso) || '<span class="ct-vazio">—</span>'}</td>
+        <td class="ct-td-cidade" data-rotulo="Cidade">${esc(r.cidade) || '<span class="ct-vazio">—</span>'}</td>
+        <td class="ct-td-contato" data-rotulo="Contato">${zap ? `<a class="ct-zap" href="${zap}" target="_blank" rel="noopener" title="Abrir no WhatsApp">${esc(r.contato)}</a>` : (esc(r.contato) || '<span class="ct-vazio">—</span>')}</td>
+        <td class="ct-obs-link ct-td-obs" data-rotulo="Observações" data-historico="${r.id}" title="Ver histórico completo"><div class="ct-obs">${esc(obsCurta) || '<span class="ct-vazio">—</span>'}</div>${temMais ? `<span class="ct-obs-mais">ver histórico (${linhasObs.length})</span>` : ''}</td>
+        <td class="ct-td-venc" data-rotulo="Venc. boleto">${fmtData(r.vencimentoBoleto) || '<span class="ct-vazio">—</span>'}</td>
+        <td class="ct-td-contrato" data-rotulo="Contrato">${contrato}</td>
         <td class="acoes-col action-execute">${acoes}</td>
       </tr>`.replace(/^/, separador);
   }).join('');

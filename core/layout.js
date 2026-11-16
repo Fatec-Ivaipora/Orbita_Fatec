@@ -58,6 +58,9 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
       </div>
       <span class="logo-orbita">ÓRBITA</span><span class="logo-fatec">FATEC</span>
     </a>
+    <button type="button" class="layout-sidebar-fechar" id="layout-sidebar-fechar" aria-label="Fechar menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   `;
   sidebar.appendChild(sidebarHeader);
 
@@ -212,29 +215,39 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
     }
   }
 
-  // Toggle Sidebar Mobile
+  // Menu no celular (13/11/2026): abre pelo ☰, fecha pelo ✕, tocando fora ou no Esc;
+  // a página de trás não rola enquanto o menu está aberto.
   const toggleBtn = document.getElementById('layout-sidebar-toggle');
+  const fecharMenu = () => {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+    document.body.classList.remove('layout-menu-aberto');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+  };
   if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', 'false');
     toggleBtn.addEventListener('click', () => {
       sidebar.classList.add('open');
       overlay.classList.add('active');
+      document.body.classList.add('layout-menu-aberto');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      // mostra o item da tela atual (o menu pode ser comprido)
+      const ativo = sidebar.querySelector('.layout-nav-item.active');
+      if (ativo) ativo.scrollIntoView({ block: 'center' });
     });
   }
+  const fecharBtn = document.getElementById('layout-sidebar-fechar');
+  if (fecharBtn) fecharBtn.addEventListener('click', fecharMenu);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sidebar.classList.contains('open')) fecharMenu(); });
 
   if (overlay) {
-    overlay.addEventListener('click', () => {
-      sidebar.classList.remove('open');
-      overlay.classList.remove('active');
-    });
+    overlay.addEventListener('click', fecharMenu);
   }
 
   // Fechar sidebar ao clicar em um link do menu no mobile
   const navItems = sidebar.querySelectorAll('.layout-nav-item');
   navItems.forEach(item => {
-    item.addEventListener('click', () => {
-      sidebar.classList.remove('open');
-      overlay.classList.remove('active');
-    });
+    item.addEventListener('click', fecharMenu);
   });
 
   // Evento de Logout
