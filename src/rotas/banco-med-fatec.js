@@ -884,13 +884,16 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
         const empacotar = async (q) => ({
             id: q.id, titulo: q.titulo, tipoMoodle: q.tipoMoodle, casoClinico: q.casoClinico || '', pergunta: q.pergunta || '', enunciadoHtml: q.enunciadoHtml || '',
             alternativas: q.alternativas || [], justificativa: q.justificativa || '', fonte: q.fonte || '', dificuldade: q.dificuldade, elaboradoPor: q.elaboradoPor || q.professorNome || '',
-            usoProva: q.usoProva || usoDaProva, imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30)
+            usoProva: q.usoProva || usoDaProva, imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30),
+            ...(posicao.get(q.id) ? { numeroAva: posicao.get(q.id) } : {})
         });
+        // prefixo do nome no AVA: [2ºB 1ªCH], [2ºB 2ªCH], [EXAME], [DEP], [ADAPT]
+        const prefixoUso = (u) => (u === 'exame' ? 'EXAME' : u === 'dp' ? 'DEP' : u === 'adp' ? 'ADAPT' : `${av.bimestre}ºB ${u === 'c2' ? '2ª' : '1ª'}CH`);
         const grupos = {};
         for (const q of [...daProva, ...extras]) { const u = q.usoProva && q.usoProva !== usoDaProva ? q.usoProva : usoDaProva; (grupos[u] = grupos[u] || []).push(await empacotar(q)); }
         res.json({
             nomeArquivo: `${(av.sigla || av.disciplina)} ${av.semestre} ${av.bimestre}o bim - ${prof.nome}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_') + '.xml',
-            grupos: Object.entries(grupos).map(([u, questoes]) => ({ uso: u, rotulo: USOS_PROVA[u], categoria: u === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[u]}`, questoes }))
+            grupos: Object.entries(grupos).map(([u, questoes]) => ({ uso: u, rotulo: USOS_PROVA[u], prefixo: prefixoUso(u), categoria: u === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[u]}`, questoes }))
         });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });

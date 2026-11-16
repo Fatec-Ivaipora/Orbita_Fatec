@@ -594,7 +594,10 @@ router.get('/:id/exportar', async (req, res) => {
     try {
         const av = await lerAvaliacao(req.params.id);
         exigeDisc(req, av.chave);
-        if (av.status !== 'finalizada') return res.status(409).json({ error: 'Finalize a avaliação antes de baixar o arquivo do AVA.' });
+        // 16/11/2026: a responsável / coordenação / TI baixam a prova COMO ESTÁ (sem finalizar e sem padronizar),
+        // para importar as questões do professor e subir no AVA sem alteração. Professor continua com a trava CADAM.
+        const comoEsta = req.query.rascunho === '1' && !req.prof;
+        if (av.status !== 'finalizada' && !comoEsta) return res.status(409).json({ error: 'Finalize a avaliação antes de baixar o arquivo do AVA.' });
         const questoes = visiveis(req, av, await lerQuestoes(av.questoesIds));
         const ordem = new Map((av.questoesIds || []).map((id, i) => [id, i]));
         questoes.sort((a, b) => ordem.get(a.id) - ordem.get(b.id));
@@ -738,10 +741,40 @@ router.post('/:id/banco', async (req, res) => {
     } catch (e) { erro(res, e); }
 });
 
+// repetidas (16/11/2026): mesma questão no arquivo, na prova ou no banco da disciplina neste semestre
+// (sem diferenciar maiúscula/minúscula, acento e pontuação). chaves = Padrao.chaveComparar do enunciado de cada questão.
+const chaveImportada = (x) => Padrao.chaveComparar(x.casoHtml !== undefined || x.pergunta ? `${x.casoHtml || ''} ${x.pergunta || ''}` : (x.enunciado || ''));
+async function marcarRepetidas(av, chaves) {
+    const ja = new Map();
+    const pos = new Map((av.questoesIds || []).map((id, i) => [id, i + 1]));
+    (await lerQuestoes(av.questoesIds || [])).forEach(q => { const k = Padrao.chaveComparar(q.enunciadoHtml); if (k) ja.set(k, `já está nesta prova (questão ${pos.get(q.id)})`); });
+    if (av.categoriaId) {
+        const banco = await db.collection(COL_Q).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
+        banco.docs.forEach(d => { const k = Padrao.chaveComparar(d.data().enunciadoHtml); if (k && !ja.has(k)) ja.set(k, 'já está no banco da disciplina neste semestre'); });
+    }
+    const noArquivo = new Map();
+    return chaves.map((k, i) => {
+        if (!k) return null;
+        if (ja.has(k)) return ja.get(k);
+        if (noArquivo.has(k)) return `repete a questão ${noArquivo.get(k)} deste arquivo`;
+        noArquivo.set(k, i + 1); return null;
+    });
+}
+// o Word é lido no navegador: ele manda só as chaves para conferir as repetidas
+router.post('/:id/importar/repetidas', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        const chaves = (Array.isArray(req.body.chaves) ? req.body.chaves : []).slice(0, 200).map(k => String(k || '').slice(0, 4000));
+        res.json({ repetidas: await marcarRepetidas(av, chaves) });
+    } catch (e) { erro(res, e); }
+});
+
 // importar de Word / PDF / texto colado → só a PRÉVIA (nada é salvo aqui)
 router.post('/:id/importar/analisar', async (req, res) => {
     try {
-        exigeDisc(req, (await lerAvaliacao(req.params.id)).chave);
+        const avImp = await lerAvaliacao(req.params.id);
+        exigeDisc(req, avImp.chave);
         const alt = [4, 5].includes(parseInt(req.body.alternativasPorQuestao, 10)) ? parseInt(req.body.alternativasPorQuestao, 10) : null;
         let linhas = [];
         const nome = String(req.body.nomeArquivo || '').toLowerCase();
@@ -760,7 +793,10 @@ router.post('/:id/importar/analisar', async (req, res) => {
             ? Padrao.lerPorNivel(linhas, { pdf: ehPdf || !req.body.arquivoBase64 })
             : lerQuestoesDeLinhas(linhas.flatMap(ParseLinhas.expandirLinhaConcatenada));
         if (!questoes.length) return res.status(400).json({ error: 'Não encontrei questões objetivas. As questões precisam estar numeradas ("Questão 1", "1.", "2)") ou começar em "NÍVEL DE DIFICULDADE:", com as alternativas A), B), C), D).' });
-        res.json({ questoes, aviso: '' });
+        const rep = await marcarRepetidas(avImp, questoes.map(chaveImportada));
+        rep.forEach((r, i) => { if (r) questoes[i].repetida = r; });
+        const nRep = rep.filter(Boolean).length;
+        res.json({ questoes, aviso: nRep ? `${nRep} questão(ões) repetida(s): veja a marca em cada uma.` : '' });
     } catch (e) { erro(res, e); }
 });
 
@@ -837,6 +873,109 @@ router.post('/:id/importar', async (req, res) => {
         await batch.commit();
         const extras = Object.entries(aMais).map(([k, n]) => `${n} de ${k}`).join(', ');
         res.status(201).json({ criadas: ids.length, aMais, message: `${ids.length} questão(ões) na prova.${extras ? ` Foram para o banco da disciplina, separadas: ${extras}.` : ''} Confira no checklist o que falta em cada uma.` });
+    } catch (e) { erro(res, e); }
+});
+
+// "Corrigir tudo" de português e ABNT (16/11/2026): aplica de uma vez as correções que o revisor sabe fazer sozinho
+// (revisao-pt.js — as mesmas do editor) na questão salva. Não mexe na correta nem em nada além do texto;
+// os avisos sem correção automática (ex.: referência sem ano) continuam para a pessoa resolver.
+const RV = require('../../banco-med-fatec/revisao-pt.js');
+function corrigirHtmlPt(html, opts) {
+    let k = 0;
+    return String(html || '').split(/(<[^>]+>)/).map(seg => {
+        if (!seg || seg[0] === '<' || !seg.trim()) return seg;
+        // &nbsp; (espaço do Word) conta como espaço: senão ".&nbsp;O" parece "falta espaço depois do ponto"
+        return RV.corrigirTudo(seg.replace(/&nbsp;/g, ' '), { ...(opts || {}), maiuscula: k++ === 0 }).replace(/ /g, '&nbsp;');
+    }).join('')
+        // espaço antes da pontuação que fica entre uma marcação e o ponto: "(DSM-5-TR)</em> ." → "(DSM-5-TR)</em>."
+        .replace(/([^\s>])((?:<\/?(?:em|strong|b|i|u|span|sup|sub)\b[^>]*>)*)(?:\s|&nbsp;)+([.,;:!?])(?=\s|<|&nbsp;|$)/g, '$1$2$3');
+}
+function corrigirFonte(f) { let v = String(f || ''); for (let i = 0; i < 3; i++) { const a = RV.abnt(v).filter(x => x.para); if (!a.length) break; v = RV.aplicarTodos(v, a); } return v; }
+function questaoCorrigidaPt(q) {
+    const upd = {};
+    const temPartes = !!(q.casoClinico || q.pergunta);
+    if (temPartes) {
+        const caso = corrigirHtmlPt(q.casoClinico || ''), perg = q.pergunta ? RV.corrigirTudo(String(q.pergunta), { pergunta: true }) : '';
+        if (caso !== (q.casoClinico || '')) upd.casoClinico = caso;
+        if (perg !== (q.pergunta || '')) upd.pergunta = perg;
+        if (upd.casoClinico !== undefined || upd.pergunta !== undefined) upd.enunciadoHtml = montarEnunciado(caso, perg);
+    } else if (q.enunciadoHtml) {
+        const e = corrigirHtmlPt(q.enunciadoHtml); if (e !== q.enunciadoHtml) upd.enunciadoHtml = e;
+    }
+    const alts = (q.alternativas || []).map(a => ({ ...a, texto: RV.corrigirTudo(String(a.texto || '')) }));
+    if (alts.some((a, i) => a.texto !== (q.alternativas[i].texto || ''))) upd.alternativas = alts;
+    const just = corrigirHtmlPt(q.justificativa || ''); if (just !== (q.justificativa || '')) upd.justificativa = just;
+    const fonte = corrigirFonte(q.fonte); if (q.fonte && fonte !== q.fonte) upd.fonte = fonte;
+    if (!Object.keys(upd).length) return null;
+    upd.padrao = Padrao.avaliarQuestao({ ...q, ...upd });
+    return upd;
+}
+async function corrigirPtNaProva(req, av, ids) {
+    const qs = visiveis(req, av, await lerQuestoes(ids));
+    let n = 0; const batch = db.batch();
+    qs.forEach(q => { const cv = correcaoVisivel(q); if (!cv) return; n++; batch.update(db.collection(COL_Q).doc(q.id), { ...cv.upd, corrigidaPtEm: agora(), corrigidaPtPor: quem(req), updatedAt: agora() }); });
+    if (n) await batch.commit();
+    return n;
+}
+// o que cada correção muda, campo a campo (achados com correção antes que não existem mais depois)
+const txt = (h) => Padrao.texto(h);
+function mudancasPt(q, upd) {
+    const campos = [];
+    const comparar = (campo, antes, depois, achar, k) => {
+        if (antes === depois) return;
+        const chave = (a) => `${a.de}→${a.para}`;
+        const fica = new Map(); achar(depois).filter(a => a.para).forEach(a => fica.set(chave(a), (fica.get(chave(a)) || 0) + 1));
+        const mud = [];
+        achar(antes).filter(a => a.para).forEach(a => { const k = chave(a); if (fica.get(k)) fica.set(k, fica.get(k) - 1); else mud.push({ de: a.de, para: a.para, motivo: a.motivo }); });
+        // mudança que não aparece na prévia não entra (correcaoVisivel desfaz o campo)
+        if (mud.length) campos.push({ campo, k, mudancas: mud });
+    };
+    const ach = (t) => RV.achar(t), achP = (t) => RV.achar(t, { pergunta: true });
+    if (q.casoClinico || q.pergunta) {
+        comparar('Caso clínico', txt(q.casoClinico), txt(upd.casoClinico !== undefined ? upd.casoClinico : q.casoClinico), ach, 'caso');
+        comparar('Pergunta', String(q.pergunta || ''), String(upd.pergunta !== undefined ? upd.pergunta : q.pergunta || ''), achP, 'perg');
+    } else comparar('Enunciado', txt(q.enunciadoHtml), txt(upd.enunciadoHtml !== undefined ? upd.enunciadoHtml : q.enunciadoHtml), ach, 'enun');
+    (q.alternativas || []).forEach((a, i) => comparar(`Alternativa ${Padrao.LETRAS[i]}`, String(a.texto || ''), String(upd.alternativas ? upd.alternativas[i].texto : a.texto || ''), ach, 'alt' + i));
+    comparar('Feedback', txt(q.justificativa), txt(upd.justificativa !== undefined ? upd.justificativa : q.justificativa), ach, 'fb');
+    comparar('Referência', String(q.fonte || ''), String(upd.fonte !== undefined ? upd.fonte : q.fonte || ''), (t) => RV.abnt(t), 'ref');
+    return campos;
+}
+// só o que aparece na prévia é aplicado (16/11/2026): campo que mudaria sem mostrar nada fica como estava
+function correcaoVisivel(q) {
+    const upd = questaoCorrigidaPt(q); if (!upd) return null;
+    const campos = mudancasPt(q, upd); if (!campos.length) return null;
+    const k = new Set(campos.map(c => c.k)), f = {};
+    if (k.has('caso')) f.casoClinico = upd.casoClinico;
+    if (k.has('perg')) f.pergunta = upd.pergunta;
+    if (k.has('caso') || k.has('perg')) f.enunciadoHtml = montarEnunciado(f.casoClinico !== undefined ? f.casoClinico : q.casoClinico, f.pergunta !== undefined ? f.pergunta : q.pergunta);
+    if (k.has('enun')) f.enunciadoHtml = upd.enunciadoHtml;
+    if ((q.alternativas || []).some((a, i) => k.has('alt' + i))) f.alternativas = q.alternativas.map((a, i) => (k.has('alt' + i) ? upd.alternativas[i] : a));
+    if (k.has('fb')) f.justificativa = upd.justificativa;
+    if (k.has('ref')) f.fonte = upd.fonte;
+    f.padrao = Padrao.avaliarQuestao({ ...q, ...f });
+    return { upd: f, campos };
+}
+router.post('/:id/corrigir-pt/previa', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave); exigeRascunho(av);
+        const so = Array.isArray(req.body.ids) && req.body.ids.length ? new Set(req.body.ids) : null;
+        const pos = new Map((av.questoesIds || []).map((id, i) => [id, i + 1]));
+        const qs = visiveis(req, av, await lerQuestoes((av.questoesIds || []).filter(id => !so || so.has(id))));
+        const itens = qs.map(q => { const cv = correcaoVisivel(q); return cv ? { id: q.id, numero: pos.get(q.id), professor: q.professorNome || '', campos: cv.campos } : null; })
+            .filter(Boolean).sort((a, b) => a.numero - b.numero);
+        res.json({ itens });
+    } catch (e) { erro(res, e); }
+});
+router.post('/:id/corrigir-pt', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave); exigeRascunho(av);
+        // só as questões que a pessoa conferiu na prévia e deixou marcadas
+        const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).filter(id => (av.questoesIds || []).includes(id));
+        if (!ids.length) return res.status(400).json({ error: 'Marque ao menos uma questão na prévia.' });
+        const n = await corrigirPtNaProva(req, av, ids);
+        res.json({ corrigidas: n, message: n ? `Português e ABNT corrigidos em ${n} questão(ões). O que precisa de decisão continua apontado.` : 'Não havia correção automática para fazer.' });
     } catch (e) { erro(res, e); }
 });
 
@@ -979,4 +1118,5 @@ router.get('/:id/modelo', async (req, res) => {
 });
 
 router._interno = { USOS_PROVA, usoDoTexto, destinoDoTexto, pastaProva, usoDaAvaliacao, chaveEnvio, progressoDisciplina, lerCriterios, limparCriterios, COL_CRIT, montarModeloDocx, enviarDocx, planoDaDisciplina, listaDisciplinas, itens, referencias, lerQuestoesDeLinhas, questaoDoBody, confirmarImagens, comLinks, linkEnvioImagem, resumoComImagens, tokens, normNome, bucket };
+router._ptCorrigir = { questaoCorrigidaPt, corrigirHtmlPt, mudancasPt, correcaoVisivel };
 module.exports = router;
