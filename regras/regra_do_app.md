@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Medicina: módulo Aplicação de Provas (calendário das turmas, aplicadores, laboratórios e NAPA)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/med-aplicacao-provas
+- Arquivos alterados: src/rotas/aplicacao-provas-med.js (novo), api/index.js, core/permissions.js, src/middlewares/auth.js, medicina/aplicacao-provas/{index.html, app.js, aplicacao-provas.css} (novos)
+- Tipo: módulo novo
+- Motivo: o calendário de provas das turmas (T1/T2/T3) e a lista de professores aplicadores eram duas artes feitas à mão que não batiam entre si. Agora é uma fonte só.
+- Impacto: coleções novas no Firestore med_aplicacao_provas e med_aplicacao_config (por semestre). Edita: coord_medicina (inclui a secretaria acadêmica), a responsável pelas avaliações (users.avaliacoesMed) e ADM. professor_medicina só lê, com "Minhas aplicações". Os nomes dos alunos do NAPA (laudo) não vão para o professor. Status do semestre: em montagem → validado (alterar depois de validado reabre). Impressão/PDF e imagem para WhatsApp do calendário das turmas, dos aplicadores e do NAPA (RASCUNHO até validar). Aviso de choque de turma, professor e laboratório no mesmo dia e turno.
+- Como testar: entrar como coord_medicina → Medicina → Aplicação de Provas → 2026.2 (carregado das artes de 16/11); editar uma prova, Configurar, Validar, Imprimir / imagem. Como professor_medicina: só leitura e "Minhas aplicações".
+- Como reverter: tirar o módulo de core/permissions.js e o app.use de api/index.js. As coleções podem ficar.
+- Atenção: o módulo precisa de nível no config/permissions do Firestore (coord_medicina 3, professor_medicina 2), senão o menu não mostra.
 ### [2026-11-13] Órbita no celular: menu e Contratos
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/orbita-mobile
