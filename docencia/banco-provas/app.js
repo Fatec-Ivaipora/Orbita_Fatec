@@ -1500,15 +1500,13 @@ function popularCotasSimulado() {
   ];
   // Ordem das disciplinas na prova (29/10/2026): as setas mudam a ordem das linhas, e a prova sai na
   // ordem da lista (Conhecimentos Gerais pode ir pro fim, por exemplo). Quantidades digitadas continuam.
-  lista.innerHTML = linhas.map(l => `
+  // 16/11/2026: em vez de setas (cansativo com 11 disciplinas) e de digitar a posição (confundia com a quantidade),
+  // cada disciplina tem a lista "Ordem" (1º, 2º…): escolhe e ela vai direto para o lugar.
+  lista.innerHTML = `<div class="prova-cota-cab" aria-hidden="true"><span>Ordem na prova</span><span>Disciplina</span><span>Nº de questões</span></div>` + linhas.map(l => `
     <div class="prova-cota-row" data-disciplina-id="${l.id}">
-      <span class="prova-cota-ordem">
-        <button type="button" class="prova-cota-mover" data-mover="-1" title="Subir na ordem da prova" aria-label="Subir ${esc(l.label)}">↑</button>
-        <button type="button" class="prova-cota-mover" data-mover="1" title="Descer na ordem da prova" aria-label="Descer ${esc(l.label)}">↓</button>
-      </span>
-      <input type="number" min="1" class="prova-cota-pos" title="Posição na prova: digite o número e a disciplina vai direto para esse lugar" aria-label="Posição de ${esc(l.label)} na prova">
-      <span>${esc(l.label)}</span>
-      <input type="number" min="0" value="0" class="prova-cota-qtd" data-disciplina-id="${l.id}">
+      <select class="prova-cota-pos" aria-label="Ordem de ${esc(l.label)} na prova"></select>
+      <span class="prova-cota-nome">${esc(l.label)}</span>
+      <input type="number" min="0" value="0" class="prova-cota-qtd" data-disciplina-id="${l.id}" aria-label="Nº de questões de ${esc(l.label)}">
     </div>`).join('');
   numerarCotasSimulado();
 }
@@ -1516,10 +1514,8 @@ function popularCotasSimulado() {
 function numerarCotasSimulado() {
   const rows = [...document.querySelectorAll('#prova-cotas-lista .prova-cota-row')];
   rows.forEach((row, i) => {
-    row.querySelector('.prova-cota-pos').value = i + 1;
-    row.querySelector('.prova-cota-pos').max = rows.length;
-    row.querySelector('[data-mover="-1"]').disabled = i === 0;
-    row.querySelector('[data-mover="1"]').disabled = i === rows.length - 1;
+    const sel = row.querySelector('.prova-cota-pos');
+    sel.innerHTML = rows.map((r, j) => `<option value="${j + 1}"${j === i ? ' selected' : ''}>${j + 1}º</option>`).join('');
   });
 }
 
@@ -1539,6 +1535,9 @@ function posicionarCotaSimulado(input) {
     if (sorteioAtual) { sorteioAtual = null; renderPreviewSorteio(); showToast('Ordem mudada — clique em "Montar prova com essas quantidades" de novo.'); }
   }
   numerarCotasSimulado();
+  // o foco continua na disciplina que mudou de lugar (antes "pulava")
+  row.querySelector('.prova-cota-pos').focus();
+  row.classList.add('prova-cota-movida'); setTimeout(() => row.classList.remove('prova-cota-movida'), 900);
 }
 function moverCotaSimulado(btn) {
   const row = btn.closest('.prova-cota-row');
@@ -1918,7 +1917,6 @@ function bindEventos() {
   document.getElementById('prova-cotas-lista').addEventListener('click', (e) => { const b = e.target.closest('.prova-cota-mover'); if (b && !b.disabled) moverCotaSimulado(b); });
   document.getElementById('btn-sim-arquivo').addEventListener('click', abrirSimuladoDoArquivo);
   document.getElementById('prova-cotas-lista').addEventListener('change', (e) => { const p = e.target.closest('.prova-cota-pos'); if (p) posicionarCotaSimulado(p); });
-  document.getElementById('prova-cotas-lista').addEventListener('keydown', (e) => { const p = e.target.closest('.prova-cota-pos'); if (p && e.key === 'Enter') { e.preventDefault(); posicionarCotaSimulado(p); } });
   document.getElementById('sim-arquivo-sel').addEventListener('change', (e) => usarSequenciaDoArquivo(e.target.value));
   document.getElementById('btn-cancelar-importar').addEventListener('click', fecharModalImportar);
   document.getElementById('form-importar').addEventListener('submit', analisarImportacao);

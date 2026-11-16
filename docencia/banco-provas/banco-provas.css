@@ -473,3 +473,13 @@ body .bp-link-acoes .btn-secondary.bp-link-excluir[data-confirma] { background: 
 .prova-cota-row { grid-template-columns: auto 56px 1fr 110px; }
 .prova-cota-row .prova-cota-pos { width: 56px; text-align: center; font-weight: 700; color: var(--primary-blue); }
 @media (max-width: 600px) { .prova-cota-row { grid-template-columns: auto 52px 1fr 72px; gap: 0.4rem; } }
+
+/* ordem por lista (16/11/2026): Ordem | Disciplina | Nº de questões, com cabeçalho */
+.prova-cota-cab, .prova-cota-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 120px; gap: 0.75rem; align-items: center; }
+.prova-cota-cab { margin: 0 0 0.35rem; font-size: 0.74rem; font-weight: 700; color: var(--text-secondary, #5b6b7b); text-transform: none; }
+.prova-cota-cab span:last-child { text-align: center; }
+.prova-cota-row { margin-bottom: 0.45rem; padding: 0.15rem 0.3rem; border-radius: 8px; transition: background .4s; }
+.prova-cota-row .prova-cota-pos { width: 92px; min-height: 36px; font-weight: 700; color: var(--primary-blue); }
+.prova-cota-row .prova-cota-qtd { width: 120px; text-align: center; }
+.prova-cota-movida { background: #e6f7f4; }
+@media (max-width: 600px) { .prova-cota-cab, .prova-cota-row { grid-template-columns: 74px minmax(0, 1fr) 70px; gap: 0.4rem; } .prova-cota-row .prova-cota-pos { width: 74px; } .prova-cota-row .prova-cota-qtd { width: 70px; } }
