@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Banco de Provas — ordem das disciplinas do simulado por lista
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/simulado-ordem-lista
+- Arquivos alterados: docencia/banco-provas/{app.js, banco-provas.css, index.html}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: setas + número digitado confundiam (duas caixas de número na linha; o Enter mudava a linha de lugar e o cursor pulava).
+- Impacto: cada disciplina tem a lista "Ordem na prova" (1º, 2º…): escolhe e ela vai direto para o lugar; cabeçalho Ordem | Disciplina | Nº de questões; o cursor fica na disciplina movida, que pisca em destaque. Sem setas.
+- Como testar: Montar Simulado com várias disciplinas → mudar a ordem pela lista. Testado no Chrome (11 disciplinas, computador e celular) com as funções reais do app.js.
+- Como reverter: reverter os arquivos acima.
+
 ### [2026-11-16] Banco de Provas — Montar o simulado igual ao arquivo importado
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/simulado-pelo-arquivo (em cima de fix/banco-provas-cg-sem-duplicar)
