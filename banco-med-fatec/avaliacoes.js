@@ -13,10 +13,16 @@ let disciplinas = [], avaliacoes = [];
 let atual = null;            // { avaliacao, questoes, plano, professores, analise }
 let filtroProfessor = '';
 let carregouGrade = false;
+// quem usa a aba (16/11/2026): editor (Ana / coordenação / ADM) ou professor (titular nas disciplinas de professor.titulares)
+let meuPapel = { editor: true, professor: null };
+const souEditor = () => !!meuPapel.editor;
+const souTitular = (chave) => souEditor() || !!(meuPapel.professor && meuPapel.professor.titulares.includes(chave));
 
 // ---------- utilidades ----------
 const $ = (s, el = document) => el.querySelector(s);
 const ordinal = (n) => `${n}º`;
+// "2º bimestre · 1ª chamada" ou "Exame" (16/11/2026)
+const rotuloAvaliacao = (a) => (a.tipo === 'exame' ? 'Exame semestral' : `${ordinal(a.bimestre)} bimestre · ${a.chamada}ª chamada`);
 const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 const CORES = [['#E0F2FE', '#075985'], ['#DCFCE7', '#166534'], ['#FEF3C7', '#92400E'], ['#FCE7F3', '#9D174D'], ['#EDE9FE', '#5B21B6'], ['#FFE4E6', '#9F1239'], ['#CCFBF1', '#115E59'], ['#E0E7FF', '#3730A3'], ['#FFEDD5', '#9A3412'], ['#F1F5F9', '#334155']];
 function corDe(nome) { let h = 0; for (const c of String(nome || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CORES[h % CORES.length]; }
@@ -96,17 +102,19 @@ async function carregarGrade() {
   }
 }
 
-function slotHtml(disc, bim, ch) {
-  const av = avaliacoes.find(a => a.chave === disc.chave && a.bimestre === bim && a.chamada === ch);
-  const rotulo = `${ordinal(bim)} bimestre, ${ch}ª chamada`;
-  if (!av) return `<button type="button" class="av-slot av-slot-vazio" data-criar="${esc(disc.chave)}" data-bim="${bim}" data-ch="${ch}" aria-label="Montar ${rotulo}">${ic('mais')}<span>Montar</span><em class="av-slot-ch">${ch}ª chamada</em></button>`;
+function slotHtml(disc, bim, ch, tipo) {
+  const av = avaliacoes.find(a => a.chave === disc.chave && (tipo === 'exame' ? a.tipo === 'exame' : a.tipo !== 'exame' && a.bimestre === bim && a.chamada === ch));
+  const rotulo = tipo === 'exame' ? 'Exame semestral' : `${ordinal(bim)} bimestre, ${ch}ª chamada`;
+  const etiqueta = tipo === 'exame' ? 'Exame semestral' : `${ch}ª chamada`;
+  if (!av) return `<button type="button" class="av-slot av-slot-vazio av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-criar="${esc(disc.chave)}" data-bim="${bim}" data-ch="${ch}" ${tipo ? `data-tipo="${tipo}"` : ''} aria-label="Montar ${rotulo}">${ic('mais')}<span>Montar</span><em class="av-slot-ch">${etiqueta}</em></button>`;
   const fin = av.status === 'finalizada';
   const plan = Number(disc.qtdQuestoes) || 0;
   const pct = plan ? Math.min(100, Math.round(100 * av.totalQuestoes / plan)) : 0;
-  return `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes}${plan ? ` de ${plan}` : ''} questões">
-    ${fin ? ic('cadeado') : ic('editar')}<span><b>${av.totalQuestoes}</b>${plan ? ` de ${plan}` : ` ${av.totalQuestoes === 1 ? 'questão' : 'questões'}`}</span>${plan ? `<i class="av-slot-barra" aria-hidden="true"><i style="width:${pct}%"></i></i>` : ''}<small>${fin ? 'Finalizada' : 'Em montagem'}</small><em class="av-slot-ch">${ch}ª chamada</em></button>`;
+  return `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'} av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes}${plan ? ` de ${plan}` : ''} questões">
+    ${fin ? ic('cadeado') : ic('editar')}<span><b>${av.totalQuestoes}</b>${plan ? ` de ${plan}` : ` ${av.totalQuestoes === 1 ? 'questão' : 'questões'}`}</span>${plan ? `<i class="av-slot-barra" aria-hidden="true"><i style="width:${pct}%"></i></i>` : ''}<small>${fin ? 'Finalizada' : 'Em montagem'}</small><em class="av-slot-ch">${etiqueta}</em></button>`;
 }
 
+let verFechados = false;
 function renderGrade() {
   const busca = P.norm($('#av-busca').value || '');
   const lista = disciplinas.filter(d => !busca || P.norm(`${d.nome} ${d.sigla} ${d.professores.join(' ')}`).includes(busca));
@@ -115,11 +123,12 @@ function renderGrade() {
   $('#av-resumo').textContent = `${disciplinas.length} disciplinas · ${montadas} avaliação(ões) em andamento ou prontas · ${fin} finalizada(s)`;
   if (!lista.length) { $('#av-conteudo').innerHTML = '<div class="av-vazio">Nenhuma disciplina encontrada.</div>'; return; }
   $('#av-conteudo').innerHTML = `
-    <div class="av-grade" role="table" aria-label="Avaliações por disciplina">
+    <div class="av-grade ${verFechados || !BIMESTRES_FECHADOS.includes(1) ? '' : 'av-grade-sem-b1'}" role="table" aria-label="Avaliações por disciplina">
       <div class="av-grade-cab" role="row">
         <span role="columnheader">Disciplina</span>
-        <span role="columnheader" class="av-grade-bim">1º bimestre<small><i>1ª chamada</i><i>2ª chamada</i></small></span>
+        ${verFechados || !BIMESTRES_FECHADOS.includes(1) ? '<span role="columnheader" class="av-grade-bim">1º bimestre<small><i>1ª chamada</i><i>2ª chamada</i></small></span>' : ''}
         <span role="columnheader" class="av-grade-bim">2º bimestre<small><i>1ª chamada</i><i>2ª chamada</i></small></span>
+        <span role="columnheader" class="av-grade-bim">Exame semestral</span>
       </div>
       ${periodos.map(p => `
         <div class="av-periodo" role="row"><span role="cell">${ordinal(p)} período</span></div>
@@ -127,19 +136,20 @@ function renderGrade() {
           <div class="av-disc" role="row">
             <div class="av-disc-info" role="cell">
               <strong>${esc(d.nome)}</strong>
-              <span class="av-disc-meta">${esc(d.sigla || '')} · <button type="button" class="av-link" data-criterios="${esc(d.chave)}">${d.criteriosDefinidos ? 'Critérios definidos' : 'Critérios: padrão'}</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button></span>
+              <span class="av-disc-meta">${esc(d.sigla || '')} · ${souEditor() ? `<button type="button" class="av-link" data-criterios="${esc(d.chave)}">${d.criteriosDefinidos ? 'Critérios definidos' : 'Critérios: padrão'}</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button>` : souTitular(d.chave) ? `<span class="av-papel av-papel-tit">Você é o titular</span> · <button type="button" class="av-link" data-divisao="${esc(d.chave)}">Divisão das questões</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button>` : '<span class="av-papel">Você é adjunto(a): vê e edita só as suas questões</span>'}</span>
 
               <span class="av-disc-profs" aria-label="Professores: ${esc(d.professores.join(', '))}">${d.professores.map(n => avatar(n)).join('')}</span>
             </div>
-            <div class="av-slots" role="cell" data-rotulo="1º bimestre">${slotHtml(d, 1, 1)}${slotHtml(d, 1, 2)}</div>
+            ${verFechados || !BIMESTRES_FECHADOS.includes(1) ? `<div class="av-slots" role="cell" data-rotulo="1º bimestre">${slotHtml(d, 1, 1)}${slotHtml(d, 1, 2)}</div>` : ''}
             <div class="av-slots" role="cell" data-rotulo="2º bimestre">${slotHtml(d, 2, 1)}${slotHtml(d, 2, 2)}</div>
+            <div class="av-slots av-slots-1" role="cell" data-rotulo="Exame semestral">${slotHtml(d, 0, 0, 'exame')}</div>
           </div>`).join('')}`).join('')}
     </div>`;
 }
 
-async function criarAvaliacao(chave, bim, ch) {
+async function criarAvaliacao(chave, bim, ch, tipo) {
   try {
-    const r = await api(BASE, { method: 'POST', body: JSON.stringify({ semestre, chave, bimestre: bim, chamada: ch }) });
+    const r = await api(BASE, { method: 'POST', body: JSON.stringify({ semestre, chave, bimestre: bim, chamada: ch, tipo: tipo || '' }) });
     await abrirAvaliacao(r.id);
     avaliacoes = await api(`${BASE}?semestre=${semestre}`);
   } catch (e) { toast(e.message, 'erro'); }
@@ -187,21 +197,21 @@ function renderEditor() {
       <button type="button" class="av-voltar" data-voltar>${ic('voltar')}Avaliações</button>
       <div class="av-ed-titulo">
         <h2>${esc(av.disciplina)}</h2>
-        <p>${esc(av.sigla || '')} · ${esc(av.semestre)} · <b>${ordinal(av.bimestre)} bimestre</b> · <b>${av.chamada}ª chamada</b>
+        <p>${esc(av.sigla || '')} · ${esc(av.semestre)} · <b>${rotuloAvaliacao(av)}</b>
           <span class="av-status ${fin ? 'av-status-fin' : 'av-status-rasc'}">${fin ? 'Finalizada' : 'Em montagem'}</span></p>
       </div>
       <div class="av-ed-acoes">
         <button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>
         ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
-                 <button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>`
-              : `<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
-                 <button type="button" class="av-icone-btn av-perigo" data-excluir-av title="Excluir avaliação" aria-label="Excluir avaliação">${ic('lixo')}</button>`}
+                 ${souEditor() ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
+              : souTitular(av.chave) ? `<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
+                 <button type="button" class="av-icone-btn av-perigo" data-excluir-av title="Excluir avaliação" aria-label="Excluir avaliação">${ic('lixo')}</button>` : ''}
       </div>
     </header>
 
     <div class="av-ed-corpo">
       <section class="av-ed-questoes" aria-label="Questões da avaliação">
-        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${ordinal(av.bimestre)} bimestre / ${av.chamada}ª chamada. Baixe o arquivo e importe no banco de questões do AVA.</div></div>` : `
+        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${rotuloAvaliacao(av).replace(' · ', ' / ')}. Baixe o arquivo e importe no banco de questões do AVA.</div></div>` : `
         <div class="bmf-toolbar av-toolbar">
           <div class="av-toolbar-acoes">
             <button type="button" class="btn av-btn-branco" data-nova>${ic('mais')}Escrever questão</button>
@@ -210,6 +220,7 @@ function renderEditor() {
           </div>
         </div>`}
 
+        ${atual.papel === 'adjunto' ? `<div class="av-faixa av-faixa-papel" role="note">Você é <b>adjunto(a)</b> nesta disciplina: aqui aparecem só as <b>suas ${questoes.length}</b> questão(ões) (a prova tem ${atual.totalNaProva} no total). O titular confere e finaliza a prova.</div>` : atual.papel === 'titular' ? '<div class="av-faixa av-faixa-papel" role="note">Você é o <b>titular</b> desta disciplina: vê e edita as questões de todos os professores, organiza a ordem e finaliza a prova.</div>' : ''}
         ${analise.pendencias.length && !fin ? `<div class="av-faixa av-faixa-aviso" role="status">${ic('alerta')}<ul>${analise.pendencias.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 
         <div class="av-prog" aria-label="${prontas} de ${questoes.length} questões no padrão">
@@ -247,8 +258,8 @@ function linhaQuestao(q, n, fin, total) {
         <ul>${p.bloqueios.map(b => `<li class="av-b">${esc(b.msg)}</li>`).join('')}${p.avisos.map(a => `<li class="av-a">${esc(a.msg)}</li>`).join('')}</ul></details>` : ''}
     </div>
     ${fin ? '' : `<div class="av-q-acoes">
-      <button type="button" class="av-icone-btn" data-subir="${esc(q.id)}" ${n === 1 ? 'disabled' : ''} aria-label="Subir questão ${n}">${ic('cima')}</button>
-      <button type="button" class="av-icone-btn" data-descer="${esc(q.id)}" ${n === total ? 'disabled' : ''} aria-label="Descer questão ${n}">${ic('baixo')}</button>
+      ${souTitular(atual.avaliacao.chave) ? `<button type="button" class="av-icone-btn" data-subir="${esc(q.id)}" ${n === 1 ? 'disabled' : ''} aria-label="Subir questão ${n}">${ic('cima')}</button>
+      <button type="button" class="av-icone-btn" data-descer="${esc(q.id)}" ${n === total ? 'disabled' : ''} aria-label="Descer questão ${n}">${ic('baixo')}</button>` : ''}
       <button type="button" class="av-icone-btn" data-editar="${esc(q.id)}" aria-label="Editar questão ${n}">${ic('editar')}</button>
       <button type="button" class="av-icone-btn av-perigo" data-retirar="${esc(q.id)}" aria-label="Retirar questão ${n}">${ic('lixo')}</button>
     </div>`}
@@ -263,7 +274,7 @@ function painelPlano(plano, analise, av) {
   return `
     <div class="av-crit-origem ${atual.criterios && atual.criterios.definidos ? 'av-crit-def' : ''}">
       <span>${atual.criterios && atual.criterios.definidos ? `Critérios definidos por <b>${esc(atual.criterios.definidoPor)}</b> em ${dataBR(atual.criterios.definidoEm)}` : 'Critérios padrão — ainda não definidos para esta disciplina'}</span>
-      <button type="button" class="av-link" data-criterios-av>Ver critérios</button>
+      ${souEditor() ? '<button type="button" class="av-link" data-criterios-av>Ver critérios</button>' : souTitular(av.chave) ? `<button type="button" class="av-link" data-divisao="${esc(av.chave)}">Divisão das questões</button>` : ''}
     </div>
     <h3>Tabela de especificação</h3>
     <p class="av-nota">Unidades do ${ordinal(av.bimestre)} bimestre no plano de ensino (Edubox ${esc(plano.semestreFonte)}). A barra clara é o esperado pelo peso de cada unidade.</p>
@@ -333,29 +344,48 @@ function blobParaBase64(blob) {
   return new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => falha(new Error('Não consegui ler uma imagem.')); r.readAsDataURL(blob); });
 }
 const nomeSeguro = (n) => String(n || 'imagem').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'imagem';
+// prepara as questões para o XML: baixa imagens do enunciado e do feedback (Storage) e monta o HTML com @@PLUGINFILE@@
+async function prepararParaXml(lista, prefixo = 'q') {
+  const out = [];
+  for (const [i, q] of lista.entries()) {
+    const arquivos = [];
+    for (const [j, im] of (q.imagens || []).entries()) {
+      const r = await fetch(im.url);
+      if (!r.ok) throw new Error(`Não consegui baixar a imagem "${im.nome}" da questão ${i + 1}.`);
+      arquivos.push({ nome: `${prefixo}${i + 1}-${j + 1}-${nomeSeguro(im.nome)}`, base64: await blobParaBase64(await r.blob()) });
+    }
+    const arquivosFeedback = [];
+    for (const [j, im] of (q.imagensFeedback || []).entries()) {
+      const r = await fetch(im.url);
+      if (!r.ok) throw new Error(`Não consegui baixar a imagem do feedback "${im.nome}" da questão ${i + 1}.`);
+      arquivosFeedback.push({ nome: `${prefixo}${i + 1}-feedback-${j + 1}-${nomeSeguro(im.nome)}`, base64: await blobParaBase64(await r.blob()) });
+    }
+    const imgs = arquivos.map(a => `<p><img src="@@PLUGINFILE@@/${a.nome}" alt="Imagem da questão ${i + 1}"></p>`).join('\n');
+    const perg = q.pergunta ? `<p><strong>${esc(q.pergunta)}</strong></p>` : '';
+    const enunciadoHtml = (q.casoClinico || q.pergunta) ? [q.casoClinico, imgs, perg].filter(Boolean).join('\n') : [q.enunciadoHtml, imgs].filter(Boolean).join('\n');
+    const justificativa = [q.justificativa, ...arquivosFeedback.map(a => `<p><img src="@@PLUGINFILE@@/${a.nome}" alt="Feedback da questão ${i + 1}"></p>`)].filter(Boolean).join('\n');
+    out.push({ ...q, enunciadoHtml, arquivos, justificativa, arquivosFeedback, provaRotulo: USO_PROVA[q.usoProva] || '' });
+  }
+  return out;
+}
+function baixarTexto(texto, nome) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([texto], { type: 'application/xml;charset=utf-8' }));
+  link.download = nome;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+}
 async function baixarXml() {
   const btn = document.querySelector('[data-xml]');
   if (btn) { btn.disabled = true; btn.dataset.txt = btn.innerHTML; btn.textContent = 'Montando o arquivo…'; }
   try {
     const dados = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/exportar`);
-    const questoes = [];
-    for (const [i, q] of dados.questoes.entries()) {
-      const arquivos = [];
-      for (const [j, im] of (q.imagens || []).entries()) {
-        const r = await fetch(im.url);
-        if (!r.ok) throw new Error(`Não consegui baixar a imagem "${im.nome}" da questão ${i + 1}.`);
-        arquivos.push({ nome: `q${i + 1}-${j + 1}-${nomeSeguro(im.nome)}`, base64: await blobParaBase64(await r.blob()) });
-      }
-      let imagem = null;
+    const questoes = await prepararParaXml(dados.questoes);
+    for (const [i, q] of questoes.entries()) {
       if (q.temImagemAntiga) {
         const a = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/questoes/${encodeURIComponent(q.id)}/imagem-antiga`);
-        if (a.dataUrl) imagem = { nome: `q${i + 1}-${nomeSeguro(a.nome)}`, dataUrl: a.dataUrl };
+        if (a.dataUrl) q.imagem = { nome: `q${i + 1}-${nomeSeguro(a.nome)}`, dataUrl: a.dataUrl };
       }
-      const imgs = arquivos.map(a => `<p><img src="@@PLUGINFILE@@/${a.nome}" alt="Imagem da questão ${i + 1}"></p>`).join('\n');
-      const perg = q.pergunta ? `<p><strong>${esc(q.pergunta)}</strong></p>` : '';
-      // imagem entre o caso clínico e a pergunta (onde o aluno precisa dela)
-      const enunciadoHtml = (q.casoClinico || q.pergunta) ? [q.casoClinico, imgs, perg].filter(Boolean).join('\n') : [q.enunciadoHtml, imgs].filter(Boolean).join('\n');
-      questoes.push({ ...q, enunciadoHtml, arquivos, imagem });
     }
     const xml = window.MoodleXml.gerarMoodleXml(dados.pasta, questoes);
     const link = document.createElement('a');
@@ -376,7 +406,7 @@ const CHECKLIST = [
   { t: 'Caso clínico (situação real)', c: ['memorizacao'], aviso: true },
   { t: 'Pergunta direta no final', c: ['pergunta', 'enunciado'] },
   { t: 'Enunciado afirmativo (sem EXCETO / INCORRETA)', c: ['negativo'] },
-  { t: '4 ou 5 alternativas, sem repetição', c: ['qtd', 'vazia', 'repetida'] },
+  { t: '4 alternativas (A a D), sem repetição', c: ['qtd', 'vazia', 'repetida'] },
   { t: 'Uma única alternativa correta', c: ['gabarito', 'tipo'] },
   { t: 'Sem "nenhuma" ou "todas as alternativas"', c: ['nenhuma'] },
   { t: 'Correta sem pista (tamanho, palavra repetida, termo absoluto)', c: ['longa', 'pista', 'absoluto', 'afirmativas'] },
@@ -390,6 +420,31 @@ let editando = null; // id da questão ou null (nova)
 // { modo, sigla, bimestre|null, plano, professores, titulo, salvar(f, id), aposSalvar(), envio, imagemAntiga(id)?, categorias?, categoriaId? }
 let ed = null;
 let imgsQuestao = [];          // [{ caminho, nome, url, mimeType }] — no Storage
+// cor do tipo de prova a partir do texto do Word ("Prova: Exame", "2º bimestre – 2ª chamada"…)
+function usoDoTextoTela(t) {
+  const s = P.norm(t);
+  if (/exame/.test(s)) return 'exame';
+  if (/depend|^dp$/.test(s)) return 'dp';
+  if (/adapta|^adp$/.test(s)) return 'adp';
+  if (/(2|segunda)\s*a?\s*ch/.test(s)) return 'c2';
+  return 'c1';
+}
+const USO_PROVA = { c1: '1ª chamada', c2: '2ª chamada', exame: 'Exame semestral', dp: 'Dependência', adp: 'Adaptação' };
+// destino da questão (16/11/2026): bimestre + chamada, exame, dependência, adaptação
+// Bimestres fechados (16/11/2026, fim de 2026.2): somem do "Para qual prova", do modelo do Word e da grade,
+// para ninguém gerar questão no lugar errado. No próximo semestre: deixar [].
+const BIMESTRES_FECHADOS = [1];
+const DESTINOS_TODOS = [['b1c1', '1º bimestre – 1ª chamada'], ['b1c2', '1º bimestre – 2ª chamada'], ['b2c1', '2º bimestre – 1ª chamada'], ['b2c2', '2º bimestre – 2ª chamada'], ['exame', 'Exame semestral'], ['dp', 'Dependência'], ['adp', 'Adaptação']];
+const DESTINOS = DESTINOS_TODOS.filter(([k]) => !BIMESTRES_FECHADOS.some(b => k.startsWith(`b${b}`)));
+const BIM_ABERTO = [1, 2].find(b => !BIMESTRES_FECHADOS.includes(b)) || 2;
+function destinoDe(q) {
+  if (['exame', 'dp', 'adp'].includes(q.usoProva)) return q.usoProva;
+  const bim = q.bimestre || (ed && ed.bimestre) || BIM_ABERTO;
+  const ch = q.usoProva === 'c2' || (!q.usoProva && ed && ed.chamada === 2) ? 'c2' : 'c1';
+  return (ed && ed.tipo === 'exame' && !q.usoProva) ? 'exame' : `b${bim}${ch}`;
+}
+let imgsFeedback = [];         // imagens do feedback (gráfico, tabela, figura) — 16/11/2026
+let enviandoFb = 0;
 let imgAntiga = null, removerImagem = false; // imagem antiga (comprimida, dentro do documento)
 let enviandoImgs = 0;
 
@@ -404,6 +459,7 @@ function modalHtml() {
             <div class="av-campos3">
               <label class="av-campo"><span>Professor que elaborou</span><select id="av-q-prof"></select></label>
               <label class="av-campo"><span>Unidade do plano</span><select id="av-q-unid"></select></label>
+              <label class="av-campo"><span>Para qual prova</span><select id="av-q-uso">${DESTINOS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
               <label class="av-campo"><span>Dificuldade</span><select id="av-q-dif"><option value="facil">Fácil</option><option value="media" selected>Média</option><option value="intermediaria">Intermediária</option><option value="dificil">Difícil</option></select></label>
             </div>
             <label class="av-campo"><span>Objetivo do plano de ensino que a questão avalia</span><select id="av-q-obj"></select></label>
@@ -425,12 +481,17 @@ function modalHtml() {
 
           <fieldset class="av-sec"><legend>Alternativas <small>marque a correta</small></legend>
             <div id="av-q-alts"></div>
-            <button type="button" class="av-link" id="av-q-mais-alt">+ 5ª alternativa</button>
+            <button type="button" class="av-link" id="av-q-mais-alt">+ Alternativa</button>
           </fieldset>
 
           <fieldset class="av-sec"><legend>Feedback e referência</legend>
             <label class="av-campo"><span>Feedback geral (por que a correta é a correta)</span></label>
-            <div id="av-q-just" class="av-rico" contenteditable="true" spellcheck="true" lang="pt-BR" role="textbox" aria-multiline="true" aria-label="Feedback geral" data-ph="Explicação que o aluno vê depois da prova…"></div>
+            <div id="av-q-just" class="av-rico" contenteditable="true" spellcheck="true" lang="pt-BR" role="textbox" aria-multiline="true" aria-label="Feedback geral" data-ph="Explicação que o aluno vê depois da prova… (ou cole aqui o gráfico com Ctrl+V)"></div>
+            <div class="av-imgs" id="av-q-fb-imgs" aria-live="polite"></div>
+            <div class="av-img-linha">
+              <label class="av-btn-img"><input type="file" id="av-q-fb-img" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>+ Imagem no feedback</label>
+              <span class="av-nota">Gráfico, tabela ou figura que explica a resposta. Pode ser só a imagem.</span>
+            </div>
             <label class="av-campo"><span>Referência</span><select id="av-q-ref"></select></label>
             <input type="text" id="av-q-ref-outra" class="av-input" spellcheck="true" lang="pt-BR" maxlength="600" placeholder="Autor. Título. Edição. Editora, ano." hidden>
           </fieldset>
@@ -459,22 +520,54 @@ function linhaAlt(i, a = {}) {
     <div class="av-alt-campos">
       <input type="text" class="av-input av-alt-txt" spellcheck="true" lang="pt-BR" maxlength="1500" placeholder="Texto da alternativa ${LETRAS[i]}" value="${esc(P.texto(a.texto || ''))}">
     </div>
-    ${i === 4 ? `<button type="button" class="av-icone-btn" data-tirar-alt aria-label="Tirar a alternativa E">${ic('x')}</button>` : ''}
+    <button type="button" class="av-icone-btn" data-tirar-alt aria-label="Tirar a alternativa ${LETRAS[i]}">${ic('x')}</button>
   </div>`;
 }
+// 16/11/2026: de 2 a 5 alternativas, qualquer uma pode sair; as letras se reorganizam (questão vinda do Word com menos alternativas)
+// Medicina: questões até a letra D (16/11/2026). Questão antiga com 5 abre com as 5 para o professor tirar uma.
+const MAX_ALTS = 4;
+function renumerarAlts() {
+  const linhas = [...document.querySelectorAll('#av-q-alts .av-alt')];
+  linhas.forEach((el, i) => {
+    el.dataset.i = i;
+    const r = el.querySelector('input[type=radio]'); r.value = i; r.setAttribute('aria-label', `Alternativa ${LETRAS[i]} é a correta`);
+    el.querySelector('.av-alt-letra span').textContent = LETRAS[i];
+    el.querySelector('.av-alt-txt').placeholder = `Texto da alternativa ${LETRAS[i]}`;
+    const x = el.querySelector('[data-tirar-alt]'); x.hidden = linhas.length <= 2; x.setAttribute('aria-label', `Tirar a alternativa ${LETRAS[i]}`);
+  });
+  const b = $('#av-q-mais-alt');
+  b.hidden = linhas.length >= MAX_ALTS;
+  b.textContent = `+ Alternativa ${LETRAS[linhas.length] || ''}`;
+}
 
+// unidades do bimestre de destino (16/11/2026): 2º bimestre mostra só as do 2º; exame semestral mostra todas.
+// A divisão por bimestre é a dos Critérios da disciplina (o servidor já manda o plano com ela aplicada).
+function bimestreDoDestino() {
+  const v = ($('#av-q-uso') || {}).value || '';
+  const m = /^b([12])/.exec(v);
+  return m ? Number(m[1]) : null;
+}
+function renderUnidades(selecionada) {
+  const unids = (ed.plano && ed.plano.unidades) || [];
+  const bim = bimestreDoDestino();
+  const sel = Number(selecionada) || null;
+  const lista = bim ? unids.filter(u => u.bimestre === bim) : unids;
+  const opU = (u, extra = '') => `<option value="${u.numero}" ${sel === u.numero ? 'selected' : ''}>Unidade ${u.numero} (${u.ch}h) – ${esc(u.titulo)}${extra}</option>`;
+  // a unidade que a questão já tinha e é de outro bimestre continua visível, marcada
+  const fora = sel && !lista.some(u => u.numero === sel) ? unids.find(u => u.numero === sel) : null;
+  $('#av-q-unid').innerHTML = '<option value="">Escolha…</option>'
+    + (lista.length ? `<optgroup label="${bim ? `Unidades do ${ordinal(bim)} bimestre` : 'Unidades do plano de ensino'}">${lista.map(u => opU(u)).join('')}</optgroup>` : '')
+    + (fora ? opU(fora, ' (outro bimestre)') : '')
+    + (!unids.length ? [1, 2, 3, 4].map(n => `<option value="${n}" ${sel === n ? 'selected' : ''}>Unidade ${n}</option>`).join('') : '');
+}
 function preencherSelects(q) {
   const { plano, professores } = ed;
-  const bim = ed.bimestre || null;
   const profs = [...new Set([...(professores || []), ...(q.professorNome ? [q.professorNome] : [])])];
   $('#av-q-prof').innerHTML = `<option value="">Escolha…</option>${profs.map(n => `<option ${n === q.professorNome ? 'selected' : ''}>${esc(n)}</option>`).join('')}`;
   // professor logado: o nome vem do perfil e não se troca
   if (ed.travaProfessor) { $('#av-q-prof').innerHTML = `<option>${esc(ed.travaProfessor)}</option>`; }
   $('#av-q-prof').disabled = !!ed.travaProfessor;
-  const unids = plano.unidades || [];
-  const doBim = bim ? unids.filter(u => u.bimestre === bim) : unids, outras = bim ? unids.filter(u => u.bimestre !== bim) : [];
-  const opU = (u) => `<option value="${u.numero}" ${Number(q.unidade) === u.numero ? 'selected' : ''}>Unidade ${u.numero} (${u.ch}h) – ${esc(u.titulo)}</option>`;
-  $('#av-q-unid').innerHTML = `<option value="">Escolha…</option>${doBim.length ? `<optgroup label="${bim ? `${ordinal(bim)} bimestre` : 'Unidades do plano de ensino'}">${doBim.map(opU).join('')}</optgroup>` : ''}${outras.length ? `<optgroup label="Outro bimestre">${outras.map(opU).join('')}</optgroup>` : ''}${!unids.length ? [1, 2, 3, 4].map(n => `<option value="${n}" ${Number(q.unidade) === n ? 'selected' : ''}>Unidade ${n}</option>`).join('') : ''}`;
+  renderUnidades(q.unidade);
   const objs = plano.objetivos || [];
   const objOutro = q.objetivo && !objs.some(o => P.norm(o) === P.norm(q.objetivo));
   $('#av-q-obj').innerHTML = `<option value="">Escolha…</option>${objs.map(o => `<option ${P.norm(o) === P.norm(q.objetivo || '') ? 'selected' : ''}>${esc(o)}</option>`).join('')}<option value="__outro" ${objOutro ? 'selected' : ''}>Outro objetivo (escrever)</option>`;
@@ -488,10 +581,10 @@ function preencherSelects(q) {
 }
 
 function abrirQuestao(id) {
-  const q = id ? atual.questoes.find(x => x.id === id) : { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media', professorNome: filtroProfessor && filtroProfessor !== 'Sem professor' ? filtroProfessor : '' };
+  const q = id ? atual.questoes.find(x => x.id === id) : { alternativas: [{}, {}, {}, {}], dificuldade: 'media', professorNome: filtroProfessor && filtroProfessor !== 'Sem professor' ? filtroProfessor : '' };
   const avId = encodeURIComponent(atual.avaliacao.id);
   ed = {
-    modo: 'avaliacao', travaProfessor: null, sigla: atual.avaliacao.sigla, bimestre: atual.avaliacao.bimestre, plano: atual.plano, professores: atual.professores,
+    modo: 'avaliacao', travaProfessor: atual.papel === 'adjunto' ? atual.eu : null, chamada: atual.avaliacao.chamada, tipo: atual.avaliacao.tipo || '', sigla: atual.avaliacao.sigla, bimestre: atual.avaliacao.bimestre, plano: atual.plano, professores: atual.professores,
     titulo: id ? (q.padronizadaEm || q.status === 'rascunho_avaliacao' ? 'Editar questão' : 'Padronizar questão do banco') : 'Nova questão',
     salvar: (f, qid) => api(qid ? `${BASE}/${avId}/questoes/${encodeURIComponent(qid)}` : `${BASE}/${avId}/questoes`, { method: qid ? 'PUT' : 'POST', body: JSON.stringify(f) }),
     aposSalvar: recarregarAtual, envio: `${BASE}/imagens/envio`,
@@ -510,16 +603,21 @@ function abrirEditor(q, id) {
     (ed.categorias || []).forEach(c => { (porPer[c.periodo] = porPer[c.periodo] || []).push(c); });
     $('#av-q-disc').innerHTML = `<option value="">Escolha a disciplina…</option>${Object.keys(porPer).sort((a, b) => a - b).map(pp => `<optgroup label="${ordinal(pp)} período">${porPer[pp].map(c => `<option value="${esc(c.id)}" ${c.id === ed.categoriaId ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</optgroup>`).join('')}`;
   }
+  const destQ = destinoDe(q);
+  $('#av-q-uso').innerHTML = DESTINOS_TODOS.filter(([k]) => DESTINOS.some(d => d[0] === k) || k === destQ).map(([k, l]) => `<option value="${k}">${l}${DESTINOS.some(d => d[0] === k) ? '' : ' (bimestre fechado)'}</option>`).join('');
+  $('#av-q-uso').value = destQ;
   preencherSelects(q);
   $('#av-q-dif').value = q.dificuldade || 'media';
   $('#av-q-nome').value = q.nomeQuestao || '';
   $('#av-q-caso').innerHTML = limpaHtml(q.casoClinico || q.enunciadoHtml || '');
   $('#av-q-perg').value = q.pergunta || '';
   $('#av-q-just').innerHTML = limpaHtml(q.justificativa || '');
-  const alts = (q.alternativas && q.alternativas.length ? q.alternativas : [{}, {}, {}, {}, {}]).slice(0, 5);
+  const alts = (q.alternativas && q.alternativas.length ? q.alternativas : [{}, {}, {}, {}]).slice(0, 5);
   $('#av-q-alts').innerHTML = alts.map((a, i) => linhaAlt(i, a)).join('');
-  $('#av-q-mais-alt').hidden = alts.length >= 5;
+  renumerarAlts();
   imgsQuestao = (q.imagens || []).map(i => ({ caminho: i.caminho, nome: i.nome, url: i.url, mimeType: i.mimeType }));
+  imgsFeedback = (q.imagensFeedback || []).map(i => ({ caminho: i.caminho, nome: i.nome, url: i.url, mimeType: i.mimeType }));
+  enviandoFb = 0; renderImgsFeedback();
   renderImgs();
   if (q.imagemAntiga) { imgAntiga = q.imagemAntiga; renderImgs(); }
   else if (q.temImagem && id && ed.imagemAntiga) ed.imagemAntiga(id)
@@ -538,6 +636,7 @@ function lerForm() {
     professorNome: $('#av-q-prof').value,
     unidade: $('#av-q-unid').value,
     dificuldade: $('#av-q-dif').value,
+    ...(() => { const d = $('#av-q-uso').value; const m = /^b([12])(c[12])$/.exec(d); return m ? { usoProva: m[2], bimestreDestino: Number(m[1]) } : { usoProva: d }; })(),
     objetivo: objSel === '__outro' ? $('#av-q-obj-outro').value.trim() : objSel,
     nomeQuestao: $('#av-q-nome').value.replace(/\s+/g, ' ').trim(),
     casoClinico: limpaHtml($('#av-q-caso').innerHTML).trim(),
@@ -549,7 +648,7 @@ function lerForm() {
 }
 function atualizarChecklist() {
   const f = lerForm();
-  const q = { ...f, tipoMoodle: 'multichoice_unica', enunciadoHtml: `${f.casoClinico} ${f.pergunta}` };
+  const q = { ...f, imagensFeedback: imgsFeedback, tipoMoodle: 'multichoice_unica', enunciadoHtml: `${f.casoClinico} ${f.pergunta}` };
   const r = P.avaliarQuestao(q);
   const cods = new Map([...r.bloqueios.map(b => [b.cod, 'erro']), ...r.avisos.map(a => [a.cod, 'aviso'])]);
   const msgs = [...r.bloqueios, ...r.avisos];
@@ -626,7 +725,9 @@ async function salvarQuestao() {
   const f = lerForm();
   if (P.texto(f.casoClinico).length + f.pergunta.length < 5) { toast('Escreva o caso clínico e a pergunta.', 'erro'); return; }
   if (enviandoImgs) { toast('Espere as imagens terminarem de subir.', 'aviso'); return; }
+  if (enviandoFb) { toast('Espere as imagens do feedback terminarem de subir.', 'aviso'); return; }
   f.imagens = imgsQuestao.map(i => ({ caminho: i.caminho, nome: i.nome }));
+  f.imagensFeedback = imgsFeedback.map(i => ({ caminho: i.caminho, nome: i.nome }));
   if (removerImagem) f.manterImagem = false;
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
@@ -647,6 +748,20 @@ function renderImgs() {
   if (enviandoImgs) itens.push(`<figure class="av-img av-img-env"><span class="av-spin"></span><figcaption>Enviando ${enviandoImgs}…</figcaption></figure>`);
   caixa.innerHTML = itens.join('');
 }
+function renderImgsFeedback() {
+  const caixa = $('#av-q-fb-imgs'); if (!caixa) return;
+  caixa.innerHTML = imgsFeedback.map((im, i) => `<figure class="av-img"><img src="${esc(im.url)}" alt=""><figcaption>${esc(im.nome)}</figcaption><button type="button" class="av-icone-btn" data-tirar-fb="${i}" aria-label="Remover ${esc(im.nome)}">${ic('x')}</button></figure>`).join('')
+    + (enviandoFb ? `<figure class="av-img av-img-env"><span class="av-spin"></span><figcaption>Enviando ${enviandoFb}…</figcaption></figure>` : '');
+}
+async function enviarImagensFeedback(files) {
+  if (imgsFeedback.length + files.length > 8) { toast('No máximo 8 imagens no feedback.', 'aviso'); return; }
+  enviandoFb += files.length; renderImgsFeedback();
+  for (const file of files) {
+    try { imgsFeedback.push(await enviarImagem(file)); }
+    catch (err) { toast(err.message, 'erro'); }
+    finally { enviandoFb--; renderImgsFeedback(); atualizarChecklist(); }
+  }
+}
 async function enviarImagem(file) {
   if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) throw new Error(`"${file.name}" não é imagem PNG, JPG, GIF ou WEBP.`);
   if (file.size > 25 * 1024 * 1024) throw new Error(`"${file.name}" passa de 25 MB.`);
@@ -660,7 +775,9 @@ function ligarModalQuestao() {
   const m = $('#av-modal-q');
   m.addEventListener('click', (e) => {
     if (e.target.closest('[data-fechar-q]') || e.target === m) return fecharQuestao();
-    if (e.target.closest('[data-tirar-alt]')) { e.target.closest('.av-alt').remove(); $('#av-q-mais-alt').hidden = false; atualizarChecklist(); }
+    if (e.target.closest('[data-tirar-alt]')) { if (document.querySelectorAll('#av-q-alts .av-alt').length > 2) { e.target.closest('.av-alt').remove(); renumerarAlts(); atualizarChecklist(); } }
+    const tf = e.target.closest('[data-tirar-fb]');
+    if (tf) { imgsFeedback.splice(Number(tf.dataset.tirarFb), 1); renderImgsFeedback(); atualizarChecklist(); }
     const ti = e.target.closest('[data-tirar-img]');
     if (ti) { imgsQuestao.splice(Number(ti.dataset.tirarImg), 1); renderImgs(); }
     if (e.target.closest('[data-tirar-antiga]')) { removerImagem = true; renderImgs(); }
@@ -671,12 +788,21 @@ function ligarModalQuestao() {
   m.addEventListener('input', atualizarChecklist);
   m.addEventListener('change', (e) => {
     if (e.target.id === 'av-q-disc') { trocarDisciplinaEditor(e.target.value); return; }
+    if (e.target.id === 'av-q-uso') renderUnidades($('#av-q-unid').value);
     if (e.target.id === 'av-q-obj') { $('#av-q-obj-outro').hidden = e.target.value !== '__outro'; if (e.target.value === '__outro') $('#av-q-obj-outro').focus(); }
     if (e.target.id === 'av-q-ref') { $('#av-q-ref-outra').hidden = e.target.value !== '__outra'; if (e.target.value === '__outra') $('#av-q-ref-outra').focus(); }
     atualizarChecklist();
   });
-  $('#av-q-mais-alt').addEventListener('click', () => { $('#av-q-alts').insertAdjacentHTML('beforeend', linhaAlt(4)); $('#av-q-mais-alt').hidden = true; atualizarChecklist(); });
+  $('#av-q-mais-alt').addEventListener('click', () => { const n = document.querySelectorAll('#av-q-alts .av-alt').length; if (n >= MAX_ALTS) return; $('#av-q-alts').insertAdjacentHTML('beforeend', linhaAlt(n)); renumerarAlts(); const novo = document.querySelectorAll('#av-q-alts .av-alt-txt')[n]; if (novo) novo.focus(); atualizarChecklist(); });
   $('#av-q-salvar').addEventListener('click', salvarQuestao);
+  $('#av-q-fb-img').addEventListener('change', (e) => { const files = [...e.target.files]; e.target.value = ''; enviarImagensFeedback(files); });
+  // colar um gráfico (Ctrl+V) direto no feedback vira imagem do feedback
+  $('#av-q-just').addEventListener('paste', (e) => {
+    const files = [...(e.clipboardData && e.clipboardData.files || [])].filter(f => /^image\//.test(f.type));
+    if (!files.length) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    enviarImagensFeedback(files.map((f, i) => new File([f], `feedback-colado-${Date.now()}-${i + 1}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })));
+  });
   $('#av-q-img').addEventListener('change', async (e) => {
     const files = [...e.target.files]; e.target.value = '';
     if (imgsQuestao.length + files.length > 8) { toast('No máximo 8 imagens por questão.', 'aviso'); return; }
@@ -707,10 +833,37 @@ function abrirImportar() {
       <div class="av-modal av-modal-medio" role="dialog" aria-modal="true" aria-labelledby="av-mi-tit">
         <header class="av-modal-cab"><h2 id="av-mi-tit">Importar questões</h2><button type="button" class="av-icone-btn" data-fechar-imp aria-label="Fechar">${ic('x')}</button></header>
         <div class="av-modal-corpo">
-          <p class="av-nota">Questões numeradas ("Questão 1", "1.", "1)") com alternativas a) a e). Uma linha "Gabarito: C" depois da questão já marca a correta. No Word (.docx), as imagens e GIFs vêm junto com a questão.</p>
-          <p class="av-modelo-baixar"><a class="btn btn-secondary av-btn" href="/banco-med-fatec/modelo-questoes-medicina.docx" download>Baixar o modelo de questões (Word)</a><span class="av-nota">Questão 01 → linha Disciplina – Tema – Dificuldade → Enunciado → alternativas (a <b>correta pintada de amarelo</b>) → Feedback da Questão → Referência Bibliográfica.</span></p>
+          <section class="av-imp-regras" aria-labelledby="av-imp-regras-tit">
+            <h3 id="av-imp-regras-tit">Regras do arquivo</h3>
+            <p class="av-imp-word"><b>Use o Word (.docx): é o padrão.</b> Só o Word traz as imagens do enunciado e do feedback (gráficos, figuras, GIFs). O PDF traz só o texto; as imagens ficam de fora e precisam ser coladas depois, questão por questão. Tem só o PDF? Abra no Word, salve como .docx e importe.</p>
+            <div class="av-imp-colunas">
+              <div>
+                <h4>Obrigatório em cada questão</h4>
+                <p class="av-imp-sub">Sem isso a questão não pode ser finalizada.</p>
+                <ul>
+                  <li>Começa em <b>"Questão 1"</b>, "1." ou <b>"NÍVEL DE DIFICULDADE:"</b>; o Órbita numera em sequência.</li>
+                  <li><b>4 alternativas, A a D</b>, todas diferentes. Sem "nenhuma" ou "todas as anteriores".</li>
+                  <li><b>Uma</b> correta, pintada de <mark>amarelo</mark> ou numa linha "Alternativa correta: C".</li>
+                  <li><b>Unidade</b> e <b>objetivo</b> do plano de ensino ("Unidade: 2", "Objetivo: O3"). O modelo da disciplina já traz a lista.</li>
+                  <li><b>Feedback</b> (justificativa da correta), em texto ou imagem.</li>
+                  <li><b>Professor</b> que elaborou: escolha abaixo.</li>
+                </ul>
+              </div>
+              <div>
+                <h4>Recomendado</h4>
+                <p class="av-imp-sub">Vira aviso na conferência CADAM.</p>
+                <ul>
+                  <li><b>Caso clínico</b> terminando numa pergunta direta ("Qual a conduta mais adequada?").</li>
+                  <li>Evite enunciado negativo (EXCETO, INCORRETA), afirmativas I, II, III e correta bem mais longa que as outras.</li>
+                  <li><b>Referência</b> bibliográfica (ABNT).</li>
+                  <li>Linha <b>"Prova:"</b> para questões de 2ª chamada, Exame semestral, Dependência ou Adaptação. Sem ela, a questão vai para esta prova.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+          <p class="av-modelo-baixar"><button type="button" class="btn btn-secondary av-btn" id="av-imp-modelo">Baixar o modelo desta disciplina (Word)</button><span class="av-nota">Já vem com as <b>unidades do bimestre</b> e os <b>objetivos do plano de ensino</b> numerados. Mande aos professores: em cada questão eles preenchem Unidade e Objetivo, pintam a <b>correta de amarelo</b> e o feedback pode ser texto ou imagem.</span></p>
           <div class="av-campos2">
-            <label class="av-campo"><span>Arquivo Word ou PDF</span><input type="file" id="av-imp-arq" accept=".docx,.doc,.pdf"></label>
+            <label class="av-campo"><span>Arquivo Word (.docx), de preferência. PDF só com texto</span><input type="file" id="av-imp-arq" accept=".docx,.doc,.pdf"></label>
             <label class="av-campo"><span>Professor de todas as questões</span><select id="av-imp-prof"></select></label>
           </div>
           <label class="av-campo"><span>…ou cole o texto</span><textarea id="av-imp-txt" rows="7" class="av-input" placeholder="1. Paciente de 45 anos…&#10;a) …&#10;b) …&#10;Gabarito: B"></textarea></label>
@@ -729,9 +882,15 @@ function abrirImportar() {
     m.addEventListener('click', (e) => { if (e.target.closest('[data-fechar-imp]') || e.target === m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
     $('#av-imp-ler').addEventListener('click', lerImportacao);
     $('#av-imp-salvar').addEventListener('click', salvarImportacao);
+    $('#av-imp-modelo').addEventListener('click', async (ev) => {
+      const b = ev.currentTarget; b.disabled = true; const t = b.textContent; b.textContent = 'Montando o modelo…';
+      try { await baixar(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/modelo`); toast('Modelo baixado: mande aos professores da disciplina.'); }
+      catch (e) { toast(e.message, 'erro'); } finally { b.disabled = false; b.textContent = t; }
+    });
     m.addEventListener('change', (e) => { if (e.target.matches('.av-imp-gab')) { previaImport[Number(e.target.dataset.i)].gabarito = e.target.value || null; mostrarPrevia(''); } });
   }
-  $('#av-imp-prof').innerHTML = `<option value="">Definir depois</option>${atual.professores.map(n => `<option>${esc(n)}</option>`).join('')}`;
+  $('#av-imp-prof').innerHTML = atual.papel === 'adjunto' ? `<option>${esc(atual.eu)}</option>` : `<option value="">${atual.papel === 'titular' ? 'Eu mesmo(a)' : 'Definir depois'}</option>${atual.professores.map(n => `<option>${esc(n)}</option>`).join('')}`;
+  $('#av-imp-prof').disabled = atual.papel === 'adjunto';
   $('#av-imp-unid').innerHTML = `<option value="">Definir depois</option>${(atual.plano.unidades || []).filter(u => u.bimestre === atual.avaliacao.bimestre).map(u => `<option value="${u.numero}">Unidade ${u.numero} – ${esc(u.titulo)}</option>`).join('')}`;
   $('#av-imp-arq').value = ''; $('#av-imp-txt').value = ''; $('#av-imp-previa').innerHTML = ''; previaImport = []; $('#av-imp-salvar').disabled = true;
   m.hidden = false; document.body.classList.add('av-sem-rolagem');
@@ -759,7 +918,9 @@ async function lerImportacao() {
     }
     const r = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}/importar/analisar`, { method: 'POST', body: JSON.stringify(body) });
     previaImport = r.questoes;
-    mostrarPrevia(r.aviso);
+    // PDF: lembra na prévia que as imagens não vieram (16/11/2026)
+    const avisoPdf = arq && /\.pdf$/i.test(arq.name) ? 'Atenção: veio de PDF, então só o texto foi lido. Se alguma questão ou feedback tinha imagem, importe o Word (.docx) ou cole a imagem na edição da questão.' : '';
+    mostrarPrevia([avisoPdf, r.aviso].filter(Boolean).join(' '));
   } catch (e) { toast(e.message, 'erro'); }
   finally { btn.disabled = false; btn.textContent = 'Ler as questões'; }
 }
@@ -769,7 +930,7 @@ function mostrarPrevia(aviso) {
     const nImg = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length, 0);
     $('#av-imp-previa').innerHTML = `
       <p class="av-nota"><b>${previaImport.length}</b> questão(ões) encontrada(s)${nImg ? `, com <b>${nImg}</b> imagem(ns)` : ''}.${semGab ? ` ${semGab} sem gabarito: marque abaixo.` : ''} ${aviso ? esc(aviso) : ''}</p>
-      <ol class="av-previa">${previaImport.map((q, i) => `<li>${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa ? '<span class="av-selo av-selo-ok">Feedback</span>' : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
+      <ol class="av-previa">${previaImport.map((q, i) => `<li>${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa || (q.imagensFeedback || []).length ? `<span class="av-selo av-selo-ok">Feedback${(q.imagensFeedback || []).length ? ` (${q.imagensFeedback.length} imagem${q.imagensFeedback.length > 1 ? 's' : ''})` : ''}</span>` : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.provaWord ? `<span class="av-tag av-tag-prova av-uso-${usoDoTextoTela(q.provaWord)}">${esc(q.provaWord)}</span>` : ''}${q.unidadeWord ? `<span class="av-tag">Unidade ${esc(q.unidadeWord)}</span>` : ''}${q.objetivoWord ? `<span class="av-tag">Objetivo ${esc(q.objetivoWord.slice(0, 40))}</span>` : ''}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
         ${(q.imagens || []).length ? `<div class="av-previa-imgs">${q.imagens.map(im => `<img src="${im.dataUrl}" alt="">`).join('')}</div>` : ''}
         <div class="av-previa-alts">${q.alternativas.map((a, j) => `<span class="${q.gabarito === LETRAS[j] ? 'av-previa-certa' : ''}"><b>${LETRAS[j]})</b> ${esc(String(a).slice(0, 90))}</span>`).join('')}</div>
         <label class="av-previa-gab">Correta <select class="av-imp-gab" data-i="${i}"><option value="">?</option>${q.alternativas.map((a, j) => `<option ${q.gabarito === LETRAS[j] ? 'selected' : ''}>${LETRAS[j]}</option>`).join('')}</select></label></li>`).join('')}</ol>`;
@@ -785,7 +946,7 @@ async function salvarImportacao() {
   const btn = $('#av-imp-salvar'); btn.disabled = true;
   try {
     // sobe as imagens do Word pro Storage antes; a questão só leva o caminho
-    const total = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length, 0);
+    const total = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length + (q.imagensFeedback || []).length, 0);
     let feitas = 0;
     const questoes = [];
     for (const q of previaImport) {
@@ -795,7 +956,14 @@ async function salvarImportacao() {
         const env = await enviarImagem(await dataUrlParaArquivo(im.dataUrl, `questao-${q.numero}-${j + 1}`));
         imagens.push({ caminho: env.caminho, nome: env.nome });
       }
-      questoes.push({ numero: q.numero, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, imagens,
+      const imagensFeedback = [];
+      for (const [j, im] of (q.imagensFeedback || []).slice(0, 8).entries()) {
+        btn.textContent = `Enviando imagens ${++feitas}/${total}…`;
+        const env = await enviarImagem(await dataUrlParaArquivo(im.dataUrl, `feedback-${q.numero}-${j + 1}`));
+        imagensFeedback.push({ caminho: env.caminho, nome: env.nome });
+      }
+      questoes.push({ numero: q.numero, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, imagens, imagensFeedback,
+        unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
         ...(q.pergunta !== undefined && q.casoHtml !== undefined ? { casoHtml: q.casoHtml, pergunta: q.pergunta, justificativa: q.justificativa, fonte: q.fonte, dificuldade: q.dificuldade, tema: q.tema } : {}) });
     }
     btn.textContent = 'Importando…';
@@ -922,6 +1090,9 @@ function preencherCriterios(voltarPadrao) {
   $('#av-mc-corpo').innerHTML = `
     <p class="av-nota">${quemDefiniu}</p>
 
+    <h3 class="av-mc-h">Professor responsável pela disciplina</h3>
+    <label class="av-campo"><span>Responsável (divide as questões entre os colegas, define as unidades de cada bimestre e acompanha o envio ao AVA). Os demais são adjuntos e veem só as próprias questões.</span><select id="av-mc-resp"><option value="">Automático: titular no Edubox (${esc((c.titulares || []).join(', ') || 'nenhum lançado')})</option>${(c.professores || []).map(n => `<option ${P.norm(n) === P.norm(cr.responsavel || '') ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+
     <h3 class="av-mc-h">Tamanho da prova e divisão entre os professores</h3>
     <div class="av-mc-qtd">
       <label class="av-campo"><span>Questões por prova</span><input type="number" id="av-mc-total" class="av-input" min="0" max="300" value="${cr.qtdQuestoes || ''}" placeholder="ex.: 20"></label>
@@ -945,13 +1116,14 @@ function preencherCriterios(voltarPadrao) {
       <p class="av-nota">O peso define quantas questões cada unidade deve ter dentro do bimestre. Igual à carga horária = proporcional às horas; peso 0 = a unidade não entra na prova.</p>`
       : `<p class="av-nota av-nota-aviso">O plano de ensino desta disciplina não está preenchido no Edubox.</p>`}
 
-    <h3 class="av-mc-h">Equilíbrio e tolerância</h3>
+    <h3 class="av-mc-h">Avisos de equilíbrio da prova</h3>
+    <p class="av-nota">O professor responsável também ajusta estes avisos em "Divisão das questões". O Órbita calcula quantas questões cada unidade deveria ter, proporcional à carga horária dela (ou ao peso acima), e avisa quando a prova foge disso.</p>
     <div class="av-campos3">
-      <label class="av-campo"><span>Mínimo de caso clínico (%)</span><input type="number" id="av-mc-caso" class="av-input" min="0" max="100" value="${lim.minCaso}"></label>
-      <label class="av-campo"><span>Avisar se a unidade tiver menos de (% do esperado)</span><input type="number" id="av-mc-abaixo" class="av-input" min="0" max="100" value="${lim.abaixo}"></label>
-      <label class="av-campo"><span>Avisar se tiver mais de (% do esperado)</span><input type="number" id="av-mc-acima" class="av-input" min="100" max="500" value="${lim.acima}"></label>
+      <label class="av-campo"><span>Caso clínico: no mínimo (% da prova)</span><input type="number" id="av-mc-caso" class="av-input" min="0" max="100" value="${lim.minCaso}"></label>
+      <label class="av-campo"><span>Unidade com poucas questões: avisar abaixo de (% do esperado)</span><input type="number" id="av-mc-abaixo" class="av-input" min="0" max="100" value="${lim.abaixo}"></label>
+      <label class="av-campo"><span>Unidade com questões demais: avisar acima de (% do esperado)</span><input type="number" id="av-mc-acima" class="av-input" min="100" max="500" value="${lim.acima}"></label>
     </div>
-    <p class="av-nota">Padrão: ${c.padrao.minCaso}% de caso clínico; avisa abaixo de ${c.padrao.abaixo}% e acima de ${c.padrao.acima}% do esperado. São avisos para quem monta a prova — não impedem finalizar.</p>`;
+    <p class="av-nota">Exemplo: numa prova de 20 questões, se a carga horária pede 8 para a Unidade 2, com ${c.padrao.abaixo}% o aviso aparece se ela tiver menos de ${Math.round(8 * c.padrao.abaixo) / 100} questões, e com ${c.padrao.acima}% se passar de ${Math.round(8 * c.padrao.acima) / 100}. Padrão: ${c.padrao.minCaso}% de caso clínico, ${c.padrao.abaixo}% e ${c.padrao.acima}%. São só avisos para quem monta a prova; não impedem finalizar.</p>`;
   resumoPesos();
 }
 
@@ -992,7 +1164,7 @@ async function salvarCriterios() {
     const porProfessor = {};
     document.querySelectorAll('.av-mc-prof-n').forEach(i => { if (Number(i.value) > 0) porProfessor[i.dataset.prof] = Number(i.value); });
     const qtdQuestoes = Number(($('#av-mc-total') || {}).value) || null;
-    const r = await api(`${CRIT}/${encodeURIComponent(critAtual.chave)}`, { method: 'PUT', body: JSON.stringify({ bimestres, pesos, limites, qtdQuestoes, porProfessor, semestre }) });
+    const r = await api(`${CRIT}/${encodeURIComponent(critAtual.chave)}`, { method: 'PUT', body: JSON.stringify({ bimestres, pesos, limites, qtdQuestoes, porProfessor, semestre, responsavel: ($('#av-mc-resp') || {}).value || '' }) });
     $('#av-modal-crit').hidden = true; document.body.classList.remove('av-sem-rolagem');
     toast(r.message);
     const d = disciplinas.find(x => x.chave === critAtual.chave); if (d) d.criteriosDefinidos = true;
@@ -1026,7 +1198,7 @@ async function perfilProfessor() {
   return euProfessor;
 }
 export async function abrirEditorBanco({ questaoId = null, categoriaId = null, categorias = [], aposSalvar = async () => {} } = {}) {
-  let q = { alternativas: [{}, {}, {}, {}, {}], dificuldade: 'media' };
+  let q = { alternativas: [{}, {}, {}, {}], dificuldade: 'media' };
   let eu;
   try { eu = await perfilProfessor(); } catch (e) { toast(e.message, 'erro'); return; }
   if (eu.restrito) {
@@ -1124,9 +1296,18 @@ function modalConf() {
       if (e.target.closest('[data-conf-imprimir]')) { document.body.classList.add('av-imprimindo-conf'); window.print(); setTimeout(() => document.body.classList.remove('av-imprimindo-conf'), 500); return; }
       const ed2 = e.target.closest('[data-conf-editar]');
       if (ed2 && confEditar) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); confEditar(ed2.dataset.confEditar); return; }
+      const px = e.target.closest('[data-prof-xml]');
+      if (px) { baixarXmlProfessor(px.dataset.profXml, px); return; }
       const av = e.target.closest('[data-conf-av]');
       if (av) abrirConferenciaDaProva(av.dataset.confAv);
       if (e.target.closest('[data-conf-lista]')) abrirConferenciaProfessor();
+    });
+    m.addEventListener('change', async (e) => {
+      const c = e.target.closest('[data-envio]');
+      if (!c) return;
+      c.disabled = true;
+      try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await abrirConferenciaDaProva(c.dataset.av); }
+      catch (err) { c.checked = !c.checked; c.disabled = false; toast(err.message, 'erro'); }
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !m.hidden) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
   }
@@ -1138,17 +1319,37 @@ function modalConf() {
 function parteHtml(a) {
   if (!a.meta) return `<span class="av-parte av-parte-sem">${a.feitas ? `Você tem ${a.feitas} questão(ões) nesta prova` : 'Sua cota ainda não foi definida'}</span>`;
   const falta = a.meta - a.feitas;
-  return `<span class="av-parte ${falta > 0 ? 'av-parte-falta' : 'av-parte-ok'}">Sua parte: <b>${a.feitas} de ${a.meta}</b> questões${falta > 0 ? ` · faltam ${falta}` : falta < 0 ? ` · ${-falta} a mais` : ' · completa'}</span>`;
+  return `<span class="av-parte ${falta > 0 ? 'av-parte-falta' : 'av-parte-ok'}"><span class="av-uso-rot av-uso-${a.tipo === 'exame' ? 'exame' : a.chamada === 2 ? 'c2' : 'c1'}">${a.tipo === 'exame' ? 'Exame semestral' : a.chamada === 2 ? '2ª chamada' : '1ª chamada'}</span> <b>${a.feitas} de ${a.meta}</b> questões${falta > 0 ? ` · faltam ${falta}` : falta < 0 ? ` · ${-falta} a mais` : ' · completa'}</span>`;
 }
 // Progresso da disciplina (Bia / coordenação): professor × prova, feitas de cota
-async function abrirProgresso(chave) {
+// marcações do AVA (professor): banco de questões e questionário
+function envioCel(e) {
+  if (!e) return '';
+  const b = e.bancoAva && e.bancoAva.feito, q = e.questionario && e.questionario.feito;
+  if (!b && !q) return '';
+  return `<small class="av-pg-envio">${b ? 'AVA ✓' : 'AVA –'} · ${q ? 'Quest. ✓' : 'Quest. –'}</small>`;
+}
+const ddmmIso = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '';
+// toda prova pode ter 2ª chamada: a parte do professor também precisa estar pronta (16/11/2026)
+function segundaHtml(s, rotulo = '2ª chamada') {
+  const quando = s.data ? ` · prova em ${ddmmIso(s.data)}` : '';
+  const usoR = /exame/i.test(rotulo) ? 'exame' : 'c2';
+  if (!s.meta) return `<span class="av-parte av-parte-sem"><span class="av-uso-rot av-uso-${usoR}">${rotulo}</span> ${s.feitas ? `${s.feitas} questão(ões) pronta(s)` : 'nenhuma questão pronta'}${quando}</span>`;
+  const falta = s.meta - s.feitas;
+  return `<span class="av-parte ${falta > 0 ? 'av-parte-falta' : 'av-parte-ok'}"><span class="av-uso-rot av-uso-${usoR}">${rotulo}</span> <b>${s.feitas} de ${s.meta}</b>${falta > 0 ? ` · <b>falta preparar ${falta}</b>` : ' · pronta'}${quando}</span>`;
+}
+function envioResumo(e) {
+  const b = e && e.bancoAva && e.bancoAva.feito, q = e && e.questionario && e.questionario.feito;
+  return `<span class="av-envio-resumo">${b ? '✓ No banco do AVA' : '• Falta subir no AVA'} · ${q ? '✓ No questionário' : '• Falta o questionário'}</span>`;
+}
+async function abrirProgresso(chave, rota) {
   modalConf();
   confEditar = null;
   $('#av-conf-tit').textContent = 'Progresso da disciplina';
   $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Contando as questões de cada professor…</p>';
   try {
-    const r = await api(`${BASE}/progresso/${encodeURIComponent(chave)}?semestre=${encodeURIComponent(semestre)}`);
-    const cel = (feitas, meta) => meta ? `<td class="${feitas >= meta ? 'av-pg-ok' : feitas ? 'av-pg-meio' : 'av-pg-zero'}">${feitas} de ${meta}${feitas > meta ? ` <small>(+${feitas - meta})</small>` : ''}</td>` : `<td class="av-pg-livre">${feitas || '–'}</td>`;
+    const r = await api(rota || `${BASE}/progresso/${encodeURIComponent(chave)}?semestre=${encodeURIComponent(semestre)}`);
+    const cel = (feitas, meta, envio) => (meta ? `<td class="${feitas >= meta ? 'av-pg-ok' : feitas ? 'av-pg-meio' : 'av-pg-zero'}">${feitas} de ${meta}${feitas > meta ? ` <small>(+${feitas - meta})</small>` : ''}` : `<td class="av-pg-livre">${feitas || '–'}`) + envioCel(envio) + '</td>';
     const completos = (i) => r.professores.filter(p => p.meta && p.feitas[i] >= p.meta).length;
     const comCota = r.professores.filter(p => p.meta).length;
     $('#av-conf-corpo').innerHTML = `
@@ -1156,15 +1357,15 @@ async function abrirProgresso(chave) {
       ${!r.provas.length ? '<p class="av-vazio">Nenhuma prova montada ainda nesta disciplina.</p>' : `
       ${!comCota ? '<p class="av-conf-nota">A divisão entre os professores ainda não foi definida nos critérios da disciplina — a tabela mostra só quantas cada um já fez.</p>' : ''}
       <div class="av-pg-tabela"><table>
-        <thead><tr><th scope="col">Professor</th>${r.provas.map(p => `<th scope="col">${ordinal(p.bimestre)} bim · ${p.chamada}ª ch.<small>${p.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</small></th>`).join('')}</tr></thead>
-        <tbody>${r.professores.map(pr => `<tr><th scope="row">${esc(pr.nome)}${pr.meta ? '' : ' <small>sem cota</small>'}</th>${pr.feitas.map(f => cel(f, pr.meta)).join('')}</tr>`).join('')}
+        <thead><tr><th scope="col">Professor</th>${r.provas.map(p => `<th scope="col" class="av-uso-th av-uso-${p.tipo === 'exame' ? 'exame' : p.chamada === 2 ? 'c2' : 'c1'}">${p.tipo === 'exame' ? 'Exame semestral' : `${ordinal(p.bimestre)} bim · ${p.chamada}ª ch.`}<small>${p.virtual ? 'ainda no banco' : p.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</small></th>`).join('')}</tr></thead>
+        <tbody>${r.professores.map(pr => `<tr><th scope="row">${esc(pr.nome)}${r.responsavel && r.responsavel.split(' / ').some(x => P.norm(x) === P.norm(pr.nome)) ? ' <small class="av-resp">responsável</small>' : ''}${pr.meta ? '' : ' <small>sem cota</small>'}</th>${pr.feitas.map((f, i) => cel(f, pr.meta, (pr.envios || [])[i])).join('')}</tr>`).join('')}
           ${r.provas.some(p => p.semProfessor) ? `<tr><th scope="row"><i>Sem professor informado</i></th>${r.provas.map(p => `<td class="${p.semProfessor ? 'av-pg-zero' : 'av-pg-livre'}">${p.semProfessor || '–'}</td>`).join('')}</tr>` : ''}
         </tbody>
         <tfoot><tr><th scope="row">Total da prova</th>${r.provas.map((p, i) => `<td>${p.total}${r.qtdQuestoes ? ` de ${r.qtdQuestoes}` : ''}${comCota ? `<small>${completos(i)} de ${comCota} professores completos</small>` : ''}</td>`).join('')}</tr></tfoot>
       </table></div>`}`;
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
-const subProva = (a) => `${esc(a.disciplina)} · ${ordinal(a.bimestre)} bimestre · ${a.chamada}ª chamada · ${esc(a.semestre)} · ${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}`;
+const subProva = (a) => `${esc(a.disciplina)} · ${rotuloAvaliacao(a)} · ${esc(a.semestre)} · ${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}`;
 
 // Bia / coordenação: a prova aberta na aba Avaliações, inteira
 function conferirProvaAberta() {
@@ -1184,7 +1385,7 @@ export async function abrirConferenciaProfessor() {
     const r = await api('/banco-med-fatec/conferencia');
     $('#av-conf-corpo').innerHTML = r.avaliacoes.length
       ? `<p class="av-conf-sub">${esc(r.professor)} · provas das suas disciplinas. Você confere só as questões que elaborou.</p>
-         <ul class="av-conf-provas">${r.avaliacoes.map(a => `<li><button type="button" data-conf-av="${esc(a.id)}"><b>${esc(a.disciplina)}</b><span>${ordinal(a.bimestre)} bimestre · ${a.chamada}ª chamada · ${esc(a.semestre)}</span><span class="av-status ${a.status === 'finalizada' ? 'av-status-fin' : 'av-status-rasc'}">${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</span>${parteHtml(a)}</button></li>`).join('')}</ul>`
+         <ul class="av-conf-provas">${r.avaliacoes.map(a => `<li><button type="button" data-conf-av="${esc(a.id)}"><b>${esc(a.disciplina)}</b><span>${rotuloAvaliacao(a)} · ${esc(a.semestre)}</span><span class="av-status ${a.status === 'finalizada' ? 'av-status-fin' : 'av-status-rasc'}">${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</span>${a.data ? `<span class="av-data-prova">Prova em ${ddmmIso(a.data)}</span>` : ''}${parteHtml(a)}${a.segunda ? segundaHtml(a.segunda) : ''}${a.exame ? segundaHtml(a.exame, 'Exame semestral') : ''}${envioResumo(a.envio)}</button></li>`).join('')}</ul>`
       : `<p class="av-vazio">Ainda não há prova montada nas suas disciplinas de ${esc(r.semestre)}.</p>`;
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
@@ -1195,7 +1396,12 @@ async function abrirConferenciaDaProva(id) {
     const a = r.avaliacao;
     $('#av-conf-tit').textContent = 'Conferência CADAM das minhas questões';
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
-    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button><p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: true });
+    const env = r.envio || {};
+    const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</label>`; };
+    const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Baixe o arquivo com as suas questões (as da prova e as a mais, de 2ª chamada, exame, dependência e adaptação, cada uma na sua categoria) e importe no banco de questões do AVA. Depois marque cada etapa.</p>
+      <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button>
+      <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
+    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: true });
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
 // botão no Banco, só para o professor (quem vê tudo confere pela aba Avaliações)
@@ -1207,7 +1413,101 @@ export async function prepararConferenciaProfessor() {
     if (!nova) return;
     nova.insertAdjacentHTML('beforebegin', '<button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-conferencia" type="button"><svg class="bmf-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Conferir minhas provas</span></button>');
     document.getElementById('bmf-btn-conferencia').addEventListener('click', abrirConferenciaProfessor);
+    nova.insertAdjacentHTML('beforebegin', '<button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-modelo" type="button"><svg class="bmf-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg><span>Modelo de questões (Word)</span></button>');
+    document.getElementById('bmf-btn-modelo').addEventListener('click', () => abrirModeloProfessor(eu));
+    try {
+      const div = await api('/banco-med-fatec/divisao');
+      if (div.some(d => d.souResponsavel)) {
+        nova.insertAdjacentHTML('beforebegin', '<button class="btn bmf-btn-on-blue-ghost action-execute" id="bmf-btn-divisao" type="button"><svg class="bmf-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Divisão das questões</span></button>');
+        document.getElementById('bmf-btn-divisao').addEventListener('click', () => abrirDivisao());
+      }
+    } catch (e) { /* sem divisão */ }
   } catch (e) { /* sem botão se o Edubox não respondeu */ }
+}
+
+// ---------- professor: modelo do Word, XML e divisão (16/11/2026) ----------
+function abrirModeloProfessor(eu) {
+  modalConf();
+  confEditar = null;
+  $('#av-conf-tit').textContent = 'Modelo de questões (Word)';
+  const discs = (eu.categoriaIds || []).map((id, i) => ({ id, nome: (eu.disciplinas || [])[i] || id }));
+  $('#av-conf-corpo').innerHTML = discs.length ? `
+    <p class="av-conf-sub">O modelo vem com os <b>objetivos</b> e as <b>unidades</b> do plano de ensino da disciplina. Cada questão precisa avaliar um objetivo da lista: escreva o código (O1, O2…) na linha "Objetivo:".</p>
+    <div class="av-mod-form">
+      <label class="av-campo"><span>Disciplina</span><select id="av-mod-disc">${discs.map(d => `<option value="${esc(d.id)}">${esc(d.nome)}</option>`).join('')}</select></label>
+      <label class="av-campo"><span>Bimestre</span><select id="av-mod-bim">${[1, 2].filter(b => !BIMESTRES_FECHADOS.includes(b)).map(b => `<option value="${b}" ${b === BIM_ABERTO ? 'selected' : ''}>${b}º bimestre</option>`).join('')}</select></label>
+      <button type="button" class="btn btn-primary av-btn" id="av-mod-baixar">Baixar o modelo</button>
+    </div>` : '<p class="av-vazio">Você não aparece como professor(a) de nenhuma disciplina neste semestre no Edubox.</p>';
+  const b = $('#av-mod-baixar');
+  if (b) b.onclick = async () => {
+    b.disabled = true; const t = b.textContent; b.textContent = 'Montando…';
+    try { await baixar(`/banco-med-fatec/modelo/${encodeURIComponent($('#av-mod-disc').value)}?bimestre=${$('#av-mod-bim').value}&semestre=${encodeURIComponent(eu.semestre || '')}`); toast('Modelo baixado.'); }
+    catch (e) { toast(e.message, 'erro'); } finally { b.disabled = false; b.textContent = t; }
+  };
+}
+async function baixarXmlProfessor(id, btn) {
+  const t = btn.textContent; btn.disabled = true; btn.textContent = 'Montando o arquivo…';
+  try {
+    const d = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml`);
+    if (!d.grupos.length) { toast('Você ainda não tem questões nesta prova.', 'aviso'); return; }
+    const grupos = [];
+    for (const [gi, g] of d.grupos.entries()) grupos.push({ ...g, questoes: await prepararParaXml(g.questoes, `p${gi + 1}q`) });
+    baixarTexto(window.MoodleXml.gerarMoodleXmlGrupos(grupos), d.nomeArquivo);
+    toast(`Arquivo baixado (${d.grupos.map(g => `${g.questoes.length} de ${g.rotulo}`).join(', ')}). No AVA: Banco de questões → Importar → Moodle XML.`);
+  } catch (e) { toast(e.message, 'erro'); }
+  finally { btn.disabled = false; btn.textContent = t; }
+}
+async function abrirDivisao(chaveAberta) {
+  modalConf();
+  confEditar = null;
+  $('#av-conf-tit').textContent = 'Divisão das questões';
+  $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Carregando…</p>';
+  try {
+    const lista = (await api('/banco-med-fatec/divisao')).filter(d => d.souResponsavel);
+    const d = lista.find(x => x.chave === chaveAberta) || lista[0];
+    if (!d) { $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Você não é responsável por nenhuma disciplina.</p>'; return; }
+    $('#av-conf-corpo').innerHTML = `
+      ${lista.length > 1 ? `<label class="av-campo"><span>Disciplina</span><select id="av-div-disc">${lista.map(x => `<option value="${esc(x.chave)}" ${x.chave === d.chave ? 'selected' : ''}>${esc(x.disciplina)}</option>`).join('')}</select></label>` : `<p class="av-conf-sub">${esc(d.disciplina)}</p>`}
+      <p class="av-nota">Você é o professor responsável: defina quantas questões tem a prova e quantas cada colega faz. Vale para cada prova: 1ª chamada e 2ª chamada de cada bimestre e o exame semestral — todo professor deixa a sua parte pronta para as três. Dependência e adaptação não entram na conta.${d.divisaoPor ? ` Última divisão: ${esc(d.divisaoPor)}, ${new Date(d.divisaoEm).toLocaleDateString('pt-BR')}.` : ''}</p>
+      <div class="av-mc-qtd">
+        <label class="av-campo"><span>Questões por prova</span><input type="number" id="av-mc-total" class="av-input" min="0" max="300" value="${d.qtdQuestoes || ''}" placeholder="ex.: 20"></label>
+        <button type="button" class="btn btn-secondary av-btn" data-dividir>Dividir igualmente</button>
+      </div>
+      <div class="av-mc-profs">${d.professores.map(n => `<label class="av-mc-prof">${chipProfessor(n)}<input type="number" class="av-input av-mc-prof-n" data-prof="${esc(n)}" min="0" max="300" value="${(d.porProfessor || {})[n] || ''}" placeholder="0" aria-label="Questões de ${esc(n)}"></label>`).join('')}</div>
+      <p class="av-nota" id="av-mc-soma"></p>
+      <h3 class="av-mc-h">Unidades trabalhadas em cada bimestre</h3>
+      ${(d.unidades || []).length ? `<p class="av-nota">Se uma unidade do 1º bimestre precisou ser trabalhada no 2º (ou o contrário), mude aqui. Vale para as provas, a lista de unidades das questões e o modelo do Word.</p>
+      <table class="av-mc-tab av-div-unid"><thead><tr><th>Unidade</th><th>CH</th><th>Bimestre</th></tr></thead>
+      <tbody>${d.unidades.map(u => `<tr><td><b>Unidade ${u.numero}</b><small>${esc(u.titulo)}</small></td><td>${u.ch}h</td>
+        <td><select class="av-div-bim" data-u="${u.numero}" aria-label="Bimestre da unidade ${u.numero}"><option value="1" ${u.bimestre === 1 ? 'selected' : ''}>1º</option><option value="2" ${u.bimestre === 2 ? 'selected' : ''}>2º</option></select>${u.bimestre !== u.bimestrePlano ? '<small class="av-div-mudou">mudou do plano</small>' : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="av-nota">O plano de ensino desta disciplina não está no Edubox.</p>'}
+      <h3 class="av-mc-h">Avisos de equilíbrio da prova</h3>
+      <p class="av-nota">O Órbita calcula quantas questões cada unidade deveria ter, proporcional à carga horária dela, e avisa quando a prova foge disso. São só avisos; não impedem finalizar.</p>
+      <div class="av-campos3">
+        <label class="av-campo"><span>Caso clínico: no mínimo (% da prova)</span><input type="number" id="av-div-caso" class="av-input" min="0" max="100" value="${d.limites.minCaso}"></label>
+        <label class="av-campo"><span>Unidade com poucas questões: avisar abaixo de (% do esperado)</span><input type="number" id="av-div-abaixo" class="av-input" min="0" max="100" value="${d.limites.abaixo}"></label>
+        <label class="av-campo"><span>Unidade com questões demais: avisar acima de (% do esperado)</span><input type="number" id="av-div-acima" class="av-input" min="100" max="500" value="${d.limites.acima}"></label>
+      </div>
+      <p class="av-nota">Exemplo: numa prova de 20 questões, se a carga horária pede 8 para a Unidade 2, com 50% o aviso aparece se ela tiver menos de 4 questões, e com 175% se passar de 14. Padrão: ${d.padraoLimites.minCaso}%, ${d.padraoLimites.abaixo}% e ${d.padraoLimites.acima}%.</p>
+      <div class="av-div-acoes"><button type="button" class="btn btn-primary av-btn" id="av-div-salvar">Salvar</button><button type="button" class="btn btn-secondary av-btn" id="av-div-prog">Ver o que cada um já fez</button></div>`;
+    resumoCotas();
+    const corpo = $('#av-conf-corpo');
+    corpo.oninput = (e) => { if (e.target.matches('#av-mc-total, .av-mc-prof-n')) resumoCotas(); };
+    corpo.onclick = (e) => {
+      if (e.target.closest('[data-dividir]')) {
+        const qtd = Number($('#av-mc-total').value) || 0; const ins = [...document.querySelectorAll('.av-mc-prof-n')];
+        if (!qtd || !ins.length) { toast('Informe quantas questões tem a prova.', 'aviso'); return; }
+        ins.forEach((inp, i) => { inp.value = Math.floor(qtd / ins.length) + (i < qtd % ins.length ? 1 : 0); }); resumoCotas();
+      }
+    };
+    const sel = $('#av-div-disc'); if (sel) sel.onchange = () => abrirDivisao(sel.value);
+    $('#av-div-salvar').onclick = async () => {
+      const porProfessor = {}; document.querySelectorAll('.av-mc-prof-n').forEach(i => { if (Number(i.value) > 0) porProfessor[i.dataset.prof] = Number(i.value); });
+      const bimestres = {}; document.querySelectorAll('.av-div-bim').forEach(s => { bimestres[s.dataset.u] = Number(s.value); });
+      try { const r = await api(`/banco-med-fatec/divisao/${encodeURIComponent(d.chave)}`, { method: 'PUT', body: JSON.stringify({ qtdQuestoes: Number($('#av-mc-total').value) || null, porProfessor, limites: { minCaso: $('#av-div-caso').value, abaixo: $('#av-div-abaixo').value, acima: $('#av-div-acima').value }, ...(document.querySelector('.av-div-bim') ? { bimestres } : {}) }) }); toast(r.message); }
+      catch (e) { toast(e.message, 'erro'); }
+    };
+    $('#av-div-prog').onclick = () => abrirProgresso(d.chave, `/banco-med-fatec/divisao/${encodeURIComponent(d.chave)}/progresso`);
+  } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
 
 // crachá do professor (iniciais + cor), o mesmo da avaliação, pra lista do Banco
@@ -1223,9 +1523,9 @@ export async function iniciarAvaliacoes(opcoes) {
   // confirma: tenta de novo por alguns segundos e só desiste quando o servidor diz que não tem acesso.
   let liberado = false;
   for (let i = 0; i < 8 && !liberado; i++) {
-    try { await api(`${BASE}/eu`); liberado = true; }
+    try { meuPapel = await api(`${BASE}/eu`); liberado = true; }
     catch (e) {
-      if (/Só a responsável|nível de acesso suficiente/i.test(e.message)) return false;
+      if (/Só a responsável|nível de acesso suficiente|Não encontrei disciplinas suas/i.test(e.message)) return false;
       await new Promise(r => setTimeout(r, 1500));
     }
   }
@@ -1239,6 +1539,7 @@ export async function iniciarAvaliacoes(opcoes) {
           <label class="av-sem"><span class="sr-only">Semestre</span><select id="av-semestre">
             ${['2026.1', '2026.2', '2027.1'].map(s => `<option ${s === semestre ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
           <input type="search" id="av-busca" class="av-busca" placeholder="Buscar disciplina, sigla ou professor" aria-label="Buscar disciplina">
+          ${BIMESTRES_FECHADOS.length ? '<button type="button" class="av-link" id="av-ver-fechados" aria-pressed="false">Mostrar 1º bimestre</button>' : ''}
         </div>
         <span id="av-resumo" class="av-resumo"></span>
       </div>
@@ -1250,8 +1551,10 @@ export async function iniciarAvaliacoes(opcoes) {
   $('#av-busca').addEventListener('input', () => carregouGrade && renderGrade());
   view.addEventListener('click', (e) => {
     const t = e.target.closest('button'); if (!t) return;
+    if (t.id === 'av-ver-fechados') { verFechados = !verFechados; t.setAttribute('aria-pressed', String(verFechados)); t.textContent = verFechados ? 'Esconder 1º bimestre' : 'Mostrar 1º bimestre'; return renderGrade(); }
     if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
-    if (t.dataset.criar) return criarAvaliacao(t.dataset.criar, Number(t.dataset.bim), Number(t.dataset.ch));
+    if (t.dataset.divisao) return abrirDivisao(t.dataset.divisao);
+    if (t.dataset.criar) return criarAvaliacao(t.dataset.criar, Number(t.dataset.bim), Number(t.dataset.ch), t.dataset.tipo);
     if (t.dataset.abrir) return abrirAvaliacao(t.dataset.abrir);
     if (t.hasAttribute('data-voltar')) return voltarGrade();
     if (t.hasAttribute('data-nova')) return abrirQuestao(null);
@@ -1274,6 +1577,6 @@ export async function iniciarAvaliacoes(opcoes) {
     if (e.key !== 'Escape') return;
     ['#av-modal-q', '#av-modal-imp', '#av-modal-banco'].forEach(s => { const m = $(s); if (m && !m.hidden) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
   });
-  return true;
+  return meuPapel;
 }
 export function abrirAbaAvaliacoes() { if (!carregouGrade && !atual) carregarGrade(); }

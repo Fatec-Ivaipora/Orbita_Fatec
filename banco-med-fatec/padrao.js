@@ -1,6 +1,6 @@
 // Padrão das questões e análise da avaliação — Medicina (12/11/2026). Só regras, sem IA.
 // Base: guia de elaboração de itens do NBME (Case & Swanson) e Guia de Elaboração de Itens do INEP
-// (mesma linha do ENAMED/Revalida): caso clínico + pergunta direta + 4 ou 5 alternativas homogêneas,
+// (mesma linha do ENAMED/Revalida): caso clínico + pergunta direta + 4 alternativas homogêneas (A a D — padrão da Medicina, 16/11/2026),
 // UMA resposta correta, sem "nenhuma/todas", sem enunciado negativo, sem pista na correta.
 // Compartilhado entre o servidor (require) e a tela (window.PadraoMed) — sem nada de Node aqui.
 (function (raiz, fabrica) {
@@ -48,13 +48,15 @@ function avaliarQuestao(q, opts) {
 
     if (q.tipoMoodle && q.tipoMoodle !== 'multichoice_unica') B('tipo', 'O tipo precisa ser "Múltipla escolha – uma resposta".');
     if (corretas.length !== 1) B('gabarito', corretas.length ? 'Marque só UMA alternativa correta.' : 'Marque a alternativa correta.');
-    if (alts.length < 4 || alts.length > 5) B('qtd', `A questão tem ${alts.length} alternativa(s); o padrão é 4 ou 5.`);
+    // Medicina: sempre 4 alternativas, A a D (16/11/2026)
+    if (alts.length !== 4) B('qtd', alts.length > 4 ? `A questão tem ${alts.length} alternativas; na Medicina são 4 (A a D). Tire a que sobra.` : `A questão tem ${alts.length} alternativa(s); na Medicina são 4 (A a D).`);
     if (alts.some(a => !a.t)) B('vazia', 'Há alternativa sem texto.');
     const vistas = new Set();
     alts.forEach((a, i) => { if (a.n && vistas.has(a.n)) B('repetida', `A alternativa ${LETRAS[i]} repete outra.`); vistas.add(a.n); });
     alts.forEach((a, i) => { if (RE_NENHUMA_TODAS.test(a.n)) B('nenhuma', `Alternativa ${LETRAS[i]}: "nenhuma/todas as alternativas" não é usado no padrão.`); });
     if (enunciado.length < 40) B('enunciado', 'O enunciado está curto demais.');
-    if (!texto(q.justificativa)) B('feedback', 'Escreva o feedback geral (explicação da resposta correta).');
+    // 16/11/2026: o feedback pode ser só uma imagem (gráfico, tabela, figura)
+    if (!texto(q.justificativa) && !(q.imagensFeedback || []).length) B('feedback', 'Escreva o feedback geral (explicação da resposta correta) ou coloque uma imagem.');
     if (!opts.semMetadados) {
         if (!String(q.professorNome || '').trim()) B('professor', 'Informe o professor que elaborou a questão.');
         if (!String(q.objetivo || '').trim()) B('objetivo', 'Escolha o objetivo do plano de ensino que a questão avalia.');
@@ -135,6 +137,109 @@ function lerQuestoesDeLinhas(itens) {
     }).filter(q => q.enunciado && q.alternativas.length >= 2);
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// FORMATO "NÍVEL DE DIFICULDADE" (16/11/2026 — ex.: prova de Neurociências do Prof. Paulo Vitor): as questões NÃO
+// são numeradas; cada uma começa em "NÍVEL DE DIFICULDADE: FÁCIL/MÉDIO/DIFÍCIL" e o Órbita numera em sequência
+// (1, 2, 3…). Depois vêm enunciado, alternativas A) a D), "ALTERNATIVA CORRETA: B" (ou RESPOSTA CORRETA, "C.",
+// "C) texto"), JUSTIFICATIVA: (feedback) e REFERÊNCIA(S): (fonte). Serve ao Word (blocos = parágrafos, com
+// imagens e marca-texto) e ao PDF (blocos = linhas quebradas; opts.pdf junta as linhas em parágrafos).
+// ---------------------------------------------------------------------------------------------------------
+const RE_NIVEL = /^n[íi]vel\s+de\s+dificuldade\s*:?\s*(.*)$/i;
+const RE_CORRETA = /^[A-Za-zÀ-ú]{0,14}\s*corret[ao]\s*:\s*\(?([A-Ea-e])(?=$|[\s).:;-])/i;
+const RE_JUST = /^(justificativa|feedback|coment[áa]rio)(\s+d[ao]\s+quest[ãa]o)?\s*:?\s*(.*)$/i;
+const RE_REFS = /^refer[êe]ncias?(\s+bibliogr[áa]ficas?)?\s*:?\s*(.*)$/i;
+function ehFormatoNivel(textos) { return (textos || []).filter(t => RE_NIVEL.test(String((t && t.texto !== undefined ? t.texto : t) || '').trim())).length >= 2; }
+function dificuldadeDe(t) {
+    const x = norm(t);
+    return /facil/.test(x) ? 'facil' : /intermedi/.test(x) ? 'intermediaria' : /dificil/.test(x) ? 'dificil' : 'media';
+}
+function escHtml(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// PDF: junta as linhas quebradas em parágrafos (quebra quando a linha termina em . : ? ! e é mais curta que as cheias)
+function paragrafosPdf(blocos) {
+    const max = Math.max(1, ...blocos.map(b => b.texto.length));
+    const out = []; let cur = null;
+    blocos.forEach(b => {
+        if (!cur) cur = { texto: '', imgs: [], marcado: false };
+        cur.texto = (cur.texto ? cur.texto + ' ' : '') + b.texto; cur.imgs.push(...(b.imgs || []));
+        if (/[.:?!]\s*$/.test(b.texto) && b.texto.length < max * 0.85) { out.push(cur); cur = null; }
+    });
+    if (cur) out.push(cur);
+    return out.map(b => ({ ...b, html: escHtml(b.texto) }));
+}
+function lerPorNivel(blocosIn, opts) {
+    opts = opts || {};
+    const blocos = (blocosIn || []).map(b => (typeof b === 'string' ? { texto: b } : b))
+        .map(b => ({ texto: String(b.texto || '').replace(/\s+/g, ' ').trim(), html: b.html, imgs: b.imgs || [], marcado: !!b.marcado, tag: b.tag || '' }))
+        .filter(b => b.texto || b.imgs.length);
+    const qs = []; let q = null, sec = null;
+    for (const b of blocos) {
+        const t = b.texto;
+        const mN = RE_NIVEL.exec(t);
+        if (mN && t.length < 60) { q = { numero: qs.length + 1, dificuldade: dificuldadeDe(mN[1]), dificTexto: mN[1].trim(), enun: [], alts: [], marcada: -1, gabarito: null, fb: [], ref: [] }; qs.push(q); sec = 'enun'; continue; }
+        if (!q) continue;
+        const mC = RE_CORRETA.exec(t);
+        if (mC && t.length < 200 && sec !== 'fb' && sec !== 'ref') { q.gabarito = mC[1].toUpperCase(); sec = 'pos'; continue; }
+        const mJ = RE_JUST.exec(t);
+        if (mJ && sec !== 'ref') {
+            sec = 'fb';
+            if (mJ[3] || b.imgs.length) q.fb.push({ ...b, texto: mJ[3] || '', html: mJ[3] ? escHtml(mJ[3]) : '' });
+            continue;
+        }
+        const mR = RE_REFS.exec(t);
+        if (mR) { sec = 'ref'; if (mR[2]) q.ref.push(mR[2]); continue; }
+        if (sec === 'enun' || sec === 'alts') {
+            const mU = /^unidade\s*:?\s*(.+)$/i.exec(t), mO = /^objetivo\s*:?\s*(.+)$/i.exec(t), mP = /^prova\s*:\s*(.+)$/i.exec(t);
+            if (sec === 'enun' && mP && t.length < 80) { q.provaWord = mP[1].trim(); continue; }
+            if (sec === 'enun' && mU && t.length < 200) { q.unidadeWord = mU[1].trim(); continue; }
+            if (sec === 'enun' && mO && t.length < 600) { q.objetivoWord = mO[1].trim(); continue; }
+            const a = RE_ALT.exec(t);
+            if (a && a[1].toUpperCase() === LETRAS[q.alts.length]) { q.alts.push(a[2]); if (b.marcado) q.marcada = q.alts.length - 1; sec = 'alts'; continue; }
+            if (sec === 'alts') { if (t) q.alts[q.alts.length - 1] += ' ' + t; if (b.marcado) q.marcada = q.alts.length - 1; continue; }
+            q.enun.push(b); continue;
+        }
+        if (sec === 'fb') { q.fb.push(b); continue; }
+        if (sec === 'ref') { if (t) q.ref.push(t); }
+    }
+    // Word com alternativas em LISTA AUTOMÁTICA (a, b, c, d do botão de lista, sem a letra no texto): os itens de lista
+    // no fim do enunciado são as alternativas, na ordem; a marcada com marca-texto é a correta se não houver a linha.
+    qs.forEach(q => {
+        if (q.alts.length >= 2) return;
+        let i = q.enun.length;
+        while (i > 0 && q.enun[i - 1].tag === 'LI' && q.enun[i - 1].texto) i--;
+        const lista = q.enun.slice(i);
+        if (lista.length < 2 || lista.length > 5) return;
+        q.enun = q.enun.slice(0, i);
+        q.alts = lista.map(b => b.texto);
+        const m = lista.findIndex(b => b.marcado);
+        if (m >= 0) q.marcada = m;
+    });
+    return qs.map(q => {
+        const enun = opts.pdf ? paragrafosPdf(q.enun) : q.enun.map(b => ({ ...b, html: b.html || escHtml(b.texto) }));
+        const fb = opts.pdf ? paragrafosPdf(q.fb.filter(b => b.texto)) : q.fb.filter(b => b.texto).map(b => ({ ...b, html: b.html || escHtml(b.texto) }));
+        const comTexto = enun.filter(b => b.texto);
+        // pergunta = último parágrafo; se o enunciado for um parágrafo só, a última frase dele
+        let pergunta = comTexto.length ? comTexto[comTexto.length - 1].texto : '';
+        let caso = comTexto.slice(0, -1).map(b => '<p>' + b.html + '</p>').join('');
+        if (comTexto.length === 1) {
+            const frases = pergunta.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ú])/);
+            if (frases.length > 1) { const ult = frases.pop(); caso = '<p>' + escHtml(frases.join(' ')) + '</p>'; pergunta = ult; }
+        }
+        const gabarito = q.gabarito || (q.marcada >= 0 ? LETRAS[q.marcada] : null);
+        return {
+            numero: q.numero, tituloOriginal: 'Nível de dificuldade: ' + q.dificTexto, tema: '', dificuldade: q.dificuldade,
+            casoHtml: caso, pergunta,
+            enunciado: comTexto.map(b => b.texto).join('\n'),
+            alternativas: q.alts.map(a => String(a).trim()),
+            gabarito: gabarito && LETRAS.indexOf(gabarito) >= 0 && LETRAS.indexOf(gabarito) < q.alts.length ? gabarito : null,
+            imagens: q.enun.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: 'questao-' + q.numero + '-' + (i + 1) })),
+            justificativa: fb.map(b => '<p>' + b.html + '</p>').join(''),
+            imagensFeedback: q.fb.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: 'feedback-' + q.numero + '-' + (i + 1) })),
+            unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
+            fonte: q.ref.join(' ')
+        };
+    }).filter(q => q.alternativas.length >= 2 && (q.pergunta || q.casoHtml));
+}
+
 // Título no AVA (13/11/2026): "Prof. Nome – título do objetivo" (a disciplina já é a pasta do banco no AVA).
 // O parâmetro sigla ficou só pra não quebrar quem chama.
 function tituloPadrao(professor, sigla, objetivo) {
@@ -213,5 +318,5 @@ function analisarAvaliacao(questoes, plano, bimestre, criterios) {
     };
 }
 
-return { LETRAS, texto, norm, lerQuestoesDeLinhas, avaliarQuestao, analisarAvaliacao, aplicarCriterios, CRITERIOS_PADRAO, tituloPadrao, ehAplicacao };
+return { LETRAS, texto, norm, lerQuestoesDeLinhas, lerPorNivel, ehFormatoNivel, avaliarQuestao, analisarAvaliacao, aplicarCriterios, CRITERIOS_PADRAO, tituloPadrao, ehAplicacao };
 }));

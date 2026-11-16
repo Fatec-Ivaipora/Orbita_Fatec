@@ -90,6 +90,7 @@ const verifyToken = async (req, res, next) => {
             req.user.primeiroAcesso = cached.primeiroAcesso;
             req.user.matriculasSemestreMinimo = cached.matriculasSemestreMinimo;
             req.user.avaliacoesMed = cached.avaliacoesMed;
+            req.user.professorMedicina = cached.professorMedicina;
         } else {
             const { db } = require('../firebase');
             const userDoc = await db.collection('users').doc(req.user.uid).get();
@@ -114,6 +115,9 @@ const verifyToken = async (req, res, next) => {
             // Responsável pelas avaliações da Medicina (12/11/2026): monta e finaliza as provas de todas as
             // disciplinas no Banco MED (aba Avaliações) e vê a autoria das questões, sem trocar o cargo.
             req.user.avaliacoesMed = userData.avaliacoesMed === true;
+            // Dá aula na Medicina sem ser do cargo professor_medicina (ex.: coordenador de outro curso, 16/11/2026):
+            // no Banco MED vale como professor (só as disciplinas dele, titular x adjunto).
+            req.user.professorMedicina = userData.professorMedicina === true;
             if (req.user.primeiroAcesso && await senhaTrocadaDepoisDaMarcacao(req.user.uid, userData)) {
                 await db.collection('users').doc(req.user.uid).update({ primeiroAcesso: false });
                 req.user.primeiroAcesso = false;
@@ -126,6 +130,7 @@ const verifyToken = async (req, res, next) => {
                 primeiroAcesso: req.user.primeiroAcesso,
                 matriculasSemestreMinimo: req.user.matriculasSemestreMinimo,
                 avaliacoesMed: req.user.avaliacoesMed,
+                professorMedicina: req.user.professorMedicina,
                 lastFetched: now
             });
         }
@@ -438,8 +443,8 @@ const requireModulePermission = (moduleName) => {
                 'avaliacao-docente': 1,
                 cobranca: 1,
                 'banco-med-fatec': 3,
-                'relatorio-desempenho': 3,
-                'aplicacao-provas-med': 2, // professor só lê (as aplicações dele aparecem destacadas)
+                'relatorio-desempenho': 1,
+                'aplicacao-provas-med': 1, // 16/11/2026: no menu Medicina o professor vê só o Banco (as datas das provas aparecem lá dentro)
                 'banco-provas': 1,
                 'confirmacao-evento': 1,
                 contratos: 1,

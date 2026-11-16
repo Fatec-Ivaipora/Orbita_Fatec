@@ -9,6 +9,7 @@
 //   código e nome do professor, titulação (tac_professor.titpro) e quantos diários ele tem no curso.
 //   Só leitura; sem CPF.
 //
+// v4 16/11/2026: devolve também "vinculo" = linha inteira de tac_professor (professor titular x adjunto)
 // GET /corpo-docente/diarios?semestres=2026/2,2026-2&curso=MED   (v2, 12/11/2026)
 //   Um diário por linha: disciplina, sigla, turma, período e o professor (nome, titulação). Provas da Medicina.
 //
@@ -57,7 +58,8 @@ async function cdDiarios(semestres, curso) {
     const r = await client.query(`
       select dt.coddtu, trim(c.codcur) as codcur, trim(t.nomtur) as turma, t.pertur as periodo, t.semtur as sem,
              d.coddis, trim(d.nomdis) as disciplina, trim(d.noadis) as sigla,
-             f.codfun, trim(f.nomfun) as nome, trim(coalesce(p.titpro, '')) as titulacao
+             f.codfun, trim(f.nomfun) as nome, trim(coalesce(p.titpro, '')) as titulacao,
+             row_to_json(p) as vinculo
         from tac_professor p
         join trh_funcionario f on f.codfun = p.funpro
         join tac_disciplina_turma dt on dt.coddtu = p.dtupro
@@ -109,7 +111,7 @@ async function rotaOrbitaCorpoDocente(req, res) {
   if (!u.pathname.startsWith('/corpo-docente/')) return false;
   if (!autenticadoOrbita(req)) { cdResponder(res, 401, { ok: false, erro: 'nao autorizado' }); return true; }
   if (req.method !== 'GET') { cdResponder(res, 405, { ok: false, erro: 'so GET' }); return true; }
-  if (u.pathname === '/corpo-docente/ping') { cdResponder(res, 200, { ok: true, rotas: 'corpo-docente', versao: 3 }); return true; }
+  if (u.pathname === '/corpo-docente/ping') { cdResponder(res, 200, { ok: true, rotas: 'corpo-docente', versao: 4 }); return true; }
   if (u.pathname === '/corpo-docente/lista') {
     const semestres = String(u.searchParams.get('semestres') || '').split(',').map(s => s.trim()).filter(s => /^\d{4}[/-][12]$/.test(s)).slice(0, 4);
     if (!semestres.length) { cdResponder(res, 400, { ok: false, erro: 'semestres invalidos' }); return true; }

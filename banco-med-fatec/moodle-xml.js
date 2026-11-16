@@ -69,8 +69,11 @@ function blocoGeneralFeedback(questao) {
     const partes = [];
     if (questao.justificativa) partes.push(questao.justificativa);
     if (questao.fonte) partes.push(`<p><em>FONTE: ${xmlEscape(questao.fonte)}</em></p>`);
+    // imagens do feedback (16/11/2026): já referenciadas no texto com @@PLUGINFILE@@/nome; aqui vão os <file>
+    const arquivos = (questao.arquivosFeedback || []).filter(a => a && a.nome && a.base64)
+        .map(a => `\n<file name="${xmlEscape(a.nome)}" path="/" encoding="base64">${a.base64}</file>`).join('');
     return `  <generalfeedback format="html">
-    <text>${cdata(partes.join('\n'))}</text>
+    <text>${cdata(partes.join('\n'))}</text>${arquivos}
   </generalfeedback>`;
 }
 
@@ -78,6 +81,7 @@ function blocoTags(questao) {
     const tags = [];
     if (questao.dificuldade) tags.push(`dificuldade:${DIFICULDADE_LABEL[questao.dificuldade] || questao.dificuldade}`);
     if (questao.elaboradoPor) tags.push(`autor:${questao.elaboradoPor}`);
+    if (questao.provaRotulo) tags.push(`prova:${questao.provaRotulo}`);
     if (!tags.length) return '';
     return `  <tags>
 ${tags.map(t => `    <tag><text>${xmlEscape(t)}</text></tag>`).join('\n')}
@@ -174,5 +178,19 @@ function gerarMoodleXml(nomeCategoria, questoes) {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<quiz>\n${corpo}\n</quiz>\n`;
 }
 
-return { gerarMoodleXml, xmlEscape };
+// várias categorias num arquivo só (16/11/2026): 1ª chamada, 2ª chamada, exame, dependência, adaptação separados no banco do AVA
+function gerarMoodleXmlGrupos(grupos) {
+    const corpo = grupos.filter(g => g.questoes && g.questoes.length).map(g => [`<question type="category">
+  <category>
+    <text>$module$/top/${xmlEscape(g.categoria)}</text>
+  </category>
+  <info format="moodle_auto_format">
+    <text>${cdata(`Categoria gerada pelo Órbita — BANCO MED-FATEC ('${g.categoria}').`)}</text>
+  </info>
+  <idnumber></idnumber>
+</question>`, ...g.questoes.map(q => questaoParaXml({ ...q, provaRotulo: q.provaRotulo || g.rotulo }))].join('\n\n')).join('\n\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<quiz>\n${corpo}\n</quiz>\n`;
+}
+
+return { gerarMoodleXml, gerarMoodleXmlGrupos, xmlEscape };
 }));
