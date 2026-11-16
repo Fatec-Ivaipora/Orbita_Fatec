@@ -416,8 +416,23 @@ body {
   pointer-events: auto;
 }
 
+/* Botão ✕ do menu: só no celular */
+.layout-sidebar-fechar { display: none; }
+
 /* Responsive */
 @media (max-width: 768px) {
+  .layout-sidebar { width: min(300px, 86vw); }
+  .layout-sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .layout-sidebar-fechar {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 44px; height: 44px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06); color: #e2e8f0; cursor: pointer;
+  }
+  .layout-sidebar-fechar:focus-visible, .layout-sidebar-toggle:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+  .layout-nav-item { min-height: 44px; }
+  .layout-nav-category { min-height: 44px; box-sizing: border-box; }
+  .layout-sidebar-toggle { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  body.layout-menu-aberto .layout-content { overflow: hidden; }
   .layout-sidebar {
     position: fixed;
     top: 0;

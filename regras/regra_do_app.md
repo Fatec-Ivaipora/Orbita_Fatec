@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-13] Órbita no celular: menu e Contratos
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/orbita-mobile
+- Arquivos alterados: core/layout.js, core/layout.css, comercial/contratos/index.html, comercial/contratos/app.js, comercial/contratos/contratos-celular.css (novo)
+- Tipo: melhoria de interface (só celular; o computador não muda)
+- Motivo: navegar pelo celular estava ruim, principalmente em Contratos (lista a ~2.400px do topo, tabela de 1.623px numa tela de 390px, Assinou/WhatsApp/ações escondidos à direita).
+- Impacto: menu com botão ✕, Esc e página travada atrás; Contratos até 640px com topo enxuto (cursos e abas numa linha, indicadores 2×2, abas presas no topo, filtros extras atrás do botão "Filtros"), cada aluno vira cartão com WhatsApp e ações de 44px, janelas com Salvar sempre à vista.
+- Como testar: abrir Contratos no celular (ou DevTools 390px), escolher o semestre, rolar a lista, trocar de aba, abrir Filtros, Histórico e Editar; conferir no computador que a tabela continua igual.
+- Como reverter: remover o link de contratos-celular.css do index.html e reverter core/layout.*.
+
 ### [2026-11-13] Banco de Provas: Word com "Questão N" e disciplina em estilo de Título
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-leitura-titulos
