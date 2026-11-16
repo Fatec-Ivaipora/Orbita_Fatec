@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Banco de Provas — Montar o simulado igual ao arquivo importado
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/simulado-pelo-arquivo (em cima de fix/banco-provas-cg-sem-duplicar)
+- Arquivos alterados: src/rotas/banco-provas.js, docencia/banco-provas/{app.js, index.html, banco-provas.css}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: o coordenador já manda no Word a sequência das disciplinas, quantas questões de cada e quais; montar de novo na mão é retrabalho.
+- Impacto: a importação grava a sequência do arquivo (coleção docencia_bp_lotes: curso, semestre, bimestre, chamada, nomeArquivo, ordem [{n, id}]); na confirmação, a de Conhecimentos Gerais reaproveitada passa a apontar para a que já existia. No Montar Simulado, "Montar igual ao arquivo importado" (GET /lotes, GET /lotes/:id/sequencia) monta os blocos na ordem do Word, com a quantidade e as questões de cada disciplina, e preenche bimestre/chamada/semestre; o coordenador confere e cria. Vale para arquivos importados a partir desta versão; arquivo com questão ainda na revisão pede para confirmar antes.
+- Como testar: importar um simulado, confirmar as disciplinas, Montar Simulado → "Montar igual ao arquivo importado" → escolher o arquivo. Testado (só leitura + registro temporário apagado) com o simulado da Enfermagem 2º per.: CG 5 (1–5), 9, 8, 9, 9.
+- Como reverter: reverter os arquivos acima (a coleção docencia_bp_lotes pode ficar). Montagem manual: cada disciplina ganhou o campo com o número da posição (digita e ela vai direto para o lugar), além das setas ↑↓.
+
 ### [2026-11-16] Banco de Provas — Conhecimentos Gerais sem duplicar entre os períodos
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-provas-cg-sem-duplicar
