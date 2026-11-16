@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Banco de Provas — Conhecimentos Gerais sem duplicar entre os períodos
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-provas-cg-sem-duplicar
+- Arquivos alterados: src/rotas/banco-provas.js, docencia/banco-provas/app.js, docencia/banco-provas/index.html, regras/regra_do_app.md
+- Tipo: correção
+- Motivo: as 5 de Conhecimentos Gerais são as mesmas para todas as turmas do curso no semestre; cada simulado de período traz as mesmas 5 no Word e a importação gravava de novo (em 2026.2: 146 repetidas, ex.: Agronomia 45 para 6 diferentes).
+- Impacto: ao confirmar o bloco de Conhecimentos Gerais na revisão da importação, a questão que já está no banco do mesmo curso e semestre (texto igual, sem diferenciar maiúscula/minúscula, acento e pontuação — Padrao.chaveComparar) não é gravada de novo: é reaproveitada e a tela avisa quantas. O Montar Simulado já pega as de Conhecimentos Gerais do banco por curso/semestre, então cada turma usa as mesmas.
+- Como testar: importar dois simulados de períodos diferentes do mesmo curso com as mesmas 5 de Conhecimentos Gerais; na 2ª confirmação aparece "5 já estavam no banco… reaproveitadas".
+- Como reverter: reverter os arquivos acima.
+
 ### [2026-11-16] Banco MED: feedback em imagem e modelo do Word por disciplina (unidades e objetivos do plano)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-med-feedback-imagem
