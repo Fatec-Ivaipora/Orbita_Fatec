@@ -66,9 +66,10 @@
             <h2 id="mh-titulo">Horário da disciplina</h2>
             <p class="mz-modal-sub" id="mh-sub"></p>
             <p class="md-dica">Dia e horário podem ficar para depois: deixe "Dia a definir" e salve só o professor.</p>
+            <p class="md-dica"><b>Disciplina com dois professores</b> (ex.: estágio): clique em "+ Adicionar professor ou horário" e preencha uma linha para cada professor, com o mesmo dia e horário. No horário impresso eles saem juntos ("Prof. A e Prof. B").</p>
             <form id="form-horario" autocomplete="off">
                 <div id="mh-linhas"></div>
-                <button type="button" class="mz-btn mz-btn-sec" id="mh-add">+ Adicionar horário</button>
+                <button type="button" class="mz-btn mz-btn-sec" id="mh-add">+ Adicionar professor ou horário</button>
                 <p class="mz-erro hidden" id="mh-erro"></p>
                 <div class="mz-modal-acoes">
                     <button type="button" class="mz-btn mz-btn-sec" id="mh-cancelar">Cancelar</button>
@@ -111,6 +112,6 @@
     <datalist id="lista-salas"></datalist>
     <div id="toast" class="mz-toast hidden mz-no-print" role="status"></div>
 
-    <script type="module" src="/matrizes/app.js?v=13"></script>
+    <script type="module" src="/matrizes/app.js?v=14"></script>
 </body>
 </html>
