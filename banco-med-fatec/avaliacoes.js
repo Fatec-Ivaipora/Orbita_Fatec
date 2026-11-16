@@ -203,7 +203,7 @@ function renderEditor() {
       <div class="av-ed-acoes">
         <button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>
         ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
-                 ${souEditor() ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
+                 ${souTitular(av.chave) ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
               : souTitular(av.chave) ? `<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
                  <button type="button" class="av-icone-btn av-perigo" data-excluir-av title="Excluir avaliação" aria-label="Excluir avaliação">${ic('lixo')}</button>` : ''}
       </div>
@@ -221,6 +221,7 @@ function renderEditor() {
         </div>`}
 
         ${atual.papel === 'adjunto' ? `<div class="av-faixa av-faixa-papel" role="note">Você é <b>adjunto(a)</b> nesta disciplina: aqui aparecem só as <b>suas ${questoes.length}</b> questão(ões) (a prova tem ${atual.totalNaProva} no total). O titular confere e finaliza a prova.</div>` : atual.papel === 'titular' ? '<div class="av-faixa av-faixa-papel" role="note">Você é o <b>titular</b> desta disciplina: vê e edita as questões de todos os professores, organiza a ordem e finaliza a prova.</div>' : ''}
+        ${atual.papel && atual.papel !== 'editor' ? envioNaProvaHtml(av, questoes) : ''}
         ${analise.pendencias.length && !fin ? `<div class="av-faixa av-faixa-aviso" role="status">${ic('alerta')}<ul>${analise.pendencias.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 
         <div class="av-prog" aria-label="${prontas} de ${questoes.length} questões no padrão">
@@ -242,6 +243,21 @@ function renderEditor() {
         ${painelPlano(plano, analise, av)}
       </aside>
     </div>`;
+}
+
+// Professor sobe as próprias questões no AVA sem esperar a finalização (16/11/2026): o arquivo só sai quando as
+// questões dele estão sem nada "a corrigir" na Conferência CADAM.
+function envioNaProvaHtml(av, questoes) {
+  const minhas = questoes.filter(q => atual.papel === 'adjunto' || P.norm(q.professorNome || '') === P.norm(atual.eu || ''));
+  const aCorrigir = minhas.filter(q => !q.padrao.ok).length;
+  const env = atual.meuEnvio || {};
+  const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(av.id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR')}</small>` : ''}</label>`; };
+  return `<section class="av-envio av-envio-prova" aria-label="Enviar ao AVA">
+    <h3>Enviar as suas questões ao AVA</h3>
+    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja a Conferência CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo (vai com as questões a mais de 2ª chamada e exame, cada uma na sua categoria), importe no banco de questões do AVA e marque cada etapa.`}</p>
+    <div class="av-envio-acoes"><button type="button" class="btn btn-primary av-btn" data-prof-xml="${esc(av.id)}" ${!minhas.length || aCorrigir ? 'disabled' : ''}>${ic('baixar')}Baixar minhas questões para o AVA</button>
+      <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></div>
+  </section>`;
 }
 
 function linhaQuestao(q, n, fin, total) {
@@ -1554,6 +1570,7 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.id === 'av-ver-fechados') { verFechados = !verFechados; t.setAttribute('aria-pressed', String(verFechados)); t.textContent = verFechados ? 'Esconder 1º bimestre' : 'Mostrar 1º bimestre'; return renderGrade(); }
     if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
     if (t.dataset.divisao) return abrirDivisao(t.dataset.divisao);
+    if (t.dataset.profXml) return baixarXmlProfessor(t.dataset.profXml, t);
     if (t.dataset.criar) return criarAvaliacao(t.dataset.criar, Number(t.dataset.bim), Number(t.dataset.ch), t.dataset.tipo);
     if (t.dataset.abrir) return abrirAvaliacao(t.dataset.abrir);
     if (t.hasAttribute('data-voltar')) return voltarGrade();
@@ -1572,6 +1589,13 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.dataset.fp !== undefined) { filtroProfessor = t.dataset.fp; renderEditor(); }
     if (t.dataset.criterios) return abrirCriterios(t.dataset.criterios, carregarGrade);
     if (t.hasAttribute('data-criterios-av')) return abrirCriterios(atual.avaliacao.chave, recarregarAtual);
+  });
+  // marcações "subi no AVA" / "coloquei no questionário" dentro da prova
+  view.addEventListener('change', async (e) => {
+    const c = e.target.closest('[data-envio]'); if (!c) return;
+    c.disabled = true;
+    try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await recarregarAtual(); }
+    catch (err) { c.checked = !c.checked; c.disabled = false; toast(err.message, 'erro'); }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
