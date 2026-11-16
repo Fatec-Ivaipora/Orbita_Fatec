@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplicação de Provas · Órbita - FatecIVP</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/core/layout.css">
+  <link rel="stylesheet" href="/core/orbita.css?v=3">
+  <link rel="stylesheet" href="/medicina/aplicacao-provas/aplicacao-provas.css?v=4">
+</head>
+<body class="orb-v2">
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <div class="layout-main">
+      <div class="layout-content">
+        <main class="ap-main">
+
+          <header class="ap-cab">
+            <div class="ap-cab-txt">
+              <img src="/img/medfatec-logo.png" alt="MED FATEC" class="ap-logo">
+              <div>
+                <h1>Aplicação de Provas</h1>
+                <p>Calendário das turmas, professores aplicadores, laboratórios e NAPA</p>
+              </div>
+            </div>
+            <div class="ap-cab-ctrl">
+              <label class="ap-sem"><span>Semestre</span><select id="ap-semestre"></select></label>
+              <label class="ap-sem"><span>Etapa</span>
+                <select id="ap-etapa">
+                  <option value="">Todas</option>
+                  <option value="b1">1º bimestre</option>
+                  <option value="b2">2º bimestre</option>
+                  <option value="sub">2ª chamada</option>
+                  <option value="exame">Exame</option>
+                </select>
+              </label>
+            </div>
+          </header>
+
+          <section class="ap-status" id="ap-status" aria-live="polite"></section>
+
+          <div class="ap-barra">
+            <nav class="ap-abas" role="tablist" aria-label="Visões do calendário">
+              <button type="button" role="tab" class="ap-aba ativa" data-aba="turmas" aria-selected="true">Por turma</button>
+              <button type="button" role="tab" class="ap-aba" data-aba="aplicadores" aria-selected="false">Aplicadores</button>
+              <button type="button" role="tab" class="ap-aba" data-aba="minhas" aria-selected="false" hidden>Minhas aplicações <span id="ap-n-minhas"></span></button>
+              <button type="button" role="tab" class="ap-aba" data-aba="napa" aria-selected="false" hidden>NAPA</button>
+            </nav>
+            <div class="ap-acoes">
+              <button type="button" class="ap-btn ap-btn-pri ap-so-editor" id="ap-nova" hidden>+ Prova</button>
+              <button type="button" class="ap-btn ap-so-editor" id="ap-config" hidden>Configurar</button>
+              <div class="ap-menu-wrap">
+                <button type="button" class="ap-btn" id="ap-exportar" aria-haspopup="true" aria-expanded="false">Imprimir / imagem</button>
+                <div class="ap-menu" id="ap-menu-exportar" role="menu" hidden>
+                  <button type="button" role="menuitem" data-exp="img-turmas">Imagem: calendário das turmas (alunos)</button>
+                  <button type="button" role="menuitem" data-exp="img-aplicadores">Imagem: professores aplicadores</button>
+                  <button type="button" role="menuitem" data-exp="pdf-turmas">Imprimir / PDF: calendário das turmas</button>
+                  <button type="button" role="menuitem" data-exp="pdf-aplicadores">Imprimir / PDF: aplicadores e laboratórios</button>
+                  <button type="button" role="menuitem" data-exp="pdf-napa" class="ap-so-editor" hidden>Imprimir / PDF: NAPA (sala, notebooks)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="ap-conflitos" id="ap-conflitos" hidden></section>
+          <section id="ap-conteudo" class="ap-conteudo"><div class="ap-vazio">Carregando o calendário…</div></section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- área de impressão / imagem (montada na hora) -->
+  <div id="ap-saida" class="ap-saida" aria-hidden="true"></div>
+
+  <script type="module" src="/medicina/aplicacao-provas/app.js?v=4"></script>
+</body>
+</html>
