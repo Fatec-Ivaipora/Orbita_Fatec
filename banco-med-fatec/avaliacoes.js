@@ -215,7 +215,7 @@ function renderEditor() {
 
     <div class="av-ed-corpo">
       <section class="av-ed-questoes" aria-label="Questões da avaliação">
-        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${rotuloAvaliacao(av).replace(' · ', ' / ')}. Baixe o arquivo e importe no banco de questões do AVA.</div></div>` : `
+        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${atual.totalNaProva || questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${rotuloAvaliacao(av).replace(' · ', ' / ')}. Baixe o arquivo e importe no banco de questões do AVA.</div></div>` : `
         <div class="bmf-toolbar av-toolbar">
           <div class="av-toolbar-acoes">
             <button type="button" class="btn av-btn-branco" data-nova>${ic('mais')}Escrever questão</button>
@@ -225,7 +225,7 @@ function renderEditor() {
           </div>
         </div>`}
 
-        ${atual.papel === 'adjunto' ? `<div class="av-faixa av-faixa-papel" role="note">Você é <b>adjunto(a)</b> nesta disciplina: aqui aparecem só as <b>suas ${questoes.length}</b> questão(ões) (a prova tem ${atual.totalNaProva} no total). O titular confere e finaliza a prova.</div>` : atual.papel === 'titular' ? '<div class="av-faixa av-faixa-papel" role="note">Você é o <b>titular</b> desta disciplina: vê e edita as questões de todos os professores, organiza a ordem e finaliza a prova.</div>' : ''}
+        ${atual.papel === 'adjunto' ? `<div class="av-faixa av-faixa-papel" role="note"><div>Você é <b>adjunto(a)</b> nesta disciplina: aqui aparecem só as <b>suas ${questoes.length}</b> ${questoes.length === 1 ? 'questão' : 'questões'} (a prova tem ${atual.totalNaProva} no total). O titular confere e finaliza a prova.</div></div>` : atual.papel === 'titular' ? '<div class="av-faixa av-faixa-papel" role="note"><div>Você é o <b>titular</b> desta disciplina: vê e edita as questões de todos os professores, organiza a ordem e finaliza a prova.</div></div>' : ''}
         ${atual.papel && atual.papel !== 'editor' ? envioNaProvaHtml(av, questoes) : ''}
         ${analise.pendencias.length && !fin ? `<div class="av-faixa av-faixa-aviso" role="status">${ic('alerta')}<ul>${analise.pendencias.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 
@@ -1439,6 +1439,11 @@ async function abrirProgresso(chave, rota) {
   $('#av-conf-corpo').innerHTML = '<p class="av-vazio">Contando as questões de cada professor…</p>';
   try {
     const r = await api(rota || `${BASE}/progresso/${encodeURIComponent(chave)}?semestre=${encodeURIComponent(semestre)}`);
+    // bimestre fechado (fim de 2026.2) não aparece no progresso, como na grade (16/11/2026)
+    const fica = r.provas.map((p, i) => i).filter(i => r.provas[i].tipo === 'exame' || verFechados || !BIMESTRES_FECHADOS.includes(r.provas[i].bimestre));
+    const ocultas = r.provas.length - fica.length;
+    r.provas = fica.map(i => r.provas[i]);
+    r.professores.forEach(pr => { pr.feitas = fica.map(i => pr.feitas[i]); if (Array.isArray(pr.envios)) pr.envios = fica.map(i => pr.envios[i]); });
     const cel = (feitas, meta, envio) => (meta ? `<td class="${feitas >= meta ? 'av-pg-ok' : feitas ? 'av-pg-meio' : 'av-pg-zero'}">${feitas} de ${meta}${feitas > meta ? ` <small>(+${feitas - meta})</small>` : ''}` : `<td class="av-pg-livre">${feitas || '–'}`) + envioCel(envio) + '</td>';
     const completos = (i) => r.professores.filter(p => p.meta && p.feitas[i] >= p.meta).length;
     const comCota = r.professores.filter(p => p.meta).length;
@@ -1446,6 +1451,8 @@ async function abrirProgresso(chave, rota) {
       <p class="av-conf-sub">${esc(r.disciplina)} · ${esc(r.semestre)}${r.qtdQuestoes ? ` · prova de ${r.qtdQuestoes} questões` : ''}</p>
       ${!r.provas.length ? '<p class="av-vazio">Nenhuma prova montada ainda nesta disciplina.</p>' : `
       ${!comCota ? '<p class="av-conf-nota">A divisão entre os professores ainda não foi definida nos critérios da disciplina — a tabela mostra só quantas cada um já fez.</p>' : ''}
+      ${ocultas ? `<p class="av-conf-nota">O 1º bimestre está fechado e não aparece aqui (${ocultas} coluna${ocultas > 1 ? 's' : ''}).</p>` : ''}
+      <p class="av-pg-dica">Role a tabela para o lado para ver todas as provas.</p>
       <div class="av-pg-tabela"><table>
         <thead><tr><th scope="col">Professor</th>${r.provas.map(p => `<th scope="col" class="av-uso-th av-uso-${p.tipo === 'exame' ? 'exame' : p.chamada === 2 ? 'c2' : 'c1'}">${p.tipo === 'exame' ? 'Exame semestral' : `${ordinal(p.bimestre)} bim · ${p.chamada}ª ch.`}<small>${p.virtual ? 'ainda no banco' : p.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</small></th>`).join('')}</tr></thead>
         <tbody>${r.professores.map(pr => `<tr><th scope="row">${esc(pr.nome)}${r.responsavel && r.responsavel.split(' / ').some(x => P.norm(x) === P.norm(pr.nome)) ? ' <small class="av-resp">responsável</small>' : ''}${pr.meta ? '' : ' <small>sem cota</small>'}</th>${pr.feitas.map((f, i) => cel(f, pr.meta, (pr.envios || [])[i])).join('')}</tr>`).join('')}
