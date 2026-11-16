@@ -140,7 +140,8 @@ router.get('/professores', verifyToken, checkPermission, async (req, res) => {
     if (!podeVerAutoria(req.user.role, req.user)) return res.status(403).json({ error: 'Só a coordenação pode ver o banco por professor.' });
     try {
         const snap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
-        const professores = snap.docs
+        const extra = await db.collection('users').where('professorMedicina', '==', true).get();
+        const professores = [...snap.docs, ...extra.docs.filter(d => !snap.docs.some(x => x.id === d.id))]
             .map(d => ({ uid: d.id, nome: d.data().name || d.data().email }))
             .sort((a, b) => a.nome.localeCompare(b.nome));
         res.json(professores);
@@ -246,8 +247,9 @@ router.get('/questoes/contagem-professor', verifyToken, checkPermission, async (
     if (!podeVerAutoria(req.user.role, req.user)) return res.status(403).json({ error: 'Só a coordenação pode ver o relatório por professor.' });
     try {
         const professoresSnap = await db.collection('users').where('role', 'in', ['professor_medicina', 'coord_medicina']).get();
+        const extraSnap = await db.collection('users').where('professorMedicina', '==', true).get();
         const contagens = [];
-        await Promise.all(professoresSnap.docs.map(async (d) => {
+        await Promise.all([...professoresSnap.docs, ...extraSnap.docs.filter(d => !professoresSnap.docs.some(x => x.id === d.id))].map(async (d) => {
             const agg = await db.collection(COL_QUESTOES)
                 .where('criadoPor', '==', d.id)
                 .where('status', '==', 'publicada')
@@ -298,7 +300,14 @@ router.get('/questoes', verifyToken, checkPermission, async (req, res) => {
         const docs = soDisciplinas
             ? (await Promise.all(soDisciplinas.map(id => query.where('categoriaId', '==', id).get()))).flatMap(sn => sn.docs)
             : (await query.get()).docs;
-        const questoes = docs.map(d => anonimizarQuestao({ id: d.id, ...d.data() }, req.user.role, req.user));
+        let lista = docs.map(d => ({ id: d.id, ...d.data() }));
+        let resp = null;
+        if (prof) {
+            resp = await categoriasComoResponsavel(req);
+            // adjunto: só as próprias questões; responsável: todas as da disciplina dele
+            lista = lista.filter(q => resp.has(q.categoriaId) || minhaQuestao(q, prof, req.user.uid));
+        }
+        const questoes = lista.map(q => (resp && resp.has(q.categoriaId) ? q : anonimizarQuestao(q, req.user.role, req.user)));
         questoes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         res.json(questoes);
     } catch (err) {
@@ -727,13 +736,14 @@ const semestreAtual = () => { const d = new Date(); return `${d.getFullYear()}.$
 // Professor de Medicina (13/11/2026): escreve questão só nas disciplinas que dá no semestre (diários do Edubox)
 // e o nome dele vem do PERFIL — fica fixo no título "Prof. Nome – …", ninguém digita. Quem vê autoria
 // (coordenação, ADM, responsável pelas avaliações) continua escolhendo professor e disciplina livremente.
-function ehProfessorRestrito(user) { return user.role === 'professor_medicina' && !podeVerAutoria(user.role, user); }
+function ehProfessorRestrito(user) { return (user.role === 'professor_medicina' || user.professorMedicina === true) && !podeVerAutoria(user.role, user); }
 const perfilCache = new Map();
 async function perfilProfessor(user) {
     const c = perfilCache.get(user.uid);
     if (c && Date.now() - c.em < 5 * 60000) return c.valor;
     const snap = await db.collection('users').doc(user.uid).get();
-    const nome = String((snap.exists && (snap.data().name || snap.data().nome)) || user.name || '').replace(/\s+/g, ' ').trim();
+    // nomeEdubox (16/11/2026): quando o nome da conta difere do Edubox (ex.: "TATIANE BORZUK" x "Tatiane Borzuk da Fonseca")
+    const nome = String((snap.exists && (snap.data().nomeEdubox || snap.data().name || snap.data().nome)) || user.name || '').replace(/\s+/g, ' ').trim();
     const { listaDisciplinas, normNome } = AV();
     const { fonte, disciplinas } = await listaDisciplinas(semestreAtual());
     const minhas = nome ? disciplinas.filter(d => d.professores.some(p => normNome(p) === normNome(nome))) : [];
@@ -786,12 +796,92 @@ router.get('/conferencia', verifyToken, checkPermission, async (req, res) => {
         const prof = await perfilProfessor(req.user);
         const snaps = await Promise.all(prof.categoriaIds.map(id => db.collection(COL_AVALIACOES).where('categoriaId', '==', id).get()));
         const critCache = new Map();
-        const lista = (await Promise.all(snaps.flatMap(sn => sn.docs).map(async d => {
-            const a = d.data();
+        const todas = snaps.flatMap(sn => sn.docs).map(d => ({ id: d.id, ...d.data() }));
+        // datas do calendário (Aplicação de Provas): disciplina + etapa (b1/b2 = 1ª chamada do bimestre; sub = 2ª chamada)
+        const n = AV().normNome;
+        const cal = {};
+        (await db.collection('med_aplicacao_provas').where('semestre', '==', prof.semestre).get()).docs.forEach(d => {
+            const p = d.data(); const k = `${n(p.disciplina)}|${p.etapa}`; if (!cal[k] || p.data < cal[k]) cal[k] = p.data;
+        });
+        const dataDe = (a, chamada) => cal[`${n(a.disciplina)}|${a.tipo === 'exame' || chamada === 'exame' ? 'exame' : chamada === 2 ? 'sub' : 'b' + a.bimestre}`] || null;
+        // 2ª chamada pronta = questões dele na avaliação de 2ª chamada (se já existe) + as marcadas "2ª chamada" no banco da disciplina
+        const reservaCache = new Map();
+        const reservaUso = async (a, uso) => {
+            const k = `${a.categoriaId}|${a.semestre}`;
+            if (!reservaCache.has(k)) reservaCache.set(k, db.collection(COL_QUESTOES).where('categoriaId', '==', a.categoriaId).where('usoProva', 'in', ['c2', 'exame']).get()
+                .then(sn => sn.docs.map(d => ({ id: d.id, ...d.data() })).filter(q => q.status === 'publicada' && (!q.semestre || q.semestre === a.semestre))));
+            return (await reservaCache.get(k)).filter(q => q.usoProva === uso && (uso === 'exame' || !q.bimestre || q.bimestre === a.bimestre) && minhaQuestao(q, prof, req.user.uid));
+        };
+        const reserva2 = (a) => reservaUso(a, 'c2');
+        const lista = (await Promise.all(todas.map(async a => {
             const parte = await minhaParte(a, prof, req.user.uid, critCache);
-            return { id: d.id, disciplina: a.disciplina, sigla: a.sigla, semestre: a.semestre, bimestre: a.bimestre, chamada: a.chamada, status: a.status, totalProva: (a.questoesIds || []).length, ...parte };
+            const item = { id: a.id, tipo: a.tipo || '', disciplina: a.disciplina, sigla: a.sigla, semestre: a.semestre, bimestre: a.bimestre, chamada: a.chamada, status: a.status, totalProva: (a.questoesIds || []).length, ...parte, envio: (a.envios || {})[AV().chaveEnvio(prof.nome)] || null, data: dataDe(a, a.chamada) };
+            // exame: na 1ª chamada do 2º bimestre, mostra também o que ele já deixou pronto para o exame
+            if (a.tipo !== 'exame' && a.chamada === 1 && a.bimestre === 2) {
+                const avE = todas.find(x => x.chave === a.chave && x.semestre === a.semestre && x.tipo === 'exame');
+                const resE = await reservaUso(a, 'exame');
+                const idsE = new Set((avE && avE.questoesIds) || []);
+                const naE = avE ? (await minhaParte(avE, prof, req.user.uid, critCache)).feitas : 0;
+                item.exame = { meta: parte.meta, feitas: naE + resE.filter(q => !idsE.has(q.id)).length, avaliacaoId: avE ? avE.id : null, data: dataDe(a, 'exame') };
+            }
+            if (a.tipo !== 'exame' && a.chamada !== 2) {
+                const av2 = todas.find(x => x.tipo !== 'exame' && x.chave === a.chave && x.semestre === a.semestre && x.bimestre === a.bimestre && x.chamada === 2);
+                const res = await reserva2(a);
+                let naAv2 = 0;
+                if (av2) { const p2 = await minhaParte(av2, prof, req.user.uid, critCache); naAv2 = p2.feitas; }
+                const ids2 = new Set((av2 && av2.questoesIds) || []);
+                item.segunda = { meta: parte.meta, feitas: naAv2 + res.filter(q => !ids2.has(q.id)).length, avaliacaoId: av2 ? av2.id : null, data: dataDe(a, 2) };
+            }
+            return item;
         }))).sort((a, b) => String(b.semestre).localeCompare(String(a.semestre)) || (b.bimestre - a.bimestre) || (a.chamada - b.chamada) || String(a.disciplina).localeCompare(String(b.disciplina)));
         res.json({ professor: prof.nome, semestre: prof.semestre, avaliacoes: lista });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+// O professor sinaliza que subiu as questões dele no banco do AVA e no questionário (16/11/2026)
+router.put('/conferencia/:id/envio', verifyToken, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'Só o professor marca o envio das questões dele.' });
+        const etapa = req.body.etapa;
+        if (!['bancoAva', 'questionario'].includes(etapa)) return res.status(400).json({ error: 'Etapa inválida.' });
+        const ref = db.collection(COL_AVALIACOES).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Avaliação não encontrada.' });
+        const prof = await exigeDisciplinaDoProfessor(req, snap.data().categoriaId);
+        const k = AV().chaveEnvio(prof.nome);
+        const valor = req.body.feito ? { feito: true, em: new Date().toISOString() } : { feito: false, em: null };
+        await ref.update(new admin.firestore.FieldPath('envios', k, 'professor'), prof.nome, new admin.firestore.FieldPath('envios', k, etapa), valor);
+        res.json({ message: req.body.feito ? (etapa === 'bancoAva' ? 'Marcado: subiu no banco de questões do AVA.' : 'Marcado: está no questionário do AVA.') : 'Marcação desfeita.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+// XML do professor: as questões dele nesta prova + as "a mais" (2ª chamada, exame, dependência, adaptação) da disciplina
+router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação baixa o arquivo da prova inteira na aba Avaliações.' });
+        const snap = await db.collection(COL_AVALIACOES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Avaliação não encontrada.' });
+        const av = snap.data();
+        const prof = await exigeDisciplinaDoProfessor(req, av.categoriaId);
+        const ids = av.questoesIds || [];
+        const docs = ids.length ? await db.getAll(...ids.map(id => db.collection(COL_QUESTOES).doc(id))) : [];
+        const daProva = docs.filter(d => d.exists).map(d => ({ id: d.id, ...d.data() })).filter(q => minhaQuestao(q, prof, req.user.uid));
+        const usoDaProva = AV().usoDaAvaliacao(av);
+        const extrasSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
+        const extras = extrasSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .filter(q => q.usoProva && q.usoProva !== usoDaProva && q.status === 'publicada' && !ids.includes(q.id) && minhaQuestao(q, prof, req.user.uid) && (q.usoProva === 'exame' || !q.bimestre || !av.bimestre || q.bimestre === av.bimestre));
+        const { comLinks, USOS_PROVA } = AV();
+        const base = [av.disciplina, av.semestre, ...(av.tipo === 'exame' ? [] : [`${av.bimestre}º Bimestre`])].map(x => String(x).replace(/\//g, '-')).join('/');
+        const raiz = [av.disciplina, av.semestre].map(x => String(x).replace(/\//g, '-')).join('/');
+        const empacotar = async (q) => ({
+            id: q.id, titulo: q.titulo, tipoMoodle: q.tipoMoodle, casoClinico: q.casoClinico || '', pergunta: q.pergunta || '', enunciadoHtml: q.enunciadoHtml || '',
+            alternativas: q.alternativas || [], justificativa: q.justificativa || '', fonte: q.fonte || '', dificuldade: q.dificuldade, elaboradoPor: q.elaboradoPor || q.professorNome || '',
+            usoProva: q.usoProva || usoDaProva, imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30)
+        });
+        const grupos = {};
+        for (const q of [...daProva, ...extras]) { const u = q.usoProva && q.usoProva !== usoDaProva ? q.usoProva : usoDaProva; (grupos[u] = grupos[u] || []).push(await empacotar(q)); }
+        res.json({
+            nomeArquivo: `${(av.sigla || av.disciplina)} ${av.semestre} ${av.bimestre}o bim - ${prof.nome}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_') + '.xml',
+            grupos: Object.entries(grupos).map(([u, questoes]) => ({ uso: u, rotulo: USOS_PROVA[u], categoria: u === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[u]}`, questoes }))
+        });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 router.get('/conferencia/:id', verifyToken, checkPermission, async (req, res) => {
@@ -813,8 +903,97 @@ router.get('/conferencia/:id', verifyToken, checkPermission, async (req, res) =>
         res.json({
             avaliacao: { id: snap.id, disciplina: av.disciplina, sigla: av.sigla, semestre: av.semestre, bimestre: av.bimestre, chamada: av.chamada, status: av.status, categoriaId: av.categoriaId },
             totalProva: ids.length, professor: prof.nome, questoes: minhas,
+            envio: (av.envios || {})[AV().chaveEnvio(prof.nome)] || null,
             ...(await minhaParte(av, prof, req.user.uid, new Map()).then(p => ({ meta: p.meta, qtdProva: p.qtdProva })))
         });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Divisão das questões pelo professor RESPONSÁVEL da disciplina (16/11/2026): a coordenação / responsável pelas
+// avaliações escolhe o responsável nos Critérios; ele define o tamanho da prova e quantas questões cada colega faz.
+// Só isso: unidades, pesos e limites continuam com a coordenação.
+// Responsável (titular) x adjunto (16/11/2026): o responsável vê TODAS as questões da disciplina, com autoria;
+// o adjunto vê só as que ele mesmo fez. Responsável = o definido nos Critérios (e, quando o relay trouxer, o titular do Edubox).
+async function categoriasComoResponsavel(req) {
+    if (!ehProfessorRestrito(req.user)) return null;
+    if (req._respCats) return req._respCats;
+    const lista = await disciplinasDoResponsavel(req).catch(() => []);
+    req._respCats = new Set(lista.filter(d => d.souResponsavel).map(d => d.categoriaId));
+    return req._respCats;
+}
+async function disciplinasDoResponsavel(req) {
+    const prof = await perfilProfessor(req.user);
+    const { listaDisciplinas, lerCriterios, normNome } = AV();
+    const { disciplinas } = await listaDisciplinas(semestreAtual());
+    const minhas = disciplinas.filter(d => prof.categoriaIds.includes(d.categoriaId));
+    const crits = await Promise.all(minhas.map(d => lerCriterios(d.chave)));
+    return minhas.map((d, i) => {
+        const c = crits[i] || {};
+        return { chave: d.chave, disciplina: d.nome, sigla: d.sigla, categoriaId: d.categoriaId, professores: d.professores,
+            // responsável = o escolhido nos Critérios; sem escolha, o professor TITULAR do Edubox
+            responsavel: c.responsavel || (d.titulares || []).join(' / '),
+            souResponsavel: c.responsavel ? normNome(c.responsavel) === normNome(prof.nome) : (d.titulares || []).some(t => normNome(t) === normNome(prof.nome)),
+            qtdQuestoes: c.qtdQuestoes || null, porProfessor: c.porProfessor || {}, bimestres: c.bimestres || {}, limites: { ...require('../../banco-med-fatec/padrao.js').CRITERIOS_PADRAO, ...(c.limites || {}) }, padraoLimites: require('../../banco-med-fatec/padrao.js').CRITERIOS_PADRAO, divisaoPor: c.divisaoPor || '', divisaoEm: c.divisaoEm || null };
+    });
+}
+// unidades do plano de ensino com o bimestre em vigor (o que o responsável/coordenação definiu, senão o do plano)
+async function unidadesComBimestre(d) {
+    const { planoDaDisciplina } = AV();
+    const plano = await planoDaDisciplina(semestreAtual(), d.disciplina).catch(() => ({ unidades: [] }));
+    return (plano.unidades || []).map(u => ({ numero: u.numero, titulo: u.titulo, ch: u.ch, bimestrePlano: u.bimestre, bimestre: Number((d.bimestres || {})[u.numero]) || u.bimestre }));
+}
+// o responsável acompanha a disciplina: quanto cada professor fez e se já subiu no AVA e no questionário
+router.get('/divisao/:chave/progresso', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação acompanha pela aba Avaliações.' });
+        const d = (await disciplinasDoResponsavel(req)).find(x => x.chave === req.params.chave);
+        if (!d || !d.souResponsavel) return res.status(403).json({ error: 'Só o professor responsável pela disciplina acompanha os colegas.' });
+        res.json(await AV().progressoDisciplina(d.chave, semestreAtual()));
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+router.get('/divisao', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação divide as questões nos Critérios da disciplina (aba Avaliações).' });
+        const lista = await disciplinasDoResponsavel(req);
+        await Promise.all(lista.filter(d => d.souResponsavel).map(async d => { d.unidades = await unidadesComBimestre(d); }));
+        res.json(lista);
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+router.put('/divisao/:chave', verifyToken, async (req, res) => {
+    try {
+        if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação divide as questões nos Critérios da disciplina (aba Avaliações).' });
+        const d = (await disciplinasDoResponsavel(req)).find(x => x.chave === req.params.chave);
+        if (!d || !d.souResponsavel) return res.status(403).json({ error: 'Só o professor responsável pela disciplina divide as questões.' });
+        const { limparCriterios, COL_CRIT } = AV();
+        const c = limparCriterios({ qtdQuestoes: req.body.qtdQuestoes, porProfessor: req.body.porProfessor, bimestres: req.body.bimestres, limites: req.body.limites });
+        const prof = await perfilProfessor(req.user);
+        await db.collection(COL_CRIT).doc(d.chave).set({ disciplina: d.disciplina, sigla: d.sigla, qtdQuestoes: c.qtdQuestoes, divisaoPor: prof.nome, divisaoPorUid: req.user.uid, divisaoEm: new Date().toISOString() }, { merge: true });
+        // em que bimestre cada unidade foi trabalhada (16/11/2026): o responsável ajusta quando uma unidade do 1º foi dada no 2º
+        const upd = { porProfessor: c.porProfessor };
+        if (req.body.bimestres && typeof req.body.bimestres === 'object') upd.bimestres = c.bimestres;
+        // avisos de equilíbrio (caso clínico mínimo, unidade com poucas/demais questões): o responsável também ajusta (16/11/2026)
+        if (req.body.limites && typeof req.body.limites === 'object') upd.limites = c.limites;
+        await db.collection(COL_CRIT).doc(d.chave).update(upd);
+        res.json({ message: 'Salvo. Cada professor já vê a parte dele em "Conferir minhas provas", e as unidades seguem o bimestre que você definiu.' });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// Modelo de questões (Word) da disciplina, para o professor (16/11/2026): o professor só baixa o das disciplinas
+// que ministra no semestre; coordenação e ADM baixam de qualquer uma. Vem com os objetivos e as unidades do plano.
+router.get('/modelo/:categoriaId', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const prof = await exigeDisciplinaDoProfessor(req, req.params.categoriaId);
+        const cat = await db.collection(COL_CATEGORIAS).doc(req.params.categoriaId).get();
+        if (!cat.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        const c = cat.data();
+        const semestre = /^\d{4}\.[12]$/.test(req.query.semestre || '') ? req.query.semestre : semestreAtual();
+        const bimestre = ['1', '2'].includes(String(req.query.bimestre)) ? Number(req.query.bimestre) : null;
+        const { planoDaDisciplina, montarModeloDocx, enviarDocx } = AV();
+        const planoEdubox = await planoDaDisciplina(semestre, c.nome).catch(() => ({ unidades: [], objetivos: [] }));
+        const { listaDisciplinas, lerCriterios, normNome } = AV();
+        const dd = (await listaDisciplinas(semestre).catch(() => ({ disciplinas: [] }))).disciplinas.find(x => normNome(x.nome) === normNome(c.nome));
+        const plano = require('../../banco-med-fatec/padrao.js').aplicarCriterios(planoEdubox, (dd && await lerCriterios(dd.chave).catch(() => null)) || {});
+        enviarDocx(res, await montarModeloDocx({ disciplina: c.nome, sigla: c.nomeBreve || '', semestre, bimestre, professor: prof ? prof.nome : '', plano }));
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -831,7 +1010,10 @@ router.get('/contexto/:categoriaId', verifyToken, checkPermission, async (req, r
             planoDaDisciplina(semestre, c.nome).catch(() => ({ unidades: [], objetivos: [], referencias: [] }))
         ]);
         const d = lista.disciplinas.find(x => normNome(x.nome) === normNome(c.nome));
-        res.json({ categoriaId: cat.id, disciplina: c.nome, sigla: c.nomeBreve || c.nome, periodo: c.periodo, professores: prof ? [prof.nome] : (d ? d.professores : []), plano });
+        // unidades no bimestre que a coordenação definiu nos Critérios (16/11/2026)
+        const crit = d ? await AV().lerCriterios(d.chave).catch(() => null) : null;
+        const planoCrit = require('../../banco-med-fatec/padrao.js').aplicarCriterios(plano, crit || {});
+        res.json({ categoriaId: cat.id, disciplina: c.nome, sigla: c.nomeBreve || c.nome, periodo: c.periodo, professores: prof ? [prof.nome] : (d ? d.professores : []), plano: planoCrit });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -839,11 +1021,16 @@ router.get('/questoes/:id/completa', verifyToken, checkPermission, async (req, r
     try {
         const s = await db.collection(COL_QUESTOES).doc(req.params.id).get();
         if (!s.exists) return res.status(404).json({ error: 'Questão não encontrada.' });
-        await exigeDisciplinaDoProfessor(req, s.data().categoriaId);
+        const profQ = await exigeDisciplinaDoProfessor(req, s.data().categoriaId);
+        let ehResp = false;
+        if (profQ) {
+            ehResp = (await categoriasComoResponsavel(req)).has(s.data().categoriaId);
+            if (!ehResp && !minhaQuestao(s.data(), profQ, req.user.uid)) return res.status(403).json({ error: 'Você vê só as suas questões. O professor responsável pela disciplina vê todas.' });
+        }
         const q = await AV().resumoComImagens({ id: s.id, ...s.data() });
         const antiga = s.data().imagem;
         if (q.temImagem && antiga && antiga.dataUrl) q.imagemAntiga = { nome: antiga.nome || 'imagem', dataUrl: antiga.dataUrl };
-        res.json(anonimizarQuestao(q, req.user.role, req.user));
+        res.json(ehResp ? q : anonimizarQuestao(q, req.user.role, req.user));
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
@@ -870,6 +1057,10 @@ router.post('/questoes-padrao', verifyToken, checkPermission, async (req, res) =
         if (prof) req.body.professorNome = prof.nome;
         const { q, c, categoriaId, confirmarImagens, tokens } = await questaoPadraoDoBody(req);
         q.imagens = await confirmarImagens(req.body.imagens);
+        q.imagensFeedback = await confirmarImagens(req.body.imagensFeedback);
+        q.padrao = require('../../banco-med-fatec/padrao.js').avaliarQuestao(q);
+        if (!q.semestre) q.semestre = semestreAtual();
+        if (q.bimestre === undefined) q.bimestre = null;
         const quem = req.user.name || req.user.email || 'Professor';
         const ref = db.collection(COL_QUESTOES).doc();
         await ref.set({
@@ -899,6 +1090,10 @@ router.put('/questoes-padrao/:id', verifyToken, checkPermission, async (req, res
         const ficam = new Set(q.imagens.map(i => i.caminho));
         const { bucket } = AV();
         await Promise.all((antes.imagens || []).filter(i => !ficam.has(i.caminho)).map(i => bucket().file(i.caminho).delete({ ignoreNotFound: true })));
+        q.imagensFeedback = req.body.imagensFeedback === undefined ? (antes.imagensFeedback || []) : await confirmarImagens(req.body.imagensFeedback);
+        const ficamFb = new Set(q.imagensFeedback.map(i => i.caminho));
+        await Promise.all((antes.imagensFeedback || []).filter(i => !ficamFb.has(i.caminho)).map(i => bucket().file(i.caminho).delete({ ignoreNotFound: true })));
+        q.padrao = require('../../banco-med-fatec/padrao.js').avaliarQuestao(q);
         const quem = req.user.name || req.user.email || 'Professor';
         await ref.update({
             ...q, categoriaId, periodo: c.periodo ?? null,

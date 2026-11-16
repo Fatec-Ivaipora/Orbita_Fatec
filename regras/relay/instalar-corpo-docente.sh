@@ -1,7 +1,8 @@
 #!/bin/bash
 # Instala/atualiza a rota /corpo-docente/* (professores e titulacao por curso, p/ a aba Titulacao das Matrizes do Orbita - 09/11/2026;
 # v2 12/11/2026: /corpo-docente/diarios = professor x disciplina x turma, p/ as provas da Medicina;
-# v3 12/11/2026: /corpo-docente/plano = plano de ensino do diario (campos + conteudos/unidade/CH)). So leitura.
+# v3 12/11/2026: /corpo-docente/plano = plano de ensino do diario (campos + conteudos/unidade/CH)).
+# v4 16/11/2026: /corpo-docente/diarios devolve tambem "vinculo" = a linha inteira de tac_professor (p/ achar o professor TITULAR x adjunto). So leitura.
 # Colar no Web Console do droplet (DigitalOcean), como root. Desfazer: cp /opt/edubox-relay/server.mjs.bak-corpo-docente /opt/edubox-relay/server.mjs && systemctl restart edubox-relay
 set -e
 cd /opt/edubox-relay
@@ -47,7 +48,8 @@ async function cdDiarios(semestres, curso) {
     const r = await client.query(`
       select dt.coddtu, trim(c.codcur) as codcur, trim(t.nomtur) as turma, t.pertur as periodo, t.semtur as sem,
              d.coddis, trim(d.nomdis) as disciplina, trim(d.noadis) as sigla,
-             f.codfun, trim(f.nomfun) as nome, trim(coalesce(p.titpro, '')) as titulacao
+             f.codfun, trim(f.nomfun) as nome, trim(coalesce(p.titpro, '')) as titulacao,
+             row_to_json(p) as vinculo
         from tac_professor p
         join trh_funcionario f on f.codfun = p.funpro
         join tac_disciplina_turma dt on dt.coddtu = p.dtupro
@@ -99,7 +101,7 @@ async function rotaOrbitaCorpoDocente(req, res) {
   if (!u.pathname.startsWith('/corpo-docente/')) return false;
   if (!autenticadoOrbita(req)) { cdResponder(res, 401, { ok: false, erro: 'nao autorizado' }); return true; }
   if (req.method !== 'GET') { cdResponder(res, 405, { ok: false, erro: 'so GET' }); return true; }
-  if (u.pathname === '/corpo-docente/ping') { cdResponder(res, 200, { ok: true, rotas: 'corpo-docente', versao: 3 }); return true; }
+  if (u.pathname === '/corpo-docente/ping') { cdResponder(res, 200, { ok: true, rotas: 'corpo-docente', versao: 4 }); return true; }
   if (u.pathname === '/corpo-docente/lista') {
     const semestres = String(u.searchParams.get('semestres') || '').split(',').map(s => s.trim()).filter(s => /^\d{4}[/-][12]$/.test(s)).slice(0, 4);
     if (!semestres.length) { cdResponder(res, 400, { ok: false, erro: 'semestres invalidos' }); return true; }
@@ -138,7 +140,7 @@ const a = s.indexOf("const server = http.createServer(");
 if (a < 0) { console.error("ANCORA NAO ENCONTRADA - nada foi alterado"); process.exit(1); }
 const m = s.indexOf(MARCA), f = s.indexOf(FIM);
 if (m >= 0 && f > m && f < a) {
-  s = s.slice(0, m) + MARCA + " (v3) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(f + FIM.length + 1);
+  s = s.slice(0, m) + MARCA + " (v4) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(f + FIM.length + 1);
   console.log("bloco atualizado");
 } else {
   const g = s.indexOf("if (!autenticado(req))", a);
@@ -147,7 +149,7 @@ if (m >= 0 && f > m && f < a) {
   s = s.slice(0, ini) + recuo + "if (await rotaOrbitaCorpoDocente(req, res)) return; // Órbita — Corpo docente\n" + s.slice(ini);
   const cands = [s.indexOf("// ---- Órbita — Matrículas Edubox"), s.indexOf("// ---- Órbita — Diagnóstico matrículas"), s.indexOf("// ---- Órbita — Comercial menores"), s.indexOf("// ---- Órbita — Cobrança conferência"), s.indexOf("// ---- Órbita — Comercial (v"), s.indexOf("// ---- Órbita — Automação AVA"), s.indexOf("const server = http.createServer(")].filter(x => x >= 0);
   const p = Math.min(...cands);
-  s = s.slice(0, p) + MARCA + " (v3) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(p);
+  s = s.slice(0, p) + MARCA + " (v4) ----\n" + bloco + "\n" + FIM + "\n" + s.slice(p);
   console.log("bloco inserido");
 }
 fs.writeFileSync("server.mjs", s);
@@ -156,5 +158,5 @@ node --check server.mjs && chown relay:relay server.mjs && systemctl restart edu
 TOKEN=$(grep -E '^ORBITA_TOKEN=' /opt/edubox-relay/.env | cut -d= -f2- | tr -d '"'"'"' ')
 curl -s "http://localhost:8443/corpo-docente/ping" -H "Authorization: Bearer $TOKEN"; echo
 curl -s "http://localhost:8443/corpo-docente/lista?semestres=2026/2" -H "Authorization: Bearer $TOKEN" | head -c 160; echo " ..."
-curl -s "http://localhost:8443/corpo-docente/diarios?semestres=2026/2&curso=MED" -H "Authorization: Bearer $TOKEN" | head -c 300; echo " ..."
+curl -s "http://localhost:8443/corpo-docente/diarios?semestres=2026/2&curso=MED" -H "Authorization: Bearer $TOKEN" | head -c 700; echo " ..."
 curl -s "http://localhost:8443/corpo-docente/plano?semestres=2026/2&curso=MED" -H "Authorization: Bearer $TOKEN" | head -c 400; echo " ..."

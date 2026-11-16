@@ -342,7 +342,7 @@ export const ROLE_PERMISSIONS = {
   // tela de Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "aplicacao-provas-med", "agenda-espacos"]
+    modules: ["dashboard", "banco-med-fatec", "agenda-espacos"] // 16/11/2026: menu Medicina só com o Banco
   },
   // Setor Comercial — por enquanto só o Meu Espaço (Painel do Setor, Quadro
   // de Avisos, atividades). Módulo próprio do comercial ainda vai ser criado;

@@ -11,6 +11,12 @@ function lerAtributo(xml, tag, atributo) {
     return m ? m[1] : null;
 }
 
+function paraRomano(n, minusculo) {
+    const tab = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+    let r = ''; for (const [v, s] of tab) while (n >= v) { r += s; n -= v; }
+    return minusculo ? r.toLowerCase() : r;
+}
+
 async function escreverNumeracaoAutomatica(buffer) {
     try {
         const zip = await window.JSZip.loadAsync(buffer);
@@ -71,9 +77,12 @@ async function escreverNumeracaoAutomatica(buffer) {
             // Subníveis recomeçam quando o nível de cima avança
             for (const k of Object.keys(cont)) if (parseInt(k, 10) > parseInt(ilvl, 10)) delete cont[k];
 
-            if (!FORMATOS_DECIMAIS.has(nivel.formato)) return paragrafo;
+            // afirmativas I, II, III, IV em lista automática romana (16/11/2026): sem escrever o número, "Apenas I e II" perde o sentido
+            const romano = /^(upper|lower)Roman$/.test(nivel.formato || '');
+            if (!FORMATOS_DECIMAIS.has(nivel.formato) && !romano) return paragrafo;
             mudou = true;
-            const run = `<w:r><w:t xml:space="preserve">${cont[ilvl]} - </w:t></w:r>`;
+            const rotulo = romano ? `${paraRomano(cont[ilvl], nivel.formato === 'lowerRoman')}. ` : `${cont[ilvl]} - `;
+            const run = `<w:r><w:t xml:space="preserve">${rotulo}</w:t></w:r>`;
             return pPr ? paragrafo.replace(pPr, pPr + run) : paragrafo.replace(/^<w:p\b[^>]*>/, (abre) => abre + run);
         });
         if (!mudou) return buffer;
@@ -143,17 +152,26 @@ const DIFIC = [[/f[áa]cil/i, 'facil'], [/intermedi[áa]ria/i, 'intermediaria'],
 function blocosDoHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const blocos = [];
-  const add = (el) => {
+  const add = (orig) => {
+    // item de lista com outra lista dentro (16/11/2026 — ex.: afirmativas I–IV e as alternativas numa sublista):
+    // o item vale só pelo texto dele; cada item da sublista vira um bloco à parte (addLista)
+    const el = orig.tagName === 'LI' ? orig.cloneNode(true) : orig;
+    if (orig.tagName === 'LI') el.querySelectorAll('ol, ul').forEach(x => x.remove());
     const imgs = [...el.querySelectorAll('img')].map(i => i.getAttribute('src')).filter(src => /^data:image\//.test(src || ''));
     const marcado = !!el.querySelector('mark');
     const limpo = el.cloneNode(true);
     limpo.querySelectorAll('img').forEach(i => i.remove());
     limpo.querySelectorAll('mark').forEach(m => m.replaceWith(...m.childNodes));
     const texto = limpo.textContent.replace(/\s+/g, ' ').trim();
-    blocos.push({ texto, html: limpo.innerHTML.trim(), imgs, marcado, tag: el.tagName });
+    if (orig.tagName === 'LI' && !texto && !imgs.length) return;
+    blocos.push({ texto, html: limpo.innerHTML.trim(), imgs, marcado, tag: orig.tagName });
   };
+  const addLista = (lista) => lista.querySelectorAll(':scope > li').forEach(li => {
+    add(li);
+    li.querySelectorAll(':scope > ol, :scope > ul').forEach(addLista);
+  });
   [...doc.body.children].forEach(el => {
-    if (el.tagName === 'OL' || el.tagName === 'UL') el.querySelectorAll(':scope > li').forEach(add);
+    if (el.tagName === 'OL' || el.tagName === 'UL') addLista(el);
     else if (el.tagName === 'TABLE') el.querySelectorAll('tr').forEach(add);
     else add(el);
   });
@@ -170,9 +188,13 @@ function lerModeloDeBlocos(blocos) {
     if (RE_ENUN.test(b.texto)) { sec = 'enun'; continue; }
     if (RE_FEED.test(b.texto)) { sec = 'feedback'; continue; }
     if (RE_REF.test(b.texto)) { sec = 'ref'; continue; }
+    const mU = /^unidade\s*:?\s*(.+)$/i.exec(b.texto), mO = /^objetivo\s*:?\s*(.+)$/i.exec(b.texto), mP = /^prova\s*:\s*(.+)$/i.exec(b.texto);
+    if ((sec === 'titulo' || sec === 'enun') && mP && b.texto.length < 80) { q.provaWord = mP[1].trim(); continue; }
+    if ((sec === 'titulo' || sec === 'enun') && mU && b.texto.length < 200) { q.unidadeWord = mU[1].trim(); continue; }
+    if ((sec === 'titulo' || sec === 'enun') && mO && b.texto.length < 600) { q.objetivoWord = mO[1].trim(); continue; }
     if (sec === 'titulo') { if (b.texto) { if (!q.titulo) q.titulo = b.texto; else q.enun.push(b); } continue; }
     if (sec === 'enun') { if (b.texto || b.imgs.length) q.enun.push(b); continue; }
-    if (sec === 'feedback') { if (b.texto) q.feedback.push(b); continue; }
+    if (sec === 'feedback') { if (b.texto || b.imgs.length) q.feedback.push(b); continue; }
     if (sec === 'ref') { if (b.texto) q.ref.push(b.texto); }
   }
   return qs.map(q => {
@@ -192,9 +214,11 @@ function lerModeloDeBlocos(blocos) {
     const icorreta = alts.findIndex(a => a.marcado);
     const partes = String(q.titulo || '').split(/\s+[–—-]\s+/).map(x => x.trim()).filter(Boolean);
     let dificuldade = 'media';
-    const ult = partes[partes.length - 1] || '';
-    DIFIC.forEach(([re, v]) => { if (re.test(ult)) dificuldade = v; });
-    const tema = partes.length >= 3 ? partes.slice(1, -1).join(' – ') : (partes.length === 2 ? (DIFIC.some(([re]) => re.test(partes[1])) ? '' : partes[1]) : '');
+    const ehDific = (p) => DIFIC.some(([re]) => re.test(p)) && p.split(' ').length <= 2;
+    partes.filter(ehDific).forEach(p => DIFIC.forEach(([re, v]) => { if (re.test(p)) dificuldade = v; }));
+    // tira semestre (2026.2), professor (Prof./Profa.) e dificuldade; sobra disciplina e tema
+    const resto = partes.filter(p => !/^\d{4}[.\/-][12]$/.test(p) && !/^prof(a|\.|essor|essora)?\b/i.test(p) && !ehDific(p));
+    const tema = resto.length >= 2 ? resto.slice(1).join(' – ') : (resto[0] || '');
     return {
       numero: q.numero, tituloOriginal: q.titulo, tema, dificuldade,
       casoHtml: caso, pergunta,
@@ -202,7 +226,9 @@ function lerModeloDeBlocos(blocos) {
       alternativas: alts.map(a => a.texto.replace(RE_LETRA, '').replace(/^\t+/, '').trim()),
       gabarito: icorreta >= 0 ? 'ABCDE'[icorreta] : null,
       imagens,
-      justificativa: q.feedback.map(b => b.tag === 'LI' ? `<p>• ${b.html}</p>` : `<p>${b.html}</p>`).join(''),
+      justificativa: q.feedback.filter(b => b.texto).map(b => b.tag === 'LI' ? `<p>• ${b.html}</p>` : `<p>${b.html}</p>`).join(''),
+      imagensFeedback: q.feedback.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: `feedback-${q.numero}-${i + 1}` })),
+      unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
       fonte: q.ref.join(' ')
     };
   }).filter(q => q.alternativas.length >= 2 && (q.pergunta || q.casoHtml));
@@ -215,7 +241,11 @@ async function lerModelo(file) {
   const { value: html } = await window.mammoth.convertToHtml({ arrayBuffer: numerado }, { styleMap: ["highlight[color='yellow'] => mark", "highlight[color='green'] => mark"] });
   const blocos = blocosDoHtml(html);
   const temModelo = blocos.some(b => RE_ENUN.test(b.texto)) && blocos.some(b => RE_INICIO.test(b.texto));
-  return temModelo ? lerModeloDeBlocos(blocos) : null;
+  if (temModelo) return lerModeloDeBlocos(blocos);
+  // questões sem número, cada uma aberta por "NÍVEL DE DIFICULDADE:" (16/11/2026) — o Órbita numera 1, 2, 3…
+  const P = window.PadraoMed;
+  if (P && P.ehFormatoNivel && P.ehFormatoNivel(blocos)) return P.lerPorNivel(blocos);
+  return null;
 }
 window.LerWord = { ler, itensDoHtml, lerModelo, lerModeloDeBlocos, blocosDoHtml };
 })();

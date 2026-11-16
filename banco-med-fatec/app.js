@@ -9,7 +9,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=15";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=28";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -580,6 +580,7 @@ function renderQuestoes() {
           ${autor ? chipProfessorHtml(autor) : ''}
           <span class="av-tag">${q.unidade ? `Unidade ${esc(q.unidade)}` : 'Sem unidade'}</span>
           <span class="av-tag ${pd.aplicacao ? 'av-tag-caso' : ''}">${pd.aplicacao ? 'Caso clínico' : 'Memorização'}</span>
+          ${q.usoProva ? `<span class="av-tag av-tag-prova av-uso-${q.usoProva}">${q.usoProva === 'exame' ? 'Exame semestral' : `${q.bimestre ? `${q.bimestre}º bim · ` : ''}${({ c1: '1ª chamada', c2: '2ª chamada', dp: 'Dependência', adp: 'Adaptação' })[q.usoProva] || ''}`}</span>` : ''}
           ${nImgs ? `<span class="av-tag">${nImgs} imagem(ns)</span>` : ''}
           ${pd.ok ? `<span class="av-selo av-selo-ok">No padrão</span>` : `<span class="av-selo av-selo-erro">A padronizar</span>`}
         </div>
@@ -1927,7 +1928,8 @@ async function initApp(user, role) {
   const temAvaliacoes = await iniciarAvaliacoes({ apiFetch, apiDownload, esc });
   // quem monta as avaliações (Bia / coordenação) começa nelas (13/11/2026)
   if (temAvaliacoes) document.getElementById('bmf-tab-avaliacoes').click();
-  if (temAvaliacoes && !podeVerAutoria()) {
+  // só os EDITORES (Ana / coordenação) ganham a autoria no Banco; professor na aba Avaliações não (16/11/2026)
+  if (temAvaliacoes && temAvaliacoes.editor && !podeVerAutoria()) {
     responsavelAvaliacoes = true;
     document.getElementById('bmf-filtro-busca').placeholder = 'Buscar por título ou autor...';
     await carregarProfessores();

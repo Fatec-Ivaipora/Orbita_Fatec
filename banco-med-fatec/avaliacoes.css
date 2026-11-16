@@ -420,3 +420,64 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-pg-meio { color: #92400E; background: #FEF3C7; font-weight: 700; }
 .av-pg-zero { color: #991B1B; background: #FEE2E2; font-weight: 700; }
 .av-pg-livre { color: var(--av-tinta-2); }
+
+/* envio ao AVA, tipo de prova e divisão (16/11/2026) */
+.av-tag-prova { background: #FFF4E0; color: #92400E; border-color: #F3D9B1; font-weight: 700; }
+.av-envio { background: #fff; border: 1px solid var(--av-linha); border-left: 5px solid var(--med-azul, #0052B8); border-radius: 12px; padding: 0.8rem 1rem; margin: 0.6rem 0 0.8rem; }
+.av-envio h3 { margin: 0 0 0.2rem; font-size: 0.95rem; color: var(--av-tinta); }
+.av-envio .av-nota { margin: 0 0 0.55rem; }
+.av-envio-itens { display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; margin-top: 0.6rem; }
+.av-envio-item { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; font-size: 0.88rem; min-height: 40px; padding: 0 0.7rem; border: 1px solid var(--av-linha); border-radius: 10px; cursor: pointer; }
+.av-envio-item input { width: 20px; height: 20px; }
+.av-envio-item small { font-weight: 500; color: var(--av-tinta-2); }
+.av-envio-ok { background: #DCFCE7; border-color: #B7DCC7; color: #166534; }
+.av-envio-resumo { flex-basis: 100%; font-size: 0.78rem; color: var(--av-tinta-2); font-weight: 600; }
+.av-pg-envio { display: block; font-size: 0.68rem; font-weight: 700; margin-top: 0.15rem; color: #0b5535; }
+.av-resp { display: inline; font-size: 0.68rem; font-weight: 800; color: #92400E; background: #FFF4E0; border-radius: 4px; padding: 0 0.3rem; }
+.av-mod-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 0.6rem; align-items: end; }
+.av-div-acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.8rem; }
+@media (max-width: 640px) { .av-mod-form { grid-template-columns: 1fr; } }
+
+.av-data-prova { font-size: 0.78rem; font-weight: 700; color: var(--med-azul, #0052B8); background: #EAF1FB; border-radius: 6px; padding: 0.1rem 0.45rem; }
+
+/* coluna do exame na grade (16/11/2026) */
+@media (min-width: 861px) { .av-grade-cab, .av-disc { grid-template-columns: minmax(0, 1fr) 280px 280px 140px; } }
+.av-slots-1 { grid-template-columns: 1fr; }
+@media (min-width: 861px) and (max-width: 1180px) { .av-grade-cab, .av-disc { grid-template-columns: minmax(0, 1fr) 240px 240px 120px; } }
+
+.av-div-unid td small { display: block; font-size: 0.74rem; color: var(--av-tinta-2); font-weight: 500; }
+.av-div-unid select { min-height: 36px; border: 1px solid var(--av-linha); border-radius: 8px; padding: 0 0.4rem; font: inherit; }
+.av-div-mudou { color: #92400E !important; font-weight: 700 !important; }
+
+/* cores por tipo de prova — paleta MED FATEC (16/11/2026) */
+.av-uso-c1 { --uso: #0052B8; --uso-txt: #ffffff; --uso-suave: #E6EFFB; }
+.av-uso-c2 { --uso: #00B3FF; --uso-txt: #003A66; --uso-suave: #E0F5FF; }
+.av-uso-exame { --uso: #0A2463; --uso-txt: #ffffff; --uso-suave: #E3E8F4; }
+.av-uso-dp { --uso: #4F6D8F; --uso-txt: #ffffff; --uso-suave: #E8EEF4; }
+.av-uso-adp { --uso: #7FA7D9; --uso-txt: #0A2463; --uso-suave: #EEF4FB; }
+.av-tag-prova[class*="av-uso-"] { background: var(--uso); color: var(--uso-txt); border-color: var(--uso); }
+.av-uso-rot { display: inline-block; background: var(--uso); color: var(--uso-txt); font-weight: 800; font-size: 0.74rem; border-radius: 5px; padding: 0.05rem 0.4rem; margin-right: 0.2rem; }
+.av-slot-uso { box-shadow: inset 0 4px 0 var(--uso); }
+.av-uso-th { box-shadow: inset 0 -3px 0 var(--uso); }
+/* grade com o 1º bimestre escondido */
+@media (min-width: 861px) { .av-grade-sem-b1 .av-grade-cab, .av-grade-sem-b1 .av-disc { grid-template-columns: minmax(0, 1fr) 300px 160px; } }
+.av-slot-vazio.av-slot-uso { box-shadow: inset 0 3px 0 var(--uso); }
+.av-slot-uso .av-slot-ch { color: var(--uso); font-weight: 800; }
+.av-uso-c2.av-slot-uso .av-slot-ch { color: #0077A8; }
+
+/* importação: regras claras para o professor (16/11/2026) */
+.av-imp-regras { margin: 0 0 1rem; border: 1px solid #C9DBF2; border-radius: 10px; background: #F5F9FE; padding: 0.9rem 1rem; color: #0A2463; }
+.av-imp-regras h3 { margin: 0 0 0.5rem; font-size: 0.98rem; color: #0A2463; }
+.av-imp-regras h4 { margin: 0; font-size: 0.86rem; color: #0052B8; }
+.av-imp-word { margin: 0 0 0.75rem; padding: 0.6rem 0.75rem; border-left: 4px solid #0052B8; background: #E3EEFB; border-radius: 6px; font-size: 0.86rem; line-height: 1.45; }
+.av-imp-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.av-imp-sub { margin: 0.1rem 0 0.35rem; font-size: 0.76rem; color: #4F6D8F; }
+.av-imp-regras ul { margin: 0; padding-left: 1.1rem; font-size: 0.84rem; line-height: 1.45; }
+.av-imp-regras li + li { margin-top: 0.25rem; }
+.av-imp-regras mark { background: #FFF06A; padding: 0 0.2em; border-radius: 2px; }
+@media (max-width: 700px) { .av-imp-colunas { grid-template-columns: 1fr; } }
+
+/* papel do professor na aba Avaliações (16/11/2026) */
+.av-papel { font-size: 0.78rem; color: #4F6D8F; font-weight: 600; }
+.av-papel-tit { color: #0052B8; font-weight: 700; }
+.av-faixa-papel { background: #EAF2FD; border-left: 4px solid #0052B8; color: #0A2463; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.88rem; margin-bottom: 0.75rem; }
