@@ -709,14 +709,34 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         const chamada = normalizarChamada(req.body.chamada);
         const semestre = normalizarTexto(req.body.semestre) || null;
 
+        // Conhecimentos Gerais são as MESMAS para todas as turmas do curso no semestre (16/11/2026): o simulado de
+        // cada período traz as mesmas 5 no Word e a importação gravava de novo. Questão que já está no banco
+        // (mesmo curso e semestre; texto igual sem diferenciar maiúscula, acento e pontuação) é reaproveitada.
+        const chave = (h) => require('../../banco-med-fatec/padrao.js').chaveComparar(h);
+        const jaTem = new Set();
+        if (geral && semestre && snap.docs.length) {
+            const curso = snap.docs[0].data().curso;
+            const ex = await db.collection(COL_QUESTOES).where('curso', '==', curso).where('disciplinaId', '==', DISCIPLINA_GERAL_ID).where('semestre', '==', semestre).get();
+            ex.docs.filter(d => d.data().status === 'publicada').forEach(d => { const k = chave(d.data().enunciadoHtml); if (k) jaTem.add(k); });
+        }
+        let reaproveitadas = 0;
         const batch = db.batch();
-        snap.docs.forEach(doc => batch.update(doc.ref, {
-            disciplinaId, periodo, bimestre, chamada, semestre,
-            status: 'publicada', updatedAt: new Date().toISOString()
-        }));
+        snap.docs.forEach(doc => {
+            const k = geral ? chave(doc.data().enunciadoHtml) : '';
+            if (geral && k && jaTem.has(k)) { batch.delete(doc.ref); reaproveitadas++; return; }
+            if (geral && k) jaTem.add(k);
+            batch.update(doc.ref, {
+                disciplinaId, periodo, bimestre, chamada, semestre,
+                status: 'publicada', updatedAt: new Date().toISOString()
+            });
+        });
         await batch.commit();
 
-        res.json({ message: 'Disciplina confirmada!', atualizadas: snap.size });
+        const novas = snap.size - reaproveitadas;
+        res.json({
+            message: reaproveitadas ? `Disciplina confirmada! ${reaproveitadas} questão(ões) de Conhecimentos Gerais já estavam no banco deste semestre e foram reaproveitadas, sem duplicar${novas ? `; ${novas} nova(s) entraram` : ''}.` : 'Disciplina confirmada!',
+            atualizadas: novas, reaproveitadas
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

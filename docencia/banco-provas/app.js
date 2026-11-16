@@ -783,14 +783,15 @@ async function confirmarTodosRevisao(itens) {
   if (semFaixa) { showToast(questoesDaFaixa(semFaixa.g, semFaixa.dados).erro, 'error'); return; }
   const btn = document.getElementById('bp-revisao-btn-todos');
   btn.disabled = true; btn.textContent = 'Publicando...';
-  let ok = 0, total = 0;
+  let ok = 0, total = 0, reap = 0;
   try {
     for (const { g, dados } of itens) {
       const { ids } = questoesDaFaixa(g, dados);
-      await apiFetch(`/banco-provas/questoes/lote/${g.loteId}/resolver`, { method: 'PUT', body: JSON.stringify({ ...dados, categoriaSugeridaTexto: g.categoriaSugeridaTexto, ...(ids ? { ids } : {}) }) });
-      ok++; total += ids ? ids.length : g.itens.length;
+      const r = await apiFetch(`/banco-provas/questoes/lote/${g.loteId}/resolver`, { method: 'PUT', body: JSON.stringify({ ...dados, categoriaSugeridaTexto: g.categoriaSugeridaTexto, ...(ids ? { ids } : {}) }) });
+      ok++; total += ids ? ids.length : g.itens.length; reap += (r && r.reaproveitadas) || 0;
     }
-    showToast(`${total} questões publicadas (${ok} blocos).`);
+    // Conhecimentos Gerais que já estavam no banco do semestre não são gravadas de novo (16/11/2026)
+    showToast(reap ? `${total - reap} questões publicadas (${ok} blocos). ${reap} de Conhecimentos Gerais já estavam no banco deste semestre e foram reaproveitadas, sem duplicar.` : `${total} questões publicadas (${ok} blocos).`);
   } catch (err) {
     showToast(`${ok} de ${itens.length} blocos publicados. Parou em um bloco: ${err.message}`, 'error');
   } finally {
@@ -811,12 +812,13 @@ async function resolverGrupoRevisao(grupo, dados) {
   const faixa = questoesDaFaixa(grupo, dados);
   if (faixa.erro) { showToast(faixa.erro, 'error'); return; }
   try {
-    await apiFetch(`/banco-provas/questoes/lote/${grupo.loteId}/resolver`, {
+    const r = await apiFetch(`/banco-provas/questoes/lote/${grupo.loteId}/resolver`, {
       method: 'PUT',
       body: JSON.stringify({ ...dados, categoriaSugeridaTexto: grupo.categoriaSugeridaTexto, ...(faixa.ids ? { ids: faixa.ids } : {}) })
     });
     const resto = faixa.ids ? grupo.itens.length - faixa.ids.length : 0;
-    showToast(faixa.ids ? `${faixa.ids.length} questão(ões) publicadas.${resto ? ` ${resto} continuam na revisão para as outras disciplinas.` : ''}` : 'Disciplina confirmada — questões publicadas.');
+    if (r && r.reaproveitadas) showToast(r.message);
+    else showToast(faixa.ids ? `${faixa.ids.length} questão(ões) publicadas.${resto ? ` ${resto} continuam na revisão para as outras disciplinas.` : ''}` : 'Disciplina confirmada — questões publicadas.');
     await carregarTudoDoCurso();
   } catch (err) {
     showToast(err.message, 'error');
