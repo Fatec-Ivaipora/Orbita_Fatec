@@ -11,6 +11,9 @@ const checkPermission = verifyToken.requireModulePermission('banco-provas');
 const COL_DISCIPLINAS = 'docencia_bp_disciplinas';
 const COL_QUESTOES = 'docencia_bp_questoes';
 const COL_PROVAS = 'docencia_bp_provas';
+// Sequência do arquivo importado (16/11/2026): ordem das questões como o coordenador mandou no Word — o
+// Montar Simulado monta "igual ao arquivo" (disciplinas na ordem, quantas de cada e quais questões).
+const COL_LOTES = 'docencia_bp_lotes';
 
 // Mesma lista de cursos da FATEC IVP usada em Avaliação Docente/Usuários —
 // duplicada aqui de propósito (mesmo padrão já adotado nesses dois arquivos),
@@ -609,9 +612,11 @@ router.post('/questoes/importar-docx', verifyToken, checkPermission, async (req,
         const imagensPorQuestao = await Promise.all(questoes.map(q => IMG.confirmar(q.imagens)));
         const loteId = db.collection(COL_QUESTOES).doc().id;
         const batch = db.batch();
+        const ordemLote = [];
         questoes.forEach((q, iq) => {
             const dissertativa = q.tipo === 'dissertativa';
             const ref = db.collection(COL_QUESTOES).doc();
+            ordemLote.push({ n: q.numero || iq + 1, id: ref.id });
             batch.set(ref, {
                 curso, disciplinaId: null, periodo: null, bimestre: padraoBimestre, chamada: padraoChamada, semestre: padraoSemestre,
                 tipo: dissertativa ? 'dissertativa' : 'objetiva',
@@ -630,6 +635,12 @@ router.post('/questoes/importar-docx', verifyToken, checkPermission, async (req,
                 createdPorNome: req.user.name || req.user.email || 'Coordenador',
                 createdAt: new Date().toISOString()
             });
+        });
+        batch.set(db.collection(COL_LOTES).doc(loteId), {
+            curso, semestre: padraoSemestre, bimestre: padraoBimestre, chamada: padraoChamada,
+            nomeArquivo: (normalizarTexto(req.body.nomeArquivo) || '').slice(0, 150) || null,
+            total: questoes.length, ordem: ordemLote,
+            createdBy: req.user.uid, createdPorNome: req.user.name || req.user.email || 'Coordenador', createdAt: new Date().toISOString()
         });
         await batch.commit();
 
@@ -713,24 +724,30 @@ router.put('/questoes/lote/:loteId/resolver', verifyToken, checkPermission, asyn
         // cada período traz as mesmas 5 no Word e a importação gravava de novo. Questão que já está no banco
         // (mesmo curso e semestre; texto igual sem diferenciar maiúscula, acento e pontuação) é reaproveitada.
         const chave = (h) => require('../../banco-med-fatec/padrao.js').chaveComparar(h);
-        const jaTem = new Set();
+        const jaTem = new Map(); // chave do texto -> id da questão que já está no banco
         if (geral && semestre && snap.docs.length) {
             const curso = snap.docs[0].data().curso;
             const ex = await db.collection(COL_QUESTOES).where('curso', '==', curso).where('disciplinaId', '==', DISCIPLINA_GERAL_ID).where('semestre', '==', semestre).get();
-            ex.docs.filter(d => d.data().status === 'publicada').forEach(d => { const k = chave(d.data().enunciadoHtml); if (k) jaTem.add(k); });
+            ex.docs.filter(d => d.data().status === 'publicada').forEach(d => { const k = chave(d.data().enunciadoHtml); if (k && !jaTem.has(k)) jaTem.set(k, d.id); });
         }
         let reaproveitadas = 0;
+        const trocas = {}; // id da importada (apagada) -> id da que já existia
         const batch = db.batch();
         snap.docs.forEach(doc => {
             const k = geral ? chave(doc.data().enunciadoHtml) : '';
-            if (geral && k && jaTem.has(k)) { batch.delete(doc.ref); reaproveitadas++; return; }
-            if (geral && k) jaTem.add(k);
+            if (geral && k && jaTem.has(k)) { batch.delete(doc.ref); trocas[doc.id] = jaTem.get(k); reaproveitadas++; return; }
+            if (geral && k) jaTem.set(k, doc.id);
             batch.update(doc.ref, {
                 disciplinaId, periodo, bimestre, chamada, semestre,
                 status: 'publicada', updatedAt: new Date().toISOString()
             });
         });
         await batch.commit();
+        if (reaproveitadas) {
+            const loteRef = db.collection(COL_LOTES).doc(req.params.loteId);
+            const lote = await loteRef.get();
+            if (lote.exists) await loteRef.update({ ordem: (lote.data().ordem || []).map(o => (trocas[o.id] ? { ...o, id: trocas[o.id] } : o)) });
+        }
 
         const novas = snap.size - reaproveitadas;
         res.json({
@@ -834,6 +851,43 @@ router.get('/provas', verifyToken, checkPermission, async (req, res) => {
 // POST /provas/simular — pré-visualização: pega as questões de cada
 // disciplina EM SEQUÊNCIA (não sorteio) conforme as quantidades pedidas,
 // sem salvar nada ainda (o coordenador confere antes de confirmar).
+// Arquivos importados do curso (os mais recentes) — para o "Montar igual ao arquivo importado"
+router.get('/lotes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const curso = normalizarTexto(req.query.curso);
+        const erroAcesso = await checarAcessoCurso(req, curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const snap = await db.collection(COL_LOTES).where('curso', '==', curso).get();
+        const lotes = snap.docs.map(d => { const l = d.data(); return { id: d.id, nomeArquivo: l.nomeArquivo, total: l.total, semestre: l.semestre, bimestre: l.bimestre, chamada: l.chamada, createdAt: l.createdAt, createdPorNome: l.createdPorNome }; })
+            .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 20);
+        res.json(lotes);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// A sequência do arquivo: blocos de disciplina na ordem do Word, com as questões de cada um
+router.get('/lotes/:id/sequencia', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const s = await db.collection(COL_LOTES).doc(req.params.id).get();
+        if (!s.exists) return res.status(404).json({ error: 'Arquivo importado não encontrado.' });
+        const lote = s.data();
+        const erroAcesso = await checarAcessoCurso(req, lote.curso);
+        if (erroAcesso) return res.status(403).json({ error: erroAcesso });
+        const ordem = (lote.ordem || []).slice().sort((a, b) => a.n - b.n);
+        const docs = ordem.length ? await db.getAll(...ordem.map(o => db.collection(COL_QUESTOES).doc(o.id))) : [];
+        const qs = docs.map((d, i) => (d.exists ? { id: d.id, n: ordem[i].n, ...d.data() } : null));
+        const emRevisao = qs.filter(q => q && q.status === 'revisao_importacao').length;
+        if (emRevisao) return res.status(409).json({ error: `Esse arquivo ainda tem ${emRevisao} questão(ões) na revisão. Confirme as disciplinas na revisão da importação e tente de novo.` });
+        const fora = qs.filter(q => !q).length;
+        const blocos = [];
+        qs.filter(q => q && q.status === 'publicada').forEach(q => {
+            const ult = blocos[blocos.length - 1];
+            const item = { id: q.id, enunciadoHtml: q.enunciadoHtml, gabarito: q.gabarito, numeroOriginal: q.n };
+            if (ult && ult.disciplinaId === q.disciplinaId) ult.questoes.push(item); else blocos.push({ disciplinaId: q.disciplinaId, questoes: [item] });
+        });
+        res.json({ lote: { id: s.id, nomeArquivo: lote.nomeArquivo, semestre: lote.semestre, bimestre: lote.bimestre, chamada: lote.chamada, total: lote.total }, blocos,
+            aviso: fora ? `${fora} questão(ões) desse arquivo foram apagadas do banco e ficaram de fora.` : '' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/provas/simular', verifyToken, checkPermission, async (req, res) => {
     try {
         const curso = normalizarTexto(req.body.curso);

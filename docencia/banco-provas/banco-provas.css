@@ -463,3 +463,13 @@ body .bp-link-acoes .btn-secondary.bp-link-excluir[data-confirma] { background: 
 .bp-img-add { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
 .bp-img-add:hover { background: #f1f5f9; }
 .bp-img-dica { flex: 1 1 260px; color: #64748b; font-size: 0.78rem; }
+
+/* Montar igual ao arquivo importado (16/11/2026) */
+.sim-arquivo { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0.75rem 0.9rem; margin-bottom: 1rem; border: 1px solid #b9e3dd; background: #effaf8; border-radius: 10px; }
+.sim-arquivo select { min-height: 38px; max-width: 100%; flex: 1 1 320px; }
+.sim-arquivo-dica { flex: 1 1 100%; margin: 0; font-size: 0.82rem; color: #355; }
+
+/* posição digitada (16/11/2026): setas | nº da posição | disciplina | quantidade */
+.prova-cota-row { grid-template-columns: auto 56px 1fr 110px; }
+.prova-cota-row .prova-cota-pos { width: 56px; text-align: center; font-weight: 700; color: var(--primary-blue); }
+@media (max-width: 600px) { .prova-cota-row { grid-template-columns: auto 52px 1fr 72px; gap: 0.4rem; } }

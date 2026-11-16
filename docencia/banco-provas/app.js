@@ -1178,6 +1178,7 @@ async function confirmarImportacao() {
         alternativasPorQuestao: importarAlternativasPorQuestao,
         professorNome: document.getElementById('importar-professor').value.trim(),
         padrao: padraoImportacao(),
+        nomeArquivo: ((document.getElementById('importar-arquivo').files[0] || {}).name || ''),
         questoes: importarQuestoesAnalisadas
       })
     });
@@ -1505,7 +1506,8 @@ function popularCotasSimulado() {
         <button type="button" class="prova-cota-mover" data-mover="-1" title="Subir na ordem da prova" aria-label="Subir ${esc(l.label)}">↑</button>
         <button type="button" class="prova-cota-mover" data-mover="1" title="Descer na ordem da prova" aria-label="Descer ${esc(l.label)}">↓</button>
       </span>
-      <span><b class="prova-cota-num"></b>${esc(l.label)}</span>
+      <input type="number" min="1" class="prova-cota-pos" title="Posição na prova: digite o número e a disciplina vai direto para esse lugar" aria-label="Posição de ${esc(l.label)} na prova">
+      <span>${esc(l.label)}</span>
       <input type="number" min="0" value="0" class="prova-cota-qtd" data-disciplina-id="${l.id}">
     </div>`).join('');
   numerarCotasSimulado();
@@ -1514,12 +1516,30 @@ function popularCotasSimulado() {
 function numerarCotasSimulado() {
   const rows = [...document.querySelectorAll('#prova-cotas-lista .prova-cota-row')];
   rows.forEach((row, i) => {
-    row.querySelector('.prova-cota-num').textContent = `${i + 1}º · `;
+    row.querySelector('.prova-cota-pos').value = i + 1;
+    row.querySelector('.prova-cota-pos').max = rows.length;
     row.querySelector('[data-mover="-1"]').disabled = i === 0;
     row.querySelector('[data-mover="1"]').disabled = i === rows.length - 1;
   });
 }
 
+// posição digitada (16/11/2026): com 11 disciplinas, clicar ↑ uma por uma cansa — digita o número e ela vai direto
+function posicionarCotaSimulado(input) {
+  const row = input.closest('.prova-cota-row');
+  const lista = row.parentElement;
+  const rows = [...lista.querySelectorAll('.prova-cota-row')];
+  const atual = rows.indexOf(row);
+  let alvo = parseInt(input.value, 10);
+  if (!alvo || alvo < 1) alvo = 1;
+  if (alvo > rows.length) alvo = rows.length;
+  if (alvo - 1 !== atual) {
+    rows.splice(atual, 1);
+    rows.splice(alvo - 1, 0, row);
+    rows.forEach(r => lista.appendChild(r));
+    if (sorteioAtual) { sorteioAtual = null; renderPreviewSorteio(); showToast('Ordem mudada — clique em "Montar prova com essas quantidades" de novo.'); }
+  }
+  numerarCotasSimulado();
+}
 function moverCotaSimulado(btn) {
   const row = btn.closest('.prova-cota-row');
   const lista = row.parentElement;
@@ -1560,6 +1580,35 @@ async function sortearProvaSimulado() {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// Montar igual ao arquivo importado (16/11/2026): disciplinas na ordem do Word, quantas de cada e as mesmas
+// questões — o coordenador só confere e cria. As de Conhecimentos Gerais reaproveitadas entram no lugar certo.
+async function abrirSimuladoDoArquivo() {
+  const sel = document.getElementById('sim-arquivo-sel');
+  try {
+    const lotes = await apiFetch(`/banco-provas/lotes?curso=${encodeURIComponent(cursoAtivo)}`);
+    if (!lotes.length) { showToast('Nenhum arquivo importado neste curso ainda (vale para os importados a partir de agora).', 'error'); return; }
+    const data = (iso) => { try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return ''; } };
+    sel.innerHTML = '<option value="">Escolha o arquivo importado…</option>' + lotes.map(l => `<option value="${esc(l.id)}">${esc(l.nomeArquivo || 'Arquivo sem nome')} · ${l.total} questões · ${esc(l.semestre || '')} · ${data(l.createdAt)}</option>`).join('');
+    sel.hidden = false; sel.focus();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+async function usarSequenciaDoArquivo(loteId) {
+  if (!loteId) return;
+  try {
+    const r = await apiFetch(`/banco-provas/lotes/${encodeURIComponent(loteId)}/sequencia`);
+    if (!r.blocos.length) { showToast('Esse arquivo não tem questões publicadas.', 'error'); return; }
+    sorteioAtual = r.blocos.map(b => ({ disciplinaId: b.disciplinaId, quantidadePedida: b.questoes.length, quantidadeDisponivel: b.questoes.length, questoes: b.questoes.slice(), disponiveis: b.questoes }));
+    // bimestre, chamada e semestre do arquivo
+    if (r.lote.bimestre) document.getElementById('prova-simulado-bimestre').value = String(r.lote.bimestre);
+    if (r.lote.chamada && r.lote.chamada !== 'exame') document.getElementById('prova-simulado-chamada').value = String(r.lote.chamada);
+    if (r.lote.semestre && !document.getElementById('prova-semestre').value) document.getElementById('prova-semestre').value = r.lote.semestre;
+    renderPreviewSorteio();
+    const resumo = sorteioAtual.map(g => `${g.disciplinaId === DISCIPLINA_GERAL_ID ? 'Conhecimentos Gerais' : nomeDisciplina(g.disciplinaId)} (${g.questoes.length})`).join(' → ');
+    showToast(`Montado igual ao arquivo: ${resumo}. Confira e crie a prova.${r.aviso ? ' ' + r.aviso : ''}`);
+    document.getElementById('prova-preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) { showToast(err.message, 'error'); }
 }
 
 // 30/10/2026: mostra TODAS as questões disponíveis de cada disciplina, com as primeiras N (a
@@ -1867,6 +1916,10 @@ function bindEventos() {
 
   document.getElementById('bp-btn-importar-docx').addEventListener('click', abrirModalImportar);
   document.getElementById('prova-cotas-lista').addEventListener('click', (e) => { const b = e.target.closest('.prova-cota-mover'); if (b && !b.disabled) moverCotaSimulado(b); });
+  document.getElementById('btn-sim-arquivo').addEventListener('click', abrirSimuladoDoArquivo);
+  document.getElementById('prova-cotas-lista').addEventListener('change', (e) => { const p = e.target.closest('.prova-cota-pos'); if (p) posicionarCotaSimulado(p); });
+  document.getElementById('prova-cotas-lista').addEventListener('keydown', (e) => { const p = e.target.closest('.prova-cota-pos'); if (p && e.key === 'Enter') { e.preventDefault(); posicionarCotaSimulado(p); } });
+  document.getElementById('sim-arquivo-sel').addEventListener('change', (e) => usarSequenciaDoArquivo(e.target.value));
   document.getElementById('btn-cancelar-importar').addEventListener('click', fecharModalImportar);
   document.getElementById('form-importar').addEventListener('submit', analisarImportacao);
   document.getElementById('btn-voltar-importar').addEventListener('click', voltarEtapaArquivo);
