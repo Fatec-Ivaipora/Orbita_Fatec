@@ -85,7 +85,7 @@ function provaDoBody(b) {
     const p = {
         turma: txt(b.turma, 10).toUpperCase(),
         data: txt(b.data, 10),
-        turno: TURNOS.includes(b.turno) ? b.turno : 'manha',
+        turno: TURNOS.includes(b.turno) ? b.turno : (b.turno === '' ? '' : 'manha'), // '' = turno a definir
         horario: HORA.test(b.horario || '') ? b.horario : '',
         disciplina: txt(b.disciplina, 160),
         tipo: TIPOS.includes(b.tipo) ? b.tipo : 'prova',

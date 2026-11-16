@@ -119,6 +119,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: entrar como coord_medicina → Medicina → Aplicação de Provas → 2026.2 (carregado das artes de 16/11); editar uma prova, Configurar, Validar, Imprimir / imagem. Como professor_medicina: só leitura e "Minhas aplicações".
 - Como reverter: tirar o módulo de core/permissions.js e o app.use de api/index.js. As coleções podem ficar.
 - Atenção: o módulo precisa de nível no config/permissions do Firestore (coord_medicina 3, professor_medicina 2), senão o menu não mostra.
+- Complemento (16/11): arte/PDF por turma para os alunos, sem o nome dos aplicadores, escolhendo o que sai (1ª chamada, 2ª chamada, exames); etapa "Substitutiva" passou a "2ª chamada"; turno "a definir"; cabeçalho na identidade MED FATEC (img/naped/*-negativo.png) e rodapé com a marca do Órbita. Carregadas no Firestore as 21 provas de 2ª chamada e os 10 exames de 2026.2 (mensagem da Secretaria).
 ### [2026-11-13] Órbita no celular: menu e Contratos
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feature/orbita-mobile

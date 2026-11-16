@@ -46,8 +46,14 @@ function toast(msg, tipo = 'ok') {
 
 // ---------- formatos ----------
 const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-const TURNO = { manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
-const ETAPA = { b1: '1º bimestre', b2: '2º bimestre', sub: 'Substitutiva', exame: 'Exame' };
+const TURNO = { manha: 'Manhã', tarde: 'Tarde', noite: 'Noite', '': 'A definir' };
+const ETAPA = { b1: '1º bimestre', b2: '2º bimestre', sub: '2ª chamada', exame: 'Exame' };
+// título de cada bloco na arte da turma (16/11/2026)
+const ETAPA_BLOCO = { b1: '1ª chamada · 1º bimestre', b2: '1ª chamada · 2º bimestre', sub: '2ª chamada', exame: 'Exames' };
+// o que sai na arte da turma: quem gera escolhe (só 1ª chamada, só 2ª, só exames, ou juntos)
+const SAI = { c1: true, sub: true, exame: true };
+const grupoDe = (et) => (et === 'b1' || et === 'b2' ? 'c1' : et);
+const SAI_ROTULO = { c1: '1ª chamada', sub: '2ª chamada', exame: 'Exames' };
 const TIPO = { prova: 'Prova', pratica: 'Prática', osce: 'OSCE', outra: 'Outra' };
 const dataObj = (iso) => { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d); };
 const ddmm = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '';
@@ -76,7 +82,7 @@ function provasVisiveis() {
 function conflitos(provas) {
   const out = [];
   const porSlot = {};
-  provas.forEach(p => { const k = `${p.data}|${p.turno}`; (porSlot[k] = porSlot[k] || []).push(p); });
+  provas.forEach(p => { if (!p.turno) return; const k = `${p.data}|${p.turno}`; (porSlot[k] = porSlot[k] || []).push(p); }); // turno a definir não entra no choque
   Object.values(porSlot).forEach(l => {
     if (l.length < 2) return;
     const d = `${ddmm(l[0].data)} ${TURNO[l[0].turno].toLowerCase()}`;
@@ -202,6 +208,14 @@ function render() {
   $('[data-aba="napa"]').hidden = !dados.editor;
   if ((aba === 'minhas' && !nMinhas) || (aba === 'napa' && !dados.editor)) aba = 'turmas';
   document.querySelectorAll('.ap-aba').forEach(b => { const on = b.dataset.aba === aba; b.classList.toggle('ativa', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+  el('ap-menu-exportar').innerHTML = `<fieldset class="ap-sai"><legend>O que sai na arte da turma</legend>${Object.entries(SAI_ROTULO).map(([k, l]) => `<label><input type="checkbox" data-sai="${k}" ${SAI[k] ? 'checked' : ''}> ${l}</label>`).join('')}</fieldset>`
+    + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="img-turma:${esc(t.id)}">Imagem da ${esc(t.id)} (alunos)</button>`).join('')
+    + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="pdf-turma:${esc(t.id)}">Imprimir / PDF da ${esc(t.id)} (alunos)</button>`).join('')
+    + '<hr><button type="button" role="menuitem" data-exp="img-turmas">Imagem: todas as turmas lado a lado</button>'
+    + '<button type="button" role="menuitem" data-exp="img-aplicadores">Imagem: professores aplicadores</button>'
+    + '<button type="button" role="menuitem" data-exp="pdf-turmas">Imprimir / PDF: todas as turmas</button>'
+    + '<button type="button" role="menuitem" data-exp="pdf-aplicadores">Imprimir / PDF: aplicadores e laboratórios</button>'
+    + (dados.editor ? '<button type="button" role="menuitem" data-exp="pdf-napa">Imprimir / PDF: NAPA (sala, notebooks)</button>' : '');
   document.querySelectorAll('.ap-so-editor').forEach(b => { b.hidden = !dados.editor; });
   renderConflitos();
   el('ap-conteudo').innerHTML = aba === 'turmas' ? renderTurmas(provas)
@@ -379,10 +393,11 @@ function cabecalhoSaida(titulo) {
   const c = dados.config;
   const et = el('ap-etapa').value;
   const val = c.status === 'validado';
+  // identidade MED FATEC (faixa azul royal com as marcas em negativo) — 16/11/2026
   return `<header class="ap-s-cab">
-      <img src="/img/fateclogoazul.png" alt="FATEC" class="ap-s-logo">
-      <div><h1>${titulo}</h1><p>Medicina · ${esc(dados.semestre)}${et ? ` · ${ETAPA[et]}` : ''}</p></div>
-      <img src="/img/medfatec-logo.png" alt="MED FATEC" class="ap-s-logo ap-s-logo-med">
+      <img src="/img/naped/medfatec-negativo.png" alt="MED FATEC" class="ap-s-logo-med">
+      <div class="ap-s-cab-txt"><h1>${titulo}</h1><p>Medicina · ${esc(dados.semestre)}${et ? ` · ${ETAPA[et]}` : ''}</p></div>
+      <img src="/img/naped/fatecivp-negativo.png" alt="FATEC Ivaiporã" class="ap-s-logo-fatec">
     </header>
     <p class="ap-s-val ${val ? '' : 'ap-s-rasc'}">${val ? `Validado por ${esc(c.validadoPor || '')} em ${new Date(c.validadoEm).toLocaleDateString('pt-BR')}` : 'RASCUNHO — calendário ainda não validado'}</p>`;
 }
@@ -395,6 +410,19 @@ function saidaTurmas() {
         <table><thead><tr><th>Data</th><th>Disciplina</th><th>Turno</th></tr></thead>
         <tbody>${ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${esc(p.disciplina)}</td><td>${TURNO[p.turno]}</td></tr>`).join('') || '<tr><td colspan="3">—</td></tr>'}</tbody></table></section>`;
     }).join('')}</div>
+    <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
+}
+// arte de UMA turma, para mandar aos alunos: sem o nome dos aplicadores (16/11/2026)
+function saidaTurma(tid) {
+  const t = (dados.config.turmas || []).find(x => x.id === tid) || { id: tid, periodo: '' };
+  const ps = provasVisiveis().filter(p => p.turma === tid);
+  const blocos = ['b1', 'b2', 'sub', 'exame'].filter(et => SAI[grupoDe(et)]).map(et => ({ et, ps: ps.filter(p => p.etapa === et) })).filter(b => b.ps.length);
+  const escolhidos = Object.keys(SAI).filter(k => SAI[k]);
+  return `<div class="ap-s ap-s-turma ap-${corTurma(tid)}">${cabecalhoSaida(`${escolhidos.length === 1 ? SAI_ROTULO[escolhidos[0]] : 'Calendário de Provas'} · ${esc(tid)}`)}
+    <p class="ap-s-turma-per">${esc(tid)} · ${t.periodo}º período</p>
+    ${blocos.map(b => `<section class="ap-s-bloco"><h2>${ETAPA_BLOCO[b.et]}</h2>
+      <table><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Horário</th><th>Local</th></tr></thead>
+      <tbody>${b.ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}</td><td>${hora(p.horario) ? `<b>${hora(p.horario)}</b>` : TURNO[p.turno]}</td><td>${esc(p.laboratorios || '')}</td></tr>`).join('')}</tbody></table></section>`).join('') || '<p>Nenhuma prova.</p>'}
     <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
 }
 function saidaAplicadores() {
@@ -425,9 +453,16 @@ function carregarHtml2canvas() {
 }
 async function exportar(tipo) {
   el('ap-menu-exportar').hidden = true; el('ap-exportar').setAttribute('aria-expanded', 'false');
-  if (!provasVisiveis().length) { toast('Não há provas nessa etapa.', 'erro'); return; }
+  const turmaSo = (tipo.match(/-turma:(.+)$/) || [])[1];
+  if (turmaSo && !Object.values(SAI).some(Boolean)) { toast('Marque o que vai sair na arte: 1ª chamada, 2ª chamada ou exames.', 'erro'); return; }
+  if (turmaSo && !provasVisiveis().some(p => p.turma === turmaSo && SAI[grupoDe(p.etapa)])) { toast(`A ${turmaSo} não tem provas no que foi marcado.`, 'erro'); return; }
+  if (!provasVisiveis().filter(p => !turmaSo || p.turma === turmaSo).length) { toast(turmaSo ? `A ${turmaSo} não tem provas nessa etapa.` : 'Não há provas nessa etapa.', 'erro'); return; }
   const saida = el('ap-saida');
-  saida.innerHTML = tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
+  saida.innerHTML = turmaSo ? saidaTurma(turmaSo) : tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
+  saida.firstElementChild.insertAdjacentHTML('beforeend', `<footer class="ap-s-pe">
+      <span class="ap-s-orbita"><span class="ap-s-orb"><span>F</span><i></i></span><span class="ap-s-orb-nome"><b>ÓRBITA</b> FATEC</span></span>
+      <span>Gerado pelo Órbita em ${new Date().toLocaleDateString('pt-BR')}</span>
+    </footer>`);
   if (tipo.startsWith('pdf')) {
     document.body.classList.add('ap-imprimindo');
     setTimeout(() => { window.print(); document.body.classList.remove('ap-imprimindo'); }, 150);
@@ -440,7 +475,8 @@ async function exportar(tipo) {
     await Promise.all([...saida.querySelectorAll('img')].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })));
     const canvas = await html2canvas(saida.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     const a = document.createElement('a');
-    a.download = `${tipo === 'img-turmas' ? 'calendario-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
+    const sufixo = turmaSo ? '-' + Object.keys(SAI).filter(k => SAI[k]).map(k => ({ c1: '1chamada', sub: '2chamada', exame: 'exames' }[k])).join('-') : '';
+    a.download = `${turmaSo ? `calendario-provas-${turmaSo}${sufixo}` : tipo === 'img-turmas' ? 'calendario-provas' : tipo === 'img-napa' ? 'napa-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
     a.href = canvas.toDataURL('image/png'); a.click();
     toast('Imagem baixada. É só mandar no WhatsApp.');
   } catch (e) { toast(e.message, 'erro'); }
@@ -475,6 +511,7 @@ function ligarEventos() {
   });
   el('ap-exportar').addEventListener('click', () => { const m = el('ap-menu-exportar'); m.hidden = !m.hidden; el('ap-exportar').setAttribute('aria-expanded', m.hidden ? 'false' : 'true'); });
   el('ap-menu-exportar').addEventListener('click', (e) => { const b = e.target.closest('[data-exp]'); if (b) exportar(b.dataset.exp); });
+  el('ap-menu-exportar').addEventListener('change', (e) => { const c = e.target.closest('[data-sai]'); if (c) SAI[c.dataset.sai] = c.checked; });
   document.addEventListener('click', (e) => { if (!e.target.closest('.ap-menu-wrap')) { el('ap-menu-exportar').hidden = true; el('ap-exportar').setAttribute('aria-expanded', 'false'); } });
 }
 

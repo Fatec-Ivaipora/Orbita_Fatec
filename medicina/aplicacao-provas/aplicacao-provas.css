@@ -138,11 +138,21 @@
 /* ---------- saída (impressão / imagem) ---------- */
 .ap-saida { position: fixed; left: -10000px; top: 0; width: 1100px; background: #fff; }
 .ap-s { padding: 28px 32px; font-family: var(--orb-texto); color: #0d1b33; background: #fff; }
-.ap-s-cab { display: flex; align-items: center; gap: 18px; border-bottom: 3px solid #12294d; padding-bottom: 12px; }
-.ap-s-cab h1 { margin: 0; font-family: var(--orb-display); font-size: 26px; color: #12294d; }
-.ap-s-cab p { margin: 2px 0 0; font-size: 14px; color: #44536b; font-weight: 600; }
-.ap-s-cab > div { flex: 1; }
-.ap-s-logo { height: 46px; width: auto; }
+/* cabeçalho na identidade MED FATEC: azul royal, ciano e as marcas em negativo */
+.ap-s-cab { display: flex; align-items: center; gap: 20px; background: #0052B8; border-radius: 14px; padding: 16px 22px; color: #fff; }
+.ap-s-cab-txt { flex: 1; min-width: 0; }
+.ap-s-cab h1 { margin: 0; font-family: var(--orb-display); font-size: 22px; white-space: nowrap; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
+.ap-s-cab p { margin: 3px 0 0; font-size: 14px; color: #A6E1FF; font-weight: 600; }
+.ap-s-logo-med { height: 38px; width: auto; flex: none; }
+.ap-s-logo-fatec { height: 30px; width: auto; flex: none; }
+/* rodapé com a marca do Órbita */
+.ap-s-pe { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 12px; border-top: 2px solid #00B3FF; font-size: 12px; color: #44536b; }
+.ap-s-orbita { display: inline-flex; align-items: center; gap: 8px; }
+.ap-s-orb { position: relative; width: 26px; height: 26px; border-radius: 50%; background: #0d1b33; border: 2px solid #1f6fb2; display: grid; place-items: center; }
+.ap-s-orb span { font-family: var(--orb-display); font-weight: 800; font-size: 13px; color: #fff; line-height: 1; }
+.ap-s-orb i { position: absolute; top: -3px; right: -1px; width: 8px; height: 8px; border-radius: 50%; background: #EB7025; }
+.ap-s-orb-nome { font-family: var(--orb-display); font-size: 14px; color: #00B3FF; letter-spacing: 0.02em; }
+.ap-s-orb-nome b { color: #0d1b33; font-weight: 800; }
 .ap-s-val { margin: 8px 0 16px; font-size: 13px; font-weight: 700; color: #0f7a4b; }
 .ap-s-rasc { color: #c8392f; letter-spacing: 0.04em; }
 .ap-s-cols { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; }
@@ -203,3 +213,24 @@
   .ap-modal > footer .ap-btn { width: auto; flex: 1; }
   .ap-modal > footer .ap-esp { display: none; }
 }
+
+/* arte de uma turma (alunos) — 16/11/2026 */
+.ap-menu hr { border: 0; border-top: 1px solid var(--orb-linha); margin: 0.3rem 0; }
+.ap-s-turma { width: 820px; }
+.ap-s-turma .ap-s-cab h1 { color: #fff; }
+.ap-s-turma-per { display: inline-block; margin: 0 0 14px; background: var(--c); color: #fff; font-family: var(--orb-display); font-weight: 800; font-size: 20px; padding: 6px 16px; border-radius: 10px; }
+.ap-s-bloco { border: 2px solid var(--cl); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.ap-s-bloco h2 { margin: 0; background: var(--cs); color: var(--c); font-family: var(--orb-display); font-size: 17px; padding: 8px 12px; }
+.ap-s-bloco table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ap-s-bloco th { text-align: left; font-size: 12px; color: #44536b; padding: 7px 10px; border-bottom: 1px solid var(--cl); }
+.ap-s-bloco td { padding: 8px 10px; border-top: 1px solid #e3e8f0; vertical-align: top; }
+.ap-s-bloco td:first-child b { color: var(--c); }
+.ap-s-bloco td:nth-child(2) { color: #5b6a80; }
+@media print { body.ap-imprimindo .ap-s-turma { width: auto; } body.ap-imprimindo .ap-s-bloco { break-inside: avoid; } }
+.ap-s-bloco table { table-layout: fixed; }
+.ap-s-bloco th:nth-child(1) { width: 64px; } .ap-s-bloco th:nth-child(2) { width: 52px; } .ap-s-bloco th:nth-child(4) { width: 92px; } .ap-s-bloco th:nth-child(5) { width: 200px; }
+
+.ap-sai { border: 0; margin: 0 0 0.25rem; padding: 0.4rem 0.6rem 0.55rem; background: var(--orb-sup2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; }
+.ap-sai legend { float: left; width: 100%; padding: 0; margin-bottom: 0.25rem; font-size: 0.74rem; font-weight: 800; color: var(--orb-tinta2); text-transform: uppercase; letter-spacing: 0.04em; }
+.ap-sai label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.86rem; font-weight: 600; min-height: 36px; cursor: pointer; }
+.ap-sai input { width: 18px; height: 18px; }
