@@ -67,6 +67,9 @@ const SUBST = {
 };
 const RE_DETERMINANTE = /(?:^|[^\wÀ-ÿ])(a|as|o|os|da|das|do|dos|na|nas|no|nos|uma|umas|um|uns|pela|pelas|pelo|pelos|à|às|ao|aos|sua|suas|seu|seus|esta|essa|este|esse|cada|nesta|nessa|neste|nesse|desta|dessa|deste|desse|outra|outro|nova|novo|boa|bom|primeira|primeiro)\s+$/i;
 const CONFIRA = {};
+// terminam em "-encia" mas são (também) verbos: a regra genérica de "-ência" não corrige (16/11/2026)
+const ENCIA_VERBO = new Set(['diferencia', 'vivencia', 'influencia', 'evidencia', 'silencia', 'licencia', 'presencia', 'potencia', 'sequencia',
+    'referencia', 'experiencia', 'providencia', 'negligencia', 'reverencia', 'diligencia', 'agencia', 'denuncia', 'pronuncia', 'anuncia']);
 // abreviações informais
 const INFORMAL = {
     pct: 'paciente', pcte: 'paciente', pcts: 'pacientes', pctes: 'pacientes', vc: 'você', vcs: 'vocês', tb: 'também', tbm: 'também',
@@ -107,7 +110,8 @@ const REGRAS = [
     [/\bpor que\s*\?/gi, (m) => comCaixa(m, 'por quê?'), 'No fim da frase é "por quê?".', 'ortografia'],
     [/\bporque\s*\?/gi, (m) => comCaixa(m, 'por quê?'), 'No fim da pergunta é "por quê?".', 'ortografia'],
     // unidades de medida (SI / padrão de laudo)
-    [/(\d+)\.(\d+)(?=\s*(°C|ºC|mg|g|kg|mL|ml|L|cm|mm|mmHg|%|bpm|irpm|mEq|U|UI)\b)/g, (m, a, b) => `${a},${b}`, 'Decimal com vírgula (ex.: 38,5 °C).', 'unidade'],
+    // 16/11/2026: "1.000" e "10.500" são milhar (ponto certo em português) — só corrige decimal com 1, 2 ou 4+ casas
+    [/(?<![\d.])(\d+)\.(\d{1,2}|\d{4,})(?![\d.])(?=\s*(°C|ºC|mg|g|kg|mL|ml|L|cm|mm|mmHg|%|bpm|irpm|mEq|U|UI)\b)/g, (m, a, b) => `${a},${b}`, 'Decimal com vírgula (ex.: 38,5 °C).', 'unidade'],
     [/(\d+)\s*º\s*C\b/g, (m, a) => `${a} °C`, 'Grau Celsius é "°C" (com espaço depois do número).', 'unidade'],
     [/(\d+)°C\b/g, (m, a) => `${a} °C`, 'Espaço entre o número e a unidade (38,5 °C).', 'unidade'],
     [/\bmmhg\b|\bMMHG\b|\bmmHG\b/g, 'mmHg', 'A unidade é "mmHg".', 'unidade'],
@@ -146,7 +150,8 @@ function achar(texto, opts) {
         if (k === ks && w.length >= 5 && /coes$/.test(k)) { add(m.index, w, comCaixa(w, w.slice(0, -4) + 'ções'), 'Falta "ções" (cedilha e til).', 'ortografia'); continue; }
         if (k === ks && w.length >= 4 && /[^aeiou]ao$|[aeiou]ao$/.test(k) && /ao$/.test(k) && !EXC_AO.has(k) && !/cao$/.test(k)) { add(m.index, w, comCaixa(w, w.slice(0, -2) + 'ão'), 'Falta o til ("ão").', 'ortografia'); continue; }
         if (k === ks && w.length >= 5 && /oes$/.test(k) && !/coes$/.test(k)) { add(m.index, w, comCaixa(w, w.slice(0, -3) + 'ões'), 'Falta o til ("ões").', 'ortografia'); continue; }
-        if (k === ks && w.length >= 7 && /encia$/.test(k) && !CONFIRA[k]) { add(m.index, w, comCaixa(w, w.slice(0, -5) + 'ência'), 'Falta o acento ("ência").', 'ortografia'); continue; }
+        // 16/11/2026: "diferencia", "vivencia", "influencia"… são verbos (ele diferencia) — não viram "-ência"
+        if (k === ks && w.length >= 7 && /encia$/.test(k) && !CONFIRA[k] && !ENCIA_VERBO.has(k) && !SUBST[k]) { add(m.index, w, comCaixa(w, w.slice(0, -5) + 'ência'), 'Falta o acento ("ência").', 'ortografia'); continue; }
         if (k === ks && w.length >= 7 && /ancia$/.test(k)) { add(m.index, w, comCaixa(w, w.slice(0, -5) + 'ância'), 'Falta o acento ("ância").', 'ortografia'); continue; }
     }
     // abreviações com barra (c/ s/)
