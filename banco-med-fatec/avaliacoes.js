@@ -317,9 +317,9 @@ function painelPlano(plano, analise, av) {
     ${analise.foraDoBimestre ? `<p class="av-nota av-nota-aviso">${analise.foraDoBimestre} questão(ões) de unidade do outro bimestre.</p>` : ''}
 
     <h3>Equilíbrio</h3>
-    <div class="av-eq" aria-label="${analise.aplicacao} de caso clínico e ${analise.memorizacao} de memorização">
+    <div class="av-eq" aria-label="${analise.aplicacao} de caso clínico e ${analise.memorizacao} de conhecimento">
       <div class="av-eq-barra"><span class="av-eq-caso" style="width:${100 * analise.aplicacao / total}%"></span></div>
-      <div class="av-eq-leg"><span><i class="av-dot av-dot-caso"></i>Caso clínico <b>${analise.aplicacao}</b></span><span><i class="av-dot"></i>Memorização <b>${analise.memorizacao}</b></span></div>
+      <div class="av-eq-leg"><span><i class="av-dot av-dot-caso"></i>Caso clínico <b>${analise.aplicacao}</b></span><span><i class="av-dot"></i>Conhecimento <b>${analise.memorizacao}</b></span></div>
     </div>
 
     <h3>Objetivos do plano <small>${analise.objetivos.filter(o => o.qtd).length} de ${analise.objetivos.length}</small></h3>
@@ -472,7 +472,7 @@ async function baixarXml(comoEsta) {
 // ==========================================================================================
 const CHECKLIST = [
   { t: 'Professor, unidade e objetivo', c: ['professor', 'unidade', 'objetivo'] },
-  { t: 'Caso clínico (situação real)', c: ['memorizacao'], aviso: true },
+  { tipo: true },
   { t: 'Pergunta direta no final', c: ['pergunta', 'enunciado'] },
   { t: 'Enunciado afirmativo (sem EXCETO / INCORRETA)', c: ['negativo'] },
   { t: '4 alternativas (A a D), sem repetição', c: ['qtd', 'vazia', 'repetida'] },
@@ -722,6 +722,7 @@ function atualizarChecklist() {
   const cods = new Map([...r.bloqueios.map(b => [b.cod, 'erro']), ...r.avisos.map(a => [a.cod, 'aviso'])]);
   const msgs = [...r.bloqueios, ...r.avisos];
   $('#av-check-lista').innerHTML = CHECKLIST.map(item => {
+    if (item.tipo) return `<li class="av-ck av-ck-info"><span class="av-ck-ic">${ic('ok')}</span><div>${r.aplicacao ? 'Tipo: caso clínico (aplicação)' : 'Tipo: questão de conhecimento (sem caso clínico)'}<small>${r.aplicacao ? 'Parte de uma situação clínica.' : 'Normal no conteúdo de base. Caso clínico só quando o objetivo pedir aplicar, analisar ou decidir.'}</small></div></li>`;
     const st = item.c.some(c => cods.get(c) === 'erro') ? 'erro' : item.c.some(c => cods.get(c) === 'aviso') ? 'aviso' : 'ok';
     const det = msgs.filter(m => item.c.includes(m.cod)).map(m => m.msg);
     return `<li class="av-ck av-ck-${st}"><span class="av-ck-ic">${st === 'ok' ? ic('ok') : st === 'erro' ? ic('x') : ic('alerta')}</span><div>${esc(item.t)}${det.length ? `<small>${esc(det[0])}</small>` : ''}</div></li>`;
