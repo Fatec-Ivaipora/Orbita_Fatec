@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Banco MED: importar do Word não perde mais questão ("na qual") e avisa o que não leu
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-importar-na-qual
+- Arquivos alterados:
+  - `banco-med-fatec/ler-word.js`: no modelo por disciplina, quando as alternativas no fim começam com letra ("A) …", "B) …"), a pergunta é o parágrafo logo antes delas; uma linha com letra nunca é tomada como pergunta. Questão que não deu pra ler direito (menos de 2 alternativas ou sem enunciado) não some mais: volta na lista com `problema` escrito, e a lista traz `comProblema` com os números.
+  - `banco-med-fatec/avaliacoes.js`: a prévia avisa (no topo e numa notificação) quais questões do arquivo não foram lidas direito; cada uma aparece com o aviso vermelho, desmarcada, e o professor marca "Importar esta questão" se quiser subir mesmo assim e acertar na edição. Cada item mostra o nº da questão no arquivo.
+  - `banco-med-fatec/index.html`: `ler-word.js?v=6` (o navegador pega a versão nova).
+- Tipo: Correção
+- Motivo: a Milene importou um Word de 15 questões (Mecanismos de Defesas e Doenças, 2º bim, 1ª chamada) e entraram 12. As questões 4, 5 e 6 tinham alternativas como "Hipersensibilidade do tipo III, na qual…": o leitor achava "qual" e tomava a alternativa C pela pergunta, a questão ficava com 1 alternativa e era descartada sem aviso.
+- Como testar: importar um Word no modelo com alternativas contendo "na qual" e conferir que todas aparecem na prévia; apagar as alternativas B a D de uma questão e conferir o aviso vermelho com ela desmarcada.
+- Como reverter: reverter o commit.
+
 ### [2026-11-17] Contratos: quantidade de contratos por cidade no filtro
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/contratos-qtd-cidade

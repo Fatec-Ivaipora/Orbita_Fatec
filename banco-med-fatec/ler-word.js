@@ -197,12 +197,19 @@ function lerModeloDeBlocos(blocos) {
     if (sec === 'feedback') { if (b.texto || b.imgs.length) q.feedback.push(b); continue; }
     if (sec === 'ref') { if (b.texto) q.ref.push(b.texto); }
   }
-  return qs.map(q => {
+  const lidas = qs.map(q => {
     const imagens = q.enun.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: `questao-${q.numero}-${i + 1}` }));
     const linhas = q.enun.filter(b => b.texto);
-    // pergunta = último parágrafo que pergunta (?, :, assinale/marque/indique…); as alternativas vêm depois dele
+    // alternativas escritas com letra ("A) …", "B) …") no fim: a pergunta é o parágrafo logo antes delas (17/11/2026).
+    // Antes procurava a pergunta pela palavra "qual" e achava "na qual" dentro da alternativa C ("Hipersensibilidade
+    // do tipo III, na qual…"): a questão ficava com 1 alternativa e sumia da prévia (Milene, questões 4 a 6).
     let ip = -1;
-    for (let i = linhas.length - 2; i >= 0; i--) {
+    let k = linhas.length;
+    while (k > 0 && RE_LETRA.test(linhas[k - 1].texto)) k--;
+    if (linhas.length - k >= 2 && k > 0) ip = k - 1;
+    // sem letras: último parágrafo que pergunta (?, :, assinale/marque/indique…); as alternativas vêm depois dele
+    for (let i = linhas.length - 2; ip < 0 && i >= 0; i--) {
+      if (RE_LETRA.test(linhas[i].texto)) continue;
       if (/[?:]\s*$/.test(linhas[i].texto) || /\b(assinale|marque|indique|aponte|qual|quais)\b/i.test(linhas[i].texto)) { ip = i; break; }
     }
     if (ip < 0) ip = Math.max(0, linhas.length - 5);
@@ -231,7 +238,16 @@ function lerModeloDeBlocos(blocos) {
       unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
       fonte: q.ref.join(' ')
     };
-  }).filter(q => q.alternativas.length >= 2 && (q.pergunta || q.casoHtml));
+  });
+  // questão que não deu pra ler direito continua na prévia, com o problema escrito (17/11/2026): antes ela sumia
+  // sem aviso. Vem desmarcada; o professor vê e marca "Importar esta questão" se quiser subir mesmo assim.
+  const todas = lidas.filter(q => q.enunciado || q.alternativas.length);
+  todas.forEach(q => {
+    if (q.alternativas.length < 2) q.problema = `Achei ${q.alternativas.length ? 'só 1 alternativa' : 'nenhuma alternativa'}. Confira se as alternativas começam com A), B), C)… logo depois da pergunta.`;
+    else if (!q.pergunta && !q.casoHtml) q.problema = 'Não achei o enunciado/pergunta antes das alternativas.';
+  });
+  todas.comProblema = todas.filter(q => q.problema).map(q => q.numero);
+  return todas;
 }
 
 async function lerModelo(file) {
