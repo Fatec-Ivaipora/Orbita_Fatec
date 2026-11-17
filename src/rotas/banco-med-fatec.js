@@ -878,6 +878,18 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
             const partes = [foraDaProva.length ? `nº ${foraDaProva.join(', ')} da prova` : '', foraExtras ? `${foraExtras} das questões a mais (2ª chamada, exame…)` : ''].filter(Boolean).join(' e ');
             return res.status(400).json({ error: `Ainda há questão sua com item a corrigir na Conferência CADAM (${partes}). Corrija e baixe de novo: o arquivo do AVA só sai com as suas questões no padrão.` });
         }
+        // 17/11/2026: baixou para o AVA (todas no padrão) = as questões dele entram no banco da disciplina na hora,
+        // sem esperar o titular finalizar. É a mesma questão: o que ele corrigir depois na prova vale no banco.
+        const paraPublicar = daProva.filter(q => q.status === 'rascunho_avaliacao');
+        if (paraPublicar.length) {
+            const agoraIso = new Date().toISOString();
+            const lote = db.batch();
+            paraPublicar.forEach(q => lote.update(db.collection(COL_QUESTOES).doc(q.id), { status: 'publicada', publicadaNoEnvio: true, publicadaEm: agoraIso, padronizadaEm: agoraIso, padronizadaPor: prof.nome, updatedAt: agoraIso }));
+            await lote.commit();
+        }
+        // marca automática no Progresso (17/11/2026): o titular vê que ele baixou o arquivo, mesmo sem marcar o resto
+        const kEnvio = AV().chaveEnvio(prof.nome);
+        await db.collection(COL_AVALIACOES).doc(req.params.id).update(new admin.firestore.FieldPath('envios', kEnvio, 'professor'), prof.nome, new admin.firestore.FieldPath('envios', kEnvio, 'arquivo'), { feito: true, em: new Date().toISOString() }).catch(() => {});
         const { comLinks, USOS_PROVA } = AV();
         const base = [av.disciplina, av.semestre, ...(av.tipo === 'exame' ? [] : [`${av.bimestre}º Bimestre`])].map(x => String(x).replace(/\//g, '-')).join('/');
         const raiz = [av.disciplina, av.semestre].map(x => String(x).replace(/\//g, '-')).join('/');
@@ -892,6 +904,7 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
         const grupos = {};
         for (const q of [...daProva, ...extras]) { const u = q.usoProva && q.usoProva !== usoDaProva ? q.usoProva : usoDaProva; (grupos[u] = grupos[u] || []).push(await empacotar(q)); }
         res.json({
+            publicadas: paraPublicar.length,
             nomeArquivo: `${(av.sigla || av.disciplina)} ${av.semestre} ${av.bimestre}o bim - ${prof.nome}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_') + '.xml',
             grupos: Object.entries(grupos).map(([u, questoes]) => ({ uso: u, rotulo: USOS_PROVA[u], prefixo: prefixoUso(u), categoria: u === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[u]}`, questoes }))
         });
