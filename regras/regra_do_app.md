@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Banco MED: sombreamento amarelo vale como marca-texto; botão de baixar Dependência/Adaptação
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-sombreamento-amarelo
+- Arquivos alterados:
+  - `banco-med-fatec/ler-word.js`: `sombreamentoComoMarcaTexto()` troca, antes da leitura, o sombreamento amarelo/verde (`w:shd fill`) do texto ou do parágrafo por marca-texto amarelo, que é o que o leitor reconhece como alternativa correta. Vale para o modelo por disciplina e para a leitura comum.
+  - `banco-med-fatec/index.html`: `ler-word.js?v=7`.
+  - `src/rotas/banco-med-fatec.js`: no `GET /conferencia/:id/xml`, as questões de Dependência e Adaptação voltam a entrar, vindas da reserva da disciplina (elas não têm prova própria no Órbita), cada uma com o seu botão ("Baixar Dependência (20)"). 2ª chamada e exame continuam só com o que está montado na prova.
+- Tipo: Correção
+- Motivo: a Mariana pintou a correta com Sombreamento (FFF200) em vez do marca-texto, e o Órbita dizia "sem marca-texto" em todas as 20 questões de DP de Sistemas Morfofisiológicos I. Ela marcou a correta na mão e importou; as 20 ficaram como reserva de Dependência e, sem reserva no botão de baixar, não havia como gerar o arquivo do AVA.
+- Como testar: importar um Word com a correta em sombreamento amarelo e conferir o gabarito na prévia; como professor com questões de DP, abrir a prova da disciplina e conferir o botão "Baixar Dependência".
+- Como reverter: reverter o commit.
+
 ### [2026-11-17] Banco MED: importar do Word não perde mais questão ("na qual") e avisa o que não leu
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-med-importar-na-qual
