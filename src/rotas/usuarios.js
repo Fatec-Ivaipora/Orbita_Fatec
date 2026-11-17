@@ -47,6 +47,8 @@ router.put('/me/senha', verifyToken, async (req, res) => {
 
         // Atualiza o Firestore para remover a flag de primeiro acesso
         await db.collection('users').doc(req.user.uid).update({ primeiroAcesso: false });
+        // libera na hora (sem esperar o cache de 1 min do middleware)
+        if (verifyToken.limparCacheUsuario) verifyToken.limparCacheUsuario(req.user.uid);
 
         res.json({ success: true, message: 'Senha atualizada com sucesso!' });
     } catch (err) {

@@ -600,6 +600,9 @@ function showFirstAccessModal(token, apiBase) {
       overlay.remove();
       // Mostrar alerta
       alert('Sua senha foi redefinida com sucesso! Bem-vindo ao Órbita.');
+      // 17/11/2026: a página carregou os módulos ANTES da troca (a API respondia "troca de senha obrigatória");
+      // recarrega para buscar tudo de novo já liberado (ex.: Banco MED ficava vazio até a pessoa apertar F5)
+      window.location.reload();
     })
     .catch(err => {
       errorMsg.textContent = err.message;
