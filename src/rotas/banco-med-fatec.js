@@ -859,7 +859,8 @@ router.put('/conferencia/:id/envio', verifyToken, async (req, res) => {
 //   ?resumo=1  → só diz quais grupos ele tem e quantas questões (sem baixar nada, sem marcar nada)
 //   ?uso=c2    → baixa só aquele grupo; sem ?uso = o grupo da própria prova
 // Grupo da própria prova = as questões dele nesta avaliação. Outro grupo = as dele na avaliação irmã (mesma disciplina
-// e semestre; 2ª chamada do mesmo bimestre, exame) + as reservadas no banco com aquele uso (menos 1ª chamada).
+// e semestre; 2ª chamada do mesmo bimestre, exame). Reserva do banco (questão marcada 2ª chamada/exame fora de
+// qualquer prova) não entra: o professor baixa o que está montado na prova.
 router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res) => {
     try {
         if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação baixa o arquivo da prova inteira na aba Avaliações.' });
@@ -883,13 +884,6 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
             const a = irmas.find(x => usoDaAvaliacao(x) === u && (u === 'exame' || !av.bimestre || x.bimestre === av.bimestre));
             if (a) grupos[u] = { questoes: await lerDaAvaliacao(a), avaliacao: a };
         }
-        const jaUsadas = new Set(Object.values(grupos).flatMap(g => g.questoes.map(q => q.id)).concat(av.questoesIds || []));
-        const reservaSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
-        reservaSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-            // reserva do banco entra em 2ª chamada, exame, DP e adaptação (dos dois lados: abrindo a 1ª ou a 2ª chamada
-            // o botão "2ª chamada" traz o mesmo); a 1ª chamada é sempre só o que está na prova
-            .filter(q => q.usoProva && q.usoProva !== 'c1' && q.status === 'publicada' && !jaUsadas.has(q.id) && minhaQuestao(q, prof, req.user.uid) && (q.usoProva === 'exame' || !q.bimestre || !av.bimestre || q.bimestre === av.bimestre))
-            .forEach(q => { (grupos[q.usoProva] = grupos[q.usoProva] || { questoes: [], avaliacao: null }).questoes.push(q); });
         const ordemUso = ['c1', 'c2', 'exame', 'dp', 'adp'];
         const usos = Object.keys(grupos).filter(u => grupos[u].questoes.length).sort((a, b) => ordemUso.indexOf(a) - ordemUso.indexOf(b));
 
