@@ -15,6 +15,7 @@ const rota = require('../utils/rota-coleta');
 // ==========================================
 const checkPermission = verifyToken.requireModulePermission('contratos');
 const COL = 'comercial_contratos';
+const { cidadeCanonica } = require('../utils/cidades');
 const STATUS = ['sem_assinatura', 'assinado', 'desistente'];
 
 const texto = (v, max = 200) => (v ?? '').toString().trim().slice(0, max);
@@ -35,7 +36,7 @@ function camposDoBody(body) {
         nome: maiusculo(body.nome, 150),
         dataMatricula: data(body.dataMatricula),
         curso: maiusculo(body.curso, 80),
-        cidade: maiusculo(body.cidade, 80),
+        cidade: cidadeCanonica(body.cidade).slice(0, 80),   // grafia padrão (src/utils/cidades.js)
         contato: texto(body.contato, 60),
         observacoes: texto(body.observacoes, 4000),
         vencimentoBoleto: data(body.vencimentoBoleto),
@@ -477,7 +478,7 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
     const agora = new Date().toISOString();
     const basicos = {
         nome: maiusculo(m.nome, 150), curso: maiusculo(m.curso, 80),
-        ...(m.cidade ? { cidade: maiusculo(m.cidade, 80) } : {}),
+        ...(m.cidade ? { cidade: cidadeCanonica(m.cidade).slice(0, 80) } : {}),
         ...(m.telefone ? { contato: texto(m.telefone, 60) } : {}),
         ...(m.vencimentoBoleto ? { vencimentoBoleto: data(m.vencimentoBoleto) } : {}),
         // menor de 18 marcado na matrícula liga o "-18" do contrato; desmarcado NÃO apaga a marca que o

@@ -20,6 +20,7 @@
 // ==========================================================================
 const { db } = require('../firebase');
 const { relay } = require('./edubox-relay');
+const { cidadeCanonica } = require('./cidades');
 
 const COL_ALUNOS = 'matriculas_alunos';
 const COL_CONFIG = 'matriculas_config';
@@ -177,7 +178,7 @@ async function comparar({ modulo, semestre }) {
                 descricao: `Está no Edubox e não no Órbita — criar como "${sitEdubox}"`,
                 dados: {
                     modulo, cursoId: curso.id, curso: curso.nome, periodo: base.periodo, nome: base.nome,
-                    cidade: (e.cidade || '').toUpperCase(), telefone: fone(e), vencimentoBoleto: null, situacao: sitEdubox,
+                    cidade: cidadeCanonica(e.cidade), telefone: fone(e), vencimentoBoleto: null, situacao: sitEdubox,
                     planoConfissao: 'Não', observacoes: '', semestre, indicadoPorAlunoId: null, indicadoPorNome: null, formando: ehFormando(e),
                     menor18: false, eduboxCodmat: String(e.codmat), origem: 'edubox'
                 }
@@ -188,7 +189,7 @@ async function comparar({ modulo, semestre }) {
         // automático: só preenche o que está vazio
         const auto = {};
         if (!alvo.d.telefone && fone(e)) auto.telefone = fone(e);
-        if (!alvo.d.cidade && e.cidade) auto.cidade = e.cidade.toUpperCase();
+        if (!alvo.d.cidade && e.cidade) auto.cidade = cidadeCanonica(e.cidade);
         if (Object.keys(auto).length) automaticos.push({ ref: alvo.ref, upd: auto, alvo });
         // situação: só quando muda o grupo
         const atual = alvo.d.situacao || '';
