@@ -1006,7 +1006,10 @@ router.get('/modelo/:categoriaId', verifyToken, checkPermission, async (req, res
         const { listaDisciplinas, lerCriterios, normNome } = AV();
         const dd = (await listaDisciplinas(semestre).catch(() => ({ disciplinas: [] }))).disciplinas.find(x => normNome(x.nome) === normNome(c.nome));
         const plano = require('../../banco-med-fatec/padrao.js').aplicarCriterios(planoEdubox, (dd && await lerCriterios(dd.chave).catch(() => null)) || {});
-        enviarDocx(res, await montarModeloDocx({ disciplina: c.nome, sigla: c.nomeBreve || '', semestre, bimestre, professor: prof ? prof.nome : '', plano }));
+        // prova escolhida na janela (16/11/2026): c1 / c2 / exame — o cabeçalho do modelo já sai com ela
+        const qual = String(req.query.prova || '');
+        const chamada = qual === 'c2' ? 2 : qual === 'c1' ? 1 : null;
+        enviarDocx(res, await montarModeloDocx({ disciplina: c.nome, sigla: c.nomeBreve || '', semestre, bimestre: qual === 'exame' ? null : bimestre, chamada, professor: prof ? prof.nome : '', plano, prova: qual === 'exame' ? 'Exame semestral' : '' }));
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
