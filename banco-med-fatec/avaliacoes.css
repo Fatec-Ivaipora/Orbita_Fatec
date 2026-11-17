@@ -486,6 +486,9 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-envio-prova { margin: 0 0 0.9rem; }
 .av-envio-acoes { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; }
 .av-envio-acoes .av-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+/* um botão de baixar por prova: 1ª chamada, 2ª chamada, exame... (17/11/2026) */
+.av-xml-botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.av-xml-botoes .av-pt-btn { grid-column: auto; grid-row: auto; }
 
 /* "Corrigir tudo" de português e ABNT na Conferência CADAM (16/11/2026) */
 .av-pt-tudo-barra { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: center; margin: 0.6rem 0; padding: 0.6rem 0.8rem; background: #EAF2FD; border-radius: 8px; }

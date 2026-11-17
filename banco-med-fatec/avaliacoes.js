@@ -175,6 +175,7 @@ async function abrirAvaliacao(id) {
   } catch (e) { ed.innerHTML = `<div class="av-vazio">${esc(e.message)} <button type="button" class="av-link" data-voltar>Voltar</button></div>`; }
 }
 async function recarregarAtual() {
+  resumoXmlCache.clear(); // as contagens dos botões de baixar podem ter mudado
   atual = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}`);
   renderEditor();
 }
@@ -261,8 +262,8 @@ function envioNaProvaHtml(av, questoes) {
   const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(av.id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR')}</small>` : ''}</label>`; };
   return `<section class="av-envio av-envio-prova" aria-label="Enviar ao AVA">
     <h3>Enviar as suas questões ao AVA</h3>
-    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja o Relatório CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo (vai com as questões a mais de 2ª chamada e exame, cada uma na sua categoria), importe no banco de questões do AVA e marque cada etapa.`}</p>
-    <div class="av-envio-acoes"><button type="button" class="btn btn-primary av-btn" data-prof-xml="${esc(av.id)}" ${!minhas.length || aCorrigir ? 'disabled' : ''}>${ic('baixar')}Baixar minhas questões para o AVA</button>
+    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja o Relatório CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo de cada prova (cada botão traz só as suas questões daquela prova), importe no banco de questões do AVA e marque cada etapa.`}</p>
+    <div class="av-envio-acoes">${botoesXmlHtml(av.id, 'btn btn-primary av-btn', !minhas.length || !!aCorrigir)}
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></div>
   </section>`;
 }
@@ -1658,8 +1659,8 @@ async function abrirConferenciaDaProva(id) {
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
     const env = r.envio || {};
     const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</label>`; };
-    const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Baixe o arquivo com as suas questões (as da prova e as a mais, de 2ª chamada, exame, dependência e adaptação, cada uma na sua categoria) e importe no banco de questões do AVA. Depois marque cada etapa.</p>
-      <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button>
+    const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Cada botão baixa o arquivo de uma prova só (1ª chamada, 2ª chamada, exame…), com as suas questões daquela prova. Importe no banco de questões do AVA e depois marque cada etapa.</p>
+      ${botoesXmlHtml(id, 'av-pt-btn', false)}
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
     $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + (r.questoes.length ? botaoPdf('devolutiva') + devolutivaHtml(r.questoes, subProva(a), a.status !== 'finalizada') : '<p class="av-vazio">Nenhuma questão sua nesta prova ainda.</p>'); // 17/11/2026: professor vê o Relatório (devolutiva); a Conferência CADAM é só da coordenação
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
@@ -1733,10 +1734,36 @@ async function aplicarPtMarcadas(btn) {
     if (confRecarregar) await confRecarregar();
   } catch (e) { toast(e.message, 'erro'); btn.disabled = false; btn.textContent = 'Aplicar nas marcadas'; }
 }
+// Botões "Baixar 2º bim – 1ª chamada", "Baixar 2º bim – 2ª chamada", "Baixar exame"... (17/11/2026): antes era um
+// botão só, e o arquivo da 1ª chamada levava junto as questões de 2ª chamada/exame. Cada botão traz só um grupo;
+// só aparece botão de grupo em que o professor tem questão. O container é preenchido depois do render.
+const resumoXmlCache = new Map();
+function botoesXmlHtml(id, classe, travarDaProva) {
+  setTimeout(preencherBotoesXml);
+  return `<div class="av-xml-botoes" data-xml-botoes="${esc(id)}" data-classe="${esc(classe)}" data-travar="${travarDaProva ? 1 : 0}"><span class="av-nota">Carregando os arquivos…</span></div>`;
+}
+function rotuloUsoXml(g, bim) {
+  if (g.uso === 'exame') return 'Exame';
+  if (g.uso === 'c1' || g.uso === 'c2') return `${bim ? `${bim}º bim – ` : ''}${g.rotulo}`;
+  return g.rotulo;
+}
+async function preencherBotoesXml() {
+  for (const box of document.querySelectorAll('[data-xml-botoes]:not([data-pronto])')) {
+    box.dataset.pronto = '1';
+    const id = box.dataset.xmlBotoes;
+    try {
+      if (!resumoXmlCache.has(id)) resumoXmlCache.set(id, api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml?resumo=1`));
+      const r = await resumoXmlCache.get(id);
+      box.innerHTML = r.grupos.length
+        ? r.grupos.map(g => `<button type="button" class="${esc(box.dataset.classe)}" data-prof-xml="${esc(id)}" data-uso="${esc(g.uso)}" ${g.daProva && box.dataset.travar === '1' ? 'disabled' : ''}>${ic('baixar')}Baixar ${esc(rotuloUsoXml(g, r.bimestre))} (${g.qtd})</button>`).join('')
+        : '<span class="av-nota">Você ainda não tem questões para baixar.</span>';
+    } catch (e) { resumoXmlCache.delete(id); box.innerHTML = `<span class="av-nota">${esc(e.message)}</span>`; }
+  }
+}
 async function baixarXmlProfessor(id, btn) {
-  const t = btn.textContent; btn.disabled = true; btn.textContent = 'Montando o arquivo…';
+  const t = btn.innerHTML; btn.disabled = true; btn.textContent = 'Montando o arquivo…';
   try {
-    const d = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml`);
+    const d = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml${btn.dataset.uso ? `?uso=${encodeURIComponent(btn.dataset.uso)}` : ''}`);
     if (!d.grupos.length) { toast('Você ainda não tem questões nesta prova.', 'aviso'); return; }
     const grupos = [];
     for (const [gi, g] of d.grupos.entries()) grupos.push({ ...g, questoes: await prepararParaXml(g.questoes, `p${gi + 1}q`) });
@@ -1744,7 +1771,7 @@ async function baixarXmlProfessor(id, btn) {
     toast(`Arquivo baixado (${d.grupos.map(g => `${g.questoes.length} de ${g.rotulo}`).join(', ')}).${d.publicadas ? ` ${d.publicadas} questão(ões) suas entraram no banco da disciplina.` : ''} No AVA: Banco de questões → Importar → Moodle XML.`);
     if (d.publicadas && atual && atual.avaliacao && atual.avaliacao.id === id) recarregarAtual();
   } catch (e) { toast(e.message, 'erro'); }
-  finally { btn.disabled = false; btn.textContent = t; }
+  finally { btn.disabled = false; btn.innerHTML = t; }
 }
 async function abrirDivisao(chaveAberta) {
   modalConf();
