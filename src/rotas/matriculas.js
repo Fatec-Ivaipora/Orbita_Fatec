@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const { nomeNorm, matriculaDuplicada, mensagemDuplicada } = require('../utils/matriculas-duplicidade');
+const { cidadeCanonica } = require('../utils/cidades');   // grafia padrão da cidade (17/11/2026)
 
 // Trava de semestre por usuário (users.matriculasSemestreMinimo, ex.: robô da
 // ODTech só de 2027.1 em diante, 16/10/2026). Vale pra todas as rotas: barra
@@ -317,7 +318,7 @@ router.post('/alunos', verifyToken, checkPermission, async (req, res) => {
             nome: nome.trim(),
             nomeNorm: nomeNorm(nome),
             ...(outraPessoa ? { outraPessoa: true, outraPessoaPor: req.user.name || req.user.email || '', outraPessoaEm: new Date().toISOString() } : {}),
-            cidade: (cidade || '').trim(),
+            cidade: cidadeCanonica(cidade),
             telefone: (telefone || '').trim(),
             vencimentoBoleto,
             situacao: normalizarDesistente(situacao, normalizarPeriodo(periodo)),
@@ -379,7 +380,7 @@ router.put('/alunos/:id', verifyToken, checkPermission, async (req, res) => {
             dados.planoConfissao = planoConfissao || 'Não';
         }
         if (periodo !== undefined) dados.periodo = normalizarPeriodo(periodo);
-        if (cidade !== undefined) dados.cidade = (cidade || '').trim();
+        if (cidade !== undefined) dados.cidade = cidadeCanonica(cidade);
         if (telefone !== undefined) dados.telefone = (telefone || '').trim();
         if (req.body.menor18 !== undefined) dados.menor18 = req.body.menor18 === true;
         if (req.body.vencimentoBoleto !== undefined) dados.vencimentoBoleto = /^\d{4}-\d{2}-\d{2}$/.test(req.body.vencimentoBoleto || '') ? req.body.vencimentoBoleto : null;
@@ -943,7 +944,7 @@ router.post('/virar-semestre', verifyToken, checkPermission, async (req, res) =>
                 periodo: periodoNovo,
                 nome: origem.nome,
                 nomeNorm: nomeNorm(origem.nome),
-                cidade: origem.cidade || '',
+                cidade: cidadeCanonica(origem.cidade),
                 telefone: origem.telefone || '',
                 situacao: situacaoNova,
                 planoConfissao: origem.planoConfissao || 'Não',

@@ -109,6 +109,19 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Matrículas e Contratos: cidade com a grafia padrão
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/cidades-padrao
+- Arquivos criados:
+  - `src/utils/cidades.js`: lista das cidades com o nome oficial (maiúsculo, com acento) e `cidadeCanonica()`, que acerta maiúscula/minúscula, acento e erros conhecidos (CRUZMANTINA, RIO BRANDO DO IVAI). Cidade fora da lista fica como digitada, em maiúsculo.
+- Arquivos alterados:
+  - `src/rotas/matriculas.js`, `src/utils/matriculas-edubox.js`, `src/rotas/contratos.js`: toda cidade gravada (digitada, vinda do Edubox ou copiada da matrícula para o contrato) passa por `cidadeCanonica`.
+- Dados: 715 matrículas e 21 contratos corrigidos; cidade antiga de cada um em `backups/cidades-antes-padrao-2026-11-17.json`.
+- Tipo: Correção
+- Motivo: o Comercial via a mesma cidade de vários jeitos ("CANDIDO DE ABREU" x "CÂNDIDO DE ABREU", "Ivaiporã" x "IVAIPORÃ"). As cidades vindas do Edubox já estavam certas; as variações eram digitadas no Órbita.
+- Como testar: lançar uma matrícula com "sao joao do ivai" e conferir "SÃO JOÃO DO IVAÍ" na matrícula e no contrato.
+- Como reverter: reverter o commit (os dados antigos estão no backup).
+
 ### [2026-11-17] Contratos: Medicina fica só nas Matrículas
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/contratos-sem-medicina
