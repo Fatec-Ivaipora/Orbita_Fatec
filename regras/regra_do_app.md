@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Primeiro acesso — libera o sistema logo depois de trocar a senha
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/primeiro-acesso-recarrega
+- Arquivos alterados: src/middlewares/auth.js, src/rotas/usuarios.js, core/layout.js, regras/regra_do_app.md
+- Tipo: correção
+- Motivo: professora da Medicina trocou a senha obrigatória e continuou sem ver o Banco ("tem que trocar a senha"): a janela de troca só fechava, sem recarregar, e a página mantinha o que tinha carregado antes (API respondendo 403 "Troca de senha obrigatória"); além disso o middleware guardava o primeiroAcesso em cache por até 1 min.
+- Impacto: PUT /api/usuarios/me/senha limpa o cache do usuário (verifyToken.limparCacheUsuario) e a tela recarrega depois do aviso de sucesso, já com tudo liberado.
+- Como testar: conta com primeiroAcesso → entrar, trocar a senha → a página recarrega e o módulo abre normalmente.
+- Como reverter: reverter os arquivos acima.
+
 ### [2026-11-17] Banco MED — questão de conhecimento (sem caso clínico) deixa de ser aviso
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-med-conhecimento-sem-aviso

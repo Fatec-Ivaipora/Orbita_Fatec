@@ -551,5 +551,9 @@ const requireModulePermission = (moduleName) => {
 
 verifyToken.requireModulePermission = requireModulePermission;
 
+// Esquece o cargo/flags guardados do usuário (ex.: logo depois de trocar a senha do primeiro acesso,
+// senão por até 1 min a API continuava respondendo "Troca de senha obrigatória" — caso de 17/11/2026).
+verifyToken.limparCacheUsuario = (uid) => userRoleCache.delete(uid);
+
 module.exports = verifyToken;
 
