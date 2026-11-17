@@ -542,3 +542,56 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-pg-tabela td small, .av-pg-tabela th small { white-space: normal; max-width: 150px; margin: 0 auto; }
 .av-pg-dica { display: none; margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--av-tinta-2); }
 @media (max-width: 1100px) { .av-pg-dica { display: block; } }
+
+/* ===== Relatório CADAM: devolutiva (professor) e executivo (coordenação) — 17/11/2026 ===== */
+.av-rel-abas { display: flex; gap: 0.25rem; margin: 0 0 0.8rem; border-bottom: 2px solid var(--av-linha); }
+.av-rel-abas button { border: 0; background: none; padding: 0.5rem 0.9rem; font: inherit; font-weight: 700; font-size: 0.84rem; color: var(--av-tinta-2); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.av-rel-abas button[aria-selected="true"] { color: var(--med-azul, #004F9F); border-bottom-color: var(--med-azul, #004F9F); }
+.av-rel-abas button:focus-visible { outline: 2px solid var(--med-azul, #004F9F); outline-offset: 2px; }
+.av-rel-escolha { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 0 0.7rem; font-size: 0.82rem; font-weight: 700; color: var(--av-tinta); }
+.av-rel-escolha select { font: inherit; font-weight: 600; padding: 0.3rem 0.5rem; border: 1px solid var(--av-linha); border-radius: 8px; background: #fff; max-width: 100%; }
+.av-rel-intro { margin: 0 0 0.8rem; font-size: 0.84rem; line-height: 1.5; color: var(--av-tinta); max-width: 78ch; }
+.av-rel-bloco { background: #fff; border: 1px solid var(--av-linha); border-radius: 10px; padding: 0.8rem 1rem; margin: 0.8rem 0; }
+.av-rel-bloco h3 { margin: 0 0 0.5rem; font-size: 0.92rem; color: var(--med-azul, #004F9F); }
+.av-rel-bloco ul, .av-rel-top { margin: 0; padding-left: 1.2rem; font-size: 0.82rem; line-height: 1.5; color: var(--av-tinta); }
+.av-rel-top li { margin-bottom: 0.4rem; }
+.av-rel-top small, .av-rel-bom small { color: var(--av-tinta-2); font-weight: 600; }
+.av-rel-bom { border-left: 5px solid var(--av-ok); }
+.av-rel-txt { margin: 0.55rem 0 0; font-size: 0.82rem; line-height: 1.5; color: var(--av-tinta); }
+.av-rel-parecer { margin: 0 0 0.7rem; padding: 0.55rem 0.8rem; border-radius: 8px; font-size: 0.95rem; }
+.av-rel-apta { background: #DCFCE7; color: #166534; } .av-rel-ajustes { background: #FEF3C7; color: #92400E; } .av-rel-inapta { background: #FEE2E2; color: #991B1B; }
+.av-rel-h-bom { color: var(--av-ok); }
+.av-rel-obr-h { color: var(--av-erro); } .av-rel-aj-h { color: #92400E; } .av-rel-sug-h { color: var(--med-azul, #004F9F); }
+.av-rel-lista { list-style: none; padding-left: 0 !important; display: flex; flex-direction: column; gap: 0.35rem; }
+.av-rel-item { padding: 0.4rem 0.6rem; border-radius: 6px; border-left: 3px solid; display: flex; flex-direction: column; gap: 0.12rem; }
+.av-rel-item.av-rel-obr { background: #FEF2F2; border-color: var(--av-erro); }
+.av-rel-item.av-rel-aj { background: #FFFBEB; border-color: #D97706; }
+.av-rel-item.av-rel-sug { background: #EFF6FF; border-color: var(--med-azul, #004F9F); }
+.av-rel-item em { font-style: normal; font-weight: 700; color: var(--av-tinta-2); }
+.av-rel-ex { font-size: 0.76rem; color: var(--av-tinta-2); }
+.av-rel-fonte { font-size: 0.7rem; color: var(--av-tinta-2); }
+.av-rel-tab-wrap { overflow-x: auto; }
+.av-rel-tab { width: 100%; border-collapse: collapse; font-size: 0.78rem; line-height: 1.4; }
+.av-rel-tab th { text-align: left; background: #EEF2F7; color: var(--av-tinta); padding: 0.4rem 0.5rem; font-size: 0.74rem; }
+.av-rel-tab td { padding: 0.4rem 0.5rem; border-top: 1px solid var(--av-linha); vertical-align: top; color: var(--av-tinta); }
+.av-rel-tab td small { display: block; color: var(--av-tinta-2); font-size: 0.7rem; margin-top: 0.1rem; }
+.av-rel-tab tr.av-rel-obr td:first-child { box-shadow: inset 4px 0 0 var(--av-erro); }
+.av-rel-tab tr.av-rel-aj td:first-child { box-shadow: inset 4px 0 0 #D97706; }
+.av-rel-top li.av-rel-obr::marker { color: var(--av-erro); font-weight: 800; }
+@media (max-width: 640px) {
+  .av-rel-abas button { padding: 0.45rem 0.55rem; font-size: 0.78rem; }
+  .av-rel-tab { font-size: 0.74rem; }
+}
+@media print {
+  body.av-imprimindo-conf .av-rel-abas, body.av-imprimindo-conf .av-rel-escolha { display: none !important; }
+  body.av-imprimindo-conf .av-rel-bloco, body.av-imprimindo-conf .av-rel-tab tr { break-inside: avoid; }
+}
+@media (max-width: 640px) {
+  .av-rel-tab thead { display: none; }
+  .av-rel-tab, .av-rel-tab tbody, .av-rel-tab tr, .av-rel-tab td { display: block; width: 100%; }
+  .av-rel-tab tr { border-top: 1px solid var(--av-linha); padding: 0.35rem 0 0.35rem 0.4rem; }
+  .av-rel-tab td { border: 0; padding: 0.12rem 0.4rem; }
+  .av-rel-tab td[data-r]::before { content: attr(data-r) ": "; font-weight: 700; color: var(--av-tinta-2); font-size: 0.7rem; }
+  .av-rel-tab tr.av-rel-obr { box-shadow: inset 4px 0 0 var(--av-erro); } .av-rel-tab tr.av-rel-aj { box-shadow: inset 4px 0 0 #D97706; }
+  .av-rel-tab tr td:first-child { box-shadow: none !important; }
+}

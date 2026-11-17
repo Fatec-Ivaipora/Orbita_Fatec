@@ -343,6 +343,8 @@ async function resumoComImagens(q) {
     return r;
 }
 const erro = (res, e) => res.status(e.status || 500).json({ error: e.message });
+// questão que nasceu nesta prova: ainda em montagem, ou publicada só pelo envio ao AVA e sem uso em prova finalizada (17/11/2026)
+const apagavelDeVez = (q, av) => q.avaliacaoId === av.id && (q.status === 'rascunho_avaliacao' || (q.publicadaNoEnvio === true && !(q.usadaEm || []).length));
 function exigeRascunho(av) { if (av.status === 'finalizada') { const e = new Error('Esta avaliação está finalizada. Reabra para alterar.'); e.status = 409; throw e; } }
 
 // ---------- critérios por disciplina (12/11/2026) ----------
@@ -685,7 +687,7 @@ router.delete('/:id/questoes/:qid', async (req, res) => {
         const snap = await ref.get();
         if (snap.exists && !visiveis(req, av, [{ id: snap.id, ...snap.data() }]).length) throw negar('Você retira só as suas questões.');
         const batch = db.batch();
-        if (snap.exists && snap.data().status === 'rascunho_avaliacao' && snap.data().avaliacaoId === av.id) batch.delete(ref);
+        if (snap.exists && apagavelDeVez(snap.data(), av)) batch.delete(ref);
         batch.update(db.collection(COL_AV).doc(av.id), { questoesIds: admin.firestore.FieldValue.arrayRemove(req.params.qid), updatedAt: agora() });
         await batch.commit();
         res.json({ message: 'Questão retirada da avaliação.' });
@@ -707,7 +709,7 @@ router.post('/:id/questoes/apagar', async (req, res) => {
         const batch = db.batch();
         let apagadas = 0, retiradas = 0;
         podem.forEach(q => {
-            if (q.status === 'rascunho_avaliacao' && q.avaliacaoId === av.id) { batch.delete(db.collection(COL_Q).doc(q.id)); apagadas++; } else retiradas++;
+            if (apagavelDeVez(q, av)) { batch.delete(db.collection(COL_Q).doc(q.id)); apagadas++; } else retiradas++;
         });
         batch.update(db.collection(COL_AV).doc(av.id), { questoesIds: admin.firestore.FieldValue.arrayRemove(...podem.map(q => q.id)), updatedAt: agora() });
         await batch.commit();

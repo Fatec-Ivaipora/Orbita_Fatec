@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Banco MED — Relatório CADAM: devolutiva ao professor e executivo da coordenação
+- Autor: Claude Code (a pedido do usuário; pedido do coordenador da Medicina)
+- Branch: feat/banco-med-publica-no-envio
+- Arquivos alterados: banco-med-fatec/cadam-relatorio.js (novo), banco-med-fatec/{avaliacoes.js, avaliacoes.css, app.js, index.html}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: a coordenação pediu o CADAM como relatório de conhecimento para o professor (feedback depois de montar a prova) e um relatório executivo para a responsável pelas avaliações, no roteiro de auditoria em 4 eixos (estrutura/AVA, vícios e pistas, psicometria/NBME, matriz temática).
+- Impacto: botão "Relatório CADAM" na prova. Editora (coordenação) abre o Executivo: parecer Apta/Requer ajustes/Inapta (a letra da correta não é avaliada: o Safe Exam Browser embaralha), tabela sinóptica de inconformidades, balanço por objetivo (hiperconcentração, objetivos sem questão, redundância de desfecho), recomendações prioritárias, imagens para conferir a olho e situação por professor, com atalho para a devolutiva de cada um. Professor vê só a Devolutiva (o que está bom; corrigir antes de enviar / para melhorar / dica, com por quê, como fazer e fonte); adjunto só as dele; também em "Minhas provas". Detecta: pergunta no meio do caso, alternativas dentro do caso, mídia citada e não anexada, trechos/alternativas repetidos, marca de banca (UEL, FAMERP…), % residual, letra digitada na alternativa, enunciado negativo, "visto em aula", imagem muito pequena, pergunta aberta, memorização, Bloom abaixo do objetivo, pistas, português/ABNT. Só informativo: nenhuma trava nova.
+- Como testar: abrir uma prova → Relatório CADAM (como coordenação e como professor). Conferido com Patologia Clínica II 2º bim (40 questões reais, só leitura): achou as marcas UEL/FAMERP, a "(imagem em anexo)" sem imagem da Q20, as perguntas repetidas no caso (Q1, Q25) e o "não é fator de risco" (Q28).
+- Como reverter: reverter os arquivos acima e apagar cadam-relatorio.js.
+
+### [2026-11-17] Banco MED — questões entram no banco quando o professor baixa para o AVA
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-publica-no-envio
+- Arquivos alterados: src/rotas/banco-med-fatec.js, src/rotas/banco-med-avaliacoes.js, banco-med-fatec/{avaliacoes.js, app.js, index.html}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: o adjunto não finaliza a prova; as questões dele só iam para o banco da disciplina quando o titular finalizasse ("o que menos depender do professor é melhor").
+- Impacto: ao baixar as próprias questões para o AVA (só libera com todas no padrão), as questões dele em montagem passam a publicada (publicadaNoEnvio) e entram no banco na hora; é a mesma questão, então o que ele corrigir depois na prova vale no banco. Apagar da prova uma questão que nasceu nela e não foi usada em prova finalizada apaga de vez (apagavelDeVez). O download marca sozinho "Baixou ✓" no Progresso (envios.<prof>.arquivo), além de "AVA" e "Quest.". O titular continua finalizando a prova. O "Baixar para o AVA (como está)" da coordenação não publica.
+- Como testar: testado com dados de teste em Saúde Mental (prova e questão criadas e apagadas): importada → baixou → publicada, Progresso "Baixou ✓", edição vale no banco, apagar sai de vez.
+- Como reverter: reverter os arquivos acima (questões já publicadas continuam no banco).
+
 ### [2026-11-16] Banco MED — alternativas com letra no modelo (A a D)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/modelo-alternativas-letra
