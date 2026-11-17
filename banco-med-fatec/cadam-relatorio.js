@@ -167,9 +167,6 @@ function analisarQuestao(q) {
     }
 
     // ================= EIXO 3 — psicometria e NBME =================
-    if (!aplicacao) S(3, 'ajuste', 'Memorização', 'Questão de memorização, sem caso clínico.',
-        'Mede se o aluno decorou, não se sabe usar o conhecimento numa situação real.',
-        'Transforme em vinheta: paciente com idade e sexo, quadro e uma pergunta de diagnóstico, exame ou conduta.', F.nbme16);
     const comando = sem(perg || frases(enun).slice(-1)[0] || '');
     if (/\b(exceto|incorret[ao]s?|fals[ao]s?)\b|\bnao (e|esta|sao|estao|corresponde|constitui|representa|apresenta|se aplica|faz parte|indicad)/.test(comando))
         S(3, 'obrigatorio', 'Enunciado negativo', 'Comando negativo ("NÃO", "INCORRETA", "EXCETO").',
@@ -245,8 +242,7 @@ function analisarProva(questoes, analise) {
     const redundancias = Object.values(porDesfecho).filter(d => d.questoes.length > 1);
     redundancias.forEach(d => G(4, 'ajuste', 'Redundância de desfecho', `As questões ${d.questoes.join(', ')} têm a mesma resposta correta ("${d.texto.slice(0, 70)}").`, 'Confira se cobram o mesmo desfecho; se sim, troque uma por outro tema da matriz.'));
     // posição da correta (A, B, C, D) não é avaliada: no AVA o Safe Exam Browser embaralha questões e alternativas por aluno (17/11/2026)
-    if (n && pct(caso) < 50) G(3, 'ajuste', 'Memorização', `Só ${pct(caso)}% das questões são de caso clínico.`, 'O padrão da Medicina pede a maioria em vinhetas clínicas.');
-    if (n && (bloom.Lembrar || 0) / n > 0.4) G(3, 'ajuste', 'Bloom', `${bloom.Lembrar} de ${n} questões são de memorização (Lembrar).`, 'Varie os níveis: aplicar, analisar e avaliar.');
+    // caso clínico × conhecimento NÃO é cobrado: os primeiros períodos são conteúdo de base, sem caso clínico (17/11/2026)
 
     // parecer
     const comObrig = itens.filter(i => i.pior === 'obrigatorio').length;

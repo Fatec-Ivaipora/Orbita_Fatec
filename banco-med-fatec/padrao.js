@@ -73,7 +73,8 @@ function avaliarQuestao(q, opts) {
     if ((pergunta.match(/\?/g) || []).length >= 2 || /\?.*\b(e|alem disso|tambem)\b.*\?/.test(pergunta) || /\b(qual|quais)\b[^?]*\be (qual|quais|como|por que)\b/.test(pergunta)) A('dois-assuntos', 'A pergunta cobra duas coisas. Um aspecto por questão (divida em duas).');
     if (RE_NEGATIVO.test(enunciado)) A('negativo', 'Enunciado negativo (EXCETO / INCORRETA / NÃO). Prefira perguntar pela alternativa correta.');
     if (enunciado.length >= 40 && !RE_PERGUNTA.test(pergunta)) A('pergunta', 'Termine o enunciado com uma pergunta direta (ex.: "Qual a conduta mais adequada?").');
-    if (!ehAplicacao(q)) A('memorizacao', 'Questão de memorização: não há situação clínica. O padrão da Medicina prioriza caso clínico.');
+    // 17/11/2026: questão de conhecimento (sem caso clínico) é válida — vira só o "tipo" da questão, não aviso.
+    // O que conta é bater com o objetivo (Bloom, no Relatório CADAM) e o equilíbrio da prova (gráfico caso × memorização).
     if (corretas.length === 1 && alts.length >= 3) {
         const c = corretas[0];
         const outras = alts.filter(a => a !== c).map(a => a.t.length).sort((x, y) => y - x);
