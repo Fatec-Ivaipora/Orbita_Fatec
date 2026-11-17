@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Contratos: Medicina fica só nas Matrículas
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/contratos-sem-medicina
+- Arquivos alterados:
+  - `src/rotas/contratos.js` (`sincronizarDaMatricula`): matrícula do curso Medicina (só Medicina, não Medicina Veterinária) não cria nem atualiza contrato.
+  - `scripts/vincular-matriculas-contratos.js`: o mesmo filtro no vínculo em lote.
+- Dados: os 27 contratos de Medicina de 2027.1 que já tinham entrado pelas Matrículas (todos sem assinatura, sem observação nem coleta) foram apagados; backup em `backups/contratos-medicina-2026-11-17.json`.
+- Tipo: Correção
+- Motivo: o Comercial ainda não atende Medicina; os contratos de Medicina somavam com os dos outros 16 cursos.
+- Como testar: editar ou lançar uma matrícula de Medicina 2027.1 e conferir que nada aparece no Contratos.
+- Como reverter: reverter o commit (e, se precisar, recriar os contratos a partir do backup).
+
 ### [2026-11-17] Banco MED — Relatório CADAM em PDF (devolutiva e executivo)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/banco-med-relatorio-cadam-pdf
