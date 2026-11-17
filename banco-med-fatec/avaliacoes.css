@@ -546,6 +546,9 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-ck-info .av-ck-ic { color: var(--av-tinta-2); background: #EEF2F7; }
 .av-ck-info { color: var(--av-tinta); }
 
+.av-rel-pdf { display: flex; justify-content: flex-end; margin: 0 0 0.6rem; }
+@media print { body.av-imprimindo-conf .av-rel-pdf { display: none !important; } }
+
 /* ===== Relatório CADAM: devolutiva (professor) e executivo (coordenação) — 17/11/2026 ===== */
 .av-rel-abas { display: flex; gap: 0.25rem; margin: 0 0 0.8rem; border-bottom: 2px solid var(--av-linha); }
 .av-rel-abas button { border: 0; background: none; padding: 0.5rem 0.9rem; font: inherit; font-weight: 700; font-size: 0.84rem; color: var(--av-tinta-2); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
