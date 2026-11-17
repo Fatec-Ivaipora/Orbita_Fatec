@@ -407,6 +407,9 @@ router.delete('/:id', verifyToken, checkPermission, async (req, res) => {
 // ==========================================
 // só de 2027.1 em diante (pedido do usuário, 14/10/2026): 2026.2 já estava resolvido antes do Contratos existir
 const PRIMEIRO_SEMESTRE_SYNC = '2027.1';
+// Medicina (só o curso de Medicina, não Medicina Veterinária) não entra nos Contratos: ainda não é do
+// Comercial, fica só nas Matrículas (pedido do usuário, 17/11/2026).
+const ehMedicina = (curso) => normNome(curso) === 'MEDICINA';
 const CALOURO_SIT = /^Matrícula Nova/;
 const PERDA_SIT = /^(Cancelou|Trancou|1ª Evasão|2ª Evasão|Transferência|Desistente)/;
 const normNome = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -458,6 +461,7 @@ async function garantirSemestre(semestre) {
 // m = dados da matrícula (já com a alteração); situacaoMudou = a situação foi definida/alterada agora
 async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true) {
     if (!m || !semestreValido(m.semestre) || m.semestre < PRIMEIRO_SEMESTRE_SYNC) return null;
+    if (ehMedicina(m.curso)) return null;   // Medicina fica só nas Matrículas: o Comercial não atende esse curso
     const vinc = await db.collection(COL).where('matriculaId', '==', String(matriculaId)).limit(1).get();
     let ref = vinc.empty ? null : vinc.docs[0].ref;
     let atual = vinc.empty ? null : vinc.docs[0].data();

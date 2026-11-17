@@ -25,7 +25,7 @@ const aplicar = process.argv.includes('--aplicar');
         const contratos = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const nomesContrato = new Set(contratos.map(c => normNome(c.nome)));
         // calouros + quem cancelou/trancou/desistiu e já tem contrato (assinou e depois saiu)
-        const calouros = mSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => /^Matrícula Nova/.test(m.situacao || '')
+        const calouros = mSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => normNome(m.curso) !== 'MEDICINA').filter(m => /^Matrícula Nova/.test(m.situacao || '')
             || (statusDaMatricula(m.situacao, null) === 'desistente' && (contratos.some(c => c.matriculaId === m.id) || contratos.some(c => nomeParecido(c.nome, m.nome)))));
         const r = { calouros: calouros.length, jaVinculados: 0, vincular: 0, parecido: 0, criar: 0, ambiguo: 0, statusMuda: {}, criarPorStatus: {}, completa: {} };
         const usados = new Set();   // um contrato só vincula a uma matrícula
