@@ -122,6 +122,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: lançar uma matrícula com "sao joao do ivai" e conferir "SÃO JOÃO DO IVAÍ" na matrícula e no contrato.
 - Como reverter: reverter o commit (os dados antigos estão no backup).
 
+### [2026-11-17] Banco MED: um botão de baixar para o AVA por prova (1ª chamada, 2ª chamada, exame)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-xml-por-prova
+- Arquivos alterados:
+  - `src/rotas/banco-med-fatec.js`: `GET /conferencia/:id/xml` monta os grupos (1ª chamada, 2ª chamada, exame, DP, adaptação) e devolve só um: `?uso=c2` escolhe o grupo, sem `?uso` sai o da própria prova; `?resumo=1` só diz quais grupos o professor tem e quantas questões (sem baixar nem marcar nada). 1ª chamada = só o que está na prova; 2ª chamada/exame = as dele na avaliação irmã + as reservadas no banco com aquele uso. A Conferência CADAM, a publicação no banco e a marca "baixou o arquivo" valem só para o grupo baixado (a marca vai na avaliação daquele grupo).
+  - `banco-med-fatec/avaliacoes.js`: o botão único "Baixar minhas questões para o AVA" virou um botão por grupo ("Baixar 2º bim – 1ª chamada (13)", "Baixar 2º bim – 2ª chamada (19)", "Baixar Exame"), na prova e no Relatório CADAM do professor. Só aparece botão de grupo em que ele tem questão.
+  - `banco-med-fatec/avaliacoes.css`: espaçamento dos botões.
+- Tipo: Correção
+- Motivo: a Mariana baixou a 1ª chamada do 2º bimestre de Mecanismos de Defesas e Doenças e o arquivo veio com 32 questões: as 13 da prova + 19 de 2ª chamada da mesma disciplina, que iam juntas de propósito desde 16/11.
+- Como testar: entrar como professor, abrir a 1ª chamada de uma prova em que ele tenha questões de 1ª e 2ª chamada, conferir os dois botões e que cada arquivo traz só o seu grupo.
+- Como reverter: reverter o commit.
+
 ### [2026-11-17] Contratos: Medicina fica só nas Matrículas
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/contratos-sem-medicina

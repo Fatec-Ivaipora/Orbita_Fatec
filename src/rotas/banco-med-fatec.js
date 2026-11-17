@@ -853,60 +853,93 @@ router.put('/conferencia/:id/envio', verifyToken, async (req, res) => {
         res.json({ message: req.body.feito ? (etapa === 'bancoAva' ? 'Marcado: subiu no banco de questões do AVA.' : 'Marcado: está no questionário do AVA.') : 'Marcação desfeita.' });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
-// XML do professor: as questões dele nesta prova + as "a mais" (2ª chamada, exame, dependência, adaptação) da disciplina
+// XML do professor, um arquivo por prova (17/11/2026): antes o botão da 1ª chamada levava junto as "a mais" da
+// disciplina (2ª chamada, exame, dependência, adaptação) e o professor recebia questão de outras provas no mesmo
+// arquivo. Agora a tela mostra um botão por grupo ("1ª chamada", "2ª chamada", "Exame"...) e cada um baixa só o seu.
+//   ?resumo=1  → só diz quais grupos ele tem e quantas questões (sem baixar nada, sem marcar nada)
+//   ?uso=c2    → baixa só aquele grupo; sem ?uso = o grupo da própria prova
+// Grupo da própria prova = as questões dele nesta avaliação. Outro grupo = as dele na avaliação irmã (mesma disciplina
+// e semestre; 2ª chamada do mesmo bimestre, exame) + as reservadas no banco com aquele uso (menos 1ª chamada).
 router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res) => {
     try {
         if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação baixa o arquivo da prova inteira na aba Avaliações.' });
         const snap = await db.collection(COL_AVALIACOES).doc(req.params.id).get();
         if (!snap.exists) return res.status(404).json({ error: 'Avaliação não encontrada.' });
-        const av = snap.data();
+        const av = { id: snap.id, ...snap.data() };
         const prof = await exigeDisciplinaDoProfessor(req, av.categoriaId);
-        const ids = av.questoesIds || [];
-        const docs = ids.length ? await db.getAll(...ids.map(id => db.collection(COL_QUESTOES).doc(id))) : [];
-        const daProva = docs.filter(d => d.exists).map(d => ({ id: d.id, ...d.data() })).filter(q => minhaQuestao(q, prof, req.user.uid));
-        const usoDaProva = AV().usoDaAvaliacao(av);
-        const extrasSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
-        const extras = extrasSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .filter(q => q.usoProva && q.usoProva !== usoDaProva && q.status === 'publicada' && !ids.includes(q.id) && minhaQuestao(q, prof, req.user.uid) && (q.usoProva === 'exame' || !q.bimestre || !av.bimestre || q.bimestre === av.bimestre));
+        const { comLinks, USOS_PROVA, usoDaAvaliacao } = AV();
+        const usoDaProva = usoDaAvaliacao(av);
+        const lerDaAvaliacao = async (a) => {
+            const ids = a.questoesIds || [];
+            const docs = ids.length ? await db.getAll(...ids.map(id => db.collection(COL_QUESTOES).doc(id))) : [];
+            return docs.filter(d => d.exists).map(d => ({ id: d.id, ...d.data() })).filter(q => minhaQuestao(q, prof, req.user.uid));
+        };
+        // grupos: uso → { questoes, avaliacao (de onde vêm: número no AVA e marca de envio) }
+        const grupos = { [usoDaProva]: { questoes: await lerDaAvaliacao(av), avaliacao: av } };
+        const irmas = (await db.collection(COL_AVALIACOES).where('categoriaId', '==', av.categoriaId).get()).docs
+            .map(d => ({ id: d.id, ...d.data() })).filter(a => a.id !== av.id && a.chave === av.chave && a.semestre === av.semestre);
+        for (const u of ['c1', 'c2', 'exame']) {
+            if (u === usoDaProva) continue;
+            const a = irmas.find(x => usoDaAvaliacao(x) === u && (u === 'exame' || !av.bimestre || x.bimestre === av.bimestre));
+            if (a) grupos[u] = { questoes: await lerDaAvaliacao(a), avaliacao: a };
+        }
+        const jaUsadas = new Set(Object.values(grupos).flatMap(g => g.questoes.map(q => q.id)).concat(av.questoesIds || []));
+        const reservaSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
+        reservaSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            // reserva do banco entra em 2ª chamada, exame, DP e adaptação (dos dois lados: abrindo a 1ª ou a 2ª chamada
+            // o botão "2ª chamada" traz o mesmo); a 1ª chamada é sempre só o que está na prova
+            .filter(q => q.usoProva && q.usoProva !== 'c1' && q.status === 'publicada' && !jaUsadas.has(q.id) && minhaQuestao(q, prof, req.user.uid) && (q.usoProva === 'exame' || !q.bimestre || !av.bimestre || q.bimestre === av.bimestre))
+            .forEach(q => { (grupos[q.usoProva] = grupos[q.usoProva] || { questoes: [], avaliacao: null }).questoes.push(q); });
+        const ordemUso = ['c1', 'c2', 'exame', 'dp', 'adp'];
+        const usos = Object.keys(grupos).filter(u => grupos[u].questoes.length).sort((a, b) => ordemUso.indexOf(a) - ordemUso.indexOf(b));
+
+        if (req.query.resumo) {
+            return res.json({ usoDaProva, bimestre: av.bimestre || null, grupos: usos.map(u => ({ uso: u, rotulo: USOS_PROVA[u], qtd: grupos[u].questoes.length, daProva: u === usoDaProva })) });
+        }
+
+        const uso = req.query.uso ? String(req.query.uso) : usoDaProva;
+        const g = grupos[uso];
+        if (!g || !g.questoes.length) return res.json({ publicadas: 0, grupos: [] });
+        const posicao = new Map(((g.avaliacao && g.avaliacao.questoesIds) || []).map((id, i) => [id, i + 1]));
         // 16/11/2026: o professor monta e sobe no AVA sem esperar a Ana Beatriz — então o arquivo só sai quando
         // as questões dele passam na Conferência CADAM (nada "a corrigir"); as orientações não bloqueiam.
         const PadraoMed = require('../../banco-med-fatec/padrao.js');
-        const posicao = new Map(ids.map((id, i) => [id, i + 1]));
-        const foraDaProva = daProva.filter(q => !PadraoMed.avaliarQuestao(q).ok).map(q => posicao.get(q.id)).sort((a, b) => a - b);
-        const foraExtras = extras.filter(q => !PadraoMed.avaliarQuestao(q).ok).length;
-        if (foraDaProva.length || foraExtras) {
-            const partes = [foraDaProva.length ? `nº ${foraDaProva.join(', ')} da prova` : '', foraExtras ? `${foraExtras} das questões a mais (2ª chamada, exame…)` : ''].filter(Boolean).join(' e ');
-            return res.status(400).json({ error: `Ainda há questão sua com item a corrigir na Conferência CADAM (${partes}). Corrija e baixe de novo: o arquivo do AVA só sai com as suas questões no padrão.` });
+        const fora = g.questoes.filter(q => !PadraoMed.avaliarQuestao(q).ok);
+        if (fora.length) {
+            const nums = fora.map(q => posicao.get(q.id)).filter(Boolean).sort((a, b) => a - b);
+            const onde = nums.length === fora.length ? `nº ${nums.join(', ')} da ${USOS_PROVA[uso]}` : `${fora.length} questão(ões) da ${USOS_PROVA[uso]}`;
+            return res.status(400).json({ error: `Ainda há questão sua com item a corrigir na Conferência CADAM (${onde}). Corrija e baixe de novo: o arquivo do AVA só sai com as suas questões no padrão.` });
         }
         // 17/11/2026: baixou para o AVA (todas no padrão) = as questões dele entram no banco da disciplina na hora,
         // sem esperar o titular finalizar. É a mesma questão: o que ele corrigir depois na prova vale no banco.
-        const paraPublicar = daProva.filter(q => q.status === 'rascunho_avaliacao');
+        const paraPublicar = g.questoes.filter(q => q.status === 'rascunho_avaliacao');
         if (paraPublicar.length) {
             const agoraIso = new Date().toISOString();
             const lote = db.batch();
             paraPublicar.forEach(q => lote.update(db.collection(COL_QUESTOES).doc(q.id), { status: 'publicada', publicadaNoEnvio: true, publicadaEm: agoraIso, padronizadaEm: agoraIso, padronizadaPor: prof.nome, updatedAt: agoraIso }));
             await lote.commit();
         }
-        // marca automática no Progresso (17/11/2026): o titular vê que ele baixou o arquivo, mesmo sem marcar o resto
-        const kEnvio = AV().chaveEnvio(prof.nome);
-        await db.collection(COL_AVALIACOES).doc(req.params.id).update(new admin.firestore.FieldPath('envios', kEnvio, 'professor'), prof.nome, new admin.firestore.FieldPath('envios', kEnvio, 'arquivo'), { feito: true, em: new Date().toISOString() }).catch(() => {});
-        const { comLinks, USOS_PROVA } = AV();
-        const base = [av.disciplina, av.semestre, ...(av.tipo === 'exame' ? [] : [`${av.bimestre}º Bimestre`])].map(x => String(x).replace(/\//g, '-')).join('/');
+        // marca automática no Progresso (17/11/2026): o titular vê que ele baixou o arquivo daquela prova
+        if (g.avaliacao) {
+            const kEnvio = AV().chaveEnvio(prof.nome);
+            await db.collection(COL_AVALIACOES).doc(g.avaliacao.id).update(new admin.firestore.FieldPath('envios', kEnvio, 'professor'), prof.nome, new admin.firestore.FieldPath('envios', kEnvio, 'arquivo'), { feito: true, em: new Date().toISOString() }).catch(() => {});
+        }
+        const base = [av.disciplina, av.semestre, ...(av.bimestre ? [`${av.bimestre}º Bimestre`] : [])].map(x => String(x).replace(/\//g, '-')).join('/');
         const raiz = [av.disciplina, av.semestre].map(x => String(x).replace(/\//g, '-')).join('/');
-        const empacotar = async (q) => ({
+        const questoes = [];
+        for (const q of g.questoes) questoes.push({
             id: q.id, titulo: q.titulo, tipoMoodle: q.tipoMoodle, casoClinico: q.casoClinico || '', pergunta: q.pergunta || '', enunciadoHtml: q.enunciadoHtml || '',
             alternativas: q.alternativas || [], justificativa: q.justificativa || '', fonte: q.fonte || '', dificuldade: q.dificuldade, elaboradoPor: q.elaboradoPor || q.professorNome || '',
-            usoProva: q.usoProva || usoDaProva, imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30),
+            usoProva: uso, imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30),
             ...(posicao.get(q.id) ? { numeroAva: posicao.get(q.id) } : {})
         });
         // prefixo do nome no AVA: [2ºB 1ªCH], [2ºB 2ªCH], [EXAME], [DEP], [ADAPT]
-        const prefixoUso = (u) => (u === 'exame' ? 'EXAME' : u === 'dp' ? 'DEP' : u === 'adp' ? 'ADAPT' : `${av.bimestre}ºB ${u === 'c2' ? '2ª' : '1ª'}CH`);
-        const grupos = {};
-        for (const q of [...daProva, ...extras]) { const u = q.usoProva && q.usoProva !== usoDaProva ? q.usoProva : usoDaProva; (grupos[u] = grupos[u] || []).push(await empacotar(q)); }
+        const prefixo = uso === 'exame' ? 'EXAME' : uso === 'dp' ? 'DEP' : uso === 'adp' ? 'ADAPT' : `${av.bimestre}ºB ${uso === 'c2' ? '2ª' : '1ª'}CH`;
+        const rotuloArq = uso === 'exame' ? 'exame' : uso === 'dp' ? 'dependencia' : uso === 'adp' ? 'adaptacao' : `${av.bimestre}o bim ${uso === 'c2' ? '2a' : '1a'} chamada`;
         res.json({
             publicadas: paraPublicar.length,
-            nomeArquivo: `${(av.sigla || av.disciplina)} ${av.semestre} ${av.bimestre}o bim - ${prof.nome}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_') + '.xml',
-            grupos: Object.entries(grupos).map(([u, questoes]) => ({ uso: u, rotulo: USOS_PROVA[u], prefixo: prefixoUso(u), categoria: u === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[u]}`, questoes }))
+            nomeArquivo: `${(av.sigla || av.disciplina)} ${av.semestre} ${rotuloArq} - ${prof.nome}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_') + '.xml',
+            grupos: [{ uso, rotulo: USOS_PROVA[uso], prefixo, categoria: uso === 'exame' ? `${raiz}/Exame semestral` : `${base}/${USOS_PROVA[uso]}`, questoes }]
         });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
