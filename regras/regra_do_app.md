@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Banco MED — alternativas com letra no modelo (A a D)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/modelo-alternativas-letra
+- Arquivos alterados: src/rotas/banco-med-avaliacoes.js, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: com a letra fica mais claro para o professor ("eu conheço professor"); padronizar o modelo.
+- Impacto: a questão de exemplo do modelo mostra A), B), C), D) e o passo 7 pede começar cada alternativa com a letra. A importação já tirava a letra (A), (A), A., a)…) e a correta continua sendo a pintada de amarelo.
+- Como testar: baixar o modelo e importar um Word com "A) …" a "D) …"; o arquivo de demonstração (Saúde Mental) foi refeito assim e lido com as mesmas corretas.
+- Como reverter: reverter os arquivos acima.
+
 ### [2026-11-16] Banco MED — modelo do Word com o objetivo escrito por extenso
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/modelo-objetivo-texto
