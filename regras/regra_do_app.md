@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Banco MED — Relatório CADAM em PDF (devolutiva e executivo)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-relatorio-cadam-pdf
+- Arquivos alterados: banco-med-fatec/cadam-pdf.js (novo), banco-med-fatec/{avaliacoes.js, avaliacoes.css, cadam-relatorio.js, app.js, index.html}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: entregar o Relatório CADAM ao professor (e à coordenação) em PDF, no padrão dos relatórios do Órbita.
+- Impacto: botão "Baixar PDF" no Relatório CADAM (executivo ou devolutiva, conforme a aba; a devolutiva sai do professor escolhido) e em "Conferir minhas provas" do professor. PDF vetorial com jsPDF 2.5.1 (CDN, carregado só no clique, como na CPA/Avaliação Docente): logos FATEC IVP + MED FATEC (margem branca cortada), rodapé "Órbita Fatec" com página x de y, tabela com cabeçalho repetido, nada partido entre páginas. Nome: "Relatorio CADAM - Devolutiva - Professor - Disciplina - bimestre.pdf". Também: achado interpretado mostrado com acento (taquicárdica).
+- Como testar: abrir uma prova → Relatório CADAM → Baixar PDF (nas duas abas). Conferido com Patologia Clínica II (40 questões, só leitura): executivo 6 páginas, devolutiva da Dayane 5 páginas.
+- Como reverter: reverter os arquivos acima e apagar cadam-pdf.js.
+
 ### [2026-11-17] Primeiro acesso — libera o sistema logo depois de trocar a senha
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/primeiro-acesso-recarrega

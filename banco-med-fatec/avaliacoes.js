@@ -1539,6 +1539,46 @@ function executivoHtml(qs, sub, analise) {
       </tbody></table></div></section>
     <p class="av-conf-nota">Relatório automático: confirma padrões de escrita e estrutura; não substitui a leitura do conteúdo médico (gabarito, dados clínicos). Imagens não são lidas pelo sistema.</p>`;
 }
+// ---------- PDF do Relatório CADAM (17/11/2026) — padrão de relatório do Órbita (cadam-pdf.js) ----------
+// jsPDF só é carregado quando alguém pede o PDF (mesma versão usada na CPA e na Avaliação Docente).
+let jspdfCarregando = null;
+const carregarJsPdf = () => (window.jspdf ? Promise.resolve() : (jspdfCarregando = jspdfCarregando || new Promise((ok, erro) => {
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+  s.onload = ok; s.onerror = () => { jspdfCarregando = null; erro(new Error('Não foi possível carregar o gerador de PDF. Confira a internet e tente de novo.')); };
+  document.head.appendChild(s);
+})));
+const logosPdf = {};
+async function logoPdf(url) {
+  if (logosPdf[url]) return logosPdf[url];
+  const blob = await (await fetch(url)).blob();
+  const dataUrl = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
+  const img = new Image(); img.src = dataUrl; await img.decode();
+  // corta a margem em branco da imagem (a logo da FATEC tem muita borda e saía pequena)
+  const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+  const px = cx.getImageData(0, 0, cv.width, cv.height).data; let x0 = cv.width, y0 = cv.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) { const i = (y * cv.width + x) * 4; if (px[i + 3] > 20 && (px[i] < 235 || px[i + 1] < 235 || px[i + 2] < 235)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+  if (x1 < 0) return (logosPdf[url] = { dataUrl, w: img.naturalWidth, h: img.naturalHeight });
+  const out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+  out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return (logosPdf[url] = { dataUrl: out.toDataURL('image/png'), w: out.width, h: out.height });
+}
+let pdfDados = null; // o que está na tela agora: { modo, questoes, av, professor, analise }
+async function baixarPdfRelatorio(btn) {
+  const d = pdfDados; if (!d || !d.questoes.length) return;
+  const txt = btn.textContent; btn.disabled = true; btn.textContent = 'Gerando PDF…';
+  try {
+    await carregarJsPdf();
+    const { montarPdfDevolutiva, montarPdfExecutivo } = await import('./cadam-pdf.js?v=3');
+    const [fatec, med] = await Promise.all([logoPdf('/img/fateclogoazul.png').catch(() => null), logoPdf('/img/medfatec-logo.png').catch(() => null)]);
+    const args = { CR: { ...CR(), texto: P.texto }, questoes: d.questoes, av: d.av, rotulo: rotuloAvaliacao(d.av), professor: d.professor, analise: d.analise, logos: { fatec, med } };
+    const doc = d.modo === 'executivo' ? montarPdfExecutivo(window.jspdf.jsPDF, args) : montarPdfDevolutiva(window.jspdf.jsPDF, args);
+    const nome = ['Relatorio CADAM', d.modo === 'executivo' ? 'Executivo' : 'Devolutiva', d.professor, d.av.disciplina, rotuloAvaliacao(d.av)].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|·]/g, '').replace(/\s+/g, ' ');
+    doc.save(nome + '.pdf');
+  } catch (e) { toast(e.message, 'erro'); }
+  finally { btn.disabled = false; btn.textContent = txt; }
+}
+const botaoPdf = (modo) => `<div class="av-rel-pdf"><button type="button" class="btn btn-primary av-btn" data-rel-pdf>${ic('baixar')}Baixar PDF ${modo === 'executivo' ? 'do executivo' : 'da devolutiva'}</button></div>`;
 function desenharRelatorio() {
   const e = relEstado; if (!e) return;
   const profs = [...new Set(e.questoes.map(q => q.professorNome || 'Sem professor'))].sort();
@@ -1546,13 +1586,15 @@ function desenharRelatorio() {
   const escolher = e.modo === 'devolutiva' && e.podeEscolher && profs.length > 1 ? `<label class="av-rel-escolha">Professor(a): <select data-rel-sel>${['', ...profs].map(p => `<option value="${esc(p)}" ${p === (e.professor || '') ? 'selected' : ''}>${p ? esc(p) : 'Todos'}</option>`).join('')}</select></label>` : '';
   const qs = e.modo === 'devolutiva' && e.professor ? e.questoes.filter(q => (q.professorNome || 'Sem professor') === e.professor) : e.questoes;
   $('#av-conf-tit').textContent = e.modo === 'executivo' ? 'Relatório CADAM — executivo' : 'Relatório CADAM — devolutiva' + (e.professor ? ' · ' + e.professor : '');
-  $('#av-conf-corpo').innerHTML = abas + escolher + (!qs.length ? '<p class="av-vazio">Nenhuma questão.</p>' : e.modo === 'executivo' ? executivoHtml(qs, e.sub, e.analise) : devolutivaHtml(qs, e.sub, e.editar));
+  pdfDados = { modo: e.modo, questoes: qs, av: e.av, analise: e.analise, professor: e.modo === 'devolutiva' ? (e.professor || e.eu || '') : '' };
+  $('#av-conf-corpo').innerHTML = abas + escolher + (qs.length ? botaoPdf(e.modo) : '') + (!qs.length ? '<p class="av-vazio">Nenhuma questão.</p>' : e.modo === 'executivo' ? executivoHtml(qs, e.sub, e.analise) : devolutivaHtml(qs, e.sub, e.editar));
   $('#av-conf-corpo').scrollTop = 0;
 }
 function ligarRelatorio() {
   const corpo = $('#av-conf-corpo'); if (corpo.dataset.relLigado) return; corpo.dataset.relLigado = '1';
   corpo.addEventListener('click', (ev) => {
     const m = ev.target.closest('[data-rel-modo]'); if (m && relEstado) { relEstado.modo = m.dataset.relModo; relEstado.professor = ''; desenharRelatorio(); return; }
+    const pdf = ev.target.closest('[data-rel-pdf]'); if (pdf) { baixarPdfRelatorio(pdf); return; }
     const p = ev.target.closest('[data-rel-prof]'); if (p && relEstado) { relEstado.modo = 'devolutiva'; relEstado.professor = p.dataset.relProf; desenharRelatorio(); }
   });
   corpo.addEventListener('change', (ev) => { const s = ev.target.closest('[data-rel-sel]'); if (s && relEstado) { relEstado.professor = s.value; desenharRelatorio(); } });
@@ -1565,7 +1607,7 @@ function abrirRelatorioCadam() {
   confEditar = fin ? null : (id) => abrirQuestao(id);
   confRecarregar = async () => { await recarregarAtual(); abrirRelatorioCadam(); };
   const adj = atual.papel === 'adjunto';
-  relEstado = { modo: souEditor() ? 'executivo' : 'devolutiva', professor: '', sub: subProva(atual.avaliacao), editar: !fin, analise: atual.analise,
+  relEstado = { modo: souEditor() ? 'executivo' : 'devolutiva', professor: '', av: atual.avaliacao, eu: adj ? atual.eu : '', sub: subProva(atual.avaliacao), editar: !fin, analise: atual.analise,
     questoes: atual.questoes.map((q, i) => ({ ...q, numero: i + 1 })), podeExecutivo: souEditor(), podeEscolher: !adj };
   desenharRelatorio();
 }
@@ -1610,6 +1652,8 @@ async function abrirConferenciaDaProva(id) {
     const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}`);
     const a = r.avaliacao;
     $('#av-conf-tit').textContent = 'Minhas questões — Relatório CADAM';
+    ligarRelatorio();
+    pdfDados = { modo: 'devolutiva', questoes: r.questoes, av: a, professor: r.professor || '', analise: null };
     confRecarregar = () => abrirConferenciaDaProva(id);
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
     const env = r.envio || {};
@@ -1617,7 +1661,7 @@ async function abrirConferenciaDaProva(id) {
     const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Baixe o arquivo com as suas questões (as da prova e as a mais, de 2ª chamada, exame, dependência e adaptação, cada uma na sua categoria) e importe no banco de questões do AVA. Depois marque cada etapa.</p>
       <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button>
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
-    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + (r.questoes.length ? devolutivaHtml(r.questoes, subProva(a), a.status !== 'finalizada') : '<p class="av-vazio">Nenhuma questão sua nesta prova ainda.</p>'); // 17/11/2026: professor vê o Relatório (devolutiva); a Conferência CADAM é só da coordenação
+    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + (r.questoes.length ? botaoPdf('devolutiva') + devolutivaHtml(r.questoes, subProva(a), a.status !== 'finalizada') : '<p class="av-vazio">Nenhuma questão sua nesta prova ainda.</p>'); // 17/11/2026: professor vê o Relatório (devolutiva); a Conferência CADAM é só da coordenação
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
 // botão no Banco, só para o professor (quem vê tudo confere pela aba Avaliações)

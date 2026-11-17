@@ -189,7 +189,8 @@ function analisarQuestao(q) {
         if (!/\b\d{1,3}\s*(anos|meses|dias)\b/.test(sem(frases(casoBruto)[0])))
             S(3, 'sugestao', 'Caso clínico', 'O caso não começa com idade e sexo.', 'A ordem padrão ajuda o raciocínio e uniformiza a prova.', 'Comece por "Homem de 45 anos…" e siga: local → queixa → duração → história → exame físico → exames.', F.nbme);
         const interp = (sem(casoBruto).match(/\b(febril|taquicardic[oa]|bradicardic[oa]|hipotens[oa]|taquipneic[oa]|hipoxemic[oa])\b/g) || []);
-        if (interp.length) S(3, 'sugestao', 'Caso clínico', `Achado já interpretado no caso ("${[...new Set(interp)].join('", "')}").`, 'Dar o valor bruto deixa a interpretação para o aluno, que é o que se quer avaliar.', 'Troque pelo dado: "T 38,5 °C", "FC 118 bpm", "PA 85 x 50 mmHg".', F.bmj);
+        const ACENTO = { taquicardico: 'taquicárdico', taquicardica: 'taquicárdica', bradicardico: 'bradicárdico', bradicardica: 'bradicárdica', hipoxemico: 'hipoxêmico', hipoxemica: 'hipoxêmica' };
+        if (interp.length) S(3, 'sugestao', 'Caso clínico', `Achado já interpretado no caso ("${[...new Set(interp)].map(w => ACENTO[w] || w).join('", "')}").`, 'Dar o valor bruto deixa a interpretação para o aluno, que é o que se quer avaliar.', 'Troque pelo dado: "T 38,5 °C", "FC 118 bpm", "PA 85 x 50 mmHg".', F.bmj);
         if (/\b(pa|pressao arterial)\s*:?\s*\d{2,3}\s*[x×\/]\s*\d{2,3}(?!\s*mm)/i.test(casoBruto) || /\bfc\s*:?\s*\d{2,3}(?!\s*(bpm|batimentos))/i.test(casoBruto))
             S(3, 'sugestao', 'Caso clínico', 'Sinal vital sem unidade.', 'Número sem unidade abre margem para dúvida.', 'Use "PA 150 x 95 mmHg", "FC 118 bpm", "FR 22 irpm", "T 38,5 °C".', F.got);
     }
