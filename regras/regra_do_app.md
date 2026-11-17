@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-17] Contratos: quantidade de contratos por cidade no filtro
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/contratos-qtd-cidade
+- Arquivos alterados:
+  - `comercial/contratos/app.js`: nova `renderCidades()` mostra no select de cidade a quantidade de cada uma ("IVAIPORÃ (12)"); "Todas as cidades" fica sem número, porque o total já aparece nos cartões do topo. A contagem segue a aba escolhida (Todos, Sem assinatura, Assinados, Desistentes) e os outros filtros; `passaFiltros` passou a aceitar `ignorar = 'cidade'`.
+- Tipo: Melhoria
+- Motivo: o Comercial queria ver quantos contratos tem em cada cidade (no "Sem assinatura", quantos faltam assinar por cidade).
+- Como testar: abrir Contratos, trocar entre as abas Todos e Sem assinatura e conferir que os números no filtro de cidade mudam e batem com a tabela ao escolher a cidade.
+- Como reverter: reverter o commit.
+
 ### [2026-11-17] Matrículas e Contratos: cidade com a grafia padrão
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/cidades-padrao

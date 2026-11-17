@@ -406,7 +406,7 @@ function ordenarLista(lista, ordem) {
 function passaFiltros(r, f, ignorar = '') {
   if (ignorar !== 'tipo' && f.tipo && tipoMatricula(r) !== f.tipo) return false;
   if (ignorar !== 'curso' && f.curso && (r.curso || '').trim() !== f.curso) return false;
-  if (f.cidade && (r.cidade || '').trim() !== f.cidade) return false;
+  if (ignorar !== 'cidade' && f.cidade && (r.cidade || '').trim() !== f.cidade) return false;
   if (f.soMenor && !r.menor18) return false;
   if (f.matDe && !(r.dataMatricula && r.dataMatricula >= f.matDe)) return false;
   if (f.matAte && !(r.dataMatricula && r.dataMatricula <= f.matAte)) return false;
@@ -437,6 +437,19 @@ function renderCursos(f) {
   [...sel.options].forEach(o => {
     if (!o.value) { o.textContent = `Todos os cursos (${daAba.length})`; return; }
     o.textContent = `${o.value} (${porCurso[o.value] || 0})`;
+  });
+}
+
+// Quantidade de contratos por cidade no select (17/11/2026): segue a aba atual
+// (Todos, Sem assinatura...) e os outros filtros, ignorando o próprio filtro de cidade.
+function renderCidades(f) {
+  const daAba = registros.filter(r => naAba(r) && passaFiltros(r, f, 'cidade'));
+  const porCidade = {};
+  daAba.forEach(r => { const c = (r.cidade || '').trim(); if (c) porCidade[c] = (porCidade[c] || 0) + 1; });
+  const sel = document.getElementById('filtro-cidade');
+  [...sel.options].forEach(o => {
+    if (!o.value) return; // "Todas as cidades" fica sem número: o total já está nos cartões do topo
+    o.textContent = `${o.value} (${porCidade[o.value] || 0})`;
   });
 }
 
@@ -487,6 +500,7 @@ function renderTudo() {
 
   renderTipos(f);
   renderCursos(f);
+  renderCidades(f);
 
   const filtrando = !!(f.tipo || f.busca || f.curso || f.cidade || f.soMenor || f.assinadoDesde || f.matDe || f.matAte);
   document.getElementById('btn-limpar-filtros').classList.toggle('hidden', !filtrando);
