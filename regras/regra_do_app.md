@@ -116,7 +116,8 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Tipo: ajuste
 - Motivo: os primeiros períodos são conteúdo de base, sem caso clínico; o checklist marcava toda questão assim em laranja ("Questão de memorização").
 - Impacto: padrao.js não gera mais o aviso memorizacao; no editor o item vira "Tipo: questão de conhecimento" em cinza (informativo); a Conferência não marca "Ajustar" por isso; o Relatório CADAM não cobra caso clínico (nem por questão nem pela % da prova) — continua apontando quando a questão fica abaixo do nível do objetivo (Bloom). Gráfico/filtro/etiqueta: "Memorização" → "Conhecimento".
-- Como testar: abrir uma questão sem caso clínico: o item aparece cinza, sem laranja. Patologia II: 12 questões de conhecimento, nenhuma com aviso.
+- Também: na prova, o botão "Conferência CADAM" aparece só para a coordenação (editora); professor (titular e adjunto) vê só o "Relatório CADAM" (devolutiva) — também em "Conferir minhas provas", que mantém o envio ao AVA e troca a conferência pela devolutiva.
+- Como testar: abrir uma questão sem caso clínico: o item aparece cinza, sem laranja. Como professor, a prova mostra só "Relatório CADAM". Patologia II: 12 questões de conhecimento, nenhuma com aviso.
 - Como reverter: reverter os arquivos acima.
 
 ### [2026-11-17] Banco MED — Relatório CADAM: devolutiva ao professor e executivo da coordenação

@@ -205,7 +205,7 @@ function renderEditor() {
           <span class="av-status ${fin ? 'av-status-fin' : 'av-status-rasc'}">${fin ? 'Finalizada' : 'Em montagem'}</span></p>
       </div>
       <div class="av-ed-acoes">
-        <button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>
+        ${souEditor() ? `<button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>` : ''}
         <button type="button" class="btn btn-secondary av-btn" data-relatorio-cadam ${questoes.length ? '' : 'disabled'} title="${souEditor() ? 'Parecer da prova e devolutiva de cada professor' : 'Devolutiva das questões: o que está bom e como melhorar'}">Relatório CADAM</button>
         ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
                  ${souTitular(av.chave) ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
@@ -261,7 +261,7 @@ function envioNaProvaHtml(av, questoes) {
   const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(av.id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR')}</small>` : ''}</label>`; };
   return `<section class="av-envio av-envio-prova" aria-label="Enviar ao AVA">
     <h3>Enviar as suas questões ao AVA</h3>
-    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja a Conferência CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo (vai com as questões a mais de 2ª chamada e exame, cada uma na sua categoria), importe no banco de questões do AVA e marque cada etapa.`}</p>
+    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja o Relatório CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo (vai com as questões a mais de 2ª chamada e exame, cada uma na sua categoria), importe no banco de questões do AVA e marque cada etapa.`}</p>
     <div class="av-envio-acoes"><button type="button" class="btn btn-primary av-btn" data-prof-xml="${esc(av.id)}" ${!minhas.length || aCorrigir ? 'disabled' : ''}>${ic('baixar')}Baixar minhas questões para o AVA</button>
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></div>
   </section>`;
@@ -1609,15 +1609,15 @@ async function abrirConferenciaDaProva(id) {
   try {
     const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}`);
     const a = r.avaliacao;
-    $('#av-conf-tit').textContent = 'Conferência CADAM das minhas questões';
+    $('#av-conf-tit').textContent = 'Minhas questões — Relatório CADAM';
     confRecarregar = () => abrirConferenciaDaProva(id);
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
     const env = r.envio || {};
     const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</label>`; };
     const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Baixe o arquivo com as suas questões (as da prova e as a mais, de 2ª chamada, exame, dependência e adaptação, cada uma na sua categoria) e importe no banco de questões do AVA. Depois marque cada etapa.</p>
-      <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button> <button type="button" class="av-pt-btn" data-devolutiva-av="${esc(id)}">Ver a devolutiva CADAM das minhas questões</button>
+      <button type="button" class="av-pt-btn" data-prof-xml="${esc(id)}">Baixar minhas questões para o AVA (XML)</button>
       <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
-    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + relatorioHtml({ sub: subProva(a), questoes: r.questoes, totalProva: r.totalProva, deQuem: false, editar: a.status !== 'finalizada', avId: id });
+    $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + (r.questoes.length ? devolutivaHtml(r.questoes, subProva(a), a.status !== 'finalizada') : '<p class="av-vazio">Nenhuma questão sua nesta prova ainda.</p>'); // 17/11/2026: professor vê o Relatório (devolutiva); a Conferência CADAM é só da coordenação
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
 // botão no Banco, só para o professor (quem vê tudo confere pela aba Avaliações)
