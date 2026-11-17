@@ -1061,7 +1061,7 @@ router.get('/:id/xml', async (req, res) => {
 // Monta o Word. Usado pela avaliação (Bia/coordenação) e pelo Banco (o professor baixa o da disciplina dele).
 // bimestres fechados (fim de 2026.2): o modelo não oferece o 1º bimestre. No próximo semestre: [].
 const BIMESTRES_FECHADOS = [1];
-async function montarModeloDocx({ disciplina, sigla, semestre, bimestre, chamada, professor, plano }) {
+async function montarModeloDocx({ disciplina, sigla, semestre, bimestre, chamada, professor, plano, prova }) {
     if (bimestre && BIMESTRES_FECHADOS.includes(bimestre)) bimestre = [1, 2].find(b => !BIMESTRES_FECHADOS.includes(b)) || bimestre;
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle } = require('docx');
     const AZUL = '0052B8', LARANJA = 'B45309';
@@ -1079,23 +1079,37 @@ async function montarModeloDocx({ disciplina, sigla, semestre, bimestre, chamada
     const unidades = doBim.length ? doBim : ((plano && plano.unidades) || []);
     const objetivos = (plano && plano.objetivos) || [];
     const exemploU = unidades[0] ? String(unidades[0].numero) : '1';
+    // prova deste arquivo: "Exame semestral" ou "2º bimestre – 1ª chamada" (sem chamada, o professor escreve)
+    const provaDoArquivo = prova || (bimestre && chamada ? `${bimestre}º bimestre – ${chamada}ª chamada` : '');
     const filhos = [
-        new Paragraph({ children: [n(`Questões ${bimestre ? `do ${bimestre}º bimestre ` : ''}– ${disciplina}`, { bold: true, size: 30, color: AZUL })], spacing: { after: 60 } }),
-        P(n(['Medicina', semestre, chamada ? `${chamada}ª chamada` : '', professor ? `Prof(a). ${professor}` : ''].filter(Boolean).join(' · ') + ' · modelo do Órbita para importar as questões', { size: 20, color: '44536B' })),
+        // CABEÇALHO (16/11/2026): o mais claro possível — de que disciplina e de qual prova é este arquivo e onde importar
+        new Paragraph({ children: [n('MODELO DE QUESTÕES – ' + disciplina, { bold: true, size: 30, color: AZUL })], spacing: { after: 80 } }),
+        tabela(['Este arquivo', ''], [
+            ['Disciplina', disciplina],
+            ['Semestre', String(semestre || '')],
+            ['Prova', provaDoArquivo || 'escreva aqui a prova: 2º bimestre – 1ª chamada, 2º bimestre – 2ª chamada ou Exame semestral'],
+            ['Professor(a)', professor || '(seu nome)'],
+            ['Onde importar', `Órbita → Banco MED → aba Avaliações → ${disciplina} → ${provaDoArquivo || 'a prova'} → "Importar Word"`]
+        ], [2200, 7100]),
+        alerta([
+            n('UM ARQUIVO PARA CADA PROVA. ', { bold: true, color: LARANJA }),
+            n(`Este arquivo é só da prova "${provaDoArquivo || 'indicada acima'}". Para as outras provas (1ª chamada, 2ª chamada, Exame semestral), baixe o modelo de cada uma e importe na própria prova.`, { size: 21 })
+        ]),
         alerta([
             n('OS OBJETIVOS SÃO OBRIGATÓRIOS. ', { bold: true, color: LARANJA }),
-            n('Cada questão avalia UM objetivo do plano de ensino desta disciplina (tabela "Objetivos", mais abaixo). Escreva o código dele na linha "Objetivo:" (ex.: O2) e o número da unidade na linha "Unidade:". ', { size: 21 }),
-            n('Questão sem objetivo do plano, ou com conteúdo fora dele, volta para o professor e não entra na prova.', { bold: true, size: 21 })
+            n('Cada questão avalia UM objetivo do plano de ensino (tabela "Objetivos", mais abaixo). Na linha "Objetivo:" copie o código E o texto (ex.: O2 – Identificar e manejar…). ', { size: 21 }),
+            n('Questão sem objetivo do plano, ou com conteúdo fora dele, não entra na prova.', { bold: true, size: 21 })
         ]),
-        new Paragraph({ children: [n('COMO PREENCHER (este quadro e as tabelas podem ficar: o Órbita só lê a partir de "Questão 01")', { bold: true, size: 20, color: AZUL })], shading: { type: ShadingType.CLEAR, fill: 'EAF1FB', color: 'auto' }, indent: { left: 200, right: 200 }, spacing: { before: 120, after: 50 } }),
-        caixa('1. Cada questão começa com a linha "Questão 01", "Questão 02"…'),
-        caixa('2. Linha de título: Tema – Dificuldade (Fácil, Intermediária ou Difícil).'),
-        caixa('3. "Unidade:" com o NÚMERO da unidade e "Objetivo:" com o CÓDIGO do objetivo (O1, O2…), das tabelas abaixo. Um objetivo por questão.'),
-        caixa(`3b. "Prova:" para qual prova é a questão: ${[1, 2].filter(b => !BIMESTRES_FECHADOS.includes(b)).map(b => `${b}º bimestre – 1ª chamada · ${b}º bimestre – 2ª chamada`).join(' · ')} · Exame semestral (ou Dependência / Adaptação).` + ' Toda prova pode ter 2ª chamada, e quem não atinge a nota faz o exame semestral: deixe a sua parte pronta para todas. Cada uma fica separada no banco da disciplina e vai ao AVA identificada.'),
-        caixa('4. "Enunciado" e, embaixo: imagem (se houver), o caso clínico e por último a pergunta terminando em "?" ou ":".'),
-        caixa('5. Uma alternativa por linha: 4 alternativas (A a D). Pinte a CORRETA com marca-texto AMARELO. Sem "todas/nenhuma das alternativas" e sem enunciado negativo.'),
-        caixa('6. "Feedback da Questão": explique por que a correta é a correta. Pode ser texto, imagem (gráfico, tabela, figura) ou os dois.'),
-        caixa('7. "Referência Bibliográfica" no padrão ABNT: SOBRENOME, Nome. Título. Edição. Local: Editora, ano.'),
+        new Paragraph({ children: [n('COMO PREENCHER CADA QUESTÃO (este cabeçalho e as tabelas podem ficar: o Órbita só lê a partir de "Questão 01")', { bold: true, size: 20, color: AZUL })], shading: { type: ShadingType.CLEAR, fill: 'EAF1FB', color: 'auto' }, indent: { left: 200, right: 200 }, spacing: { before: 120, after: 50 } }),
+        caixa('1. "Questão 01", "Questão 02"… — uma linha para começar cada questão.'),
+        caixa('2. Título: Tema – Dificuldade (Fácil, Intermediária ou Difícil).'),
+        caixa('3. "Unidade:" o NÚMERO da unidade (tabela "Unidades"). Use só unidades desta prova.'),
+        caixa('4. "Objetivo:" o CÓDIGO e o TEXTO do objetivo, copiados da tabela (ex.: O2 – Identificar e manejar…). Um objetivo por questão.'),
+        caixa(`5. "Prova:" ${provaDoArquivo ? `deixe "${provaDoArquivo}" (a prova deste arquivo).` : 'a prova deste arquivo (2º bimestre – 1ª chamada, 2º bimestre – 2ª chamada ou Exame semestral).'}`),
+        caixa('6. "Enunciado" e, embaixo: imagem (se houver), o caso clínico e por último a pergunta terminando em "?" ou ":".'),
+        caixa('7. Quatro alternativas (A a D), uma por linha. Pinte a CORRETA com marca-texto AMARELO. Sem "todas/nenhuma das alternativas" e sem enunciado negativo.'),
+        caixa('8. "Feedback da Questão": por que a correta é a correta — texto, imagem (gráfico, tabela, figura) ou os dois.'),
+        caixa('9. "Referência Bibliográfica" em ABNT: SOBRENOME, Nome. Título. Edição. Local: Editora, ano.'),
         new Paragraph({ children: [n(`Objetivos do plano de ensino — escolha um por questão`, { bold: true, color: AZUL, size: 24 })], spacing: { before: 260, after: 80 } }),
         objetivos.length ? tabela(['Código', 'Objetivo de aprendizagem'], objetivos.map((o, i) => [`O${i + 1}`, String(o)]), [1100, 8200]) : P(n('O plano de ensino desta disciplina não tem objetivos cadastrados no Edubox: fale com a coordenação antes de montar as questões.', { italics: true, color: LARANJA })),
         new Paragraph({ children: [n(`Unidades do plano de ensino${doBim.length && bimestre ? ` (${bimestre}º bimestre)` : ''}`, { bold: true, color: AZUL, size: 24 })], spacing: { before: 240, after: 80 } }),
@@ -1104,8 +1118,8 @@ async function montarModeloDocx({ disciplina, sigla, semestre, bimestre, chamada
         B('Questão 01'),
         B('Tema da questão – Intermediária'),
         P([n('Unidade: ', { bold: true }), n(exemploU)]),
-        P([n('Objetivo: ', { bold: true }), n(objetivos.length ? 'O1' : 'objetivo por extenso')]),
-        P([n('Prova: ', { bold: true }), n(`${bimestre || 1}º bimestre – 1ª chamada`)]),
+        P([n('Objetivo: ', { bold: true }), n(objetivos.length ? `O1 – ${objetivos[0]}` : 'objetivo por extenso')]),
+        P([n('Prova: ', { bold: true }), n(provaDoArquivo || `${bimestre || 2}º bimestre – 1ª chamada`)]),
         B('Enunciado'),
         P(n('(cole aqui a imagem, se houver)', { italics: true, color: '777777' })),
         P(n('Caso clínico: paciente, idade, queixa, história e achados do exame.')),
@@ -1137,7 +1151,7 @@ router.get('/:id/modelo', async (req, res) => {
         const av = await lerAvaliacao(req.params.id);
         exigeDisc(req, av.chave);
         const plano = Padrao.aplicarCriterios(await planoDaDisciplina(av.semestre, av.disciplina).catch(() => ({ unidades: [], objetivos: [] })), (await lerCriterios(av.chave).catch(() => null)) || {});
-        enviarDocx(res, await montarModeloDocx({ disciplina: av.disciplina, sigla: av.sigla, semestre: av.semestre, bimestre: av.bimestre, chamada: av.chamada, plano }));
+        enviarDocx(res, await montarModeloDocx({ disciplina: av.disciplina, sigla: av.sigla, semestre: av.semestre, bimestre: av.bimestre, chamada: av.chamada, plano, prova: av.tipo === 'exame' ? 'Exame semestral' : '' }));
     } catch (e) { erro(res, e); }
 });
 

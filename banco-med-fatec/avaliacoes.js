@@ -913,7 +913,7 @@ function abrirImportar() {
                   <li>Começa em <b>"Questão 1"</b>, "1." ou <b>"NÍVEL DE DIFICULDADE:"</b>; o Órbita numera em sequência.</li>
                   <li><b>4 alternativas, A a D</b>, todas diferentes. Sem "nenhuma" ou "todas as anteriores".</li>
                   <li><b>Uma</b> correta, pintada de <mark>amarelo</mark> ou numa linha "Alternativa correta: C".</li>
-                  <li><b>Unidade</b> e <b>objetivo</b> do plano de ensino ("Unidade: 2", "Objetivo: O3"). O modelo da disciplina já traz a lista.</li>
+                  <li><b>Unidade</b> e <b>objetivo</b> do plano de ensino ("Unidade: 2", "Objetivo: O3 – texto do objetivo"). O modelo da disciplina já traz a tabela para copiar.</li>
                   <li><b>Feedback</b> (justificativa da correta), em texto ou imagem.</li>
                   <li><b>Professor</b> que elaborou: escolha abaixo.</li>
                 </ul>
@@ -1531,16 +1531,18 @@ function abrirModeloProfessor(eu) {
   $('#av-conf-tit').textContent = 'Modelo de questões (Word)';
   const discs = (eu.categoriaIds || []).map((id, i) => ({ id, nome: (eu.disciplinas || [])[i] || id }));
   $('#av-conf-corpo').innerHTML = discs.length ? `
-    <p class="av-conf-sub">O modelo vem com os <b>objetivos</b> e as <b>unidades</b> do plano de ensino da disciplina. Cada questão precisa avaliar um objetivo da lista: escreva o código (O1, O2…) na linha "Objetivo:".</p>
+    <p class="av-conf-sub">O modelo vem com os <b>objetivos</b> e as <b>unidades</b> do plano de ensino da disciplina. Cada questão precisa avaliar um objetivo da lista: escreva na linha "Objetivo:" o código e o texto dele, copiados da tabela (ex.: "O2 – Identificar…").</p>
     <div class="av-mod-form">
       <label class="av-campo"><span>Disciplina</span><select id="av-mod-disc">${discs.map(d => `<option value="${esc(d.id)}">${esc(d.nome)}</option>`).join('')}</select></label>
       <label class="av-campo"><span>Bimestre</span><select id="av-mod-bim">${[1, 2].filter(b => !BIMESTRES_FECHADOS.includes(b)).map(b => `<option value="${b}" ${b === BIM_ABERTO ? 'selected' : ''}>${b}º bimestre</option>`).join('')}</select></label>
+      <label class="av-campo"><span>Prova</span><select id="av-mod-prova"><option value="c1">1ª chamada</option><option value="c2">2ª chamada</option><option value="exame">Exame semestral</option></select></label>
       <button type="button" class="btn btn-primary av-btn" id="av-mod-baixar">Baixar o modelo</button>
+      <p class="av-nota">Um arquivo para cada prova: baixe o modelo de cada uma e importe na própria prova, em Avaliações.</p>
     </div>` : '<p class="av-vazio">Você não aparece como professor(a) de nenhuma disciplina neste semestre no Edubox.</p>';
   const b = $('#av-mod-baixar');
   if (b) b.onclick = async () => {
     b.disabled = true; const t = b.textContent; b.textContent = 'Montando…';
-    try { await baixar(`/banco-med-fatec/modelo/${encodeURIComponent($('#av-mod-disc').value)}?bimestre=${$('#av-mod-bim').value}&semestre=${encodeURIComponent(eu.semestre || '')}`); toast('Modelo baixado.'); }
+    try { await baixar(`/banco-med-fatec/modelo/${encodeURIComponent($('#av-mod-disc').value)}?bimestre=${$('#av-mod-bim').value}&prova=${$('#av-mod-prova').value}&semestre=${encodeURIComponent(eu.semestre || '')}`); toast('Modelo baixado.'); }
     catch (e) { toast(e.message, 'erro'); } finally { b.disabled = false; b.textContent = t; }
   };
 }

@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-16] Banco MED — modelo do Word com o objetivo escrito por extenso
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/modelo-objetivo-texto
+- Arquivos alterados: src/rotas/banco-med-avaliacoes.js, banco-med-fatec/{avaliacoes.js, app.js, index.html}, regras/regra_do_app.md
+- Tipo: melhoria
+- Motivo: só o código ("O2") na questão não deixava claro para o professor qual objetivo ele avalia; o modelo é o exemplo que os professores seguem.
+- Impacto: o modelo pede "Objetivo: O2 – texto do objetivo" (código e texto copiados da tabela) e a questão de exemplo já vem com "O1 – <texto do O1>"; a tela de baixar o modelo e as regras da importação dizem o mesmo. A importação já aceitava (lê o número do começo da linha; só o texto também funciona se igual ao plano).
+- Como testar: baixar o modelo de uma disciplina e ver a linha Objetivo da questão de exemplo; importar um Word com "Objetivo: O2 – …". Cabeçalho do modelo (mais claro): quadro "Este arquivo" com Disciplina, Semestre, Prova, Professor(a) e Onde importar; avisos "UM ARQUIVO PARA CADA PROVA" e "OS OBJETIVOS SÃO OBRIGATÓRIOS"; "Como preencher" em 9 passos. A janela "Modelo de questões (Word)" do Banco pede a prova (1ª chamada, 2ª chamada, Exame semestral) — GET /modelo/:categoriaId?prova=c1|c2|exame; o modelo da avaliação de exame sai como "Exame semestral".
+- Como reverter: reverter os arquivos acima.
+
 ### [2026-11-16] Banco de Provas — ordem das disciplinas do simulado por lista
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/simulado-ordem-lista
