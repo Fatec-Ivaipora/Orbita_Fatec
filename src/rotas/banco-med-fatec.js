@@ -859,8 +859,8 @@ router.put('/conferencia/:id/envio', verifyToken, async (req, res) => {
 //   ?resumo=1  → só diz quais grupos ele tem e quantas questões (sem baixar nada, sem marcar nada)
 //   ?uso=c2    → baixa só aquele grupo; sem ?uso = o grupo da própria prova
 // Grupo da própria prova = as questões dele nesta avaliação. Outro grupo = as dele na avaliação irmã (mesma disciplina
-// e semestre; 2ª chamada do mesmo bimestre, exame). Reserva do banco (questão marcada 2ª chamada/exame fora de
-// qualquer prova) não entra: o professor baixa o que está montado na prova.
+// e semestre; 2ª chamada do mesmo bimestre, exame). Reserva do banco de 2ª chamada/exame não entra: o professor
+// baixa o que está montado na prova. Dependência e adaptação saem da reserva (não têm prova no Órbita).
 router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res) => {
     try {
         if (!ehProfessorRestrito(req.user)) return res.status(403).json({ error: 'A coordenação baixa o arquivo da prova inteira na aba Avaliações.' });
@@ -884,6 +884,13 @@ router.get('/conferencia/:id/xml', verifyToken, checkPermission, async (req, res
             const a = irmas.find(x => usoDaAvaliacao(x) === u && (u === 'exame' || !av.bimestre || x.bimestre === av.bimestre));
             if (a) grupos[u] = { questoes: await lerDaAvaliacao(a), avaliacao: a };
         }
+        // Dependência e adaptação (17/11/2026): não têm prova própria no Órbita — as questões ficam só como reserva
+        // da disciplina. Sem isto o professor não tinha como baixá-las (Mariana, 20 questões de DP de Morfo I).
+        // 2ª chamada e exame continuam sem reserva: saem só do que está montado na prova.
+        const reservaSnap = await db.collection(COL_QUESTOES).where('categoriaId', '==', av.categoriaId).where('semestre', '==', av.semestre).get();
+        reservaSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .filter(q => (q.usoProva === 'dp' || q.usoProva === 'adp') && q.status === 'publicada' && minhaQuestao(q, prof, req.user.uid))
+            .forEach(q => { (grupos[q.usoProva] = grupos[q.usoProva] || { questoes: [], avaliacao: null }).questoes.push(q); });
         const ordemUso = ['c1', 'c2', 'exame', 'dp', 'adp'];
         const usos = Object.keys(grupos).filter(u => grupos[u].questoes.length).sort((a, b) => ordemUso.indexOf(a) - ordemUso.indexOf(b));
 
