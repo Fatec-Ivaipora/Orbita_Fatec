@@ -437,3 +437,6 @@ details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
 .rd-cal-campo input { min-height: 38px; border: 1px solid #CBD5E1; border-radius: 10px; padding: 0 0.7rem; font: inherit; font-weight: 600; }
 .rd-cal-campo small { font-weight: 500; color: #64748B; font-size: 0.74rem; line-height: 1.35; }
 @media (max-width: 640px) { .rd-cal-grade { grid-template-columns: 1fr; } }
+
+/* Distrator não funcional (< 5%) — material CADAM, 18/11/2026 */
+.rd-alt .pill.nf { background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }

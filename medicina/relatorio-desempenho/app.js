@@ -16,7 +16,7 @@ import { escapeHTML as esc } from "../../core/security.js";
 import { getEffectiveLevel } from "../../core/permissions.js";
 import {
   montarRelatorioHTML, identificacaoTurma, CORES_HEX, pct, dataCurta
-} from "./relatorio-render.js?v=6";
+} from "./relatorio-render.js?v=8";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -139,7 +139,7 @@ function linhaRelatorio(r) {
       <div class="rd-row-corpo">
         <div class="rd-row-badges">
           <span class="badge badge-neutro">${resumo.total || 0} questões</span>
-          <span class="badge" style="background:${CORES_HEX['Excelente']}">disc. ${pct(resumo.discriminacaoMedia, 1)}</span>
+          <span class="badge" style="background:${CORES_HEX['Muito boa']}">disc. ${pct(resumo.discriminacaoMedia, 1)}</span>
           ${revisar ? `<span class="badge badge-alerta">${revisar} para revisar</span>` : ''}
         </div>
         <div class="rd-row-titulo">${esc(r.titulo || 'Avaliação sem título')}</div>

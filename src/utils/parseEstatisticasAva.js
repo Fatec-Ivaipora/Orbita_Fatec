@@ -27,18 +27,23 @@
 // ================================================================
 
 // ---- Faixas do índice de discriminação (em %) -------------------
-// Referência clássica de análise de itens. Mexer aqui muda o relatório
-// inteiro (cards, cores, lista de revisão) — é o único lugar que define isso.
+// 18/11/2026 — segue o material da capacitação "Avaliação CADAM" (diretrizes de questões):
+//   discriminação (ponto-bisserial, grupos 27% superior × inferior): < 0,10 muito fraca · 0,10–0,19 fraca ·
+//   0,20–0,39 boa · ≥ 0,40 muito boa (RS19 p.562); negativa = gabarito errado ou duas corretas (NBME16 p.25-30).
+// Antes eram faixas "usuais" sem fonte (fraca < 20 · razoável 20–29 · boa 30–49 · excelente ≥ 50).
+// Mexer aqui muda o relatório inteiro (cards, cores, lista de revisão) — é o único lugar que define isso.
 const FAIXAS = [
     { nome: 'Problemática', min: -Infinity, max: 0 },
-    { nome: 'Fraca', min: 0, max: 20 },
-    { nome: 'Razoável', min: 20, max: 30 },
-    { nome: 'Boa', min: 30, max: 50 },
-    { nome: 'Excelente', min: 50, max: Infinity }
+    { nome: 'Muito fraca', min: 0, max: 10 },
+    { nome: 'Fraca', min: 10, max: 20 },
+    { nome: 'Boa', min: 20, max: 40 },
+    { nome: 'Muito boa', min: 40, max: Infinity }
 ];
+// Distrator não funcional: escolhido por menos de 5% dos alunos → reescrever (RS19 p.564; ES21 p.255).
+const DISTRATOR_NAO_FUNCIONAL = 5;
 
 const LIMITE_REVISAO = 20;        // (legado) faixa "Fraca" da discriminação
-const FACILIDADE_MUITO_ALTA = 85; // acima disso "quase todos acertaram"
+const FACILIDADE_MUITO_ALTA = 95; // acima disso "quase todos acertaram" — P > 0,95 informa pouco (NBME22 p.24; NBME16 p.25)
 const FACILIDADE_MUITO_BAIXA = 30;
 
 // ---- Calibração da lista de revisão (12/11/2026) -----------------
@@ -49,11 +54,14 @@ const FACILIDADE_MUITO_BAIXA = 30;
 // facilidade 30–70%; eficiência discriminativa < 15% = conferir) + literatura de análise de itens
 // (itens muito fáceis têm discriminação baixa naturalmente). Os cortes são ajustáveis pela responsável
 // pelas avaliações (banco_med_config/desempenho) — estes são o padrão.
+// 18/11/2026: padrão alinhado ao material CADAM — fácil a partir de 95% (P > 0,95 informa pouco, NBME22 p.24),
+// muito difícil abaixo de 30% (P < 0,30, NBME22 p.24), revisar com discriminação muito fraca (< 0,10, RS19 p.562)
+// e atenção com fraca (0,10–0,19, RS19 p.562). Antes: fácil 85 e revisar < 15.
 const CALIBRACAO_PADRAO = {
-    facil: 85,          // facilidade >= isto: "fácil — conteúdo dominado" (não é erro), salvo discriminação negativa
+    facil: 95,          // facilidade >= isto: "fácil — conteúdo dominado" (não é erro), salvo discriminação negativa
     muitoDificil: 30,   // facilidade < isto e discriminação < atencaoDisc: conferir gabarito/conteúdo
     quaseNinguem: 5,    // facilidade <= isto: revisar já (quase ninguém acertou)
-    revisarDisc: 15,    // dificuldade média: revisar se discriminação < isto ...
+    revisarDisc: 10,    // dificuldade média: revisar se discriminação < isto ...
     revisarEfic: 15,    // ... e eficiência discriminativa < isto (quando o AVA informa)
     atencaoDisc: 20     // discriminação < isto (sem cair nas regras acima): atenção, pode manter
 };
@@ -678,9 +686,9 @@ function classificar(discriminacao) {
     // Sem índice: o AVA deixa a célula vazia quando o desvio padrão é zero
     // (todo mundo acertou ou todo mundo errou). A questão não diferencia
     // ninguém, então entra como Fraca — e cai na lista de revisão.
-    if (!temNumero(discriminacao)) return 'Fraca';
+    if (!temNumero(discriminacao)) return 'Muito fraca';
     const faixa = FAIXAS.find(f => discriminacao >= f.min && discriminacao < f.max);
-    return faixa ? faixa.nome : 'Excelente';
+    return faixa ? faixa.nome : 'Muito boa';
 }
 
 function situacaoDa(q, lim) {
@@ -794,7 +802,8 @@ function analisar(questoes, lim) {
             alternativas: (q.alternativas || []).map(a => ({
                 ...a,
                 distratorForte: forte ? a === forte : false,
-                distratorDominante: dominante ? a === dominante : false
+                distratorDominante: dominante ? a === dominante : false,
+                naoFuncional: !a.correta && temNumero(a.frequencia) && a.frequencia < DISTRATOR_NAO_FUNCIONAL
             }))
         };
     });
@@ -804,7 +813,9 @@ function analisar(questoes, lim) {
         contagens,
         discriminacaoMedia: media(enriquecidas.map(q => q.discriminacao)),
         facilidadeMedia: media(enriquecidas.map(q => q.facilidade)),
-        boasOuExcelentes: contagens['Boa'] + contagens['Excelente'],
+        boasOuExcelentes: contagens['Boa'] + contagens['Muito boa'], // nome antigo do campo: "boas ou muito boas"
+        distratoresNaoFuncionais: questoes.reduce((s, q) => s + (q.alternativas || []).filter(a => !a.correta && temNumero(a.frequencia) && a.frequencia < DISTRATOR_NAO_FUNCIONAL).length, 0),
+        questoesComDistratorNaoFuncional: questoes.filter(q => (q.alternativas || []).some(a => !a.correta && temNumero(a.frequencia) && a.frequencia < DISTRATOR_NAO_FUNCIONAL)).length,
         paraRevisar: enriquecidas.filter(q => q.revisar).length,
         porSituacao,
         faceis: porSituacao.facil,
