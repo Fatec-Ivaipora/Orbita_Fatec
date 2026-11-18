@@ -504,60 +504,89 @@ async function renderUnidades(recarregar = true) {
     catch (e) { tela().innerHTML = `<div class="av-card av-erro">${esc(e.message)}</div>`; return; }
   }
   const ds = unidades.disciplinas;
+  if (!ds.length) {
+    tela().innerHTML = `<div class="av-card ua-vazio"><b>Nenhuma disciplina para mandar link ainda.</b>
+      <p>Entram aqui as disciplinas <b>Criar do zero</b> que já têm professor. Abra a aba <b>Disciplinas EAD</b>, clique na disciplina e preencha o professor na ficha.</p></div>`;
+    return;
+  }
   const conta = (d) => ({ pre: d.itens.filter(u => u.codigo).length, ok: d.itens.filter(u => u.coord?.status === 'ok').length, aj: d.itens.filter(u => u.coord?.status === 'ajustar').length, ava: d.itens.filter(u => u.ava).length });
+  const tot = ds.reduce((a, d) => { const c = conta(d); a.qtd += d.qtd; a.pre += c.pre; a.ok += c.ok; a.aj += c.aj; a.ava += c.ava; return a; }, { qtd: 0, pre: 0, ok: 0, aj: 0, ava: 0 });
   const profs = [...ds.reduce((m, d) => { const k = normNome(d.professor); if (!m.has(k)) m.set(k, { nome: d.professor, discs: [] }); m.get(k).discs.push(d); return m; }, new Map()).values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const cursos = [...ds.reduce((m, d) => { if (!m.has(d.cursoId)) m.set(d.cursoId, { id: d.cursoId, nome: d.cursoNome, discs: [] }); m.get(d.cursoId).discs.push(d); return m; }, new Map()).values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const linkDe = (tipo, k) => unidades.links.find(l => l.tipo === tipo && (tipo === 'professor' ? normNome(l.professor) === k : l.cursoId === k));
-  const botaoLink = (l, attrs) => l
-    ? `<button type="button" class="btn-secondary" data-ua-copiar="${esc(l.token)}">Copiar link</button> <a class="av-sub" href="${esc(linkUrl(l.token))}" target="_blank" rel="noopener">abrir</a>`
+  const acoesLink = (l, attrs) => l
+    ? `<div class="ua-link-acoes"><button type="button" class="btn-secondary" data-ua-copiar="${esc(l.token)}">Copiar link</button><a class="ua-abrir" href="${esc(linkUrl(l.token))}" target="_blank" rel="noopener">Abrir ↗</a></div>`
     : `<button type="button" class="btn-primary" ${attrs}>Gerar link</button>`;
-  const andamento = (d) => { const c = conta(d); return `${c.pre}/${d.qtd} preenchidas · ${c.ok} validadas${c.aj ? ` · <span class="av-alerta">${c.aj} p/ ajustar</span>` : ''} · ${c.ava} AVA`; };
+  const barra = (d) => { const c = conta(d); const p = (n) => Math.round(100 * n / d.qtd); return `<span class="ua-barra" title="${c.ok} validadas · ${c.pre - c.ok} aguardando · ${d.qtd - c.pre} sem preencher"><i class="ok" style="width:${p(c.ok)}%"></i><i class="pre" style="width:${p(c.pre - c.ok)}%"></i></span>`; };
+  const pilulas = (d) => { const c = conta(d); return `<span class="ua-pills">
+      <span class="ua-pill">${c.pre}/${d.qtd} preenchidas</span>
+      <span class="ua-pill ${c.ok === d.qtd ? 'bom' : ''}">${c.ok} validadas</span>
+      ${c.aj ? `<span class="ua-pill alerta">${c.aj} p/ ajustar</span>` : ''}
+      <span class="ua-pill ${c.ava === d.qtd ? 'bom' : ''}">${c.ava} AVA</span></span>`; };
+  const situacaoUa = (u) => !u.codigo ? '<span class="ua-sit-ti vazio">não preenchida</span>'
+    : u.coord?.status === 'ok' ? '<span class="ua-sit-ti bom">✓ validada</span>'
+    : u.coord?.status === 'ajustar' ? `<span class="ua-sit-ti alerta">ajustar</span><span class="av-sub">${esc(u.coord.obs)}</span>`
+    : `<span class="ua-sit-ti espera">aguardando${u.coord?.status === 'reenviada' ? ' (corrigida)' : ''}</span>`;
 
-  tela().innerHTML = !ds.length ? '<div class="av-card"><p class="av-vazio">Nenhuma disciplina "Criar do zero" com professor definido neste semestre. Defina o professor na aba Disciplinas EAD (ficha da disciplina) e volte aqui.</p></div>' : `
-    <section class="av-card av-card-tabela">
-      <h3 style="margin:0 0 .6rem">Links dos professores <span class="av-sub">um link por professor com todas as disciplinas novas dele; ele preenche código SAGAH e título de cada UA</span></h3>
-      <div class="av-tabela-wrap"><table class="av-tabela">
-        <thead><tr><th>Professor</th><th>Disciplinas</th><th>Link</th></tr></thead>
-        <tbody>${profs.map(p => { const l = linkDe('professor', normNome(p.nome)); return `<tr>
-          <td><b>${esc(p.nome)}</b></td>
-          <td>${p.discs.map(d => `${esc(nomeCurso2(d.nome))} <span class="av-sub">${esc(nomeCurso2(d.cursoNome))} · ${andamento(d)}</span>`).join('')}</td>
-          <td style="white-space:nowrap">${botaoLink(l, `data-ua-gerar="professor" data-ua-prof="${esc(p.nome)}"`)}</td></tr>`; }).join('')}</tbody>
-      </table></div>
-    </section>
-    <section class="av-card av-card-tabela">
-      <h3 style="margin:0 0 .6rem">Links dos coordenadores <span class="av-sub">um link por curso; o coordenador valida as UAs ou pede ajuste. O nome dele aparece também no link do professor</span></h3>
-      <div class="av-tabela-wrap"><table class="av-tabela">
-        <thead><tr><th>Curso</th><th>Coordenador</th><th>Link</th></tr></thead>
-        <tbody>${cursos.map(c => { const l = linkDe('coordenador', c.id); return `<tr>
-          <td><b>${esc(nomeCurso2(c.nome))}</b><span class="av-sub">${c.discs.length} disciplina(s) nova(s)</span></td>
-          <td><input class="select-filter" style="min-width:220px" data-ua-coord="${esc(c.id)}" value="${esc(l ? l.coordenador : (c.discs[0].coordenador || ''))}" placeholder="Nome do coordenador"></td>
-          <td style="white-space:nowrap">${l ? `${botaoLink(l)} <button type="button" class="btn-secondary" data-ua-gerar="coordenador" data-ua-curso="${esc(c.id)}" data-ua-curso-nome="${esc(c.nome)}" title="Salvar o nome do coordenador">Salvar nome</button>` : botaoLink(null, `data-ua-gerar="coordenador" data-ua-curso="${esc(c.id)}" data-ua-curso-nome="${esc(c.nome)}"`)}</td></tr>`; }).join('')}</tbody>
-      </table></div>
-    </section>
+  tela().innerHTML = `
+    <div class="av-resumo">
+      <div class="av-num"><b>${ds.length}</b><span>disciplinas novas com professor</span></div>
+      <div class="av-num"><b>${tot.pre}<small>/${tot.qtd}</small></b><span>UAs preenchidas</span></div>
+      <div class="av-num"><b>${tot.ok}</b><span>validadas pelo coordenador</span></div>
+      <div class="av-num"><b class="${tot.aj ? 'av-alerta' : ''}">${tot.aj}</b><span>esperando ajuste do professor</span></div>
+      <div class="av-num"><b>${tot.ava}</b><span>salas AVA validadas (TI)</span></div>
+    </div>
+
+    <div class="ua-duas">
+      <section class="av-card av-card-tabela">
+        <div class="ua-card-topo"><h3>Links dos professores</h3><p class="av-sub">Um link por professor, com todas as disciplinas novas dele.</p></div>
+        <div class="av-tabela-wrap"><table class="av-tabela ua-tab">
+          <thead><tr><th>Professor</th><th>Disciplinas</th><th></th></tr></thead>
+          <tbody>${profs.map(p => `<tr>
+            <td><b>${esc(p.nome)}</b></td>
+            <td>${p.discs.map(d => `<div class="ua-disc-mini"><span>${esc(nomeCurso2(d.nome))}</span>${barra(d)}</div>`).join('')}</td>
+            <td class="ua-col-link">${acoesLink(linkDe('professor', normNome(p.nome)), `data-ua-gerar="professor" data-ua-prof="${esc(p.nome)}"`)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </section>
+      <section class="av-card av-card-tabela">
+        <div class="ua-card-topo"><h3>Links dos coordenadores</h3><p class="av-sub">Um link por curso. O coordenador vem do cadastro do Órbita (cargo Coordenador); dá para trocar o nome aqui.</p></div>
+        <div class="av-tabela-wrap"><table class="av-tabela ua-tab">
+          <thead><tr><th>Curso</th><th>Coordenador</th><th></th></tr></thead>
+          <tbody>${cursos.map(c => { const l = linkDe('coordenador', c.id); const attrs = `data-ua-gerar="coordenador" data-ua-curso="${esc(c.id)}" data-ua-curso-nome="${esc(c.nome)}"`; return `<tr>
+            <td><b>${esc(nomeCurso2(c.nome))}</b><span class="av-sub">${c.discs.length} disciplina(s)</span></td>
+            <td><input class="ua-input" data-ua-coord="${esc(c.id)}" data-ua-coord-orig="${esc(l ? l.coordenador : '')}" value="${esc(l ? l.coordenador : (c.discs[0].coordenador || ''))}" placeholder="Nome do coordenador" aria-label="Coordenador de ${esc(nomeCurso2(c.nome))}"></td>
+            <td class="ua-col-link">${l ? `${acoesLink(l)}<button type="button" class="ua-salvar-nome hidden" ${attrs}>Salvar nome</button>` : acoesLink(null, attrs)}</td></tr>`; }).join('')}</tbody>
+        </table></div>
+      </section>
+    </div>
+
     ${cursos.map(c => `
-    <section class="av-card av-card-tabela">
-      <h3 style="margin:0 0 .6rem">${esc(nomeCurso2(c.nome))}</h3>
+    <section class="av-card ua-curso">
+      <h3 class="ua-curso-nome">${esc(nomeCurso2(c.nome))}</h3>
       ${c.discs.map(d => { const aberta = uaAberta.has(d.id); const por = new Map(d.itens.map(u => [u.n, u])); return `
-        <div style="border-top:1px solid var(--orb-linha2);padding:.6rem 0">
-          <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
-            <button type="button" class="btn-secondary" data-ua-abrir="${esc(d.id)}" aria-expanded="${aberta}">${aberta ? '▾' : '▸'} ${esc(nomeCurso2(d.nome))}</button>
-            <span class="av-sub" style="margin:0">Prof. ${esc(d.professor)} · ${andamento(d)}</span>
-            <label class="av-sub" style="margin:0 0 0 auto">Unidades
-              <select class="select-filter" data-ua-qtd="${esc(d.id)}" style="min-width:70px">${[6, 12].map(q => `<option ${q === d.qtd ? 'selected' : ''}>${q}</option>`).join('')}</select></label>
+        <div class="ua-item ${aberta ? 'aberta' : ''}">
+          <div class="ua-item-topo">
+            <button type="button" class="ua-item-btn" data-ua-abrir="${esc(d.id)}" aria-expanded="${aberta}">
+              <span class="ua-seta" aria-hidden="true">›</span>
+              <span><b>${esc(nomeCurso2(d.nome))}</b><span class="av-sub">Prof. ${esc(d.professor)}${d.periodos?.length ? ` · ${d.periodos.join('º, ')}º período` : ''}${d.chEad ? ` · ${d.chEad} h EAD` : ''}</span></span>
+            </button>
+            ${pilulas(d)}
+            <label class="ua-qtd">UAs <select class="select-filter" data-ua-qtd="${esc(d.id)}">${[6, 12].map(q => `<option ${q === d.qtd ? 'selected' : ''}>${q}</option>`).join('')}</select></label>
           </div>
-          ${aberta ? `<div class="av-tabela-wrap" style="margin-top:.5rem"><table class="av-tabela">
-            <thead><tr><th>UA</th><th>Código SAGAH</th><th>Título</th><th>Coordenador</th><th>Sala AVA (TI)</th></tr></thead>
-            <tbody>${Array.from({ length: d.qtd }, (_, i) => { const u = por.get(i + 1) || {}; const c2 = u.coord; return `<tr>
-              <td><b>UA ${String(i + 1).padStart(2, '0')}</b>${i + 1 === d.qtd / 2 + 1 ? '<span class="av-sub">2º bimestre</span>' : i === 0 ? '<span class="av-sub">1º bimestre</span>' : ''}</td>
-              <td><code>${esc(u.codigo || '—')}</code></td><td>${esc(u.titulo || '')}</td>
-              <td>${!u.codigo ? '<span class="av-sub">não preenchida</span>' : c2?.status === 'ok' ? '<span class="av-ok">✓ validada</span>' : c2?.status === 'ajustar' ? `<span class="av-alerta">ajustar</span><span class="av-sub">${esc(c2.obs)}</span>` : '<span class="av-alerta">aguardando</span>'}</td>
-              <td><label><input type="checkbox" data-ua-ava="${esc(d.id)}" data-ua-n="${i + 1}" ${u.ava ? 'checked' : ''} ${u.codigo ? '' : 'disabled'}> validada</label></td></tr>`; }).join('')}</tbody>
+          ${aberta ? `<div class="av-tabela-wrap"><table class="av-tabela ua-tab ua-tab-uas">
+            <thead><tr><th>UA</th><th>Código SAGAH</th><th>Título</th><th>Coordenador</th><th>Sala AVA</th></tr></thead>
+            <tbody>${Array.from({ length: d.qtd }, (_, i) => { const n = i + 1; const u = por.get(n) || {}; return `${n === 1 || n === d.qtd / 2 + 1 ? `<tr class="ua-bim-ti"><td colspan="5">${n === 1 ? '1º' : '2º'} bimestre</td></tr>` : ''}<tr>
+              <td><b>UA ${String(n).padStart(2, '0')}</b></td>
+              <td>${u.codigo ? `<code>${esc(u.codigo)}</code>` : '<span class="av-sub">—</span>'}</td>
+              <td>${esc(u.titulo || '')}</td>
+              <td>${situacaoUa(u)}</td>
+              <td><label class="ua-check"><input type="checkbox" data-ua-ava="${esc(d.id)}" data-ua-n="${n}" ${u.ava ? 'checked' : ''} ${u.codigo ? '' : 'disabled'}> validada</label></td></tr>`; }).join('')}</tbody>
           </table></div>` : ''}
         </div>`; }).join('')}
     </section>`).join('')}
-    <p class="av-legenda">Entram aqui as disciplinas "Criar do zero" com professor definido. Quando o professor preenche todas as UAs, a etapa "Seleção das unidades" marca sozinha; quando o coordenador valida todas, marca "Unidades validadas pelo coordenador". Os links não pedem login: mande só para a pessoa certa.</p>`;
+    <p class="av-legenda">Entram aqui as disciplinas "Criar do zero" com professor definido. Professor preencheu todas as UAs → a etapa "Seleção das unidades" marca sozinha; coordenador validou todas → marca "Unidades validadas pelo coordenador". Os links não pedem login: mande só para a pessoa certa.</p>`;
 }
 
 async function copiarTexto(txt) {
@@ -578,7 +607,6 @@ async function acaoUnidades(e) {
       else {
         corpo.cursoId = t.dataset.uaCurso; corpo.cursoNome = t.dataset.uaCursoNome;
         corpo.coordenador = (document.querySelector(`[data-ua-coord="${CSS.escape(t.dataset.uaCurso)}"]`) || {}).value || '';
-        if (!corpo.coordenador.trim()) { toast('Escreva o nome do coordenador antes.', 'erro'); return; }
       }
       t.disabled = true;
       const l = await apiFetch(`/${MODULO}/unidades/links`, { method: 'POST', body: JSON.stringify(corpo) });
@@ -598,6 +626,7 @@ async function acaoUnidades(e) {
 }
 
 function ligarEventos() {
+  tela().addEventListener('input', (e) => { const i = e.target.closest('[data-ua-coord]'); if (!i) return; const b = i.closest('tr').querySelector('.ua-salvar-nome'); if (b) b.classList.toggle('hidden', i.value.trim() === i.dataset.uaCoordOrig); });
   tela().addEventListener('click', acaoUnidades);
   tela().addEventListener('change', acaoUnidades);
   $('av-semestre').addEventListener('change', carregar);

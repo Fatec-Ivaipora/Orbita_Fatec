@@ -124,6 +124,8 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - UA validada fica travada para o professor. UA corrigida depois de um pedido de ajuste volta como "reenviada".
   - Preencher todas as UAs marca sozinha a etapa "Seleção das unidades". Validar todas marca "Unidades validadas pelo coordenador" (marca `uid: 'link'`, desfeita sozinha se deixar de valer).
   - Link do professor: um por semestre e professor. Link do coordenador: um por semestre e curso. Gerar de novo devolve o mesmo link.
+  - O nome do coordenador vem do cadastro do Órbita: usuário com cargo `coordenador` e o curso em `users.cursos`. Ficam de fora auxiliar (`auxiliarDeNome`) e contas de teste/licitação; se houver dois, aparecem os dois. A TI pode trocar o nome na aba, e o nome salvo no link passa a valer.
+  - Visual da aba no padrão Órbita v2: resumo em números, cartões de links lado a lado, barra de andamento por disciplina, pílulas de status e lista de UAs que abre e fecha.
 - Impacto: nenhuma mudança no fluxo atual da criação. Os links não pedem login, então devem ir só para a pessoa certa.
 - Como testar: na aba Disciplinas EAD, definir o professor numa disciplina "Criar". Na aba Unidades (links), gerar o link do professor e o do coordenador. Abrir o do professor, preencher e enviar. Abrir o do coordenador e validar uma UA e pedir ajuste em outra. Conferir na aba que o andamento e as etapas mudaram.
 - Como reverter: remover a aba, a pasta `unidades-ead/` e o bloco "Unidades (UAs) por link" de `automacao-ava.js`. A coleção `ava_unidades_links` pode ser apagada.

@@ -593,7 +593,26 @@ async function linksDoSemestre(semestre) {
     const snap = await db.collection(COL_LINKS_UA).where('semestre', '==', semestre).get();
     return snap.docs.map(s => ({ token: s.id, ...s.data() }));
 }
-const coordDoCurso = (links, cursoId) => (links.find(l => l.tipo === 'coordenador' && l.cursoId === cursoId && l.ativo !== false) || {}).coordenador || '';
+// Coordenador de cada curso = usuário do Órbita com cargo "coordenador" e o curso em users.cursos
+// (auxiliar de coordenação — users.auxiliarDeNome — e contas de teste/licitação ficam de fora). Cache 10 min.
+let coordCache = null;
+async function coordenadoresDoOrbita() {
+    if (coordCache && Date.now() - coordCache.em < 10 * 60 * 1000) return coordCache.mapa;
+    const snap = await db.collection('users').where('role', '==', 'coordenador').get();
+    const mapa = new Map();
+    snap.docs.forEach(s => {
+        const u = s.data();
+        const nome = texto(u.name || u.nome, 120);
+        if (!nome || u.ativo === false || u.auxiliarDeNome || /teste|licita/i.test(nome)) return;
+        const cursos = Array.isArray(u.cursos) ? u.cursos : (u.cursos || u.curso ? [u.cursos || u.curso] : []);
+        cursos.forEach(c => { if (!mapa.has(c)) mapa.set(c, []); mapa.get(c).push(nome); });
+    });
+    coordCache = { em: Date.now(), mapa };
+    return mapa;
+}
+// nome do link do coordenador (se a TI gerou/ajustou) ou, senão, o(s) coordenador(es) do curso no Órbita
+const coordDoCurso = (links, cursoId, doOrbita) => (links.find(l => l.tipo === 'coordenador' && l.cursoId === cursoId && l.ativo !== false) || {}).coordenador
+    || ((doOrbita && doOrbita.get(cursoId)) || []).join(' / ');
 
 // marca/desmarca sozinho as etapas "seleção" e "validação do coordenador" conforme as UAs
 function etapasDasUnidades(d, quem) {
@@ -618,10 +637,10 @@ router.get('/unidades', verifyToken, checkPermission, async (req, res) => {
         if (!soTi(req, res)) return;
         const semestre = req.query.semestre;
         if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
-        const [discs, links] = await Promise.all([discCriarDoSemestre(semestre), linksDoSemestre(semestre)]);
+        const [discs, links, doOrbita] = await Promise.all([discCriarDoSemestre(semestre), linksDoSemestre(semestre), coordenadoresDoOrbita()]);
         res.json({
             semestre,
-            disciplinas: discs.map(x => ({ ...discPublica(x.id, x.d), coordenador: coordDoCurso(links, x.d.cursoId) }))
+            disciplinas: discs.map(x => ({ ...discPublica(x.id, x.d), coordenador: coordDoCurso(links, x.d.cursoId, doOrbita) }))
                 .sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR')),
             links: links.filter(l => l.ativo !== false).map(l => ({ token: l.token, tipo: l.tipo, professor: l.professor || '', cursoId: l.cursoId || '', cursoNome: l.cursoNome || '', coordenador: l.coordenador || '' }))
         });
@@ -647,8 +666,8 @@ router.post('/unidades/links', verifyToken, checkPermission, async (req, res) =>
         } else if (b.tipo === 'coordenador') {
             const cursoId = texto(b.cursoId, 60);
             if (!CURSOS_FATEC.includes(cursoId)) return res.status(400).json({ error: 'Curso inválido.' });
-            const coordenador = texto(b.coordenador, 120);
-            if (!coordenador) return res.status(400).json({ error: 'Informe o nome do coordenador.' });
+            const coordenador = texto(b.coordenador, 120) || ((await coordenadoresDoOrbita()).get(cursoId) || []).join(' / ');
+            if (!coordenador) return res.status(400).json({ error: 'Esse curso não tem coordenador cadastrado no Órbita: escreva o nome.' });
             const ja = links.find(l => l.tipo === 'coordenador' && l.ativo !== false && l.cursoId === cursoId);
             if (ja) {
                 if (ja.coordenador !== coordenador) await db.collection(COL_LINKS_UA).doc(ja.token).update({ coordenador, updatedAt: agora(), updatedBy: quemFez(req) });
@@ -704,9 +723,9 @@ const doCoordenador = (l, d) => d.cursoId === l.cursoId;
 router.get('/publico/unidades/:token', async (req, res) => {
     try {
         const l = await linkUa(req.params.token, res); if (!l) return;
-        const [discs, links] = await Promise.all([discCriarDoSemestre(l.semestre), linksDoSemestre(l.semestre)]);
+        const [discs, links, doOrbita] = await Promise.all([discCriarDoSemestre(l.semestre), linksDoSemestre(l.semestre), coordenadoresDoOrbita()]);
         const minhas = discs.filter(x => (l.tipo === 'professor' ? daProfessor(l, x.d) : doCoordenador(l, x.d)))
-            .map(x => ({ ...discPublica(x.id, x.d), coordenador: coordDoCurso(links, x.d.cursoId) }))
+            .map(x => ({ ...discPublica(x.id, x.d), coordenador: coordDoCurso(links, x.d.cursoId, doOrbita) }))
             .sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
         res.json({ tipo: l.tipo, semestre: l.semestre, professor: l.professor || '', cursoNome: l.cursoNome || '', coordenador: l.coordenador || '', disciplinas: minhas });
     } catch (err) { res.status(500).json({ error: 'Não foi possível abrir o link agora. Tente de novo em instantes.' }); }
