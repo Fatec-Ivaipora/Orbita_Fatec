@@ -12,12 +12,13 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const lerLocal = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
   const gravarLocal = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } };
+  // "BACHARELADO EM ARQUITETURA E URBANISMO" -> "Arquitetura e Urbanismo"; "... APLICADA À ARQUITETURA II" -> "... Aplicada à Arquitetura II"
   const nomeBonito = (n) => {
-    const t = String(n || '').trim();
+    const t = String(n || '').trim().replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '');
     if (t !== t.toUpperCase()) return t;
     return t.toLowerCase().replace(/(^|[\s(\/-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase())
-      .replace(/(?!^)\b(De|Da|Do|Das|Dos|E|Em|No|Na|Nos|Nas|Ao|Aos|À|Às|A|O|Para|Por|Com)\b/g, (x) => x.toLowerCase())
-      .replace(/\b(Ii|Iii|Iv|Vi|Vii|Viii|Ix)\b/g, (x) => x.toUpperCase());
+      .replace(/(?!^)(?<![\p{L}])(De|Da|Do|Das|Dos|E|Em|No|Na|Nos|Nas|Ao|Aos|À|Às|A|O|Para|Por|Com)(?![\p{L}])/gu, (x) => x.toLowerCase())
+      .replace(/(?<![\p{L}])(Ii|Iii|Iv|Vi|Vii|Viii|Ix)(?![\p{L}])/gu, (x) => x.toUpperCase());
   };
   const dois = (n) => String(n).padStart(2, '0');
   const sem = (s) => String(s || '').replace('.', '/');

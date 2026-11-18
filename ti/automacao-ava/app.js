@@ -493,7 +493,11 @@ function gerarCsv(b) {
 let unidades = null;          // { semestre, disciplinas, links }
 let uaAberta = new Set();
 const linkUrl = (token) => `${location.origin}/unidades-ead/index.html?t=${token}`;
-const nomeCurso2 = (n) => String(n || '').toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\b(De|Da|Do|E|Em)\b/g, x => x.toLowerCase());
+// "BACHARELADO EM ARQUITETURA E URBANISMO" -> "Arquitetura e Urbanismo"; "INFORMÁTICA APLICADA À ARQUITETURA II" -> "Informática Aplicada à Arquitetura II"
+const nomeCurso2 = (n) => String(n || '').replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '').toLowerCase()
+  .replace(/(^|[\s(\/-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase())
+  .replace(/(?!^)(?<![\p{L}])(De|Da|Do|Das|Dos|E|Em|No|Na|Nos|Nas|Ao|Aos|À|Às|A|O|Para|Por|Com)(?![\p{L}])/gu, (x) => x.toLowerCase())
+  .replace(/(?<![\p{L}])(Ii|Iii|Iv|Vi|Vii|Viii|Ix)(?![\p{L}])/gu, (x) => x.toUpperCase());
 const normNome = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 
 async function renderUnidades(recarregar = true) {
