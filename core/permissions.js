@@ -57,7 +57,7 @@ export const MODULES = {
     title: "Financeiro Medicina",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
     url: "/financeiro/medicina/index.html",
-    somenteUsuarios: ["A6gsjqRTwdeAy29KVxcHJg2jYNy2", "EtrSfFo1FCYD6ZZOFQ6AL25axWX2", "rhQ6fe4HQfMOCCejry1sPx0hA1v1"] // Lisa, Fábio (editam) e Paulo Henrique (só vê — USUARIOS_SO_VER na rota)
+    somenteUsuarios: ["A6gsjqRTwdeAy29KVxcHJg2jYNy2", "EtrSfFo1FCYD6ZZOFQ6AL25axWX2", "rhQ6fe4HQfMOCCejry1sPx0hA1v1", "rSw36LAa8fPI94aYFoVv7JggB6w2"] // Lisa, Fábio, Paulo henrique e Administrador — todos editam
   },
   acessos: {
     id: "acessos",

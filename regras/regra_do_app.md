@@ -109,6 +109,12 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Financeiro Medicina: ADM geral (Paulo Henrique e Administrador) vê e edita tudo
+- Autor: Claude (pedido do Paulo Henrique: "o adm geral vê tudo… faz tudo")
+- Branch: feat/financeiro-medicina-acesso-adm
+- Arquivos alterados: `src/rotas/financeiro-medicina.js` (`USUARIOS_PERMITIDOS`) e `core/permissions.js` (`somenteUsuarios`).
+- Acesso total (ver e editar): Lisa Marie, Fábio Costa, Paulo henrique e o perfil Administrador. O "só leitura" do Paulo (entrada anterior) deixa de existir. Os outros ADM N1 (Roni, Laisa) continuam sem acesso.
+
 ### [2026-11-18] Financeiro Medicina: Paulo Henrique passa a ver (só leitura)
 - Autor: Claude (pedido do próprio Paulo Henrique, Suporte AVA)
 - Branch: feat/financeiro-medicina-paulo-ver

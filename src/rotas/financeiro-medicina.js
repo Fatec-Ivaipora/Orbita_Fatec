@@ -21,17 +21,18 @@ const verifyToken = require('../middlewares/auth');
 // 18/11/2026 (pedido do usuário): SÓ a Lisa (Financeiro) e o Fábio Costa (direção) veem este módulo — ninguém mais,
 // nem outros ADM N1 ou o resto do Financeiro. Incluir alguém só quando pedirem: acrescentar o uid aqui E em
 // core/permissions.js (MODULES['financeiro-medicina'].somenteUsuarios).
+// 18/11/2026 (pedido do Paulo Henrique): o ADM geral vê e faz tudo — Paulo Henrique e o perfil Administrador
+// entram junto com Lisa e Fábio (os outros ADM N1, como Roni e Laisa, continuam sem acesso).
 const USUARIOS_PERMITIDOS = [
     'A6gsjqRTwdeAy29KVxcHJg2jYNy2', // LISA MARIE (Financeiro)
-    'EtrSfFo1FCYD6ZZOFQ6AL25axWX2'  // FABIO COSTA (direção)
+    'EtrSfFo1FCYD6ZZOFQ6AL25axWX2', // FABIO COSTA (direção)
+    'rhQ6fe4HQfMOCCejry1sPx0hA1v1', // Paulo henrique (ADM geral / Suporte AVA)
+    'rSw36LAa8fPI94aYFoVv7JggB6w2'  // Administrador (ADM geral)
 ];
-// Só VER (sem editar), a pedido (18/11/2026): Paulo Henrique (Suporte AVA). Também precisa estar em somenteUsuarios.
-const USUARIOS_SO_VER = [
-    'rhQ6fe4HQfMOCCejry1sPx0hA1v1' // Paulo henrique (Suporte AVA) — só leitura
-];
+const USUARIOS_SO_VER = []; // ninguém só-leitura por enquanto
 const somentePermitidos = (req, res, next) => (USUARIOS_PERMITIDOS.includes(req.user && req.user.uid)
     || (USUARIOS_SO_VER.includes(req.user && req.user.uid) && req.method === 'GET')
-    ? next() : res.status(403).json({ error: USUARIOS_SO_VER.includes(req.user && req.user.uid) ? 'Seu acesso ao Financeiro da Medicina é só de leitura.' : 'Acesso restrito: só a Lisa e o Fábio veem o Financeiro da Medicina.' }));
+    ? next() : res.status(403).json({ error: USUARIOS_SO_VER.includes(req.user && req.user.uid) ? 'Seu acesso ao Financeiro da Medicina é só de leitura.' : 'Acesso restrito ao Financeiro da Medicina (Lisa, Fábio e ADM geral).' }));
 const checkPermission = [verifyToken.requireModulePermission('financeiro-medicina'), somentePermitidos];
 const COL_T = 'fin_med_turmas';
 const COL_A = 'fin_med_alunos';
