@@ -109,6 +109,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Financeiro Medicina: tabela com cara de planilha (grade, zebra, "—" no vazio)
+- Autor: Claude (pedido do Paulo Henrique: "número em cima de número… ficou muito solto… onde tem número, onde não tem")
+- Branch: fix/financeiro-medicina-rodape
+- Arquivos alterados: `financeiro/medicina/financeiro-medicina.css` (`?v=3`), `app.js` (`?v=2`) e `index.html`.
+- O que muda:
+  - O rodapé fixo ganha fundo sólido; o total ficava sobreposto à linha que rolava por baixo.
+  - A tabela ganha linhas de grade, linhas zebradas, linhas mais baixas e células editáveis com borda.
+  - Célula vazia mostra "—" em cinza.
+  - A categoria vira etiqueta pequena ao lado do nome.
+  - A coluna "Total a receber" fica destacada.
+  - Nenhum cálculo muda.
+
 ### [2026-11-18] Financeiro Medicina: ADM geral (Paulo Henrique e Administrador) vê e edita tudo
 - Autor: Claude (pedido do Paulo Henrique: "o adm geral vê tudo… faz tudo")
 - Branch: feat/financeiro-medicina-acesso-adm

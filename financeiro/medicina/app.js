@@ -78,18 +78,19 @@ function renderTurmas() {
 function linhaAluno(a, cols) {
   const c = a.calc || {};
   const cel = (campo, v, cls = '') => podeEditar
-    ? `<input class="fm-cel ${cls}" inputmode="decimal" data-aluno="${esc(a.id)}" data-campo="${campo}" value="${esc(n2(v))}" aria-label="${campo} de ${esc(a.nome)}">`
-    : `<span class="fm-calc">${esc(n2(v))}</span>`;
+    ? `<input class="fm-cel ${cls}" inputmode="decimal" placeholder="—" data-aluno="${esc(a.id)}" data-campo="${campo}" value="${esc(n2(v))}" aria-label="${campo} de ${esc(a.nome)}">`
+    : `<span class="fm-calc">${v === null || v === undefined || v === '' ? '<span class="fm-traco">—</span>' : esc(n2(v))}</span>`;
+  const calc = (v) => (v ? n2(v) : '<span class="fm-traco">—</span>');
   return `<tr class="cat-${esc(a.categoria || 'normal')}" data-linha="${esc(a.id)}">
-    <td class="fm-nome">${esc(nomeBonito(a.nome))}${podeEditar ? `<span class="fm-sub"><select class="fm-cat-sel" data-aluno="${esc(a.id)}" data-campo="categoria" aria-label="Categoria">${Object.entries(CAT_ROTULO).map(([k, r]) => `<option value="${k}" ${(a.categoria || '') === k ? 'selected' : ''}>${r}</option>`).join('')}</select></span>` : (a.categoria ? `<span class="fm-sub">${esc(CAT_ROTULO[a.categoria])}</span>` : '')}</td>
+    <td class="fm-nome"><span class="fm-nome-txt">${esc(nomeBonito(a.nome))}</span>${podeEditar ? `<span class="fm-cat-wrap"><select class="fm-cat-sel" data-aluno="${esc(a.id)}" data-campo="categoria" aria-label="Categoria">${Object.entries(CAT_ROTULO).map(([k, r]) => `<option value="${k}" ${(a.categoria || '') === k ? 'selected' : ''}>${r}</option>`).join('')}</select></span>` : (a.categoria ? `<span class="fm-cat-wrap fm-sub">${esc(CAT_ROTULO[a.categoria])}</span>` : '')}</td>
     <td>${cel('contratoMae', a.contratoMae)}</td>
     <td>${cel('descontoPct', a.descontoPct, 'pct')}</td>
     <td>${cel('mensal', a.mensal)}</td>
-    <td class="fm-calc" data-calc="difMes">${c.difMes ? n2(c.difMes) : ''}</td>
+    <td class="fm-calc" data-calc="difMes">${calc(c.difMes)}</td>
     <td>${cel('quitou', a.quitou)}</td>
     ${cols.map(col => `<td>${cel(`saldo:${col.id}`, (a.saldos || {})[col.id])}</td>`).join('')}
-    <td class="fm-calc" data-calc="saldoSemestre">${c.saldoSemestre ? n2(c.saldoSemestre) : ''}</td>
-    <td class="fm-calc fm-total" data-calc="totalReceber">${c.totalReceber ? n2(c.totalReceber) : ''}</td>
+    <td class="fm-calc" data-calc="saldoSemestre">${calc(c.saldoSemestre)}</td>
+    <td class="fm-calc fm-total" data-calc="totalReceber">${calc(c.totalReceber)}</td>
     <td>${podeEditar ? `<input class="fm-cel fm-obs" data-aluno="${esc(a.id)}" data-campo="obs" value="${esc(a.obs || '')}" title="${esc(a.obs || '')}" aria-label="Observação">` : `<span class="fm-sub" title="${esc(a.obs || '')}">${esc((a.obs || '').slice(0, 60))}</span>`}</td>
     <td>${podeEditar ? `<button type="button" class="fm-btn-x" data-excluir="${esc(a.id)}" title="Tirar da turma" aria-label="Tirar ${esc(a.nome)} da turma">×</button>` : ''}</td>
   </tr>`;
@@ -152,7 +153,7 @@ async function salvarCelula(el) {
     el.classList.remove('salvando'); el.classList.add('salvo'); setTimeout(() => el.classList.remove('salvo'), 900);
     if (campo !== 'obs' && campo !== 'categoria' && el.value.trim()) el.value = n2(lerNum(el.value));
     const tr = el.closest('tr');
-    ['difMes', 'saldoSemestre', 'totalReceber'].forEach(k => { const td = tr.querySelector(`[data-calc="${k}"]`); if (td) td.textContent = a.calc[k] ? n2(a.calc[k]) : ''; });
+    ['difMes', 'saldoSemestre', 'totalReceber'].forEach(k => { const td = tr.querySelector(`[data-calc="${k}"]`); if (td) td.innerHTML = a.calc[k] ? n2(a.calc[k]) : '<span class="fm-traco">—</span>'; });
     if (campo === 'categoria') tr.className = `cat-${a.categoria || 'normal'}`;
     atualizarTotais();
   } catch (e) { el.classList.remove('salvando'); toast(e.message, 'erro'); }
