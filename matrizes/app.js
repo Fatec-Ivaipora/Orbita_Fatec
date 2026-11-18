@@ -712,16 +712,20 @@ function baixarCsvCarga() {
 }
 
 // ---------- MODAL DE HORÁRIO ----------
+// titulação e novo/veterano só fazem sentido com um professor de verdade (não vazio nem "contratar")
+const semProfReal = (nome) => !String(nome || '').trim() || ehContratar(nome);
 function linhaHtml(a = {}) {
   return `<div class="mz-linha">
-    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div>
-      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label>
-      <label class="f-tit-rot">Professor<select class="f-vinc" aria-label="Professor novo ou veterano">${opcoesVinc(a.professor || '', a.vinculo || '')}</select></label></div>
+    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div></div>
     <select class="f-dia" aria-label="Dia da semana"><option value="">Dia a definir</option>${DIAS.map(d => `<option value="${d}" ${a.dia === d ? 'selected' : ''}>${DIA_LONGO[d]}</option>`).join('')}</select>
     <input type="time" class="f-ini" value="${esc(a.inicio || '')}" aria-label="Início">
     <input type="time" class="f-fim" value="${esc(a.fim || '')}" aria-label="Fim">
     <input type="text" list="lista-salas" class="f-sala" placeholder="Sala" value="${esc(a.sala || '')}" maxlength="80" aria-label="Sala">
     <button type="button" class="f-rem" title="Remover este horário" aria-label="Remover horário">×</button>
+    <div class="f-extra ${semProfReal(a.professor) ? 'hidden' : ''}">
+      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label>
+      <label class="f-tit-rot">Novo ou veterano<select class="f-vinc" aria-label="Professor novo ou veterano">${opcoesVinc(a.professor || '', a.vinculo || '')}</select></label>
+    </div>
     <div class="mz-pre" aria-label="Horários padrão">
       ${PRESETS.map(p => `<button type="button" class="mz-btn mz-btn-sec mz-btn-mini f-pre" data-ini="${p.ini}" data-fim="${p.fim}">${p.rotulo}</button>`).join('')}
     </div>
@@ -777,14 +781,14 @@ async function salvarTitulacoesModal(linhas) {
 // Edubox dos últimos 5 anos (GET /matrizes/historico-docentes); o coordenador pode marcar Novo/Veterano.
 // Só vai pro relatório da direção (aba Titulação): NÃO sai no horário.
 const ROT_VINC = { novo: 'Novo', veterano: 'Veterano' };
-let histDoc = null;   // { semestre, ok, lista: [{ codfun, nome, cursos, toks }] }
+let histDoc = null;   // { semestre, ok, lista: [{ nome, toks }] } — quem já deu aula na Fatec
 let histPromessa = null;
 function carregarHist() {
   if (histDoc && histDoc.semestre === dados.semestre) return Promise.resolve(histDoc);
   if (histPromessa) return histPromessa;
   const sem = dados.semestre;
   histPromessa = apiFetch(`/matrizes/historico-docentes?semestre=${encodeURIComponent(sem)}`)
-    .then(r => ({ semestre: sem, ok: !!r.ok, lista: (r.professores || []).map(x => ({ ...x, toks: normT(x.nome).split(' ') })) }))
+    .then(r => ({ semestre: sem, ok: !!r.ok, lista: (r.nomes || []).map(nome => ({ nome, toks: normT(nome).split(' ') })) }))
     .catch(() => ({ semestre: sem, ok: false, lista: [] }))
     .then(h => { histDoc = h; histPromessa = null; return h; });
   return histPromessa;
@@ -793,9 +797,8 @@ function vincAuto(nome) {
   if (!histDoc || histDoc.semestre !== dados.semestre) return 'carregando';
   if (!histDoc.ok) return null;
   if (ehContratar(nome) || !normT(nome)) return null;
-  const c = cursoAtual();
-  const p = profTit(nome);
-  let h = p && p.codfun ? histDoc.lista.find(x => String(x.codfun) === String(p.codfun)) : null;
+  const p = profTit(nome);   // nome completo do Edubox, quando o digitado casa com um professor
+  let h = p ? histDoc.lista.find(x => normT(x.nome) === normT(p.nome)) : null;
   if (!h) {
     const ex = histDoc.lista.filter(x => normT(x.nome) === normT(nome));
     if (ex.length === 1) h = ex[0];
@@ -812,6 +815,15 @@ function opcoesVinc(nome, atual) {
   const rot = ehContratar(nome) || !normT(nome) ? '—' : a === 'carregando' ? 'consultando o Edubox…' : a ? ROT_VINC[a] : 'sem histórico';
   return `<option value="">Pelo histórico (${esc(rot)})</option>`
     + ['novo', 'veterano'].map(v => `<option value="${v}" ${v === atual ? 'selected' : ''}>${ROT_VINC[v]}</option>`).join('');
+}
+function atualizarExtras(linha, nome) {
+  if (!linha) return;
+  linha.querySelector('.f-extra').classList.toggle('hidden', semProfReal(nome));
+  const st = linha.querySelector('.f-tit'), sv = linha.querySelector('.f-vinc');
+  const t = st.value;
+  st.innerHTML = opcoesTit(nome);
+  if (t && [...st.options].some(o => o.value === t)) st.value = t;   // mantém o que o coordenador já escolheu
+  sv.innerHTML = opcoesVinc(nome, sv.value);
 }
 function atualizarVincModal() {
   document.querySelectorAll('#mh-linhas .mz-linha').forEach(l => {
@@ -919,10 +931,9 @@ function wireEventos() {
   $('sel-semestre').addEventListener('change', (e) => carregar(e.target.value));
   $('mh-linhas').addEventListener('input', (e) => {
     if (!e.target.classList.contains('f-prof')) return;
-    const w = e.target.closest('.f-prof-wrap');
+    const w = e.target.closest('.f-prof-wrap'), linha = e.target.closest('.mz-linha');
     w.querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
-    w.querySelector('.f-tit').innerHTML = opcoesTit(e.target.value);
-    const sv = w.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(e.target.value, sv.value);
+    atualizarExtras(linha, e.target.value);
   });
   $('mh-linhas').addEventListener('click', (e) => {
     const op = e.target.closest('.f-sug-op');
@@ -930,8 +941,7 @@ function wireEventos() {
     const wrap = op.closest('.f-prof-wrap');
     wrap.querySelector('.f-prof').value = op.dataset.nome;
     wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
-    wrap.querySelector('.f-tit').innerHTML = opcoesTit(op.dataset.nome);
-    const sv = wrap.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(op.dataset.nome, sv.value);
+    atualizarExtras(op.closest('.mz-linha'), op.dataset.nome);
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tit-rapida]');

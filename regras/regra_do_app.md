@@ -109,6 +109,22 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Matrizes e Horários: pente fino (segurança da titulação, troca de nome, modal do horário)
+- Autor: Claude Code (a pedido do usuário: "faz um pente fino nesse módulo")
+- Branch: fix/matrizes-pente-fino
+- Arquivos alterados: src/rotas/matrizes.js, matrizes/app.js (`?v=18`), matrizes/matrizes.css (`?v=20`), matrizes/index.html, regras/regra_do_app.md
+- Tipo: correção + ajuste visual
+- Motivo: revisão do código das mudanças de titulação/novo x veterano e tela do horário espremida (relato do usuário com print).
+- Impacto:
+  - Segurança: `PUT/DELETE /titulacao-professor` com código do Edubox que não está na lista do Edubox não grava mais em `F{codfun}` (segue só pelo nome, chave `N_`) — antes, um coordenador conseguia mudar a titulação de professor de outro curso mandando esse código com o nome de um professor do curso dele. E um nome curto de uma palavra só ("Maria") no horário não libera mais editar qualquer homônimo.
+  - Homônimos: a titulação editada de um professor (com código) não passa mais para outro professor com o mesmo nome e outro código.
+  - Troca de nome (`PUT /professor-nome`): grava tudo de uma vez (batch: horários + titulação + log) e a titulação editada do nome antigo é COPIADA para o novo, não movida — outros cursos que ainda usam o nome antigo não perdem a titulação.
+  - Novo x veterano: professor com código do Edubox é classificado só pelo código (sem histórico = novo); a busca por nome fica só para quem foi digitado sem cadastro.
+  - `GET /historico-docentes` devolve só os nomes (sem código e sem cursos).
+  - Modal do horário: janela até 880px; em tela estreita a linha quebra (professor em cima; dia, início e fim; sala); Titulação e Novo/veterano numa linha própria, que só aparece quando há professor (não aparece para "contratar" nem vazio).
+- Como testar: Semestre por turma → Editar → com "CONTRATAR" os campos de titulação/novo-veterano somem; com um nome, aparecem numa linha própria e legível. Testes do backend com Firestore em memória e relay stub (30 casos).
+- Como reverter: reverter o commit.
+
 ### [2026-11-18] Matrizes e Horários: professor novo x veterano (relatório da direção)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/matrizes-titulacao-semestre-turma
