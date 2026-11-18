@@ -33,8 +33,20 @@ const CURSOS = [
     { re: /MEDVET/i, cursoId: 'JN24YJ0vBzgCGqA1xSr9', curso: 'MEDICINA VETERINÁRIA' },
     { re: /BIOMED/i, cursoId: 'S34uO1F1RpK1cgv7SCEW', curso: 'BIOMEDICINA' },
     { re: /FISIO/i, cursoId: 'sSxsAcP8hgQ1FXFe3Ugz', curso: 'FISIOTERAPIA' },
-    { re: /PEDAGOG/i, cursoId: 'aMmStzcyZMmj9u0bzeDn', curso: 'PEDAGOGIA' }
+    { re: /PEDAGOG/i, cursoId: 'aMmStzcyZMmj9u0bzeDn', curso: 'PEDAGOGIA' },
+    { re: /DIREITO/i, cursoId: 'QvYzvZdSeU5Oz1gU2p9K', curso: 'DIREITO' }
 ];
+// arquivo sem o curso no nome (ex.: "compras.xlsx" do Direito): usa o campo "CURSO:" do cabeçalho da planilha
+function cursoDoCabecalho(arquivo) {
+    const wb = XLSX.read(fs.readFileSync(arquivo), { type: 'buffer' });
+    for (const aba of wb.SheetNames) {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, defval: '', raw: true }).slice(0, 6);
+        const txt = rows.flat().map(limpa).join(' ');
+        const c = CURSOS.find(x => x.re.test(txt.replace(/^.*?CURSO:/i, '')));
+        if (/CURSO:/i.test(txt) && c) return c;
+    }
+    return null;
+}
 
 const limpa = (v) => (v === null || v === undefined ? '' : String(v)).replace(/\s+/g, ' ').trim();
 const norm = (s) => limpa(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -93,7 +105,7 @@ function lerPlanilha(arquivo) {
     let total = 0, pulados = 0;
     const gravar = [];
     for (const f of arquivos) {
-        const curso = CURSOS.find(x => x.re.test(f));
+        const curso = CURSOS.find(x => x.re.test(f)) || cursoDoCabecalho(path.join(PASTA, f));
         if (!curso) { console.log(`?? ${f}: curso não reconhecido — pulado`); continue; }
         const itens = lerPlanilha(path.join(PASTA, f));
         console.log(`== ${f} → ${curso.curso}: ${itens.length} itens`);
