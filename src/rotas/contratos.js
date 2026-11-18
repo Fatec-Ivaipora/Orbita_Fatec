@@ -516,6 +516,15 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
         const novo = await db.collection(COL).add(doc);
         return { acao: 'criado', id: novo.id, status };
     }
+    // 18/11/2026: a matrícula deixou de ser calouro (ex.: Cristiane, criada como Matrícula Nova e corrigida para
+    // Rematrícula Assinada conforme o Edubox) → o Comercial só acompanha calouro, então o contrato sai, com a mesma
+    // regra da matrícula excluída: sem trabalho do Comercial, apaga; com trabalho, fica e marca que a matrícula saiu.
+    if (atual && atual.matriculaId && situacaoMudou && !calouro && !perda) {
+        const temTrabalho = !!(atual.assinadoEm || (atual.observacoes || '').trim() || atual.atividadeId || atual.coletaData || atual.status === 'assinado');
+        if (!temTrabalho) { await ref.delete(); return { acao: 'removido', id: ref.id }; }
+        await ref.update({ matriculaRemovida: true, matriculaSituacao: m.situacao || '', updatedAt: agora, updatedBy: `Matrículas (${quem || 'automático'})` });
+        return { acao: 'marcado', id: ref.id };
+    }
     const upd = { ...basicos, updatedAt: agora, updatedBy: `Matrículas (${quem || 'automático'})` };
     if (m.semestre !== atual.semestre) { upd.semestre = m.semestre; await garantirSemestre(m.semestre); }
     if (situacaoMudou) {

@@ -508,7 +508,23 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             .where('modulo', '==', modulo)
             .where('semestre', '==', semestre);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
-        const snap = await query.get();
+        // 18/11/2026: veterano lançado à mão (sem a marca da Virada, origemAlunoId) contava como "matrícula nova em
+        // outro período" — ex.: Ana Clara (Pedagogia 7º, estava no 6º em 2026.2) e Cristiane (Psicologia 7º, trancou
+        // em 2026.1 e voltou: no Edubox é Rematrícula, não ingresso novo). Quem já teve matrícula em QUALQUER semestre
+        // anterior do mesmo módulo (com aluno no sistema: de 2026.1 em diante) é veterano, com ou sem a marca. Assim a
+        // Quantidade de matrículas fecha com o Edubox e com o Total de matrículas dos Contratos.
+        const anteriores = [];
+        for (let [a, n] = semestre.split('.').map(Number); anteriores.length < 10;) {
+            if (n === 1) { a--; n = 2; } else n = 1;
+            const s = `${a}.${n}`;
+            if (s < '2026.1') break;
+            anteriores.push(s);
+        }
+        const [snap, antSnap] = await Promise.all([
+            query.get(),
+            anteriores.length ? db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', 'in', anteriores).select('nome', 'nomeNorm').get() : { docs: [] }
+        ]);
+        const nomesAnterior = new Set(antSnap.docs.map(d => d.data().nomeNorm || nomeNorm(d.data().nome)));
 
         const porCursoSituacao = {}; // curso -> situacao -> contagem
         const porSituacaoTotal = {};
@@ -541,7 +557,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             const a = doc.data();
             total++;
             if (a.origemAlunoId) vindosDeVirada++;
-            else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao)) novasAcimaAtivas++;
+            else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao) && !nomesAnterior.has(a.nomeNorm || nomeNorm(a.nome))) novasAcimaAtivas++;
             if (a.periodo && a.periodo !== '1º' && CALOUROS_SITS.includes(a.situacao)) calourosForaDo1++;
             if (a.formando) formandos++;
             const curso = a.curso || '—';
