@@ -86,6 +86,7 @@ function render() {
   if (!dados) return;
   if (aba === 'relatorio') return renderRelatorio();
   if (aba === 'conduit') return renderConduit();
+  if (aba === 'unidades') return renderUnidades();
   renderCriacao();
 }
 
@@ -483,7 +484,122 @@ function gerarCsv(b) {
 // ================================================================
 //  EVENTOS E INÍCIO
 // ================================================================
+// ================================================================
+//  ABA: UNIDADES (LINKS) — 18/11/2026
+//  Professor (sem login) escolhe as UAs do catálogo SAGAH pelo link dele; o coordenador do curso valida
+//  pelo link do curso; a TI gera/copia os links e marca a validação da sala no AVA. Página pública:
+//  /unidades-ead/index.html?t=<token>. Servidor: /automacao-ava/unidades e /publico/unidades.
+// ================================================================
+let unidades = null;          // { semestre, disciplinas, links }
+let uaAberta = new Set();
+const linkUrl = (token) => `${location.origin}/unidades-ead/index.html?t=${token}`;
+const nomeCurso2 = (n) => String(n || '').toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\b(De|Da|Do|E|Em)\b/g, x => x.toLowerCase());
+const normNome = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+
+async function renderUnidades(recarregar = true) {
+  if (!['ti', 'adm'].includes(dados.papel)) { tela().innerHTML = '<p class="av-vazio">Só a TI gera os links das unidades.</p>'; return; }
+  if (recarregar || !unidades || unidades.semestre !== dados.semestre) {
+    tela().innerHTML = '<p class="av-vazio">Carregando as unidades...</p>';
+    try { unidades = await apiFetch(`/${MODULO}/unidades?semestre=${encodeURIComponent(dados.semestre)}`); }
+    catch (e) { tela().innerHTML = `<div class="av-card av-erro">${esc(e.message)}</div>`; return; }
+  }
+  const ds = unidades.disciplinas;
+  const conta = (d) => ({ pre: d.itens.filter(u => u.codigo).length, ok: d.itens.filter(u => u.coord?.status === 'ok').length, aj: d.itens.filter(u => u.coord?.status === 'ajustar').length, ava: d.itens.filter(u => u.ava).length });
+  const profs = [...ds.reduce((m, d) => { const k = normNome(d.professor); if (!m.has(k)) m.set(k, { nome: d.professor, discs: [] }); m.get(k).discs.push(d); return m; }, new Map()).values()]
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const cursos = [...ds.reduce((m, d) => { if (!m.has(d.cursoId)) m.set(d.cursoId, { id: d.cursoId, nome: d.cursoNome, discs: [] }); m.get(d.cursoId).discs.push(d); return m; }, new Map()).values()]
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const linkDe = (tipo, k) => unidades.links.find(l => l.tipo === tipo && (tipo === 'professor' ? normNome(l.professor) === k : l.cursoId === k));
+  const botaoLink = (l, attrs) => l
+    ? `<button type="button" class="btn-secondary" data-ua-copiar="${esc(l.token)}">Copiar link</button> <a class="av-sub" href="${esc(linkUrl(l.token))}" target="_blank" rel="noopener">abrir</a>`
+    : `<button type="button" class="btn-primary" ${attrs}>Gerar link</button>`;
+  const andamento = (d) => { const c = conta(d); return `${c.pre}/${d.qtd} preenchidas · ${c.ok} validadas${c.aj ? ` · <span class="av-alerta">${c.aj} p/ ajustar</span>` : ''} · ${c.ava} AVA`; };
+
+  tela().innerHTML = !ds.length ? '<div class="av-card"><p class="av-vazio">Nenhuma disciplina "Criar do zero" com professor definido neste semestre. Defina o professor na aba Disciplinas EAD (ficha da disciplina) e volte aqui.</p></div>' : `
+    <section class="av-card av-card-tabela">
+      <h3 style="margin:0 0 .6rem">Links dos professores <span class="av-sub">um link por professor com todas as disciplinas novas dele; ele preenche código SAGAH e título de cada UA</span></h3>
+      <div class="av-tabela-wrap"><table class="av-tabela">
+        <thead><tr><th>Professor</th><th>Disciplinas</th><th>Link</th></tr></thead>
+        <tbody>${profs.map(p => { const l = linkDe('professor', normNome(p.nome)); return `<tr>
+          <td><b>${esc(p.nome)}</b></td>
+          <td>${p.discs.map(d => `${esc(nomeCurso2(d.nome))} <span class="av-sub">${esc(nomeCurso2(d.cursoNome))} · ${andamento(d)}</span>`).join('')}</td>
+          <td style="white-space:nowrap">${botaoLink(l, `data-ua-gerar="professor" data-ua-prof="${esc(p.nome)}"`)}</td></tr>`; }).join('')}</tbody>
+      </table></div>
+    </section>
+    <section class="av-card av-card-tabela">
+      <h3 style="margin:0 0 .6rem">Links dos coordenadores <span class="av-sub">um link por curso; o coordenador valida as UAs ou pede ajuste. O nome dele aparece também no link do professor</span></h3>
+      <div class="av-tabela-wrap"><table class="av-tabela">
+        <thead><tr><th>Curso</th><th>Coordenador</th><th>Link</th></tr></thead>
+        <tbody>${cursos.map(c => { const l = linkDe('coordenador', c.id); return `<tr>
+          <td><b>${esc(nomeCurso2(c.nome))}</b><span class="av-sub">${c.discs.length} disciplina(s) nova(s)</span></td>
+          <td><input class="select-filter" style="min-width:220px" data-ua-coord="${esc(c.id)}" value="${esc(l ? l.coordenador : (c.discs[0].coordenador || ''))}" placeholder="Nome do coordenador"></td>
+          <td style="white-space:nowrap">${l ? `${botaoLink(l)} <button type="button" class="btn-secondary" data-ua-gerar="coordenador" data-ua-curso="${esc(c.id)}" data-ua-curso-nome="${esc(c.nome)}" title="Salvar o nome do coordenador">Salvar nome</button>` : botaoLink(null, `data-ua-gerar="coordenador" data-ua-curso="${esc(c.id)}" data-ua-curso-nome="${esc(c.nome)}"`)}</td></tr>`; }).join('')}</tbody>
+      </table></div>
+    </section>
+    ${cursos.map(c => `
+    <section class="av-card av-card-tabela">
+      <h3 style="margin:0 0 .6rem">${esc(nomeCurso2(c.nome))}</h3>
+      ${c.discs.map(d => { const aberta = uaAberta.has(d.id); const por = new Map(d.itens.map(u => [u.n, u])); return `
+        <div style="border-top:1px solid var(--orb-linha2);padding:.6rem 0">
+          <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+            <button type="button" class="btn-secondary" data-ua-abrir="${esc(d.id)}" aria-expanded="${aberta}">${aberta ? '▾' : '▸'} ${esc(nomeCurso2(d.nome))}</button>
+            <span class="av-sub" style="margin:0">Prof. ${esc(d.professor)} · ${andamento(d)}</span>
+            <label class="av-sub" style="margin:0 0 0 auto">Unidades
+              <select class="select-filter" data-ua-qtd="${esc(d.id)}" style="min-width:70px">${[6, 12].map(q => `<option ${q === d.qtd ? 'selected' : ''}>${q}</option>`).join('')}</select></label>
+          </div>
+          ${aberta ? `<div class="av-tabela-wrap" style="margin-top:.5rem"><table class="av-tabela">
+            <thead><tr><th>UA</th><th>Código SAGAH</th><th>Título</th><th>Coordenador</th><th>Sala AVA (TI)</th></tr></thead>
+            <tbody>${Array.from({ length: d.qtd }, (_, i) => { const u = por.get(i + 1) || {}; const c2 = u.coord; return `<tr>
+              <td><b>UA ${String(i + 1).padStart(2, '0')}</b>${i + 1 === d.qtd / 2 + 1 ? '<span class="av-sub">2º bimestre</span>' : i === 0 ? '<span class="av-sub">1º bimestre</span>' : ''}</td>
+              <td><code>${esc(u.codigo || '—')}</code></td><td>${esc(u.titulo || '')}</td>
+              <td>${!u.codigo ? '<span class="av-sub">não preenchida</span>' : c2?.status === 'ok' ? '<span class="av-ok">✓ validada</span>' : c2?.status === 'ajustar' ? `<span class="av-alerta">ajustar</span><span class="av-sub">${esc(c2.obs)}</span>` : '<span class="av-alerta">aguardando</span>'}</td>
+              <td><label><input type="checkbox" data-ua-ava="${esc(d.id)}" data-ua-n="${i + 1}" ${u.ava ? 'checked' : ''} ${u.codigo ? '' : 'disabled'}> validada</label></td></tr>`; }).join('')}</tbody>
+          </table></div>` : ''}
+        </div>`; }).join('')}
+    </section>`).join('')}
+    <p class="av-legenda">Entram aqui as disciplinas "Criar do zero" com professor definido. Quando o professor preenche todas as UAs, a etapa "Seleção das unidades" marca sozinha; quando o coordenador valida todas, marca "Unidades validadas pelo coordenador". Os links não pedem login: mande só para a pessoa certa.</p>`;
+}
+
+async function copiarTexto(txt) {
+  try { await navigator.clipboard.writeText(txt); toast('Link copiado.', 'ok'); }
+  catch (e) { window.prompt('Copie o link:', txt); }
+}
+
+async function acaoUnidades(e) {
+  if (aba !== 'unidades') return;
+  const t = e.target.closest('button, input[type="checkbox"], select');
+  if (!t) return;
+  try {
+    if (e.type === 'click' && t.dataset.uaCopiar) return copiarTexto(linkUrl(t.dataset.uaCopiar));
+    if (e.type === 'click' && t.dataset.uaAbrir) { uaAberta.has(t.dataset.uaAbrir) ? uaAberta.delete(t.dataset.uaAbrir) : uaAberta.add(t.dataset.uaAbrir); return renderUnidades(false); }
+    if (e.type === 'click' && t.dataset.uaGerar) {
+      const corpo = { semestre: dados.semestre, tipo: t.dataset.uaGerar };
+      if (corpo.tipo === 'professor') corpo.professor = t.dataset.uaProf;
+      else {
+        corpo.cursoId = t.dataset.uaCurso; corpo.cursoNome = t.dataset.uaCursoNome;
+        corpo.coordenador = (document.querySelector(`[data-ua-coord="${CSS.escape(t.dataset.uaCurso)}"]`) || {}).value || '';
+        if (!corpo.coordenador.trim()) { toast('Escreva o nome do coordenador antes.', 'erro'); return; }
+      }
+      t.disabled = true;
+      const l = await apiFetch(`/${MODULO}/unidades/links`, { method: 'POST', body: JSON.stringify(corpo) });
+      await renderUnidades(true);
+      return copiarTexto(linkUrl(l.token));
+    }
+    if (e.type === 'change' && t.dataset.uaQtd) {
+      await apiFetch(`/${MODULO}/unidades/${encodeURIComponent(t.dataset.uaQtd)}`, { method: 'PATCH', body: JSON.stringify({ qtd: Number(t.value) }) });
+      toast('Quantidade de unidades salva.', 'ok'); return renderUnidades(true);
+    }
+    if (e.type === 'change' && t.dataset.uaAva) {
+      t.disabled = true;
+      await apiFetch(`/${MODULO}/unidades/${encodeURIComponent(t.dataset.uaAva)}`, { method: 'PATCH', body: JSON.stringify({ n: Number(t.dataset.uaN), ava: t.checked }) });
+      return renderUnidades(true);
+    }
+  } catch (err) { toast(err.message, 'erro'); t.disabled = false; }
+}
+
 function ligarEventos() {
+  tela().addEventListener('click', acaoUnidades);
+  tela().addEventListener('change', acaoUnidades);
   $('av-semestre').addEventListener('change', carregar);
   $('av-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (!b || b.disabled) return; aba = b.dataset.aba; render(); });
   document.addEventListener('change', (e) => { const s = e.target.closest('[data-av-curso]'); if (s) { filtroCurso = s.value; render(); } });
