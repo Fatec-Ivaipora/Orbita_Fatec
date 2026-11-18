@@ -109,6 +109,29 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Automação AVA: unidades (UAs) das disciplinas novas por link — professor preenche, coordenador valida
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/ead-unidades-links
+- Arquivos alterados/criados:
+  - `src/rotas/automacao-ava.js`: rotas da TI `GET /unidades`, `POST /unidades/links`, `PATCH /unidades/:id` (qtd 6/12 e validação da sala no AVA) e rotas públicas, sem login, em que o token do link é a autorização: `GET /publico/unidades/:token`, `POST .../salvar` (professor) e `POST .../validar` (coordenador). Coleção nova `ava_unidades_links/{token}`; as UAs ficam em `ava_criacao/{id}.unidades` (`qtd`, `itens[{n, codigo, titulo, coord{status ok|ajustar|reenviada, obs}, ava}]`).
+  - `unidades-ead/` (novo, público): a página do link. Com token de professor, ele digita o código SAGAH e o título de cada UA e envia. Com token de coordenador, ele valida cada UA, valida todas, ou pede ajuste com observação. Usa o visual do `enviar-questoes`.
+  - `ti/automacao-ava/` (aba nova "Unidades (links)"): gera e copia o link de cada professor e de cada curso (com o nome do coordenador), mostra o andamento, troca 6/12 unidades e marca a "Sala AVA validada" por UA.
+- Tipo: Nova funcionalidade (dentro do módulo existente `automacao-ava`; sem módulo novo no menu).
+- Motivo: substituir a planilha por curso (Disciplina, Professor, Coordenador, UA, Código, Nome, VAL COORD, VALIDAÇÃO SALA AVA) que o T.I manda aos professores EAD que criam disciplina. Professor e coordenador não têm acesso ao Órbita, então recebem um link.
+- Regras:
+  - Entram as disciplinas "Criar do zero" com professor definido na ficha.
+  - A quantidade de UAs é 12 (60 h EAD ou mais: UA 01–06 no 1º bimestre, 07–12 no 2º) ou 6. A TI pode trocar.
+  - UA validada fica travada para o professor. UA corrigida depois de um pedido de ajuste volta como "reenviada".
+  - Preencher todas as UAs marca sozinha a etapa "Seleção das unidades". Validar todas marca "Unidades validadas pelo coordenador" (marca `uid: 'link'`, desfeita sozinha se deixar de valer).
+  - Link do professor: um por semestre e professor. Link do coordenador: um por semestre e curso. Gerar de novo devolve o mesmo link.
+  - O nome do coordenador vem do cadastro do Órbita: usuário com cargo `coordenador` e o curso em `users.cursos`. Ficam de fora auxiliar (`auxiliarDeNome`) e contas de teste/licitação; se houver dois, aparecem os dois. A TI pode trocar o nome na aba, e o nome salvo no link passa a valer.
+  - Visual da aba no padrão Órbita v2: resumo em números, cartões de links lado a lado, barra de andamento por disciplina, pílulas de status e lista de UAs que abre e fecha.
+  - Dado (18/11/2026, direto no Firestore pela API, sem código): o professor que cria e a titulação das disciplinas "Criar" de 2027.1 foram preenchidos conforme a planilha de criação do T.I. São 9 disciplinas, total de R$ 8.200,00. O professor que cria não é necessariamente quem vai dar aula, então a planilha de levantamento de aulas NÃO vale para este campo. Tópicos Especiais em Fisioterapia I ficou sem professor, como na planilha.
+  - Dado (18/11/2026): três disciplinas que o Órbita sugeria como "Criar" e que não estão na planilha de criação passaram para "Replicar" a pedido do T.I: Projetos Bidimensionais Auxiliados por Computador (Eng. Civil, 5º), Fisioterapia Neurofuncional II (7º) e Cultura, Comportamento e Clima Organizacional (Pedagogia, 6º). Com isso, "Criar do zero" em 2027.1 ficou com as 10 da planilha.
+- Impacto: nenhuma mudança no fluxo atual da criação. Os links não pedem login, então devem ir só para a pessoa certa.
+- Como testar: na aba Disciplinas EAD, definir o professor numa disciplina "Criar". Na aba Unidades (links), gerar o link do professor e o do coordenador. Abrir o do professor, preencher e enviar. Abrir o do coordenador e validar uma UA e pedir ajuste em outra. Conferir na aba que o andamento e as etapas mudaram.
+- Como reverter: remover a aba, a pasta `unidades-ead/` e o bloco "Unidades (UAs) por link" de `automacao-ava.js`. A coleção `ava_unidades_links` pode ser apagada.
+
 ### [2026-11-17] Banco MED: sombreamento amarelo vale como marca-texto; botão de baixar Dependência/Adaptação
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/banco-med-sombreamento-amarelo

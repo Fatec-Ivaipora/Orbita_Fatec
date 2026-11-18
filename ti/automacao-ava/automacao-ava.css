@@ -138,3 +138,50 @@
 .av-rel-fixa td, .av-rel-fixa th { overflow-wrap: anywhere; }
 
 .av-parecida { display: block; color: #a8650b; font-weight: 600; }
+
+/* ---------- aba Unidades (links) — 18/11/2026 ---------- */
+.av-num b small { font-size: 0.9rem; color: var(--orb-mudo); font-weight: 600; }
+.ua-vazio p { margin: 0.35rem 0 0; color: var(--orb-tinta2); }
+.ua-duas { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.ua-duas .av-card { margin-bottom: 0; }
+.ua-card-topo { padding: 0.6rem 0.75rem 0.5rem; }
+.ua-card-topo h3, .ua-curso-nome { margin: 0; font-family: var(--orb-display); font-size: 1rem; color: var(--orb-tinta); }
+.ua-card-topo .av-sub { margin-top: 0.2rem; }
+.ua-tab td { vertical-align: middle; }
+.av-tabela.ua-tab td:last-child { min-width: 0; }
+.ua-col-link { text-align: right; white-space: nowrap; }
+.ua-link-acoes { display: inline-flex; align-items: center; gap: 0.6rem; }
+.ua-abrir { font-size: 0.8rem; font-weight: 600; color: var(--orb-marca); text-decoration: none; }
+.ua-abrir:hover { text-decoration: underline; }
+.ua-salvar-nome { margin-left: 0.5rem; border: 0; background: none; color: var(--orb-marca); font-weight: 600; font-size: 0.8rem; cursor: pointer; text-decoration: underline; }
+.ua-input { width: 100%; min-width: 180px; min-height: 36px; padding: 0 0.65rem; border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); background: var(--orb-sup); color: var(--orb-tinta); font: inherit; font-size: 0.86rem; box-sizing: border-box; }
+.ua-input:focus { outline: none; border-color: var(--orb-marca); box-shadow: 0 0 0 3px var(--orb-marca-suave); }
+.ua-disc-mini { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.15rem 0; }
+.ua-barra { flex: none; width: 90px; height: 6px; border-radius: 99px; background: var(--orb-linha2); display: inline-flex; overflow: hidden; }
+.ua-barra i { display: block; height: 100%; }
+.ua-barra i.ok { background: var(--orb-bom); }
+.ua-barra i.pre { background: var(--orb-alerta); opacity: 0.55; }
+
+.ua-curso { padding: 0.9rem 1rem 0.4rem; }
+.ua-curso-nome { margin-bottom: 0.4rem; }
+.ua-item { border-top: 1px solid var(--orb-linha2); }
+.ua-item-topo { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.65rem 0; }
+.ua-item-btn { display: flex; align-items: center; gap: 0.6rem; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; color: var(--orb-tinta); font: inherit; font-size: 0.9rem; flex: 1 1 260px; }
+.ua-item-btn .av-sub { margin-top: 0.1rem; }
+.ua-seta { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--orb-sup2); border: 1px solid var(--orb-linha); color: var(--orb-tinta2); font-size: 1rem; line-height: 1; transition: transform 0.15s; flex: none; }
+.ua-item.aberta .ua-seta { transform: rotate(90deg); }
+.ua-pills { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; }
+.ua-pill { padding: 0.15rem 0.6rem; border-radius: var(--orb-raio-pilula); background: var(--orb-sup2); border: 1px solid var(--orb-linha); font-size: 0.74rem; font-weight: 600; color: var(--orb-tinta2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ua-pill.bom { background: var(--orb-bom-suave); color: var(--orb-bom); border-color: transparent; }
+.ua-pill.alerta { background: var(--orb-alerta-suave); color: var(--orb-alerta); border-color: transparent; }
+.ua-qtd { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--orb-mudo); font-weight: 600; }
+.ua-qtd .select-filter { min-width: 64px; min-height: 32px; }
+.ua-tab-uas { margin-bottom: 0.75rem; }
+.ua-bim-ti td { background: var(--orb-sup2); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--orb-tinta2); padding: 0.4rem 0.8rem; }
+.ua-sit-ti { font-weight: 600; font-size: 0.82rem; }
+.ua-sit-ti.bom { color: var(--orb-bom); }
+.ua-sit-ti.alerta { color: var(--orb-crit); }
+.ua-sit-ti.espera { color: var(--orb-alerta); }
+.ua-sit-ti.vazio { color: var(--orb-mudo); font-weight: 500; }
+.ua-check { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--orb-tinta2); cursor: pointer; }
+@media (max-width: 720px) { .ua-duas { grid-template-columns: 1fr; } }
