@@ -131,6 +131,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - Biomedicina: 41;
   - Fisioterapia: 11 (com o link do produto em `linkReferencia`);
   - Pedagogia: 14.
+  - Direito (NPJ): 11, incluídos depois (18/11/2026) a partir do "compras.xlsx". Como o nome do arquivo não traz o curso, o script reconhece o curso pelo campo "CURSO:" do cabeçalho. Total na licitação: 88 itens.
 - Fonte: planilhas "LEVANTAMENTO DE MATERIAIS - SEMESTRE 2027/1" da pasta COMPRAS. As planilhas não foram alteradas.
 - Regras da importação:
   - Quantidade em texto composto ("20 cx P e 10 cx M", "1 frasco de cada") vira quantidade 1, com o texto inteiro na unidade.
