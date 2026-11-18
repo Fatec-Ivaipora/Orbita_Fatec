@@ -190,14 +190,139 @@ async function titulacoesEdubox(semestre) {
             const nome = String(p.nome || '').trim(), k = norm(nome), sem = String(p.sem || '').replace(/[/-]/, '.');
             if (!k) return;
             const at = m.get(k);
-            if (!at || sem > at.sem || (sem === at.sem && NIVEL_TIT(p.titulacao) > NIVEL_TIT(at.tit))) m.set(k, { nome, sem, tit: p.titulacao });
+            if (!at || sem > at.sem || (sem === at.sem && NIVEL_TIT(p.titulacao) > NIVEL_TIT(at.tit))) m.set(k, { nome, sem, tit: p.titulacao, codfun: p.codfun });
         });
-        return [...m.values()].map(p => ({ nome: p.nome, titulacao: ROTULO_TIT(p.tit) })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        return [...m.values()].map(p => ({ codfun: p.codfun != null ? String(p.codfun) : null, nome: p.nome, titulacao: ROTULO_TIT(p.tit) })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     } catch (e) {
         console.error('[matrizes] titulações:', e.message);
         return [];
     }
 }
+
+// ==========================================
+// TITULAÇÃO EDITADA PELO COORDENADOR (18/11/2026) — a titulação do Edubox às vezes está errada ou
+// desatualizada; o coordenador corrige aqui e vale a editada (editada > Edubox). Um doc por professor:
+//   matrizes_titulacoes/F{codfun}        professor que existe no Edubox (chave estável: código dele)
+//   matrizes_titulacoes/N_{NOME_NORM}    professor só digitado nos horários, sem cadastro no Edubox
+//   { codfun|null, nome, nomeNorm, titulacao, titulacaoEdubox, semestreReferencia, alteradoPor:{uid,nome}, alteradoEm }
+// Toda gravação/remoção também vai pro log matrizes_titulacoes_log (quem, quando, de → para).
+// Coordenador edita só professor que dá aula no(s) curso(s) dele no semestre (diário do Edubox ou
+// horário definido aqui); ADM/RH (escopo = todos) editam qualquer um. Validado aqui, não só na tela.
+// ==========================================
+const COL_TIT = 'matrizes_titulacoes';
+const TITULACOES = ['Doutor', 'Mestre', 'Especialista', 'Graduado'];
+const normNomeTit = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const chaveTit = (codfun, nome) => (codfun != null && String(codfun).trim() ? `F${String(codfun).trim()}` : `N_${normNomeTit(nome).replace(/ /g, '_')}`);
+
+// { porChave: Map(docId → dados), porNome: Map(nomeNorm → dados) }
+async function overridesTitulacao() {
+    const snap = await db.collection(COL_TIT).get();
+    const porChave = new Map(), porNome = new Map();
+    snap.forEach(d => { const x = d.data(); porChave.set(d.id, x); if (x.nomeNorm && !porNome.has(x.nomeNorm)) porNome.set(x.nomeNorm, x); });
+    return { porChave, porNome };
+}
+// Professor {codfun?, nome, titulacao} → o mesmo com a titulação que vale + de onde ela veio.
+function comOverride(p, ov) {
+    const o = (p.codfun != null && ov.porChave.get(chaveTit(p.codfun))) || ov.porNome.get(normNomeTit(p.nome)) || null;
+    if (!o) return { ...p, fonte: 'edubox' };
+    const em = o.alteradoEm && o.alteradoEm.toDate ? o.alteradoEm.toDate().toISOString() : (o.alteradoEm || null);
+    return { ...p, titulacao: o.titulacao, titulacaoEdubox: p.titulacao || '', fonte: 'coordenador', editadoPor: (o.alteradoPor || {}).nome || '', editadoEm: em };
+}
+async function titulacoesComOverride(semestre) {
+    const [tits, ov] = await Promise.all([titulacoesEdubox(semestre), overridesTitulacao()]);
+    return tits.map(t => comOverride(t, ov));
+}
+
+// O professor dá aula em algum curso do escopo neste semestre? (diário do Edubox ou horário definido aqui)
+async function professorNoEscopo(semestre, escopo, codfun, nome) {
+    if (escopo === null) return true;
+    if (!escopo.length) return false;
+    if (codfun) {
+        const cd = await relay(`/corpo-docente/lista?semestres=${encodeURIComponent(formatosEdubox(semestre).join(','))}`, { timeoutMs: 30000 }).catch(() => null);
+        if (cd && cd.ok && (cd.professores || []).some(p => String(p.codfun) === String(codfun) && escopo.includes(cursoIdDe(String(p.codcur).trim())))) return true;
+    }
+    const alvo = { nome, toks: normNomeTit(nome).split(' ') };
+    const gSnap = await db.collection('matrizes_grade').where('semestre', '==', semestre).get();
+    return gSnap.docs.some(d => {
+        const x = d.data();
+        if (!escopo.includes(x.cursoId || d.id.split('__')[1])) return false;
+        return Object.values(x.alocacoes || {}).some(a => (a.aulas || []).some(au => {
+            if (ehContratar(au.professor)) return false;
+            if (normNomeTit(au.professor) === normNomeTit(nome)) return true;
+            const achado = acharProfessor([alvo], au.professor);
+            return !!(achado && !achado.ambiguo);
+        }));
+    });
+}
+
+// Confere o pedido e devolve o professor "oficial" (nome do Edubox quando vem o codfun).
+async function prepararTitulacao(req, res) {
+    const b = req.body || {};
+    const semestre = SEMESTRE.test(String(b.semestre || '')) ? b.semestre : '';
+    if (!semestre) { res.status(400).json({ error: 'Informe o semestre.' }); return null; }
+    const codfun = b.codfun != null && /^\d{1,12}$/.test(String(b.codfun).trim()) ? String(b.codfun).trim() : null;
+    let nome = String(b.nome || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    let titulacaoEdubox = '';
+    const tits = await titulacoesEdubox(semestre);
+    if (codfun) {
+        const e = tits.find(t => t.codfun === codfun);
+        if (e) { nome = e.nome; titulacaoEdubox = e.titulacao || ''; }
+        else if (!nome) { res.status(400).json({ error: 'Professor não encontrado no Edubox.' }); return null; }
+    } else {
+        const e = tits.find(t => normNomeTit(t.nome) === normNomeTit(nome));
+        if (e) titulacaoEdubox = e.titulacao || '';
+    }
+    if (!nome || ehContratar(nome)) { res.status(400).json({ error: 'Informe o professor.' }); return null; }
+    const escopo = await escopoDe(req);
+    if (!(await professorNoEscopo(semestre, escopo, codfun, nome))) {
+        res.status(403).json({ error: 'Você só pode alterar a titulação de professores dos seus cursos.' });
+        return null;
+    }
+    return { semestre, codfun, nome, titulacaoEdubox, id: chaveTit(codfun, nome), quem: { uid: req.user.uid, nome: req.user.name || req.user.email || '' } };
+}
+
+// PUT /api/matrizes/titulacao-professor  { semestre, codfun?, nome, titulacao }
+router.put('/titulacao-professor', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const titulacao = String((req.body || {}).titulacao || '');
+        if (!TITULACOES.includes(titulacao)) return res.status(400).json({ error: 'Titulação inválida. Use Doutor, Mestre, Especialista ou Graduado.' });
+        const p = await prepararTitulacao(req, res);
+        if (!p) return;
+        const ref = db.collection(COL_TIT).doc(p.id);
+        const antes = await ref.get();
+        await ref.set({
+            codfun: p.codfun, nome: p.nome, nomeNorm: normNomeTit(p.nome), titulacao, titulacaoEdubox: p.titulacaoEdubox,
+            semestreReferencia: p.semestre, alteradoPor: p.quem, alteradoEm: admin.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection(`${COL_TIT}_log`).add({
+            chave: p.id, codfun: p.codfun, nome: p.nome, acao: 'editar', de: antes.exists ? antes.data().titulacao : (p.titulacaoEdubox || ''),
+            para: titulacao, semestre: p.semestre, por: p.quem, em: admin.firestore.FieldValue.serverTimestamp()
+        });
+        res.json({ ok: true, chave: p.id, codfun: p.codfun, nome: p.nome, titulacao, titulacaoEdubox: p.titulacaoEdubox, fonte: 'coordenador', editadoPor: p.quem.nome, editadoEm: new Date().toISOString() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/matrizes/titulacao-professor  { semestre, codfun?, nome } — volta a valer a titulação do Edubox
+router.delete('/titulacao-professor', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const p = await prepararTitulacao(req, res);
+        if (!p) return;
+        const ref = db.collection(COL_TIT).doc(p.id);
+        const antes = await ref.get();
+        if (antes.exists) {
+            await ref.delete();
+            await db.collection(`${COL_TIT}_log`).add({
+                chave: p.id, codfun: p.codfun, nome: p.nome, acao: 'voltar-edubox', de: antes.data().titulacao, para: p.titulacaoEdubox,
+                semestre: p.semestre, por: p.quem, em: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        res.json({ ok: true, codfun: p.codfun, nome: p.nome, titulacao: p.titulacaoEdubox, fonte: 'edubox' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ==========================================
 // TITULAÇÃO POR CURSO (09/11/2026) — relatório do diretor: doutores, mestres, especialistas e graduados de
@@ -222,9 +347,10 @@ router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matri
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : '';
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
         const escopo = await escopoDe(req);
-        const [docsEdubox, cd] = await Promise.all([
+        const [docsEdubox, cd, ov] = await Promise.all([
             matrizesDoSemestre(semestre),
-            relay(`/corpo-docente/lista?semestres=${encodeURIComponent(formatosEdubox(semestre).join(','))}`, { timeoutMs: 30000 }).catch(e => ({ ok: false, erro: e.message }))
+            relay(`/corpo-docente/lista?semestres=${encodeURIComponent(formatosEdubox(semestre).join(','))}`, { timeoutMs: 30000 }).catch(e => ({ ok: false, erro: e.message })),
+            overridesTitulacao()
         ]);
         const cursos = new Map(docsEdubox.filter(m => podeVer(escopo, m.cursoId)).map(m => [m.cursoId, { cursoId: m.cursoId, cursoNome: m.cursoNome, professores: new Map(), semProfessor: 0 }]));
         const doEdubox = cd && cd.ok && (cd.professores || []).length > 0;
@@ -233,7 +359,7 @@ router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matri
                 const c = cursos.get(cursoIdDe(String(p.codcur).trim()));
                 if (!c) return;
                 const k = String(p.codfun);
-                if (!c.professores.has(k)) c.professores.set(k, { nome: p.nome, titulacao: ROTULO_TIT(p.titulacao), diarios: p.diarios });
+                if (!c.professores.has(k)) c.professores.set(k, comOverride({ codfun: k, nome: p.nome, titulacao: ROTULO_TIT(p.titulacao), diarios: p.diarios }, ov));
             });
         } else {
             // planejamento: o que os coordenadores definiram nos horários deste semestre
@@ -246,7 +372,10 @@ router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matri
                     if (ehContratar(au.professor)) return;
                     const achado = acharProfessor(lista, au.professor);
                     const k = achado && !achado.ambiguo ? normNome(achado.nome) : normNome(au.professor);
-                    if (!c.professores.has(k)) c.professores.set(k, { nome: achado && !achado.ambiguo ? achado.nome : au.professor, titulacao: achado ? achado.titulacao : '', digitado: au.professor });
+                    if (!c.professores.has(k)) {
+                        const certo = achado && !achado.ambiguo;
+                        c.professores.set(k, comOverride({ codfun: certo ? achado.codfun : null, nome: certo ? achado.nome : au.professor, titulacao: achado ? achado.titulacao : '', digitado: au.professor }, ov));
+                    }
                 }));
             });
             // disciplinas sem professor (sem horário ou só "contratar"), contadas como na tela
@@ -293,7 +422,7 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('matrizes'), as
             const [docsEdubox, gSnap, tits] = await Promise.all([
                 matrizesDoSemestre(semestre),
                 db.collection('matrizes_grade').where('semestre', '==', semestre).get(),
-                titulacoesEdubox(semestre)
+                titulacoesComOverride(semestre)
             ]);
             titulacoes = tits;
             const grades = new Map();
