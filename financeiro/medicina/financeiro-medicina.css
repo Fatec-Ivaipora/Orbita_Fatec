@@ -90,3 +90,32 @@
 .fm-toast { position: fixed; right: 1.2rem; bottom: 1.2rem; background: var(--orb-marca); color: #fff; padding: 0.7rem 1rem; border-radius: var(--orb-raio-ctrl); font-size: 0.88rem; z-index: 1100; max-width: 440px; }
 .fm-toast.erro { background: var(--orb-crit); }
 @media (max-width: 760px) { .layout-content { padding: 1rem 1rem 2.5rem; } .fm-barra .fm-direita { margin-left: 0; } }
+
+/* rodapé fixo: fundo sólido (o fundo translúcido do "Total a receber" deixava aparecer a linha que rola por baixo) */
+.fm-tabela tfoot td, .fm-tabela tfoot td.fm-total { background: #eef2f8; }
+.fm-tabela tfoot td.fm-nome { background: #eef2f8; z-index: 3; }
+
+/* ---------- 18/11/2026: cara de planilha (pedido: "número em cima de número… onde tem número, onde não tem") ---------- */
+.fm-tabela { font-size: 0.8rem; }
+.fm-tabela th, .fm-tabela td { border-right: 1px solid #e3e8f0; }
+.fm-tabela th { border-bottom: 2px solid #cfd8e3; text-align: right; min-width: 92px; }
+.fm-tabela th.fm-nome { text-align: left; }
+.fm-tabela td { padding: 0 0.25rem; height: 30px; border-bottom: 1px solid #e3e8f0; }
+.fm-tabela tbody tr:nth-child(even) td { background: #f7f9fc; }
+.fm-tabela tbody tr:nth-child(even) td.fm-nome { background: #f7f9fc; }
+.fm-tabela tbody tr:hover td, .fm-tabela tbody tr:hover td.fm-nome { background: #eef4ff; }
+.fm-tabela td.fm-nome { display: table-cell; min-width: 300px; max-width: 340px; padding: 0.15rem 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-nome-txt { display: inline-block; max-width: 205px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.fm-cat-wrap { display: inline-block; margin-left: 0.4rem; vertical-align: middle; }
+.fm-cat-sel { font-size: 0.68rem; padding: 0.05rem 0.25rem; max-width: 110px; height: 22px; }
+.fm-cel { width: 100%; min-width: 86px; height: 26px; box-sizing: border-box; background: #fff; border: 1px solid #e6ebf2; border-radius: 4px; padding: 0 0.4rem; }
+.fm-cel::placeholder { color: #c3ccd8; text-align: right; }
+.fm-cel.pct { min-width: 54px; }
+.fm-obs { min-width: 200px; text-align: left; }
+.fm-obs::placeholder { text-align: left; }
+.fm-calc { padding: 0 0.5rem !important; }
+.fm-traco { color: #c3ccd8; }
+.fm-tabela td.fm-total { background: #eaf1fd !important; font-weight: 700; color: var(--orb-tinta); border-left: 2px solid #b9cdf0; }
+.fm-tabela th.fm-tot { text-align: right; }
+.fm-tabela tfoot td { border-top: 2px solid #cfd8e3; text-align: right; }
+.fm-tabela tfoot td.fm-nome { text-align: left; }
