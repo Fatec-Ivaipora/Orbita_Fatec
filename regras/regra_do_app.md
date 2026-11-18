@@ -112,10 +112,12 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 ### [2026-11-18] Matrículas: veterano lançado à mão não conta como "matrícula nova em outro período"
 - Autor: Claude (pedido do Suporte AVA: os números do relatório de Matrículas e dos Contratos têm que bater)
 - Branch: fix/matriculas-veterano-lancado-a-mao
-- Arquivo alterado: `src/rotas/matriculas.js` (GET `/relatorio`).
+- Arquivos alterados: `src/rotas/matriculas.js` (GET `/relatorio`) e `src/rotas/contratos.js` (`sincronizarDaMatricula`).
 - Problema: em 2027.1, a "Quantidade de matrículas" dava 378 (372 calouros do 1º + 6 em outros períodos) e o "Total de matrículas" dos Contratos dava 377 (372 + 5). O 6º era a Ana Clara Gonçalves do Lago (Pedagogia 7º, Pendência Financeira): ela é veterana (6º em 2026.2) mas foi lançada à mão em 16/11, sem a marca da Virada (`origemAlunoId`). O relatório contava como "matrícula nova acima do 1º" todo cadastro sem essa marca.
-- Correção: quem tem matrícula no **semestre anterior** do mesmo módulo (pelo nome normalizado) é veterano, com ou sem a marca, e não entra em `novasAcimaAtivas`. O relatório faz uma leitura a mais (nomes do semestre anterior).
-- Resultado (rota real, dados de 18/11): Quantidade de matrículas = 372 + 5 = **377**, igual aos Contratos.
+- Correção 1 (`src/rotas/matriculas.js`): quem teve matrícula em **qualquer semestre anterior** do mesmo módulo, com aluno no sistema (de 2026.1 em diante), é veterano, com ou sem a marca, e não entra em `novasAcimaAtivas`. Isso cobre também quem volta de trancamento, como a Cristiane Schneckemberg Loffi (Psicologia 7º, trancou em 2026.1), que no Edubox é rematrícula e não ingresso novo. O relatório faz uma leitura a mais (nomes dos semestres anteriores, `in`).
+- Correção 2 (`src/rotas/contratos.js`, `sincronizarDaMatricula`): quando a situação da matrícula deixa de ser de calouro (e não é perda), o contrato sai do Comercial, com a regra da matrícula excluída: sem trabalho do Comercial, apaga; com trabalho, fica e marca `matriculaRemovida`. Antes o contrato ficava sobrando, porque o Comercial não exclui pela tela.
+- Dado (18/11/2026, pela rota `PUT /alunos/:id`, conforme o Edubox): Cristiane passou de "Matrícula Nova" para "Rematrícula Assinada". O contrato dela, sem nenhum trabalho do Comercial, saiu sozinho.
+- Resultado 2027.1 (rota real): Matrículas = 372 + 4 = **376**; Contratos = 376 ativos (372 + 4) + 8 desistentes; Edubox (agente do Lucas) = 372 + 4 = 376.
 - Como reverter: desfazer o commit.
 
 ### [2026-11-18] Troca de curso: Feed diário e sincronização das Matrículas usam "outra matrícula ativa no semestre"
