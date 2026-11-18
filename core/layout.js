@@ -11,9 +11,14 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
     } catch (e) {}
   }
 
+  // Módulo restrito a usuários específicos (somenteUsuarios, ex.: Financeiro Medicina): decide pelo usuário,
+  // não pelo cargo — quem está na lista entra (mesmo sem nível no cargo); quem não está sai (mesmo ADM N1).
+  const restritoAtivo = MODULES[activeModuleId] && MODULES[activeModuleId].somenteUsuarios;
+  if (restritoAtivo && !restritoAtivo.includes(user.uid)) { window.location.href = '/meu-espaco/index.html'; return; }
+
   // Guard de acesso à página: com cache, decide pelo nível efetivo;
   // sem cache, cai na lista estática do cargo (primeiro load)
-  if (role !== 'adm_l1' && activeModuleId !== 'dashboard' && activeModuleId !== 'fidelidade') {
+  if (!restritoAtivo && role !== 'adm_l1' && activeModuleId !== 'dashboard' && activeModuleId !== 'fidelidade') {
     if (cachedPerms) {
       if (getAccessLevel(cachedPerms[activeModuleId]) < 2) {
         window.location.href = '/meu-espaco/index.html';
@@ -35,6 +40,9 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   // Visibilidade de módulo no menu: nível efetivo >= 2 quando há cache;
   // sem cache, fallback para a lista estática do cargo
   const podeVerModulo = (modId) => {
+    // módulo restrito a usuários específicos (ex.: Financeiro Medicina — só Lisa e Fábio): vale até pra ADM N1
+    const restrito = MODULES[modId] && MODULES[modId].somenteUsuarios;
+    if (restrito) return restrito.includes(user.uid);
     if (role === 'adm_l1') return true;
     if (modId === 'dashboard') return true;
     if (modId === 'fidelidade' && !CARGOS_SEM_CARTAO.includes(role)) return true;
@@ -304,7 +312,7 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
           localStorage.setItem('orbita_permissions', novasJson);
 
           // Se a visualização do módulo ativo foi desativada, redireciona
-          if (activeModuleId !== 'dashboard' && activeModuleId !== 'fidelidade') {
+          if (!restritoAtivo && activeModuleId !== 'dashboard' && activeModuleId !== 'fidelidade') {
             if (getAccessLevel(efetivas[activeModuleId]) < 2) {
               window.location.href = '/meu-espaco/index.html';
               return;
