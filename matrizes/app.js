@@ -170,6 +170,9 @@ function titulacaoDe(prof) {
   if (ehContratar(prof) || !titIndex.length) return null;
   const tk = normT(prof).split(' ').filter(Boolean);
   if (!tk.length) return null;
+  // nome idêntico (inclui professor sem Edubox com titulação definida pelo coordenador) vence a busca por partes
+  const ex = titIndex.filter(t => normT(t.nome) === normT(prof));
+  if (ex.length === 1) return { tit: ex[0].titulacao, nomes: [ex[0].nome], editada: ex[0].fonte === 'coordenador' ? ex[0] : null };
   const cand = titIndex.filter(t => t.toks[0] === tk[0] && tk.slice(1).every(w => t.toks.slice(1).some(x => x === w || x.startsWith(w))));
   if (!cand.length) return { tit: '', nomes: [] };
   const tits = [...new Set(cand.map(c => c.titulacao))];
@@ -179,10 +182,14 @@ function seloTitulacao(prof) {
   if (ehContratar(prof)) return '<span class="mz-tit contratar">a contratar</span>';
   const t = titulacaoDe(prof);
   if (!t) return '';
-  if (!t.nomes.length) return '<span class="mz-tit nao" title="Não achei esse nome entre os professores do Edubox — escolha o nome completo da lista">sem titulação</span>';
-  if (t.tit === '?') return `<span class="mz-tit nao" title="Mais de um professor no Edubox com esse nome: ${esc(t.nomes.join(' | '))} — escolha o nome completo da lista">?</span>`;
-  if (t.editada) return `<span class="mz-tit ${esc(t.tit.toLowerCase())} editada" title="${esc(t.nomes.join(' | '))} — titulação editada${t.editada.editadoPor ? ' por ' + esc(t.editada.editadoPor) : ''} (Edubox: ${esc(t.editada.titulacaoEdubox || 'sem titulação')})">${esc(t.tit)} ✎</span>`;
-  return `<span class="mz-tit ${esc(t.tit.toLowerCase())}" title="Edubox: ${esc(t.nomes.join(' | '))}">${esc(t.tit || '—')}</span>`;
+  let cls, txt, dica;
+  if (!t.nomes.length) { cls = 'nao'; txt = 'sem titulação'; dica = 'Não achei esse nome entre os professores do Edubox — escolha o nome completo da lista'; }
+  else if (t.tit === '?') { cls = 'nao'; txt = '?'; dica = `Mais de um professor no Edubox com esse nome: ${t.nomes.join(' | ')} — escolha o nome completo da lista`; }
+  else if (t.editada) { cls = `${t.tit.toLowerCase()} editada`; txt = `${t.tit} ✎`; dica = `${t.nomes.join(' | ')} — titulação editada${t.editada.editadoPor ? ' por ' + t.editada.editadoPor : ''} (Edubox: ${t.editada.titulacaoEdubox || 'sem titulação'})`; }
+  else { cls = (t.tit || 'nao').toLowerCase(); txt = t.tit || 'sem titulação'; dica = `Edubox: ${t.nomes.join(' | ')}`; }
+  // quem edita clica no selo e escolhe a titulação ali mesmo (18/11/2026)
+  if (podeEditar) return `<button type="button" class="mz-tit mz-tit-btn ${esc(cls)}" data-tit-rapida="${esc(prof)}" title="${esc(dica)} · clique para definir a titulação">${esc(txt)}</button>`;
+  return `<span class="mz-tit ${esc(cls)}" title="${esc(dica)}">${esc(txt)}</span>`;
 }
 // sugestões do campo Professor: os nomes completos do Edubox (com a titulação) + os já usados nos horários
 const nomeEdubox = (nome) => tituloCaso(String(nome || '').toLowerCase());
@@ -871,6 +878,29 @@ function wireEventos() {
     wrap.querySelector('.f-prof').value = op.dataset.nome;
     wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
     wrap.querySelector('.f-tit').innerHTML = opcoesTit(op.dataset.nome);
+  });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tit-rapida]');
+    if (!b) return;
+    const prof = b.dataset.titRapida;
+    const sel = document.createElement('select');
+    sel.className = 'mz-tit-sel';
+    sel.setAttribute('aria-label', `Titulação de ${prof}`);
+    sel.innerHTML = opcoesTit(prof);
+    b.replaceWith(sel);
+    sel.focus();
+    let feito = false;
+    sel.addEventListener('change', async () => {
+      feito = true;
+      sel.disabled = true;
+      try {
+        const n = await salvarTitulacoesModal([{ professor: prof, tit: sel.value }]);
+        if (n) toast(sel.value ? `Titulação de ${prof}: ${sel.value}.` : `${prof} voltou à titulação do Edubox.`);
+      } catch (err) { toast(err.message, 'erro'); }
+      renderAbas();
+    });
+    sel.addEventListener('blur', () => { if (!feito) renderAbas(); });
+    sel.addEventListener('keydown', (k) => { if (k.key === 'Escape') { feito = true; renderAbas(); } });
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-filtro-semprof]') || !dados) return;
