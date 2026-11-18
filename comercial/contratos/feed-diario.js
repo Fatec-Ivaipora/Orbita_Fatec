@@ -205,7 +205,7 @@ function desenhar() {
         : `<button type="button" class="btn-secondary" id="fd-editar-vagas">Editar vagas do edital</button>${d.vagasAtualizadasEm ? `<small>Vagas atualizadas em ${new Date(d.vagasAtualizadasEm).toLocaleDateString('pt-BR')}${d.vagasAtualizadasPor ? ` por ${esc(d.vagasAtualizadasPor)}` : ''}</small>` : ''}`}</div>` : ''}
 
       <footer class="fd-rodape">
-        <p>Calouro = ingresso em ${esc(semBR(d.semestre))} no 1º período. Outros períodos = aluno novo que entrou direto num período acima do 1º. Não conta quem cancelou, trancou, desistiu ou transferiu${d.totais.sairam ? ` (${n(d.totais.sairam)} até agora)` : ''}. Vagas disponíveis contam só os calouros do 1º período, já com a margem de 10% sobre as vagas do edital.</p>
+        <p>Calouro = ingresso em ${esc(semBR(d.semestre))} no 1º período. Outros períodos = aluno novo que entrou direto num período acima do 1º. Não conta quem cancelou, trancou, desistiu ou transferiu${d.totais.sairam ? ` (${n(d.totais.sairam)} até agora)` : ''}${d.totais.trocaram ? `; ${n(d.totais.trocaram)} ${d.totais.trocaram === 1 ? 'trocou' : 'trocaram'} de curso (cancelou um curso e tem outra matrícula ativa no semestre, inclusive Medicina) e não ${d.totais.trocaram === 1 ? 'conta' : 'contam'} como saída` : ''}. Vagas disponíveis contam só os calouros do 1º período, já com a margem de 10% sobre as vagas do edital.</p>
         <p>Emitido em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} pelo Órbita · Contratos.</p>
       </footer>
     </article>`;

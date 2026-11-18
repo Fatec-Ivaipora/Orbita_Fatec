@@ -93,16 +93,20 @@ async function cursosDoOrbita() {
 // Compara Edubox x Órbita de um módulo+semestre. Devolve as pendências (propostas) e o que é automático.
 async function comparar({ modulo, semestre }) {
     const semEdubox = semestreEdubox(semestre, modulo);
-    const [r, snap, cursos] = await Promise.all([
+    // 18/11/2026: a lista do OUTRO módulo (Graduação ↔ Medicina) entra só pra achar quem trocou de curso entre eles
+    const outroModulo = modulo === 'medicina' ? 'fatec' : 'medicina';
+    const [r, snap, cursos, rOutro] = await Promise.all([
         relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semEdubox)}`, { timeoutMs: 60000 }),
         db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestre).get(),
-        cursosDoOrbita()
+        cursosDoOrbita(),
+        relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semestreEdubox(semestre, outroModulo))}`, { timeoutMs: 60000 }).catch(() => null)
     ]);
     if (!r || !r.ok) throw new Error((r && r.erro) || 'Edubox não respondeu.');
     // nome social (config/nomes_sociais): o Edubox só tem o nome de registro — troca antes de comparar, senão
     // o aluno com nome social parece outra pessoa (ex.: VALDEIR → CLARK, 09/11/2026)
     const { aplicarNasLinhas } = require('./nome-social');
     const doEdubox = await aplicarNasLinhas((r.matriculas || []).filter(e => (modulo === 'medicina') === (e.codcur === 'MED')));
+    const doOutro = rOutro && rOutro.ok ? await aplicarNasLinhas((rOutro.matriculas || []).filter(e => (outroModulo === 'medicina') === (e.codcur === 'MED'))) : [];
     const { nomeParecido } = require('../rotas/contratos')._interno;
 
     const docs = snap.docs.map(d => ({ id: d.id, ref: d.ref, d: d.data() }));
@@ -113,16 +117,37 @@ async function comparar({ modulo, semestre }) {
 
     // quem trocou de curso tem 2 matrículas no Edubox (a nova ativa e a antiga cancelada): a ATIVA liga
     // primeiro, e a antiga cancelada não vira "criar" nem move o cadastro (09/11/2026)
-    const nomesAtivos = new Set(doEdubox.filter(e => { const s0 = situacaoDoEdubox(e, semEdubox); return s0 && !ehSaida(s0); }).map(e => norm(e.nome)));
-    const ordenadas = [...doEdubox].sort((a, b) => (ehSaida(situacaoDoEdubox(a, semEdubox)) ? 1 : 0) - (ehSaida(situacaoDoEdubox(b, semEdubox)) ? 1 : 0));
-    const antigaDeQuemTrocou = (e, sit) => ehSaida(sit) && nomesAtivos.has(norm(e.nome));
+    // Troca de curso (18/11/2026, regra alinhada com a leitura do agente do Lucas): matrícula que saiu e o aluno tem
+    // OUTRA matrícula ativa no semestre — inclusive no outro módulo (Graduação ↔ Medicina) — é troca de curso,
+    // não importa o motivo do cancelamento no Edubox ("Transf. curso", "Outro" ou vazio). Liga pelo nome, porque o
+    // relay não manda o código do aluno (alumat).
+    const ativasPorNome = new Map();
+    const semOutro = semestreEdubox(semestre, outroModulo);
+    [...doEdubox.map(e => [e, semEdubox]), ...doOutro.map(e => [e, semOutro])].forEach(([e, sem]) => {
+        const s0 = situacaoDoEdubox(e, sem);
+        if (!s0 || ehSaida(s0)) return;
+        const k = norm(e.nome);
+        if (!ativasPorNome.has(k)) ativasPorNome.set(k, []);
+        ativasPorNome.get(k).push({ codmat: String(e.codmat), codcur: e.codcur });
+    });
+    const outraAtiva = (e) => (ativasPorNome.get(norm(e.nome)) || []).find(x => x.codmat !== String(e.codmat)) || null;
+    // situação do Edubox já com a troca de curso: saiu + outra ativa em OUTRO curso = "Mudança de Curso"
+    const situacaoBase = situacaoDoEdubox;
+    const sitComTroca = (e, sem) => {
+        const s0 = situacaoBase(e, sem);
+        if (!s0 || !ehSaida(s0) || s0 === 'Mudança de Curso') return s0;
+        const outra = outraAtiva(e);
+        return outra && outra.codcur !== e.codcur ? 'Mudança de Curso' : s0;
+    };
+    const ordenadas = [...doEdubox].sort((a, b) => (ehSaida(sitComTroca(a, semEdubox)) ? 1 : 0) - (ehSaida(sitComTroca(b, semEdubox)) ? 1 : 0));
+    const antigaDeQuemTrocou = (e, sit) => ehSaida(sit) && !!outraAtiva(e);
 
     for (const e of ordenadas) {
         const curso = modulo === 'medicina' ? { id: null, nome: 'Medicina' } : cursos.get(norm(CURSO_EDUBOX[e.codcur] || ''));
         const base = { nome: String(e.nome || '').trim().toUpperCase(), codmat: String(e.codmat), periodo: periodoDe(e.periodo) };
         if (!curso) { propostas.push({ ...base, chave: `conf_${e.codmat}`, tipo: 'conferir', curso: e.codcur, descricao: `Curso "${e.codcur}" do Edubox não existe no Órbita` }); continue; }
         base.curso = curso.nome;
-        const sitEdubox = situacaoDoEdubox(e, semEdubox);
+        const sitEdubox = sitComTroca(e, semEdubox);
         let alvo = porCodmat.get(String(e.codmat));
         if (!alvo) {
             const livres = docs.filter(x => !usados.has(x.id) && !x.d.eduboxCodmat && (modulo === 'medicina' || x.d.cursoId === curso.id));

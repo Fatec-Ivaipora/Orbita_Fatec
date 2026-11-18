@@ -109,6 +109,23 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Troca de curso: Feed diário e sincronização das Matrículas usam "outra matrícula ativa no semestre"
+- Autor: Claude (pedido do Suporte AVA, a partir da conferência com o agente do Lucas / Fábio)
+- Branch: fix/troca-de-curso-edubox
+- Arquivos alterados: `src/rotas/contratos.js` (feed-diario), `comercial/contratos/feed-diario.js` (+ `app.js` `?v=12`) e `src/utils/matriculas-edubox.js` (`comparar`).
+- Problema: a conferência Edubox × Órbita de 2027.1 achou 9 cancelados no Feed contra 8 no Edubox. O 9º era a Isadora, que saiu de Fisioterapia e foi para a Medicina. Causas:
+  - O Feed lia só a Graduação e contava como "saiu" toda matrícula cancelada, mesmo com o aluno matriculado em outro curso.
+  - A sincronização das Matrículas só via a troca dentro do próprio módulo. Uma troca Graduação → Medicina virava a diferença "criar como Mudança de Curso" (ou 1ª Evasão).
+  - O "Mudança de Curso" dependia do motivo "Transf. curso" no Edubox. Das 5 trocas, 3 estão com motivo "Outro" ou vazio.
+- Regra nova, a mesma da leitura do agente do Lucas: matrícula que saiu (cancel, tranc, desist ou transf) e cujo aluno tem **outra matrícula ativa no semestre**, inclusive no outro módulo (Graduação ↔ Medicina), é **troca de curso**.
+  - Feed: a matrícula entra em "trocaram de curso" e não soma em "saíram". Ele lê também a lista da Medicina (`2027-1`) só para isso; a Medicina segue fora das contas. Cancelamento acima do 1º período deixa de somar em "saíram", igual à consulta deles.
+  - Sincronização: a matrícula antiga de quem trocou não vira cadastro nem diferença. Se o cadastro já estiver ligado à matrícula antiga e o aluno tiver outra ativa em **outro curso**, a situação passa a "Mudança de Curso", seja qual for o motivo.
+- Limite: o relay `/matriculas-edubox/lista` não envia o código do aluno (`alumat`). Por isso a ligação é pelo nome normalizado (com nome social aplicado na sincronização). Foi pedido incluir o `alumat` no relay.
+- Testado com listas simuladas do Edubox:
+  - Fisio → Medicina e Agronomia → Direito entraram em "trocaram". Um cancelamento sem outra matrícula ficou em "saíram".
+  - Na sincronização, a troca para a Medicina não gerou diferença. A troca dentro da Graduação criou só a matrícula ativa. Quem saiu continua como 1ª Evasão.
+- Como reverter: desfazer o commit (três arquivos).
+
 ### [2026-11-18] Relatório Desempenho (MED): critérios do material CADAM, com fonte, sem faixa inventada
 - Autor: Claude (pedido do Suporte AVA: "seguir normas e não inventar nada")
 - Branch: feat/relatorio-desempenho-cadam
