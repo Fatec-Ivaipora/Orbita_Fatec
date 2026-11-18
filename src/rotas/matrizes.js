@@ -230,7 +230,15 @@ function comOverride(p, ov) {
 }
 async function titulacoesComOverride(semestre) {
     const [tits, ov] = await Promise.all([titulacoesEdubox(semestre), overridesTitulacao()]);
-    return tits.map(t => comOverride(t, ov));
+    const out = tits.map(t => comOverride(t, ov));
+    // professor sem cadastro no Edubox (só digitado nos horários) com titulação definida pelo coordenador
+    const vistos = new Set(out.map(t => normNomeTit(t.nome)));
+    ov.porChave.forEach((o, id) => {
+        if (!id.startsWith('N_') || vistos.has(o.nomeNorm)) return;
+        vistos.add(o.nomeNorm);
+        out.push(comOverride({ codfun: null, nome: o.nome, titulacao: '' }, ov));
+    });
+    return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 // O professor dá aula em algum curso do escopo neste semestre? (diário do Edubox ou horário definido aqui)
@@ -299,6 +307,52 @@ router.put('/titulacao-professor', verifyToken, verifyToken.requireModulePermiss
             para: titulacao, semestre: p.semestre, por: p.quem, em: admin.firestore.FieldValue.serverTimestamp()
         });
         res.json({ ok: true, chave: p.id, codfun: p.codfun, nome: p.nome, titulacao, titulacaoEdubox: p.titulacaoEdubox, fonte: 'coordenador', editadoPor: p.quem.nome, editadoEm: new Date().toISOString() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/matrizes/professor-nome  { semestre, de, para } — corrige o nome do professor em TODOS os horários
+// do semestre nos cursos que a pessoa vê (coordenador: os dele; ADM/RH: todos). A titulação editada do nome
+// antigo (professor sem Edubox) vai junto pro nome novo.
+router.put('/professor-nome', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const b = req.body || {};
+        const semestre = SEMESTRE.test(String(b.semestre || '')) ? b.semestre : '';
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+        const de = String(b.de || '').replace(/\s+/g, ' ').trim();
+        const para = String(b.para || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (!de || !para) return res.status(400).json({ error: 'Informe o nome atual e o novo nome.' });
+        if (ehContratar(para)) return res.status(400).json({ error: 'O novo nome não pode ser "contratar" / "a definir".' });
+        if (para.length < 3) return res.status(400).json({ error: 'Nome muito curto.' });
+        const escopo = await escopoDe(req);
+        const nDe = normNomeTit(de);
+        const gSnap = await db.collection('matrizes_grade').where('semestre', '==', semestre).get();
+        let aulasTrocadas = 0;
+        const docs = [];
+        for (const d of gSnap.docs) {
+            const x = d.data();
+            if (!podeVer(escopo, x.cursoId || d.id.split('__')[1])) continue;
+            const mudou = {};
+            Object.entries(x.alocacoes || {}).forEach(([k, a]) => {
+                let n = 0;
+                const aulas = (a.aulas || []).map(au => (normNomeTit(au.professor) === nDe ? (n++, { ...au, professor: para }) : au));
+                if (n) { mudou[k] = { ...a, aulas }; aulasTrocadas += n; }
+            });
+            if (Object.keys(mudou).length) docs.push({ ref: d.ref, mudou });
+        }
+        if (!aulasTrocadas) return res.status(404).json({ error: 'Não achei esse professor nos horários dos seus cursos neste semestre.' });
+        for (const { ref, mudou } of docs) await ref.set({ alocacoes: mudou }, { merge: true });
+        const quem = { uid: req.user.uid, nome: req.user.name || req.user.email || '' };
+        // leva a titulação editada (chave por nome) junto, se o nome novo ainda não tiver uma
+        const velho = db.collection(COL_TIT).doc(chaveTit(null, de)), novo = db.collection(COL_TIT).doc(chaveTit(null, para));
+        const [sv, sn] = await Promise.all([velho.get(), novo.get()]);
+        if (sv.exists && !sn.exists && velho.id !== novo.id) {
+            await novo.set({ ...sv.data(), nome: para, nomeNorm: normNomeTit(para), alteradoPor: quem, alteradoEm: admin.firestore.FieldValue.serverTimestamp() });
+            await velho.delete();
+        }
+        await db.collection(`${COL_TIT}_log`).add({ acao: 'renomear', de, para, semestre, aulas: aulasTrocadas, cursos: docs.map(x => x.ref.id), por: quem, em: admin.firestore.FieldValue.serverTimestamp() });
+        res.json({ ok: true, de, para, aulas: aulasTrocadas, cursos: docs.length });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

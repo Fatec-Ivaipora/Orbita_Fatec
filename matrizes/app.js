@@ -707,7 +707,8 @@ function baixarCsvCarga() {
 // ---------- MODAL DE HORÁRIO ----------
 function linhaHtml(a = {}) {
   return `<div class="mz-linha">
-    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div></div>
+    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div>
+      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label></div>
     <select class="f-dia" aria-label="Dia da semana"><option value="">Dia a definir</option>${DIAS.map(d => `<option value="${d}" ${a.dia === d ? 'selected' : ''}>${DIA_LONGO[d]}</option>`).join('')}</select>
     <input type="time" class="f-ini" value="${esc(a.inicio || '')}" aria-label="Início">
     <input type="time" class="f-fim" value="${esc(a.fim || '')}" aria-label="Fim">
@@ -717,6 +718,51 @@ function linhaHtml(a = {}) {
       ${PRESETS.map(p => `<button type="button" class="mz-btn mz-btn-sec mz-btn-mini f-pre" data-ini="${p.ini}" data-fim="${p.fim}">${p.rotulo}</button>`).join('')}
     </div>
   </div>`;
+}
+
+// ---- Titulação no cadastro do professor (18/11/2026): o coordenador escolhe aqui e já vale na aba
+// "Titulação dos professores". "Conforme o Edubox" = sem titulação editada (vale a do Edubox).
+// Professor do Edubox (ou com titulação já editada) que bate com o nome digitado; mais de um = null.
+function profTit(nome) {
+  if (ehContratar(nome)) return null;
+  const v = normT(nome);
+  const exato = titIndex.filter(t => normT(t.nome) === v);
+  if (exato.length === 1) return exato[0];
+  const t = titulacaoDe(nome);
+  if (!t || t.tit === '?' || t.nomes.length !== 1) return null;
+  return titIndex.find(x => x.nome === t.nomes[0]) || null;
+}
+function opcoesTit(nome) {
+  const p = profTit(nome);
+  const edubox = p ? (p.fonte === 'coordenador' ? p.titulacaoEdubox : p.titulacao) : '';
+  const atual = p && p.fonte === 'coordenador' ? p.titulacao : '';
+  const base = `<option value="">${ehContratar(nome) ? '—' : `Conforme o Edubox (${esc(edubox || 'sem titulação')})`}</option>`;
+  return base + TITS.map(t => `<option value="${t}" ${t === atual ? 'selected' : ''}>${t}</option>`).join('');
+}
+// grava a titulação escolhida em cada linha do modal (só o que mudou). Roda depois de salvar o horário:
+// o backend confere se o professor está nos horários do curso do coordenador.
+async function salvarTitulacoesModal(linhas) {
+  const feitos = new Set();
+  let n = 0;
+  for (const { professor, tit } of linhas) {
+    const k = normT(professor);
+    if (!k || ehContratar(professor) || feitos.has(k)) continue;
+    feitos.add(k);
+    const p = profTit(professor);
+    const atual = p && p.fonte === 'coordenador' ? p.titulacao : '';
+    if (tit === atual) continue;
+    const corpo = { semestre: dados.semestre, codfun: p ? p.codfun || null : null, nome: p ? p.nome : professor };
+    const r = await apiFetch('/matrizes/titulacao-professor', { method: tit ? 'PUT' : 'DELETE', body: JSON.stringify(tit ? { ...corpo, titulacao: tit } : corpo) });
+    if (p) aplicarTitLocal(p, r);
+    else if (tit) {
+      const novo = { codfun: null, nome: r.nome, titulacao: r.titulacao, fonte: 'coordenador', titulacaoEdubox: '', editadoPor: r.editadoPor, editadoEm: r.editadoEm };
+      (dados.titulacoes = dados.titulacoes || []).push(novo);
+      titIndex.push({ ...novo, toks: normT(novo.nome).split(' ') });
+    }
+    n++;
+  }
+  if (n) titCache = null;   // a aba Titulação recalcula as contagens na próxima vez que abrir
+  return n;
 }
 
 // sugestões do nome correto embaixo do campo Professor (09/11/2026)
@@ -751,6 +797,9 @@ function fecharModal() { $('modal-horario').classList.add('hidden'); emEdicao = 
 async function salvarHorario(ev) {
   ev.preventDefault();
   const erro = (m) => { $('mh-erro').textContent = m; $('mh-erro').classList.remove('hidden'); };
+  const titsLinhas = [...document.querySelectorAll('#mh-linhas .mz-linha')].map(l => ({
+    professor: nomeCorreto(l.querySelector('.f-prof').value.trim()), tit: l.querySelector('.f-tit').value
+  }));
   const aulas = [...document.querySelectorAll('#mh-linhas .mz-linha')].map(l => ({
     professor: nomeCorreto(l.querySelector('.f-prof').value.trim()),
     dia: l.querySelector('.f-dia').value,
@@ -785,6 +834,8 @@ async function salvarHorario(ev) {
       (r.conflitos || []).forEach(x => { if (!conflitos.some(y => y.professor === x.professor && y.dia === x.dia && y.inicio === x.inicio && y.curso === x.curso && y.disciplina === x.disciplina)) conflitos.push(x); });
       feitos++;
     }
+    let erroTit = '';
+    try { await salvarTitulacoesModal(titsLinhas); } catch (e) { erroTit = e.message; }
     listaProfessores();
     fecharModal();
     renderKpis(); renderCursos(); renderAbas();
@@ -792,7 +843,8 @@ async function salvarHorario(ev) {
     const desc = (x) => (x.tipo === 'sala'
       ? `a ${salaTxt(x.sala).toLowerCase()} já está ocupada ${DIA_LONGO[x.dia].toLowerCase()} ${x.inicio}–${x.fim} por ${x.professor} em ${x.curso}${x.disciplina ? ' (' + x.disciplina + ')' : ''}`
       : `${x.professor} já tem aula ${DIA_LONGO[x.dia].toLowerCase()} ${x.inicio}–${x.fim} em ${x.curso}${x.disciplina ? ' (' + x.disciplina + ')' : ''}`);
-    if (reais.length) toast(`Salvo, mas atenção — conflito: ${desc(reais[0])}${reais.length > 1 ? ` e mais ${reais.length - 1}` : ''}.`, 'aviso');
+    if (erroTit) toast(`Horário salvo, mas a titulação não: ${erroTit}`, 'erro');
+    else if (reais.length) toast(`Salvo, mas atenção — conflito: ${desc(reais[0])}${reais.length > 1 ? ` e mais ${reais.length - 1}` : ''}.`, 'aviso');
     else if (iguais.length) toast(`Salvo. Obs.: ${desc(iguais[0])}, no mesmo horário (aula conjunta?).`, 'aviso');
     else toast(alvos.length > 1 ? `Horário salvo nas ${alvos.length} turmas do grupo.` : 'Horário salvo.');
   } catch (err) {
@@ -808,7 +860,9 @@ function wireEventos() {
   $('sel-semestre').addEventListener('change', (e) => carregar(e.target.value));
   $('mh-linhas').addEventListener('input', (e) => {
     if (!e.target.classList.contains('f-prof')) return;
-    e.target.closest('.f-prof-wrap').querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
+    const w = e.target.closest('.f-prof-wrap');
+    w.querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
+    w.querySelector('.f-tit').innerHTML = opcoesTit(e.target.value);
   });
   $('mh-linhas').addEventListener('click', (e) => {
     const op = e.target.closest('.f-sug-op');
@@ -816,6 +870,7 @@ function wireEventos() {
     const wrap = op.closest('.f-prof-wrap');
     wrap.querySelector('.f-prof').value = op.dataset.nome;
     wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
+    wrap.querySelector('.f-tit').innerHTML = opcoesTit(op.dataset.nome);
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-filtro-semprof]') || !dados) return;
@@ -914,8 +969,12 @@ function abrirEdicaoTit(i) {
   const p = titProfs[i], li = document.querySelector(`[data-tit-li="${i}"]`);
   if (!p || !li) return;
   const ops = TITS.map(t => `<option value="${t}" ${t === p.titulacao ? 'selected' : ''}>${t}</option>`).join('');
+  // nome editável só no planejamento (professores vindos dos horários); no modo Edubox o nome é o do diário
+  const nomeHorario = titCache.dados.fonte === 'matrizes' ? (p.digitado || p.nome) : '';
   li.innerHTML = `<form class="tt-edit" data-tit-form="${i}">
-      <span class="tt-prof">${esc(tituloCaso(p.nome))}</span>
+      ${nomeHorario
+        ? `<label class="tt-edit-nome">Nome nos horários<input type="text" name="nome" maxlength="120" value="${esc(nomeHorario)}" autocomplete="off"></label>`
+        : `<span class="tt-prof">${esc(tituloCaso(p.nome))}</span>`}
       <div class="tt-edit-linha">
         <select aria-label="Titulação" name="titulacao">${p.titulacao && TITS.includes(p.titulacao) ? '' : '<option value="" selected disabled>Escolha…</option>'}${ops}</select>
         <button type="submit" class="mz-btn mz-btn-pri mz-btn-mini">Salvar</button>
@@ -923,7 +982,24 @@ function abrirEdicaoTit(i) {
       </div>
       ${p.fonte === 'coordenador' ? `<button type="button" class="tt-voltar" data-tit-voltar="${i}">Voltar ao Edubox (${esc(p.titulacaoEdubox || 'sem titulação')})</button>` : '<small class="tt-edit-nota">No Edubox: ' + esc(p.titulacao || 'sem titulação') + '</small>'}
     </form>`;
-  li.querySelector('select').focus();
+  li.querySelector('input, select').focus();
+}
+// corrige o nome do professor em todos os horários do semestre (cursos que a pessoa vê) e depois a titulação
+async function salvarNomeETit(i, novoNome, titulacao) {
+  const p = titProfs[i];
+  const de = p.digitado || p.nome;
+  try {
+    const r = await apiFetch('/matrizes/professor-nome', { method: 'PUT', body: JSON.stringify({ semestre: titCache.semestre, de, para: novoNome }) });
+    if (titulacao && titulacao !== (p.fonte === 'coordenador' ? p.titulacao : '')) {
+      await apiFetch('/matrizes/titulacao-professor', { method: 'PUT', body: JSON.stringify({ semestre: titCache.semestre, nome: novoNome, titulacao }) });
+    }
+    toast(`Nome trocado para “${novoNome}” em ${r.aulas} ${r.aulas === 1 ? 'horário' : 'horários'}.`);
+    titCache = null;
+    await carregar(dados.semestre);   // horários e titulações mudaram: recarrega tudo (redesenha esta aba)
+  } catch (err) {
+    toast(err.message, 'erro');
+    document.querySelectorAll(`[data-tit-form="${i}"] button`).forEach(b => { b.disabled = false; });
+  }
 }
 // aplica o resultado em todos os cursos (o mesmo professor pode estar em vários) e no selo dos horários
 function aplicarTitLocal(p, r) {
@@ -961,10 +1037,16 @@ document.addEventListener('submit', (e) => {
   const f = e.target.closest('[data-tit-form]');
   if (!f) return;
   e.preventDefault();
+  const i = Number(f.dataset.titForm), p = titProfs[i];
   const v = f.querySelector('select').value;
-  if (!v) return toast('Escolha a titulação.', 'erro');
+  const campoNome = f.querySelector('input[name="nome"]');
+  const novoNome = campoNome ? campoNome.value.replace(/\s+/g, ' ').trim() : '';
+  const trocouNome = campoNome && normT(novoNome) !== normT(p.digitado || p.nome);
+  if (campoNome && novoNome.length < 3) return toast('Informe o nome do professor.', 'erro');
+  if (!v && !trocouNome) return toast('Escolha a titulação.', 'erro');
   f.querySelectorAll('button').forEach(b => { b.disabled = true; });
-  salvarTit(Number(f.dataset.titForm), v);
+  if (trocouNome) salvarNomeETit(i, novoNome, v);
+  else salvarTit(i, v);
 });
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-tit-prof]');
