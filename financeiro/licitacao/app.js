@@ -29,6 +29,14 @@ let itensHasMore = false;
 let itensCarregandoTodas = false;
 let statusFiltroSelecionado = 'pendentes';
 
+// Escolhas lembradas (18/11/2026): a licitação, o curso e o filtro de status que a pessoa escolheu por último
+// voltam selecionados ao abrir Licitação, Relatório e Negociação (neste navegador), em vez de voltar sempre
+// pra licitação "ativa". Sem nada lembrado (ou se a licitação/curso não existir mais), vale o padrão de antes.
+const CHAVE_MEMORIA = 'orbita:licitacao:escolhas';
+function lerMemoria() { try { return JSON.parse(localStorage.getItem(CHAVE_MEMORIA) || '{}') || {}; } catch (e) { return {}; } }
+function lembrar(campos) { try { localStorage.setItem(CHAVE_MEMORIA, JSON.stringify({ ...lerMemoria(), ...campos })); } catch (e) { /* sem armazenamento */ } }
+const temOpcao = (select, valor) => !!(select && valor && [...select.options].some(o => o.value === valor));
+
 function isCoordenador() {
   return currentRole === 'coordenador';
 }
@@ -210,6 +218,7 @@ async function initPaginaLicitacao() {
 
   document.getElementById('licitacao-select')?.addEventListener('change', async (e) => {
     semestreSelecionado = e.target.value || null;
+    lembrar({ licitacao: semestreSelecionado || '' });
     cursoSelecionadoId = null;
     await atualizarCursosDaLicitacao(semestreSelecionado);
     document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
@@ -229,6 +238,7 @@ async function initPaginaLicitacao() {
       return;
     }
     cursoSelecionadoId = e.target.value || null;
+    lembrar({ curso: cursoSelecionadoId || '' });
     document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
     atualizarLinkRelatorio();
     if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
@@ -237,6 +247,7 @@ async function initPaginaLicitacao() {
 
   document.getElementById('status-filtro-select')?.addEventListener('change', async (e) => {
     statusFiltroSelecionado = e.target.value || 'pendentes';
+    lembrar({ status: statusFiltroSelecionado });
     if (cursoSelecionadoId && semestreSelecionado) await carregarItens();
   });
 
@@ -300,10 +311,21 @@ function atualizarBotaoCarregarMais() {
 async function carregarSemestreAtivo() {
   try {
     const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
-    semestreSelecionado = semestreAtivoCoordenador || null;
     const select = document.getElementById('licitacao-select');
+    const mem = lerMemoria();
+    semestreSelecionado = (temOpcao(select, mem.licitacao) ? mem.licitacao : semestreAtivoCoordenador) || null;
     if (select && semestreSelecionado) select.value = semestreSelecionado;
     await atualizarCursosDaLicitacao(semestreSelecionado);
+    // filtro de status e curso lembrados (o curso só se existir nesta licitação)
+    const selStatus = document.getElementById('status-filtro-select');
+    if (temOpcao(selStatus, mem.status)) { selStatus.value = mem.status; statusFiltroSelecionado = mem.status; }
+    const selCurso = document.getElementById('curso-select');
+    if (semestreSelecionado && temOpcao(selCurso, mem.curso)) {
+      selCurso.value = mem.curso;
+      cursoSelecionadoId = mem.curso;
+      atualizarLinkRelatorio();
+      await carregarItens();
+    }
     document.getElementById('btn-novo-item')?.toggleAttribute('disabled', !cursoSelecionadoId || !semestreSelecionado);
   } catch (err) {
     showToast('Erro ao carregar licitação ativa: ' + err.message, 'error');
@@ -809,12 +831,18 @@ async function initPaginaRelatorio() {
     selectLicitacao.innerHTML = '<option value="">Todas as licitações</option>' + opcoesLicitacoes();
     try {
       const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
-      if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
+      const lembrada = lerMemoria().licitacao;
+      if (temOpcao(selectLicitacao, lembrada)) selectLicitacao.value = lembrada;
+      else if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
     } catch (err) {}
   }
 
   await atualizarCursosRelatorio(selectLicitacao?.value || '');
   if (select && cursoIdInicial) select.value = cursoIdInicial;
+  else if (temOpcao(select, lerMemoria().curso)) select.value = lerMemoria().curso;
+
+  selectLicitacao?.addEventListener('change', () => lembrar({ licitacao: selectLicitacao.value || '' }));
+  select?.addEventListener('change', () => { if (select.value) lembrar({ curso: select.value }); });
 
   selectLicitacao?.addEventListener('change', async () => {
     await atualizarCursosRelatorio(selectLicitacao.value);
@@ -981,7 +1009,9 @@ async function initPaginaNegociacao() {
     selectLicitacao.innerHTML = '<option value="">Todas as licitações</option>' + opcoesLicitacoes();
     try {
       const { semestreAtivoCoordenador } = await apiFetch('/financeiro/config');
-      if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
+      const lembrada = lerMemoria().licitacao;
+      if (temOpcao(selectLicitacao, lembrada)) selectLicitacao.value = lembrada;
+      else if (semestreAtivoCoordenador) selectLicitacao.value = semestreAtivoCoordenador;
     } catch (err) {}
   }
 
@@ -1004,6 +1034,10 @@ async function initPaginaNegociacao() {
     }
   }
   await atualizarCursosNegociacao();
+  if (!cursoIdInicial && temOpcao(selectCurso, lerMemoria().curso)) selectCurso.value = lerMemoria().curso;
+
+  selectLicitacao?.addEventListener('change', () => lembrar({ licitacao: selectLicitacao.value || '' }));
+  selectCurso?.addEventListener('change', () => { if (selectCurso.value) lembrar({ curso: selectCurso.value }); });
 
   selectLicitacao?.addEventListener('change', async () => {
     await atualizarCursosNegociacao();
