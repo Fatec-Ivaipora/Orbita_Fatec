@@ -109,6 +109,38 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Módulo novo: Aulas EAD (Gestão de T.I.) — salas Zoom, grade da semana e gravações das UAs
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/ead-aulas
+- Arquivos criados: `src/rotas/ead-aulas.js`, `ti/ead-aulas/index.html`, `ti/ead-aulas/app.js` e `ti/ead-aulas/ead-aulas.css`.
+- Arquivos alterados:
+  - `api/index.js`: rota `/api/ead-aulas`.
+  - `core/permissions.js`: módulo `ead-aulas` na categoria T.I, nos cargos `adm_l1`, `adm_l2` e `ti`.
+  - `src/middlewares/auth.js`: nível padrão 3 para `ti` e `adm_l2`.
+- O que faz (só o T.I usa; o coordenador EAD não tem acesso e recebe o relatório em texto):
+  1. **Salas Zoom**: cadastro das contas/salas (AULA 30..44, EAD-1/EAD-2) com link, senha e senha de anfitrião. As salas de setor (NAPED Medicina, Coordenação EAD, Suporte AVA, Direção Acadêmica) ficam como "fixa" e não entram na distribuição. São importadas da "LISTAGEM LINKS ZOOM" (.xlsx, uma aba por dia).
+  2. **Disciplinas EAD do semestre**: curso, período, carga horária, dia, horário e professor que DÁ a aula, importados da planilha "DISCIPLINAS EaD <semestre> LEVANTAMENTO" (.xlsx, prévia antes de gravar).
+     - Célula vazia não apaga o que já existe. Gravações não são mexidas pela importação.
+     - Não confundir com o professor que CRIA a disciplina (Automação AVA).
+  3. **Grade da semana**: regra do T.I é o mesmo link em todos os dias em que o professor dá aula. "Distribuir salas" dá a cada professor sem sala a primeira sala não fixa livre em todos os dias dele.
+     - A tela mostra, por dia, quem usa cada sala e avisa quando há dois professores na mesma sala.
+     - Ocupação avulsa por dia (síncrona mediada, reserva) se escreve na própria linha.
+  4. **Gravações**: UA - 01..12 nas disciplinas de 60/80 h (6 por bimestre) e UA - 01..06 nas de 30/40 h (3 por bimestre), mais a revisão de cada bimestre.
+     - Cada unidade passa por Gravou (professor), Baixou, YouTube e AVA (T.I).
+     - Marcar uma etapa marca as anteriores; desmarcar desmarca as seguintes.
+  5. **Relatório do dia**: texto pronto para o coordenador EAD, escolhendo o bimestre e "até a UA". Separa o que falta gravar (por professor), o que foi gravado e falta publicar (com a etapa que falta) e o que está em dia.
+- Coleções: `ead_aulas_salas`, `ead_aulas_disc/{semestre__curso__disciplina__periodo}` e `ead_aulas_semestre/{semestre}` (`salaDoProfessor`, `ocupacoes`).
+- Dados já carregados (18/11/2026, pela própria tela, em teste local com o login do T.I):
+  - 30 salas da LISTAGEM LINKS ZOOM 2026.2;
+  - 105 disciplinas de 2027.1 da planilha de levantamento (72 ainda sem professor);
+  - sala distribuída para os 9 professores que já têm dia definido.
+- **Pendente (manual):** dar o nível do módulo "Aulas EAD" em Usuários › Gerência de Acessos (T.I = 3, ADM N2 = 3), senão o menu não aparece para esses cargos (o ADM N1 sempre vê).
+- Como testar:
+  - Em Gestão de T.I. › Aulas EAD, conferir as 4 abas.
+  - Clicar numa disciplina e marcar "YouTube" numa UA: Gravou e Baixou marcam juntos.
+  - Ver na aba Relatório a disciplina em "aguardando publicação".
+- Como reverter: tirar o módulo de `core/permissions.js`, a rota de `api/index.js` e a pasta `ti/ead-aulas/`. As coleções `ead_aulas_*` podem ser apagadas.
+
 ### [2026-11-18] Automação AVA: unidades (UAs) das disciplinas novas por link — professor preenche, coordenador valida
 - Autor: Claude (pedido do Suporte AVA)
 - Branch: feat/ead-unidades-links
