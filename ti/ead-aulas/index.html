@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aulas EAD - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/ti/ead-aulas/ead-aulas.css?v=2">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header ea-header">
+                    <div>
+                        <h1 class="page-title"><span class="ea-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></span>Aulas EAD</h1>
+                        <p class="page-subtitle">Disciplinas EAD, salas Zoom e gravações das unidades — tudo numa página</p>
+                    </div>
+                    <label class="ea-semestre">Semestre
+                        <select id="ea-semestre" class="select-filter"></select>
+                    </label>
+                </div>
+
+                <div class="abas ea-abas" role="tablist" id="ea-abas">
+                    <button type="button" class="aba ativa" role="tab" data-aba="gravacoes" aria-selected="true">Disciplinas e gravações</button>
+                    <button type="button" class="aba" role="tab" data-aba="grade" aria-selected="false">Grade da semana</button>
+                    <button type="button" class="aba" role="tab" data-aba="salas" aria-selected="false">Salas Zoom</button>
+                    <button type="button" class="aba" role="tab" data-aba="relatorio" aria-selected="false">Relatório do dia</button>
+                </div>
+
+                <div id="ea-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="ea-modal" class="ea-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ea-modal-titulo">
+        <div class="ea-modal-caixa">
+            <div class="ea-modal-topo">
+                <h2 id="ea-modal-titulo"></h2>
+                <button type="button" class="ea-fechar" id="ea-modal-fechar" aria-label="Fechar">×</button>
+            </div>
+            <div id="ea-modal-corpo"></div>
+        </div>
+    </div>
+    <input type="file" id="ea-arquivo" accept=".xlsx,.xls" class="hidden">
+    <div id="ea-toast" class="ea-toast hidden" role="status"></div>
+
+    <script type="module" src="/ti/ead-aulas/app.js?v=2"></script>
+</body>
+</html>
