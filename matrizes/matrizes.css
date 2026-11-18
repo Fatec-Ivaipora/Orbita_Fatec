@@ -402,3 +402,28 @@ details.mz-card[open] > summary { border-bottom: 1px solid var(--border-color); 
 .mz-rel .mz-sec td { vertical-align: top; }
 .mz-rel .mz-sec td:nth-child(2) { font-weight: 600; }
 .mz-rel-acoes { flex-wrap: wrap; gap: 0.6rem 1rem; }
+
+/* titulação no cadastro do professor + nome editável na aba Titulação (18/11/2026) */
+.f-tit-rot { display: flex; align-items: center; gap: 6px; font-size: 0.74rem; font-weight: 600; color: #64748b; }
+.f-tit-rot select { flex: 1; min-width: 0; font-size: 0.8rem; padding: 0.25rem 0.4rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: var(--orb-raio-ctrl, 8px); background: #fff; }
+.tt-edit-nome { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; font-weight: 600; color: #64748b; }
+.tt-edit-nome input { font: inherit; font-size: 0.85rem; font-weight: 400; color: var(--orb-tinta, #0f172a); padding: 0.35rem 0.5rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: var(--orb-raio-ctrl, 8px); }
+/* selo de titulação clicável no Semestre por turma (18/11/2026) */
+.mz-tit-btn { border: 0; font-family: inherit; cursor: pointer; line-height: 1.6; }
+.mz-tit-btn:hover { filter: brightness(0.95); text-decoration: underline; text-underline-offset: 2px; }
+.mz-tit-sel { font: inherit; font-size: 0.75rem; margin-left: 4px; padding: 1px 4px; border: 1px solid var(--orb-azul, #1f6fb2); border-radius: 6px; background: #fff; vertical-align: middle; }
+@media print { .mz-tit-btn { text-decoration: none; } }
+
+/* professor novo x veterano — relatório da direção (18/11/2026) */
+.tt-vinc { display: inline-block; font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 0 7px; margin-left: 4px; vertical-align: 1px; }
+.tt-vinc.novo { background: #FEF3C7; color: #92400E; }
+.tt-vinc.veterano { background: #EEF2F7; color: #475569; }
+.tt-vincs { font-size: 0.76rem; color: #64748b; }
+.tt-vincs b { color: #92400E; }
+.tt-vinc-resumo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 10px 0; padding: 10px 14px; background: var(--orb-sup, #fff); border: 1px solid var(--orb-linha, #e3e8f0); border-radius: var(--orb-raio-card, 12px); }
+.tt-vinc-resumo p { margin: 0; font-size: 0.9rem; color: var(--tt-texto); display: flex; flex-direction: column; gap: 2px; }
+.tt-vinc-resumo small { color: #64748b; font-size: 0.74rem; }
+.tt-filtro { display: inline-flex; padding: 3px; gap: 2px; background: var(--orb-sup, #fff); border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 999px; }
+.tt-filtro-op { font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--orb-tinta2, #44536b); background: transparent; border: 0; border-radius: 999px; padding: 0.3rem 0.8rem; cursor: pointer; }
+.tt-filtro-op.ativo { background: var(--orb-marca, #12294d); color: #fff; }
+.tt-filtro-op:hover:not(.ativo) { color: var(--orb-azul, #1f6fb2); }

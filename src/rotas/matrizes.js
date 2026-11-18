@@ -44,15 +44,19 @@ function limparAulas(aulas) {
         const inicio = String(a.inicio || '');
         const fim = String(a.fim || '');
         if (!professor) throw new Error(`Horário ${i + 1}: informe o professor.`);
+        // professor novo ou veterano marcado pelo coordenador (18/11/2026); vazio = pelo histórico do Edubox.
+        // Só vai pro relatório da direção (aba Titulação), não sai no horário.
+        const vinculo = ['novo', 'veterano'].includes(a.vinculo) ? a.vinculo : '';
+        const comV = (o) => (vinculo ? { ...o, vinculo } : o);
         // Só o professor, sem dia e horário ainda (10/11/2026): o coordenador define quem dá a aula antes
         // de fechar o horário (e a Secretaria Acadêmica já lança o professor no Edubox).
-        if (!dia && !inicio && !fim) return { professor };
+        if (!dia && !inicio && !fim) return comV({ professor });
         if (!DIAS.includes(dia)) throw new Error(`Horário ${i + 1}: dia da semana inválido.`);
         if (!HORA.test(inicio) || !HORA.test(fim)) throw new Error(`Horário ${i + 1}: informe início e fim (HH:MM).`);
         if (minutos(fim) <= minutos(inicio)) throw new Error(`Horário ${i + 1}: o fim precisa ser depois do início.`);
         // sala (ensalamento): opcional; aceita "4", "M.A. 2", "LAB INFORMATICA 12" ou várias separadas por "/"
         const sala = String(a.sala || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-        return sala ? { professor, dia, inicio, fim, sala } : { professor, dia, inicio, fim };
+        return comV(sala ? { professor, dia, inicio, fim, sala } : { professor, dia, inicio, fim });
     });
 }
 
@@ -230,7 +234,15 @@ function comOverride(p, ov) {
 }
 async function titulacoesComOverride(semestre) {
     const [tits, ov] = await Promise.all([titulacoesEdubox(semestre), overridesTitulacao()]);
-    return tits.map(t => comOverride(t, ov));
+    const out = tits.map(t => comOverride(t, ov));
+    // professor sem cadastro no Edubox (só digitado nos horários) com titulação definida pelo coordenador
+    const vistos = new Set(out.map(t => normNomeTit(t.nome)));
+    ov.porChave.forEach((o, id) => {
+        if (!id.startsWith('N_') || vistos.has(o.nomeNorm)) return;
+        vistos.add(o.nomeNorm);
+        out.push(comOverride({ codfun: null, nome: o.nome, titulacao: '' }, ov));
+    });
+    return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 // O professor dá aula em algum curso do escopo neste semestre? (diário do Edubox ou horário definido aqui)
@@ -304,6 +316,52 @@ router.put('/titulacao-professor', verifyToken, verifyToken.requireModulePermiss
     }
 });
 
+// PUT /api/matrizes/professor-nome  { semestre, de, para } — corrige o nome do professor em TODOS os horários
+// do semestre nos cursos que a pessoa vê (coordenador: os dele; ADM/RH: todos). A titulação editada do nome
+// antigo (professor sem Edubox) vai junto pro nome novo.
+router.put('/professor-nome', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const b = req.body || {};
+        const semestre = SEMESTRE.test(String(b.semestre || '')) ? b.semestre : '';
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+        const de = String(b.de || '').replace(/\s+/g, ' ').trim();
+        const para = String(b.para || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (!de || !para) return res.status(400).json({ error: 'Informe o nome atual e o novo nome.' });
+        if (ehContratar(para)) return res.status(400).json({ error: 'O novo nome não pode ser "contratar" / "a definir".' });
+        if (para.length < 3) return res.status(400).json({ error: 'Nome muito curto.' });
+        const escopo = await escopoDe(req);
+        const nDe = normNomeTit(de);
+        const gSnap = await db.collection('matrizes_grade').where('semestre', '==', semestre).get();
+        let aulasTrocadas = 0;
+        const docs = [];
+        for (const d of gSnap.docs) {
+            const x = d.data();
+            if (!podeVer(escopo, x.cursoId || d.id.split('__')[1])) continue;
+            const mudou = {};
+            Object.entries(x.alocacoes || {}).forEach(([k, a]) => {
+                let n = 0;
+                const aulas = (a.aulas || []).map(au => (normNomeTit(au.professor) === nDe ? (n++, { ...au, professor: para }) : au));
+                if (n) { mudou[k] = { ...a, aulas }; aulasTrocadas += n; }
+            });
+            if (Object.keys(mudou).length) docs.push({ ref: d.ref, mudou });
+        }
+        if (!aulasTrocadas) return res.status(404).json({ error: 'Não achei esse professor nos horários dos seus cursos neste semestre.' });
+        for (const { ref, mudou } of docs) await ref.set({ alocacoes: mudou }, { merge: true });
+        const quem = { uid: req.user.uid, nome: req.user.name || req.user.email || '' };
+        // leva a titulação editada (chave por nome) junto, se o nome novo ainda não tiver uma
+        const velho = db.collection(COL_TIT).doc(chaveTit(null, de)), novo = db.collection(COL_TIT).doc(chaveTit(null, para));
+        const [sv, sn] = await Promise.all([velho.get(), novo.get()]);
+        if (sv.exists && !sn.exists && velho.id !== novo.id) {
+            await novo.set({ ...sv.data(), nome: para, nomeNorm: normNomeTit(para), alteradoPor: quem, alteradoEm: admin.firestore.FieldValue.serverTimestamp() });
+            await velho.delete();
+        }
+        await db.collection(`${COL_TIT}_log`).add({ acao: 'renomear', de, para, semestre, aulas: aulasTrocadas, cursos: docs.map(x => x.ref.id), por: quem, em: admin.firestore.FieldValue.serverTimestamp() });
+        res.json({ ok: true, de, para, aulas: aulasTrocadas, cursos: docs.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE /api/matrizes/titulacao-professor  { semestre, codfun?, nome } — volta a valer a titulação do Edubox
 router.delete('/titulacao-professor', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
     try {
@@ -342,15 +400,85 @@ function acharProfessor(lista, nome) {
     return c.length === 1 ? c[0] : (c.length > 1 && new Set(c.map(x => x.titulacao)).size === 1 ? { ...c[0], ambiguo: true } : (c.length ? { nome, titulacao: '?', ambiguo: true } : null));
 }
 
+// ==========================================
+// PROFESSOR NOVO x VETERANO (18/11/2026) — pedido da direção: quantos professores novos cada curso tem.
+// Histórico = diários do Edubox (relay /corpo-docente/lista) nos 10 semestres anteriores (5 anos):
+//   veterano    já deu aula na Fatec (em qualquer curso) nos diários anteriores
+//   novo        não aparece nos diários anteriores (ou nem tem cadastro no Edubox)
+// O coordenador pode corrigir no cadastro do professor (aula.vinculo = novo|veterano): vale o dele.
+// Só aparece no cadastro e no relatório da direção — não sai no horário.
+// O relay aceita até 4 formatos por chamada (= 2 semestres): 5 chamadas em paralelo.
+// ==========================================
+const HIST_SEMESTRES = 10;
+const histCache = new Map();   // semestre → { em, dados } (10 min, por instância)
+async function historicoDocentes(semestre) {
+    const c = histCache.get(semestre);
+    if (c && Date.now() - c.em < 10 * 60 * 1000) return c.dados;
+    const ant = semestresAntes(semestre, HIST_SEMESTRES).slice(1);
+    const lotes = [];
+    for (let i = 0; i < ant.length; i += 2) lotes.push(ant.slice(i, i + 2).flatMap(formatosEdubox));
+    try {
+        const rs = await Promise.all(lotes.map(l => relay(`/corpo-docente/lista?semestres=${encodeURIComponent(l.join(','))}`, { timeoutMs: 30000 })));
+        const ruim = rs.find(r => !r || !r.ok);
+        if (ruim) throw new Error((ruim && ruim.erro) || 'relay sem resposta');
+        const fatec = new Set(), curso = new Set(), porCodfun = new Map();
+        rs.forEach(r => (r.professores || []).forEach(p => {
+            const f = String(p.codfun), cid = cursoIdDe(String(p.codcur).trim());
+            fatec.add(f);
+            curso.add(`${cid}:${f}`);
+            if (!porCodfun.has(f)) porCodfun.set(f, { codfun: f, nome: String(p.nome || '').trim(), cursos: new Set() });
+            porCodfun.get(f).cursos.add(cid);
+        }));
+        // pra achar pelo nome quem só foi digitado nos horários (ou não tem titulação no Edubox)
+        const lista = [...porCodfun.values()].map(x => ({ ...x, toks: normNome(x.nome).split(' ') }));
+        const dados = { ok: true, fatec, curso, lista, desde: ant[ant.length - 1] };
+        histCache.set(semestre, { em: Date.now(), dados });
+        return dados;
+    } catch (e) {
+        console.error('[matrizes] histórico de docentes:', e.message);
+        return { ok: false, erro: e.message, fatec: new Set(), curso: new Set(), lista: [] };
+    }
+}
+function vinculoAuto(hist, cursoId, codfun, nome) {
+    if (!hist.ok) return null;
+    let f = codfun ? String(codfun) : null;
+    if (!f || !hist.fatec.has(f)) {
+        // sem código (ou código sem diário): procura pelo nome nos diários anteriores
+        const ex = hist.lista.filter(x => normNome(x.nome) === normNome(nome));
+        const ach = ex.length === 1 ? ex[0] : acharProfessor(hist.lista, nome);
+        if (ach && !ach.ambiguo && ach.codfun) f = ach.codfun;
+    }
+    // regra da direção (18/11/2026): já tem histórico na Fatec (qualquer curso) = veterano; senão = novo.
+    // Se não bater (ex.: professor que saiu e voltou), o coordenador corrige no cadastro do professor.
+    return f && hist.fatec.has(f) ? 'veterano' : 'novo';
+}
+
+// GET /api/matrizes/historico-docentes?semestre=2027.1 — pro cadastro do professor mostrar o automático
+router.get('/historico-docentes', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
+    try {
+        const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : '';
+        if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
+        const [hist, escopo] = await Promise.all([historicoDocentes(semestre), escopoDe(req)]);
+        if (!hist.ok) return res.json({ ok: false, erro: hist.erro });
+        // quem deu aula na Fatec nos últimos 5 anos + em quais dos cursos que a pessoa vê
+        const professores = hist.lista.map(x => ({ codfun: x.codfun, nome: x.nome, cursos: [...x.cursos].filter(c => podeVer(escopo, c)) }));
+        res.json({ ok: true, desde: hist.desde, professores });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
     try {
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : '';
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
         const escopo = await escopoDe(req);
-        const [docsEdubox, cd, ov] = await Promise.all([
+        const [docsEdubox, cd, ov, gSnap, hist] = await Promise.all([
             matrizesDoSemestre(semestre),
             relay(`/corpo-docente/lista?semestres=${encodeURIComponent(formatosEdubox(semestre).join(','))}`, { timeoutMs: 30000 }).catch(e => ({ ok: false, erro: e.message })),
-            overridesTitulacao()
+            overridesTitulacao(),
+            db.collection('matrizes_grade').where('semestre', '==', semestre).get(),
+            historicoDocentes(semestre)
         ]);
         const cursos = new Map(docsEdubox.filter(m => podeVer(escopo, m.cursoId)).map(m => [m.cursoId, { cursoId: m.cursoId, cursoNome: m.cursoNome, professores: new Map(), semProfessor: 0 }]));
         const doEdubox = cd && cd.ok && (cd.professores || []).length > 0;
@@ -363,7 +491,7 @@ router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matri
             });
         } else {
             // planejamento: o que os coordenadores definiram nos horários deste semestre
-            const [gSnap, tits] = await Promise.all([db.collection('matrizes_grade').where('semestre', '==', semestre).get(), titulacoesEdubox(semestre)]);
+            const tits = await titulacoesEdubox(semestre);
             const lista = tits.map(t => ({ ...t, toks: normNome(t.nome).split(' ') }));
             gSnap.forEach(d => {
                 const x = d.data(), c = cursos.get(x.cursoId || d.id.split('__')[1]);
@@ -394,14 +522,44 @@ router.get('/titulacao', verifyToken, verifyToken.requireModulePermission('matri
                 }));
             });
         }
+        // novo x veterano: o que o coordenador marcou no cadastro do professor vence o histórico do Edubox
+        const marcados = new Map();   // cursoId → [{ nome, vinculo }]
+        gSnap.forEach(d => {
+            const x = d.data(), cid = x.cursoId || d.id.split('__')[1];
+            Object.values(x.alocacoes || {}).forEach(a => (a.aulas || []).forEach(au => {
+                if (!au.vinculo || ehContratar(au.professor)) return;
+                if (!marcados.has(cid)) marcados.set(cid, []);
+                marcados.get(cid).push({ nome: au.professor, vinculo: au.vinculo });
+            }));
+        });
+        const marcadoDe = (cursoId, p) => {
+            const lista = marcados.get(cursoId) || [];
+            const nomes = [normNome(p.digitado || ''), normNome(p.nome)];
+            const ex = lista.find(m => nomes.includes(normNome(m.nome)));
+            if (ex) return ex.vinculo;
+            // nome curto digitado no horário ("Silmara Pietro") → professor do Edubox ("SILMARA R. PIETROBELLI")
+            const alvo = [{ nome: p.nome, toks: normNome(p.nome).split(' ') }];
+            const curto = lista.find(m => { const a = acharProfessor(alvo, m.nome); return a && !a.ambiguo; });
+            return curto ? curto.vinculo : null;
+        };
+        cursos.forEach(c => c.professores.forEach(p => {
+            const auto = vinculoAuto(hist, c.cursoId, p.codfun, p.nome);
+            const manual = marcadoDe(c.cursoId, p);
+            p.vinculoEdubox = auto;
+            p.vinculo = manual || auto;
+            p.vinculoFonte = manual ? 'coordenador' : (auto ? 'edubox' : null);
+        }));
         const out = [...cursos.values()].map(c => {
             const profs = [...c.professores.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+            const novos = profs.filter(p => p.vinculo === 'novo').length;
+            const veteranos = profs.filter(p => p.vinculo === 'veterano').length;
             const n = (t) => profs.filter(p => p.titulacao === t).length;
             const cont = { doutor: n('Doutor'), mestre: n('Mestre'), especialista: n('Especialista'), graduado: n('Graduado') };
             cont.semTitulacao = profs.length - cont.doutor - cont.mestre - cont.especialista - cont.graduado;
-            return { cursoId: c.cursoId, cursoNome: c.cursoNome, total: profs.length, ...cont, semProfessor: c.semProfessor, professores: profs };
+            return { cursoId: c.cursoId, cursoNome: c.cursoNome, total: profs.length, ...cont, novos, veteranos, semProfessor: c.semProfessor, professores: profs };
         }).sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR'));
-        res.json({ semestre, fonte: doEdubox ? 'edubox' : 'matrizes', erroEdubox: cd && !cd.ok ? cd.erro : null, cursos: out });
+        res.json({ semestre, fonte: doEdubox ? 'edubox' : 'matrizes', erroEdubox: cd && !cd.ok ? cd.erro : null,
+            historico: hist.ok ? { desde: hist.desde } : { erro: hist.erro }, cursos: out });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
