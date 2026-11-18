@@ -90,3 +90,7 @@
 .fm-toast { position: fixed; right: 1.2rem; bottom: 1.2rem; background: var(--orb-marca); color: #fff; padding: 0.7rem 1rem; border-radius: var(--orb-raio-ctrl); font-size: 0.88rem; z-index: 1100; max-width: 440px; }
 .fm-toast.erro { background: var(--orb-crit); }
 @media (max-width: 760px) { .layout-content { padding: 1rem 1rem 2.5rem; } .fm-barra .fm-direita { margin-left: 0; } }
+
+/* rodapé fixo: fundo sólido (o fundo translúcido do "Total a receber" deixava aparecer a linha que rola por baixo) */
+.fm-tabela tfoot td, .fm-tabela tfoot td.fm-total { background: #eef2f8; }
+.fm-tabela tfoot td.fm-nome { background: #eef2f8; z-index: 3; }
