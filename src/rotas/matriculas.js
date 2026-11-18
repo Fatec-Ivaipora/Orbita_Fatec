@@ -508,7 +508,17 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             .where('modulo', '==', modulo)
             .where('semestre', '==', semestre);
         if (cursoId) query = query.where('cursoId', '==', cursoId);
-        const snap = await query.get();
+        // 18/11/2026: veterano lançado à mão (sem a marca da Virada, origemAlunoId) contava como "matrícula nova em
+        // outro período" — ex.: Ana Clara (Pedagogia 7º), que estava no 6º em 2026.2. Quem já tinha matrícula no
+        // semestre ANTERIOR do mesmo módulo é veterano, com ou sem a marca. Assim a Quantidade de matrículas fecha
+        // com o Total de matrículas dos Contratos (calouros do 1º + matrículas novas acima do 1º).
+        const [anoS, numS] = semestre.split('.').map(Number);
+        const semestreAnterior = numS === 1 ? `${anoS - 1}.2` : `${anoS}.1`;
+        const [snap, antSnap] = await Promise.all([
+            query.get(),
+            db.collection(COL_ALUNOS).where('modulo', '==', modulo).where('semestre', '==', semestreAnterior).select('nome', 'nomeNorm').get()
+        ]);
+        const nomesAnterior = new Set(antSnap.docs.map(d => d.data().nomeNorm || nomeNorm(d.data().nome)));
 
         const porCursoSituacao = {}; // curso -> situacao -> contagem
         const porSituacaoTotal = {};
@@ -541,7 +551,7 @@ router.get('/relatorio', verifyToken, checkPermission, async (req, res) => {
             const a = doc.data();
             total++;
             if (a.origemAlunoId) vindosDeVirada++;
-            else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao)) novasAcimaAtivas++;
+            else if (a.periodo && a.periodo !== '1º' && SITS_ATIVAS_NAO_CALOURO.includes(a.situacao) && !nomesAnterior.has(a.nomeNorm || nomeNorm(a.nome))) novasAcimaAtivas++;
             if (a.periodo && a.periodo !== '1º' && CALOUROS_SITS.includes(a.situacao)) calourosForaDo1++;
             if (a.formando) formandos++;
             const curso = a.curso || '—';
