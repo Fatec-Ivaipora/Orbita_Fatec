@@ -9,7 +9,9 @@
 // - Quantidade: número puro → quantidade. "15 unidades", "4 galões" (um número + palavra) → quantidade 15 e unidade
 //   "unidades". Texto que não dá pra reduzir a um número só ("20 cx P e 10 cx M", "1 litro de cada") → quantidade 1
 //   e o texto inteiro vai na UNIDADE, pra quem cota ver exatamente o pedido. Quantidade vazia → 1.
-// - linkReferencia: o link do produto (quando a planilha traz um) ou a coluna OBSERVAÇÕES.
+// - linkReferencia: o link do produto (escrito na célula OU embutido como hiperlink — Med. Vet. usa hiperlink no texto
+//   da observação) ou, sem link, a coluna OBSERVAÇÕES.
+// - Item que já existe e ficou sem link, mas a planilha tem link → só o link é atualizado.
 // - O item não tem campo de disciplina/justificativa: esses textos ficam só na planilha original.
 // - Não duplica: se já existir item no semestre 2027.1 com o mesmo curso + produto, pula.
 //
@@ -57,11 +59,14 @@ function lerPlanilha(arquivo) {
         const cab = rows[iCab].map(norm);
         const col = (re) => cab.findIndex(c => re.test(c));
         const c = { qtd: col(/^QUANT/), un: col(/^UNIDADE/), mat: col(/MATERIAL/), prof: col(/^PROFESSOR/), per: col(/^PERIODICIDADE/), disc: col(/^DISCIPLINA/), just: col(/^JUSTIFICATIVA/), obs: col(/^OBSERVA/) };
+        const ws = wb.Sheets[aba];
+        const hiperlink = (linha, coluna) => { if (coluna < 0) return ''; const cel = ws[XLSX.utils.encode_cell({ r: linha, c: coluna })]; return cel && cel.l && cel.l.Target ? limpa(cel.l.Target) : ''; };
         rows.slice(iCab + 1).forEach((r, i) => {
             const produto = limpa(r[c.mat]);
             if (!produto) return;
             const q = quantidadeDe(r[c.qtd], limpa(r[c.un]));
-            const link = [r[c.just], r[c.obs]].map(limpa).find(x => /^https?:\/\//i.test(x)) || '';
+            const linhaIdx = iCab + 1 + i;
+            const link = [r[c.just], r[c.obs], hiperlink(linhaIdx, c.obs), hiperlink(linhaIdx, c.just)].map(limpa).find(x => /^https?:\/\//i.test(x)) || '';
             const obs = limpa(r[c.obs]);
             itens.push({
                 linha: iCab + i + 2, produto: produto.toUpperCase(), quantidade: q.quantidade, unidade: q.unidade,
@@ -80,7 +85,9 @@ function lerPlanilha(arquivo) {
     console.log(`Licitação: ${lic.docs[0].data().nome} (${SEMESTRE}) — ${COMMIT ? 'GRAVANDO' : 'DRY-RUN (nada é gravado)'}\n`);
 
     const jaSnap = await db.collection(COL_ITENS).where('semestre', '==', SEMESTRE).get();
-    const ja = new Set(jaSnap.docs.map(d => `${d.data().cursoId}|${norm(d.data().produto)}`));
+    const jaDocs = new Map(jaSnap.docs.map(d => [`${d.data().cursoId}|${norm(d.data().produto)}`, d]));
+    const ja = new Set(jaDocs.keys());
+    const atualizarLink = [];
 
     const arquivos = fs.readdirSync(PASTA).filter(f => /\.xlsx$/i.test(f) && !f.startsWith('~$'));
     let total = 0, pulados = 0;
@@ -93,13 +100,21 @@ function lerPlanilha(arquivo) {
         itens.forEach(it => {
             const k = `${curso.cursoId}|${norm(it.produto)}`;
             const dup = ja.has(k);
-            if (dup) pulados++; else { ja.add(k); gravar.push({ ...curso, ...it }); total++; }
+            if (dup) {
+                pulados++;
+                const doc = jaDocs.get(k);
+                if (doc && /^https?:\/\//i.test(it.linkReferencia) && !/^https?:\/\//i.test(doc.data().linkReferencia || '')) atualizarLink.push({ ref: doc.ref, link: it.linkReferencia, produto: it.produto, curso: curso.curso });
+            } else { ja.add(k); gravar.push({ ...curso, ...it }); total++; }
             const qtdTxt = it.qtdOriginal && String(it.quantidade) !== it.qtdOriginal ? ` [planilha: "${it.qtdOriginal}"]` : '';
             console.log(`  ${dup ? 'JÁ EXISTE ' : ''}L${it.linha}: ${it.quantidade} ${it.unidade || '-'} · ${it.produto.slice(0, 70)} · ${it.professor || '-'} · ${it.periodicidade || '-'}${qtdTxt}${it.linkReferencia ? ` · obs/link: ${it.linkReferencia.slice(0, 40)}` : ''}`);
         });
     }
     console.log(`\nNovos: ${total} · já existentes (pulados): ${pulados}`);
+    console.log(`Links a atualizar em itens já gravados: ${atualizarLink.length}`);
+    atualizarLink.forEach(a => console.log(`  LINK ${a.curso} · ${a.produto.slice(0, 60)} → ${a.link.slice(0, 70)}`));
     if (!COMMIT) { console.log('Dry-run: rode com --commit para gravar.'); process.exit(0); }
+    for (const a of atualizarLink) await a.ref.update({ linkReferencia: a.link, updatedAt: new Date().toISOString() });
+    if (atualizarLink.length) console.log(`Links atualizados: ${atualizarLink.length}.`);
 
     const agora = new Date().toISOString();
     for (let i = 0; i < gravar.length; i += 400) {

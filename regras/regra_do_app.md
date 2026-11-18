@@ -123,6 +123,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - Quantidade em texto composto ("20 cx P e 10 cx M", "1 frasco de cada") vira quantidade 1, com o texto inteiro na unidade.
   - "15 unidades" vira quantidade 15, unidade "unidades".
   - Disciplina e justificativa não existem no item da Licitação e ficaram só nas planilhas.
+  - O link do produto vale escrito na célula ou embutido como hiperlink. A Med. Vet. usa hiperlink no texto da observação: os 4 itens com link (laminários de parasitologia e microbiologia, histologia de pequenos e grandes animais) foram corrigidos na segunda rodada, que só atualiza o link de item já gravado.
 - Como reverter: apagar em `financeiro_itens` os itens com `createdBy: 'importacao-planilha-2027.1'`.
 
 ### [2026-11-18] Módulo novo: Aulas EAD (Gestão de T.I.) — salas Zoom, grade da semana e gravações das UAs
