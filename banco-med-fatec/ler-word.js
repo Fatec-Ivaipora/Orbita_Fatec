@@ -127,7 +127,7 @@ function itensDoHtml(html) {
 async function ler(file) {
   if (!window.JSZip || !window.mammoth) throw new Error('Leitor de Word não carregou. Recarregue a página.');
   if (!/\.docx$/i.test(file.name)) throw new Error('No navegador só dá pra ler Word .docx (salve o .doc como .docx).');
-  const original = await file.arrayBuffer();
+  const original = await sombreamentoComoMarcaTexto(await file.arrayBuffer());
   const numerado = await escreverNumeracaoAutomatica(original);
   const { value: html } = await window.mammoth.convertToHtml({ arrayBuffer: numerado });
   return itensDoHtml(html);
@@ -197,12 +197,19 @@ function lerModeloDeBlocos(blocos) {
     if (sec === 'feedback') { if (b.texto || b.imgs.length) q.feedback.push(b); continue; }
     if (sec === 'ref') { if (b.texto) q.ref.push(b.texto); }
   }
-  return qs.map(q => {
+  const lidas = qs.map(q => {
     const imagens = q.enun.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: `questao-${q.numero}-${i + 1}` }));
     const linhas = q.enun.filter(b => b.texto);
-    // pergunta = último parágrafo que pergunta (?, :, assinale/marque/indique…); as alternativas vêm depois dele
+    // alternativas escritas com letra ("A) …", "B) …") no fim: a pergunta é o parágrafo logo antes delas (17/11/2026).
+    // Antes procurava a pergunta pela palavra "qual" e achava "na qual" dentro da alternativa C ("Hipersensibilidade
+    // do tipo III, na qual…"): a questão ficava com 1 alternativa e sumia da prévia (Milene, questões 4 a 6).
     let ip = -1;
-    for (let i = linhas.length - 2; i >= 0; i--) {
+    let k = linhas.length;
+    while (k > 0 && RE_LETRA.test(linhas[k - 1].texto)) k--;
+    if (linhas.length - k >= 2 && k > 0) ip = k - 1;
+    // sem letras: último parágrafo que pergunta (?, :, assinale/marque/indique…); as alternativas vêm depois dele
+    for (let i = linhas.length - 2; ip < 0 && i >= 0; i--) {
+      if (RE_LETRA.test(linhas[i].texto)) continue;
       if (/[?:]\s*$/.test(linhas[i].texto) || /\b(assinale|marque|indique|aponte|qual|quais)\b/i.test(linhas[i].texto)) { ip = i; break; }
     }
     if (ip < 0) ip = Math.max(0, linhas.length - 5);
@@ -231,13 +238,66 @@ function lerModeloDeBlocos(blocos) {
       unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
       fonte: q.ref.join(' ')
     };
-  }).filter(q => q.alternativas.length >= 2 && (q.pergunta || q.casoHtml));
+  });
+  // questão que não deu pra ler direito continua na prévia, com o problema escrito (17/11/2026): antes ela sumia
+  // sem aviso. Vem desmarcada; o professor vê e marca "Importar esta questão" se quiser subir mesmo assim.
+  const todas = lidas.filter(q => q.enunciado || q.alternativas.length);
+  todas.forEach(q => {
+    if (q.alternativas.length < 2) q.problema = `Achei ${q.alternativas.length ? 'só 1 alternativa' : 'nenhuma alternativa'}. Confira se as alternativas começam com A), B), C)… logo depois da pergunta.`;
+    else if (!q.pergunta && !q.casoHtml) q.problema = 'Não achei o enunciado/pergunta antes das alternativas.';
+  });
+  todas.comProblema = todas.filter(q => q.problema).map(q => q.numero);
+  return todas;
+}
+
+// Sombreamento amarelo/verde vale como marca-texto (17/11/2026): tem professor que pinta a correta com
+// Sombreamento (w:shd fill="FFF200") em vez do marca-texto (w:highlight). O Word mostra igual, mas o mammoth só
+// enxerga o marca-texto — a correta não era reconhecida (Mariana, Morfo DP). Aqui troca o sombreamento do texto
+// (ou do parágrafo inteiro) por marca-texto amarelo antes da leitura.
+function corDeMarcaTexto(hex) {
+  const m = /^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return false;
+  const [r, g, b] = m.slice(1).map(h => parseInt(h, 16));
+  const amarelo = r >= 200 && g >= 180 && b <= 140;
+  const verde = g >= 180 && r <= 190 && b <= 160 && g - b >= 40;
+  return amarelo || verde;
+}
+async function sombreamentoComoMarcaTexto(buffer) {
+  try {
+    const zip = await window.JSZip.loadAsync(buffer);
+    const arq = zip.file('word/document.xml');
+    if (!arq) return buffer;
+    const doc = await arq.async('string');
+    const RE_SHD = /<w:shd\b[^>]*\bw:fill="([0-9A-Fa-f]{6})"[^>]*\/>/;
+    const MARCA = '<w:highlight w:val="yellow"/>';
+    let mudou = false;
+    // parágrafo inteiro sombreado: cada trecho dele ganha o marca-texto
+    let novo = doc.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, (p) => {
+      const ppr = /<w:pPr>[\s\S]*?<\/w:pPr>/.exec(p);
+      const shd = ppr && RE_SHD.exec(ppr[0].replace(/<w:rPr>[\s\S]*?<\/w:rPr>/g, ''));
+      if (!shd || !corDeMarcaTexto(shd[1])) return p;
+      mudou = true;
+      return p.replace(/<w:r>(?!\s*<w:rPr>)/g, `<w:r><w:rPr>${MARCA}</w:rPr>`).replace(/(<w:r\b[^>]*>\s*<w:rPr>)/g, `$1${MARCA}`);
+    });
+    // trecho sombreado (propriedade do texto)
+    novo = novo.replace(/<w:rPr>([\s\S]*?)<\/w:rPr>/g, (rpr, dentro) => {
+      const shd = RE_SHD.exec(dentro);
+      if (!shd || !corDeMarcaTexto(shd[1]) || /<w:highlight\b/.test(dentro)) return rpr;
+      mudou = true;
+      return `<w:rPr>${MARCA}${dentro}</w:rPr>`;
+    });
+    if (!mudou) return buffer;
+    zip.file('word/document.xml', novo);
+    return await zip.generateAsync({ type: 'arraybuffer' });
+  } catch (e) {
+    return buffer;
+  }
 }
 
 async function lerModelo(file) {
   if (!window.JSZip || !window.mammoth) throw new Error('Leitor de Word não carregou. Recarregue a página.');
   if (!/\.docx$/i.test(file.name)) throw new Error('No navegador só dá pra ler Word .docx (salve o .doc como .docx).');
-  const numerado = await escreverNumeracaoAutomatica(await file.arrayBuffer());
+  const numerado = await escreverNumeracaoAutomatica(await sombreamentoComoMarcaTexto(await file.arrayBuffer()));
   const { value: html } = await window.mammoth.convertToHtml({ arrayBuffer: numerado }, { styleMap: ["highlight[color='yellow'] => mark", "highlight[color='green'] => mark"] });
   const blocos = blocosDoHtml(html);
   const temModelo = blocos.some(b => RE_ENUN.test(b.texto)) && blocos.some(b => RE_INICIO.test(b.texto));

@@ -39,6 +39,26 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M8 10l2.5 2.5L16 7"/></svg>`,
     url: "/ti/automacao-ava/index.html"
   },
+  // Aulas EAD (18/11/2026) — salas Zoom, disciplinas EAD do semestre (dia/horário/professor), grade da semana
+  // (mesmo link pro mesmo professor) e controle das gravações das UAs (gravou/baixou/YouTube/AVA).
+  "ead-aulas": {
+    id: "ead-aulas",
+    category: "ti",
+    title: "Aulas EAD",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg>`,
+    url: "/ti/ead-aulas/index.html"
+  },
+  // Financeiro Medicina (18/11/2026) — rematrícula da Medicina: contrato mãe, mensal do acordo, saldos e reajuste
+  // por turma. SÓ os usuários de somenteUsuarios veem (Lisa e Fábio Costa) — nem outros ADM N1. A rota
+  // (src/rotas/financeiro-medicina.js, USUARIOS_PERMITIDOS) barra os outros. Incluir alguém só quando pedirem.
+  "financeiro-medicina": {
+    id: "financeiro-medicina",
+    category: "financeiro",
+    title: "Financeiro Medicina",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    url: "/financeiro/medicina/index.html",
+    somenteUsuarios: ["A6gsjqRTwdeAy29KVxcHJg2jYNy2", "EtrSfFo1FCYD6ZZOFQ6AL25axWX2", "rhQ6fe4HQfMOCCejry1sPx0hA1v1", "rSw36LAa8fPI94aYFoVv7JggB6w2"] // Lisa, Fábio, Paulo henrique e Administrador — todos editam
+  },
   acessos: {
     id: "acessos",
     category: "ti",
@@ -293,15 +313,15 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "formularios"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "formularios"]
   },
   ti: {
     label: "T.I.",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava", "ead-aulas"]
   },
   rh: {
     label: "RH",

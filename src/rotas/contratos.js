@@ -180,8 +180,11 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
         if (!/^\d{4}\.[12]$/.test(semestre)) return res.status(400).json({ error: 'Informe o semestre (ex.: 2027.1).' });
         const data = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.data || '')) ? req.query.data : hojeSP();
         // Medicina fica de fora por enquanto (pedido 11/11/2026: "depois trabalhamos eles")
-        const [fatec, vagasSnap] = await Promise.all([
+        // 18/11/2026: lê também a Medicina ("2027-1") só pra saber quem TROCOU de curso (ex.: Fisioterapia →
+        // Medicina): a Medicina continua fora das contas do feed.
+        const [fatec, med, vagasSnap] = await Promise.all([
             relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semestre.replace('.', '/'))}`, { timeoutMs: 60000 }).catch(e => ({ ok: false, erro: e.message })),
+            relay(`/matriculas-edubox/lista?semestres=${encodeURIComponent(semestre.replace('.', '-'))}`, { timeoutMs: 60000 }).catch(() => null),
             db.collection(COL_CONFIG_COM).doc(DOC_VAGAS).get()
         ]);
         if (!fatec || !fatec.ok) return res.status(502).json({ error: `Edubox não respondeu: ${(fatec && fatec.erro) || 'sem resposta'}` });
@@ -191,16 +194,27 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
         const cursos = new Map();
         const porDia = {};
         const curso = (cod) => {
-            if (!cursos.has(cod)) cursos.set(cod, { codcur: cod, nome: NOME_CURSO_FEED[cod] || cod, total: 0, outros: 0, hoje: 0, semana: 0, sairam: 0 });
+            if (!cursos.has(cod)) cursos.set(cod, { codcur: cod, nome: NOME_CURSO_FEED[cod] || cod, total: 0, outros: 0, hoje: 0, semana: 0, sairam: 0, trocaram: 0 });
             return cursos.get(cod);
         };
         const seteDiasAtras = new Date(new Date(`${data}T12:00:00`).getTime() - 6 * 86400000).toISOString().slice(0, 10);
         const linhas = (fatec.matriculas || []).filter(e => e.codcur !== 'MED').map(e => ({ e, sem: semestre.replace('.', '/') }));
+        // Troca de curso (18/11/2026, mesma regra do agente do Lucas): matrícula que saiu, mas o aluno tem OUTRA
+        // matrícula ativa no semestre (Graduação ou Medicina) → "trocou de curso", não soma em "saíram". O relay
+        // não manda o código do aluno (alumat), então liga pelo nome normalizado.
+        const ativasPorNome = new Map();
+        [...(fatec.matriculas || []), ...((med && med.ok && med.matriculas) || [])].forEach(e => {
+            if (SAIU_EDUBOX.test(e.situacao || '')) return;
+            const k = normNome(e.nome);
+            if (!ativasPorNome.has(k)) ativasPorNome.set(k, new Set());
+            ativasPorNome.get(k).add(String(e.codmat));
+        });
+        const temOutraAtiva = (e) => [...(ativasPorNome.get(normNome(e.nome)) || [])].some(cm => cm !== String(e.codmat));
         for (const { e, sem } of linhas) {
             if (String(e.semestre_ingresso || '').replace(/[-/]/, '.') !== semestre) continue;   // só calouro (ingresso no próprio semestre; o Edubox às vezes grava "2027-1")
             const c = curso(e.codcur);
             const dia = String(e.data_matricula || '').slice(0, 10);
-            if (SAIU_EDUBOX.test(e.situacao || '')) { c.sairam++; continue; }
+            if (SAIU_EDUBOX.test(e.situacao || '')) { if (Number(e.periodo) > 1) continue; temOutraAtiva(e) ? c.trocaram++ : c.sairam++; continue; }
             // 12/11/2026: aluno novo que entrou direto num período acima do 1º (transferência, 2ª graduação) aparece à
             // parte ("33 calouros + 2 outros períodos = 35") e não conta nas vagas do edital (que são do 1º período)
             if (Number(e.periodo) > 1) c.outros++;
@@ -232,6 +246,7 @@ router.get('/feed-diario', verifyToken, checkPermission, async (req, res) => {
             totais: {
                 hoje: lista.reduce((n, c) => n + c.hoje, 0), semana: lista.reduce((n, c) => n + c.semana, 0),
                 total: lista.reduce((n, c) => n + c.total, 0), outros: lista.reduce((n, c) => n + c.outros, 0), sairam: lista.reduce((n, c) => n + c.sairam, 0),
+                trocaram: lista.reduce((n, c) => n + c.trocaram, 0), medicinaLida: !!(med && med.ok),
                 vagas: lista.reduce((n, c) => n + (c.vagas || 0), 0), limite: lista.reduce((n, c) => n + (c.limite || 0), 0)
             },
             porDia: dias,
@@ -500,6 +515,15 @@ async function sincronizarDaMatricula(matriculaId, m, quem, situacaoMudou = true
         await garantirSemestre(m.semestre);
         const novo = await db.collection(COL).add(doc);
         return { acao: 'criado', id: novo.id, status };
+    }
+    // 18/11/2026: a matrícula deixou de ser calouro (ex.: Cristiane, criada como Matrícula Nova e corrigida para
+    // Rematrícula Assinada conforme o Edubox) → o Comercial só acompanha calouro, então o contrato sai, com a mesma
+    // regra da matrícula excluída: sem trabalho do Comercial, apaga; com trabalho, fica e marca que a matrícula saiu.
+    if (atual && atual.matriculaId && situacaoMudou && !calouro && !perda) {
+        const temTrabalho = !!(atual.assinadoEm || (atual.observacoes || '').trim() || atual.atividadeId || atual.coletaData || atual.status === 'assinado');
+        if (!temTrabalho) { await ref.delete(); return { acao: 'removido', id: ref.id }; }
+        await ref.update({ matriculaRemovida: true, matriculaSituacao: m.situacao || '', updatedAt: agora, updatedBy: `Matrículas (${quem || 'automático'})` });
+        return { acao: 'marcado', id: ref.id };
     }
     const upd = { ...basicos, updatedAt: agora, updatedBy: `Matrículas (${quem || 'automático'})` };
     if (m.semestre !== atual.semestre) { upd.semestre = m.semestre; await garantirSemestre(m.semestre); }

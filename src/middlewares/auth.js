@@ -219,6 +219,7 @@ const requireModulePermission = (moduleName) => {
         const defaultPermissions = {
             adm_l2: {
                 'automacao-ava': 3,
+                'ead-aulas': 3,
                 cad: 3,
                 'correcao-provas': 3,
                 cpa: 3,
@@ -252,6 +253,7 @@ const requireModulePermission = (moduleName) => {
             },
             ti: {
                 'automacao-ava': 3,
+                'ead-aulas': 3,
                 emprestimo: 3,
                 usuarios: 1,
                 ferida: 1,
@@ -302,6 +304,7 @@ const requireModulePermission = (moduleName) => {
                 'agenda-espacos': 2
             },
             financeiro: {
+                'financeiro-medicina': 3, // filtrado por usuário na rota (só Lisa e Fábio)
                 'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,

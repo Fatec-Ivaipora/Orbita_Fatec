@@ -119,6 +119,238 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: aba "Titulação dos professores" → abrir um curso → "Alterar" num professor → escolher a titulação → Salvar; o selo vira "editada" e a contagem do curso muda; recarregar e conferir que persiste; "Voltar ao Edubox" desfaz. Com um coordenador, tentar alterar professor de outro curso pela API → 403.
 - Como reverter: reverter o commit; os docs de `matrizes_titulacoes` podem ficar (sem a rota, são ignorados) ou ser apagados.
 
+### [2026-11-18] Financeiro Medicina: tabela com cara de planilha (grade, zebra, "—" no vazio)
+- Autor: Claude (pedido do Paulo Henrique: "número em cima de número… ficou muito solto… onde tem número, onde não tem")
+- Branch: fix/financeiro-medicina-rodape
+- Arquivos alterados: `financeiro/medicina/financeiro-medicina.css` (`?v=3`), `app.js` (`?v=2`) e `index.html`.
+- O que muda:
+  - O rodapé fixo ganha fundo sólido; o total ficava sobreposto à linha que rolava por baixo.
+  - A tabela ganha linhas de grade, linhas zebradas, linhas mais baixas e células editáveis com borda.
+  - Célula vazia mostra "—" em cinza.
+  - A categoria vira etiqueta pequena ao lado do nome.
+  - A coluna "Total a receber" fica destacada.
+  - Nenhum cálculo muda.
+
+### [2026-11-18] Financeiro Medicina: ADM geral (Paulo Henrique e Administrador) vê e edita tudo
+- Autor: Claude (pedido do Paulo Henrique: "o adm geral vê tudo… faz tudo")
+- Branch: feat/financeiro-medicina-acesso-adm
+- Arquivos alterados: `src/rotas/financeiro-medicina.js` (`USUARIOS_PERMITIDOS`) e `core/permissions.js` (`somenteUsuarios`).
+- Acesso total (ver e editar): Lisa Marie, Fábio Costa, Paulo henrique e o perfil Administrador. O "só leitura" do Paulo (entrada anterior) deixa de existir. Os outros ADM N1 (Roni, Laisa) continuam sem acesso.
+
+### [2026-11-18] Financeiro Medicina: Paulo Henrique passa a ver (só leitura)
+- Autor: Claude (pedido do próprio Paulo Henrique, Suporte AVA)
+- Branch: feat/financeiro-medicina-paulo-ver
+- Arquivos alterados: `src/rotas/financeiro-medicina.js` (`USUARIOS_SO_VER`: só GET) e `core/permissions.js` (o uid dele em `somenteUsuarios`, para o menu).
+- Lisa e Fábio continuam sendo os únicos que editam. Paulo vê a tela sem os campos de edição (`podeEditar` false), e qualquer alteração dele responde 403.
+
+### [2026-11-18] Módulo novo: Financeiro Medicina (rematrícula por turma) — só Lisa e Fábio
+- Autor: Claude (pedido do Suporte AVA, com a explicação da Lisa sobre a planilha)
+- Branch: feat/financeiro-medicina
+- Arquivos criados: `src/rotas/financeiro-medicina.js`, `financeiro/medicina/index.html`, `app.js` e `financeiro-medicina.css`.
+- Arquivos alterados:
+  - `api/index.js`: rota `/api/financeiro-medicina`;
+  - `core/permissions.js`: módulo com `somenteUsuarios`;
+  - `core/layout.js`: menu e guarda de página respeitam `somenteUsuarios`, que vale até para ADM N1;
+  - `src/middlewares/auth.js`: nível 3 para `financeiro` (o filtro real é por usuário).
+- O que faz: substitui a "PLANILHA REMATRÍCULA" do Financeiro, que tinha uma aba por turma e semestre, e serve para calcular os valores que o Financeiro lança no Edubox. **Não grava nada no Edubox.**
+  - **Turma** (semestre, período, ingresso, valor integral) com as **colunas de saldo** dela: "soma no total" = saldo devido; sem marcar = histórico.
+  - **Aluno:** contrato mãe, % desconto, **mensal do acordo**, quitou o semestre, saldos por coluna, categoria (Pravaler, ProUni 50%/100%, ProUni + Pravaler, Quitou, Vai quitar, Inadimplente, Pendente com o Fábio, como as cores da planilha) e observação, tudo editável na tabela.
+  - **Saldo do semestre (calculado):** (contrato mãe − mensal) × 6, a mesma conta da planilha. **Total a receber** = colunas que somam + saldo do semestre. Totais por turma e geral, que é o "quanto tenho a receber" do Fábio.
+  - **Reajuste por turma:** % na parcela (contrato mãe e, opcionalmente, o mensal do acordo e o integral) e % nos saldos escolhidos (ex.: T2 10%, T3 12%), com prévia antes de confirmar e histórico na turma.
+  - **Trazer das Matrículas:** compara com a Medicina do semestre no período da turma (com nomes parecidos, como nos Contratos) e inclui quem falta, só o nome.
+  - **Nova turma:** pode copiar as colunas e os alunos de uma turma, para abrir o semestre seguinte.
+- **Acesso:** SÓ Lisa Marie (Financeiro) e Fábio Costa (direção), pelo uid em `USUARIOS_PERMITIDOS` (servidor) e em `MODULES['financeiro-medicina'].somenteUsuarios` (menu). Nem outros ADM N1 veem. Incluir alguém só a pedido, nos dois lugares.
+- Coleções: `fin_med_turmas/{semestre__turma}` e `fin_med_alunos`.
+- Dado (18/11/2026): carga das abas de 2027.1 da planilha "PLANILHA REMATRÍCULA 2025.2 - CORRETA.xlsx", com valores, saldos, categorias pela cor, observações e comentários:
+  - T1 6º: 57 alunos, saldos R$ 3.794.693,97;
+  - T2 5º: 67 alunos, R$ 1.955.847,42;
+  - T3 3º: 63 alunos, R$ 687.260,00.
+  - Os três valores são iguais ao "TOTAL GERAL TODOS OS SALDOS" de cada aba. Os nomes batem com as Matrículas da Medicina 2027.1 (6º, 5º e 3º).
+- Como testar (com o login da Lisa ou do Fábio):
+  - abrir Financeiro › Financeiro Medicina e conferir os totais das turmas;
+  - editar o mensal de um aluno e ver o saldo do semestre e o total mudarem;
+  - abrir Reajuste na T2 com 6% e 10% e ver a prévia;
+  - com outro login, o menu não mostra o módulo e a API responde 403.
+- Como reverter: tirar o módulo de `core/permissions.js`, a rota de `api/index.js`, a pasta `financeiro/medicina/` e o trecho `somenteUsuarios` de `core/layout.js`. As coleções `fin_med_*` podem ser apagadas.
+
+### [2026-11-18] Contratos: número de cada curso conta só os ativos
+- Autor: Claude (pedido do Suporte AVA: "deixa somente o número de ativos para não enganar o pessoal do comercial")
+- Branch: fix/contratos-curso-so-ativos
+- Arquivos alterados: `comercial/contratos/app.js` (`contaComoAtivo`, usado em `renderCursos` e `renderCidades`) e `index.html` (`app.js?v=19`).
+- O que muda: na aba "Todos", os números dos botões de curso, do select de curso e do select de cidade deixam de somar os desistentes. Em 2027.1, "Todos os cursos" foi de 385 para 376 e Fisioterapia de 69 para 66. Na aba "Desistentes", os números continuam sendo os desistentes. A lista de alunos não muda.
+- Como reverter: desfazer o commit.
+
+### [2026-11-18] Matrículas: veterano lançado à mão não conta como "matrícula nova em outro período"
+- Autor: Claude (pedido do Suporte AVA: os números do relatório de Matrículas e dos Contratos têm que bater)
+- Branch: fix/matriculas-veterano-lancado-a-mao
+- Arquivos alterados: `src/rotas/matriculas.js` (GET `/relatorio`) e `src/rotas/contratos.js` (`sincronizarDaMatricula`).
+- Problema: em 2027.1, a "Quantidade de matrículas" dava 378 (372 calouros do 1º + 6 em outros períodos) e o "Total de matrículas" dos Contratos dava 377 (372 + 5). O 6º era a Ana Clara Gonçalves do Lago (Pedagogia 7º, Pendência Financeira): ela é veterana (6º em 2026.2) mas foi lançada à mão em 16/11, sem a marca da Virada (`origemAlunoId`). O relatório contava como "matrícula nova acima do 1º" todo cadastro sem essa marca.
+- Correção 1 (`src/rotas/matriculas.js`): quem teve matrícula em **qualquer semestre anterior** do mesmo módulo, com aluno no sistema (de 2026.1 em diante), é veterano, com ou sem a marca, e não entra em `novasAcimaAtivas`. Isso cobre também quem volta de trancamento, como a Cristiane Schneckemberg Loffi (Psicologia 7º, trancou em 2026.1), que no Edubox é rematrícula e não ingresso novo. O relatório faz uma leitura a mais (nomes dos semestres anteriores, `in`).
+- Correção 2 (`src/rotas/contratos.js`, `sincronizarDaMatricula`): quando a situação da matrícula deixa de ser de calouro (e não é perda), o contrato sai do Comercial, com a regra da matrícula excluída: sem trabalho do Comercial, apaga; com trabalho, fica e marca `matriculaRemovida`. Antes o contrato ficava sobrando, porque o Comercial não exclui pela tela.
+- Dado (18/11/2026, pela rota `PUT /alunos/:id`, conforme o Edubox): Cristiane passou de "Matrícula Nova" para "Rematrícula Assinada". O contrato dela, sem nenhum trabalho do Comercial, saiu sozinho.
+- Resultado 2027.1 (rota real): Matrículas = 372 + 4 = **376**; Contratos = 376 ativos (372 + 4) + 8 desistentes; Edubox (agente do Lucas) = 372 + 4 = 376.
+- Como reverter: desfazer o commit.
+
+### [2026-11-18] Troca de curso: Feed diário e sincronização das Matrículas usam "outra matrícula ativa no semestre"
+- Autor: Claude (pedido do Suporte AVA, a partir da conferência com o agente do Lucas / Fábio)
+- Branch: fix/troca-de-curso-edubox
+- Arquivos alterados: `src/rotas/contratos.js` (feed-diario), `comercial/contratos/feed-diario.js` (+ `app.js` `?v=12`) e `src/utils/matriculas-edubox.js` (`comparar`).
+- Problema: a conferência Edubox × Órbita de 2027.1 achou 9 cancelados no Feed contra 8 no Edubox. O 9º era a Isadora, que saiu de Fisioterapia e foi para a Medicina. Causas:
+  - O Feed lia só a Graduação e contava como "saiu" toda matrícula cancelada, mesmo com o aluno matriculado em outro curso.
+  - A sincronização das Matrículas só via a troca dentro do próprio módulo. Uma troca Graduação → Medicina virava a diferença "criar como Mudança de Curso" (ou 1ª Evasão).
+  - O "Mudança de Curso" dependia do motivo "Transf. curso" no Edubox. Das 5 trocas, 3 estão com motivo "Outro" ou vazio.
+- Regra nova, a mesma da leitura do agente do Lucas: matrícula que saiu (cancel, tranc, desist ou transf) e cujo aluno tem **outra matrícula ativa no semestre**, inclusive no outro módulo (Graduação ↔ Medicina), é **troca de curso**.
+  - Feed: a matrícula entra em "trocaram de curso" e não soma em "saíram". Ele lê também a lista da Medicina (`2027-1`) só para isso; a Medicina segue fora das contas. Cancelamento acima do 1º período deixa de somar em "saíram", igual à consulta deles.
+  - Sincronização: a matrícula antiga de quem trocou não vira cadastro nem diferença. Se o cadastro já estiver ligado à matrícula antiga e o aluno tiver outra ativa em **outro curso**, a situação passa a "Mudança de Curso", seja qual for o motivo.
+- Limite: o relay `/matriculas-edubox/lista` não envia o código do aluno (`alumat`). Por isso a ligação é pelo nome normalizado (com nome social aplicado na sincronização). Foi pedido incluir o `alumat` no relay.
+- Testado com listas simuladas do Edubox:
+  - Fisio → Medicina e Agronomia → Direito entraram em "trocaram". Um cancelamento sem outra matrícula ficou em "saíram".
+  - Na sincronização, a troca para a Medicina não gerou diferença. A troca dentro da Graduação criou só a matrícula ativa. Quem saiu continua como 1ª Evasão.
+- Como reverter: desfazer o commit (três arquivos).
+
+### [2026-11-18] Relatório Desempenho (MED): critérios do material CADAM, com fonte, sem faixa inventada
+- Autor: Claude (pedido do Suporte AVA: "seguir normas e não inventar nada")
+- Branch: feat/relatorio-desempenho-cadam
+- Arquivos alterados: `src/utils/parseEstatisticasAva.js`, `medicina/relatorio-desempenho/relatorio-render.js`, `app.js`, `relatorio-desempenho.css` e `index.html` (versões dos arquivos).
+- Fonte: material da capacitação "Avaliação CADAM" (aula e diretrizes de questões: NBME 2016/2022, RS19, ES21).
+- O que mudou:
+  - **Discriminação** (faixas RS19 p.562): Problemática < 0 · Muito fraca 0–9% · Fraca 10–19% · Boa 20–39% · Muito boa ≥ 40%. Antes: fraca < 20 · razoável 20–29 · boa 30–49 · excelente ≥ 50, sem fonte. As linhas tracejadas do gráfico passam a 10% e 20%. "Boas ou excelentes" vira "Boas ou muito boas (disc. ≥ 20%)".
+  - **Alfa de Cronbach**: sai o rótulo "excelente / bom / aceitável…" (faixas sem fonte). Fica só o valor, como medida de confiabilidade. O rodapé explica que o CADAM não dá faixas e que nota confiável pede ~100 questões ou mais (NBME).
+  - **Calibração padrão**: fácil a partir de 95% (P > 0,95 informa pouco, NBME), antes 85. Revisar com discriminação < 10% (muito fraca, RS19), antes 15. Muito difícil < 30% (NBME), atenção < 20% (fraca, RS19) e eficiência < 15% (Moodle) seguem iguais.
+  - **Distrator não funcional**: alternativa errada escolhida por < 5% dos alunos (RS19; ES21). Ganha uma marca "não funcional" no anexo e um cartão no resumo.
+  - **Rodapé**: como ler alfa, discriminação, facilidade e distratores, com as fontes.
+- Dados: a calibração salva (`banco_med_config/desempenho`) passou para o padrão novo pela rota `PUT /calibracao`, e os 13 relatórios foram recalculados (18/11/2026). A responsável pelas avaliações continua podendo ajustar os cortes.
+- Como testar: abrir um relatório e conferir a legenda (Muito boa / Boa / Fraca / Muito fraca / Problemática), o alfa sem rótulo, o cartão de distratores não funcionais e o rodapé com as fontes.
+- Como reverter: desfazer o commit e salvar a calibração antiga (85/30/5/15/15/20). Ao salvar, os relatórios são recalculados.
+
+### [2026-11-18] Relatório Desempenho (MED): PDF/impressão saía cortado na primeira tela
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: fix/relatorio-desempenho-pdf
+- Arquivos alterados: `medicina/relatorio-desempenho/relatorio-desempenho.css` (bloco `@media print`) e `index.html` (css `?v=7`).
+- Causa: o padrão visual v2 trava a tela. O `body` e o `.layout-wrapper` ficam com a altura da janela e `overflow: hidden`, e o conteúdo rola por dentro. Na impressão (Imprimir / Salvar como PDF) isso continuava valendo: a página tinha 905 px e o relatório, cerca de 7.300 px. Saía só o começo, sem a tabela das questões nem o anexo de alternativas.
+- Correção: no `@media print`, `html`, `body`, `.layout-wrapper`, `.layout-main` e `.layout-content` passam a ter `height: auto` e `overflow: visible` (e o `body` vira bloco). O conteúdo do relatório e os cálculos não mudam.
+- Como testar: abrir um relatório, clicar em "Imprimir" (ou "Imprimir resumo") e escolher "Salvar como PDF". Devem sair todas as páginas.
+- Observação: outras telas com impressão pelo navegador podem ter o mesmo corte desde o v2, se não soltarem a altura no `@media print`.
+- Como reverter: tirar o bloco marcado "18/11/2026" do `@media print`.
+
+### [2026-11-18] Licitação: lembra a licitação, o curso e o filtro de status escolhidos
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/licitacao-lembrar-escolhas
+- Arquivo alterado: `financeiro/licitacao/app.js`.
+- O que muda:
+  - Licitação, Relatório e Negociação abriam sempre na licitação "ativa" (configuração do financeiro), e era preciso trocar para 2027.1 toda vez.
+  - Agora as três abrem na **última licitação escolhida** e no **último curso**. A Licitação lembra também o **filtro de status** (pendentes, fechados ou todos).
+  - Fica guardado em `localStorage` (`orbita:licitacao:escolhas`), por navegador.
+  - Sem nada lembrado, ou se a licitação ou o curso não existirem mais, vale o padrão de antes (a ativa).
+  - O `?cursoId=` dos links internos continua valendo mais que o lembrado.
+- Escopo: só a Licitação. A ideia de lembrar o semestre no sistema todo foi descartada a pedido do usuário.
+- Como testar: na Licitação, escolher 2027.1, um curso e o status "todos", recarregar a página e confirmar que volta igual. Abrir o Relatório e a Negociação e conferir que já abrem em 2027.1 com o mesmo curso.
+- Como reverter: desfazer o commit (só `financeiro/licitacao/app.js`).
+### [2026-11-18] Licitação: itens da "COMPRAS SEMESTRAL 2027.1" importados dos levantamentos dos cursos
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: chore/importar-compras-2027-1
+- Arquivo criado: `scripts/importar-compras-2027-1.js`. Ele faz um dry-run por padrão e só grava com `--commit`. Não duplica: o mesmo curso com o mesmo produto em 2027.1 é pulado.
+- Dado: 77 itens gravados em `financeiro_itens`, semestre `2027.1`, todos pendentes e sem cotação (os fornecedores entram conforme a licitação):
+  - Medicina Veterinária: 11;
+  - Biomedicina: 41;
+  - Fisioterapia: 11 (com o link do produto em `linkReferencia`);
+  - Pedagogia: 14.
+  - Direito (NPJ): 11, incluídos depois (18/11/2026) a partir do "compras.xlsx". Como o nome do arquivo não traz o curso, o script reconhece o curso pelo campo "CURSO:" do cabeçalho. Total na licitação: 88 itens.
+- Fonte: planilhas "LEVANTAMENTO DE MATERIAIS - SEMESTRE 2027/1" da pasta COMPRAS. As planilhas não foram alteradas.
+- Regras da importação:
+  - Quantidade em texto composto ("20 cx P e 10 cx M", "1 frasco de cada") vira quantidade 1, com o texto inteiro na unidade.
+  - "15 unidades" vira quantidade 15, unidade "unidades".
+  - Disciplina e justificativa não existem no item da Licitação e ficaram só nas planilhas.
+  - O link do produto vale escrito na célula ou embutido como hiperlink. A Med. Vet. usa hiperlink no texto da observação: os 4 itens com link (laminários de parasitologia e microbiologia, histologia de pequenos e grandes animais) foram corrigidos na segunda rodada, que só atualiza o link de item já gravado.
+- Como reverter: apagar em `financeiro_itens` os itens com `createdBy: 'importacao-planilha-2027.1'`.
+
+### [2026-11-18] Módulo novo: Aulas EAD (Gestão de T.I.) — salas Zoom, grade da semana e gravações das UAs
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/ead-aulas
+- Arquivos criados: `src/rotas/ead-aulas.js`, `ti/ead-aulas/index.html`, `ti/ead-aulas/app.js` e `ti/ead-aulas/ead-aulas.css`.
+- Arquivos alterados:
+  - `api/index.js`: rota `/api/ead-aulas`.
+  - `core/permissions.js`: módulo `ead-aulas` na categoria T.I, nos cargos `adm_l1`, `adm_l2` e `ti`.
+  - `src/middlewares/auth.js`: nível padrão 3 para `ti` e `adm_l2`.
+- O que faz (só o T.I usa; o coordenador EAD não tem acesso e recebe o relatório em texto):
+  1. **Salas Zoom**: cadastro das contas/salas (AULA 30..44, EAD-1/EAD-2) com link, senha e senha de anfitrião. As salas de setor (NAPED Medicina, Coordenação EAD, Suporte AVA, Direção Acadêmica) ficam como "fixa" e não entram na distribuição. São importadas da "LISTAGEM LINKS ZOOM" (.xlsx, uma aba por dia).
+  2. **Disciplinas EAD do semestre**: curso, período, carga horária, dia, horário e professor que DÁ a aula, importados da planilha "DISCIPLINAS EaD <semestre> LEVANTAMENTO" (.xlsx, prévia antes de gravar).
+     - Célula vazia não apaga o que já existe. Gravações não são mexidas pela importação.
+     - Não confundir com o professor que CRIA a disciplina (Automação AVA).
+  3. **Grade da semana**: regra do T.I é o mesmo link em todos os dias em que o professor dá aula. "Distribuir salas" dá a cada professor sem sala a primeira sala não fixa livre em todos os dias dele.
+     - A tela mostra, por dia, quem usa cada sala e avisa quando há dois professores na mesma sala.
+     - Ocupação avulsa por dia (síncrona mediada, reserva) se escreve na própria linha.
+  4. **Gravações**: UA - 01..12 nas disciplinas de 60/80 h (6 por bimestre) e UA - 01..06 nas de 30/40 h (3 por bimestre), mais a revisão de cada bimestre.
+     - Cada unidade passa por Gravou (professor), Baixou, YouTube e AVA (T.I).
+     - Marcar uma etapa marca as anteriores; desmarcar desmarca as seguintes.
+  5. **Relatório do dia**: texto pronto para o coordenador EAD, escolhendo o bimestre e "até a UA". Separa o que falta gravar (por professor), o que foi gravado e falta publicar (com a etapa que falta) e o que está em dia.
+  6. **Datas das UAs (rastreabilidade)**, opcional, porque em 18/11/2026 ainda não há calendário das UAs:
+     - **Calendário das UAs** do semestre: início do 1º e do 2º bimestre e dias sem aula. Com o dia da semana da disciplina, a data prevista de cada UA e da revisão sai sozinha: semanal nas de 12 UAs, quinzenal nas de 6, pulando os dias sem aula.
+     - Na ficha, cada UA tem a data prevista, que pode ser trocada (reposição, duas UAs no mesmo dia), com aviso "mesma data de UA - xx".
+     - **Não gravou** guarda o motivo e sai sozinho quando a UA é marcada como gravada.
+     - Situação de cada UA: gravada, não gravou, atrasada (data passou sem gravar), hoje, prevista ou sem data. A lista mostra quantas estão atrasadas.
+     - O relatório passa a usar as datas quando existem: "previstas para hoje", "atrasadas" e "não gravadas, com motivo". Sem datas, continua com o "até a UA".
+     - Rotas: `PATCH /disciplinas/:id/item` (data/motivo) e `PUT /semestre/:s/calendario`. Os dados ficam em `gravacoes[item].data`, `gravacoes[item].naoGravou` e `ead_aulas_semestre.calendario`.
+  7. **Filtros tipo planilha** na lista: curso, dia da semana (ou sem dia), professor (ou sem professor), "UA prevista em" (data), busca, situação e "Limpar filtros".
+- Coleções: `ead_aulas_salas`, `ead_aulas_disc/{semestre__curso__disciplina__periodo}` e `ead_aulas_semestre/{semestre}` (`salaDoProfessor`, `ocupacoes`).
+- Dados já carregados (18/11/2026, pela própria tela, em teste local com o login do T.I):
+  - 30 salas da LISTAGEM LINKS ZOOM 2026.2;
+  - 105 disciplinas de 2027.1 da planilha de levantamento (72 ainda sem professor);
+  - sala distribuída para os 9 professores que já têm dia definido.
+- **Pendente (manual):** dar o nível do módulo "Aulas EAD" em Usuários › Gerência de Acessos (T.I = 3, ADM N2 = 3), senão o menu não aparece para esses cargos (o ADM N1 sempre vê).
+- Como testar:
+  - Em Gestão de T.I. › Aulas EAD, conferir as 4 abas.
+  - Clicar numa disciplina e marcar "YouTube" numa UA: Gravou e Baixou marcam juntos.
+  - Ver na aba Relatório a disciplina em "aguardando publicação".
+- Como reverter: tirar o módulo de `core/permissions.js`, a rota de `api/index.js` e a pasta `ti/ead-aulas/`. As coleções `ead_aulas_*` podem ser apagadas.
+
+### [2026-11-18] Automação AVA: unidades (UAs) das disciplinas novas por link — professor preenche, coordenador valida
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/ead-unidades-links
+- Arquivos alterados/criados:
+  - `src/rotas/automacao-ava.js`: rotas da TI `GET /unidades`, `POST /unidades/links`, `PATCH /unidades/:id` (qtd 6/12 e validação da sala no AVA) e rotas públicas, sem login, em que o token do link é a autorização: `GET /publico/unidades/:token`, `POST .../salvar` (professor) e `POST .../validar` (coordenador). Coleção nova `ava_unidades_links/{token}`; as UAs ficam em `ava_criacao/{id}.unidades` (`qtd`, `itens[{n, codigo, titulo, coord{status ok|ajustar|reenviada, obs}, ava}]`).
+  - `unidades-ead/` (novo, público): a página do link. Com token de professor, ele digita o código SAGAH e o título de cada UA e envia. Com token de coordenador, ele valida cada UA, valida todas, ou pede ajuste com observação. Usa o visual do `enviar-questoes`.
+  - `ti/automacao-ava/` (aba nova "Unidades (links)"): gera e copia o link de cada professor e de cada curso (com o nome do coordenador), mostra o andamento, troca 6/12 unidades e marca a "Sala AVA validada" por UA.
+- Tipo: Nova funcionalidade (dentro do módulo existente `automacao-ava`; sem módulo novo no menu).
+- Motivo: substituir a planilha por curso (Disciplina, Professor, Coordenador, UA, Código, Nome, VAL COORD, VALIDAÇÃO SALA AVA) que o T.I manda aos professores EAD que criam disciplina. Professor e coordenador não têm acesso ao Órbita, então recebem um link.
+- Regras:
+  - Entram as disciplinas "Criar do zero" com professor definido na ficha.
+  - A quantidade de UAs é 12 (60 h EAD ou mais: UA 01–06 no 1º bimestre, 07–12 no 2º) ou 6. A TI pode trocar.
+  - UA validada fica travada para o professor. UA corrigida depois de um pedido de ajuste volta como "reenviada".
+  - Preencher todas as UAs marca sozinha a etapa "Seleção das unidades". Validar todas marca "Unidades validadas pelo coordenador" (marca `uid: 'link'`, desfeita sozinha se deixar de valer).
+  - Link do professor: um por semestre e professor. Link do coordenador: um por semestre e curso. Gerar de novo devolve o mesmo link.
+  - O nome do coordenador vem do cadastro do Órbita: usuário com cargo `coordenador` e o curso em `users.cursos`. Ficam de fora auxiliar (`auxiliarDeNome`) e contas de teste/licitação; se houver dois, aparecem os dois. A TI pode trocar o nome na aba, e o nome salvo no link passa a valer.
+  - Visual da aba no padrão Órbita v2: resumo em números, cartões de links lado a lado, barra de andamento por disciplina, pílulas de status e lista de UAs que abre e fecha.
+  - Dado (18/11/2026, direto no Firestore pela API, sem código): o professor que cria e a titulação das disciplinas "Criar" de 2027.1 foram preenchidos conforme a planilha de criação do T.I. São 9 disciplinas, total de R$ 8.200,00. O professor que cria não é necessariamente quem vai dar aula, então a planilha de levantamento de aulas NÃO vale para este campo. Tópicos Especiais em Fisioterapia I ficou sem professor, como na planilha.
+  - Dado (18/11/2026): três disciplinas que o Órbita sugeria como "Criar" e que não estão na planilha de criação passaram para "Replicar" a pedido do T.I: Projetos Bidimensionais Auxiliados por Computador (Eng. Civil, 5º), Fisioterapia Neurofuncional II (7º) e Cultura, Comportamento e Clima Organizacional (Pedagogia, 6º). Com isso, "Criar do zero" em 2027.1 ficou com as 10 da planilha.
+- Impacto: nenhuma mudança no fluxo atual da criação. Os links não pedem login, então devem ir só para a pessoa certa.
+- Como testar: na aba Disciplinas EAD, definir o professor numa disciplina "Criar". Na aba Unidades (links), gerar o link do professor e o do coordenador. Abrir o do professor, preencher e enviar. Abrir o do coordenador e validar uma UA e pedir ajuste em outra. Conferir na aba que o andamento e as etapas mudaram.
+- Como reverter: remover a aba, a pasta `unidades-ead/` e o bloco "Unidades (UAs) por link" de `automacao-ava.js`. A coleção `ava_unidades_links` pode ser apagada.
+
+### [2026-11-17] Banco MED: sombreamento amarelo vale como marca-texto; botão de baixar Dependência/Adaptação
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-sombreamento-amarelo
+- Arquivos alterados:
+  - `banco-med-fatec/ler-word.js`: `sombreamentoComoMarcaTexto()` troca, antes da leitura, o sombreamento amarelo/verde (`w:shd fill`) do texto ou do parágrafo por marca-texto amarelo, que é o que o leitor reconhece como alternativa correta. Vale para o modelo por disciplina e para a leitura comum.
+  - `banco-med-fatec/index.html`: `ler-word.js?v=7`.
+  - `src/rotas/banco-med-fatec.js`: no `GET /conferencia/:id/xml`, as questões de Dependência e Adaptação voltam a entrar, vindas da reserva da disciplina (elas não têm prova própria no Órbita), cada uma com o seu botão ("Baixar Dependência (20)"). 2ª chamada e exame continuam só com o que está montado na prova.
+- Tipo: Correção
+- Motivo: a Mariana pintou a correta com Sombreamento (FFF200) em vez do marca-texto, e o Órbita dizia "sem marca-texto" em todas as 20 questões de DP de Sistemas Morfofisiológicos I. Ela marcou a correta na mão e importou; as 20 ficaram como reserva de Dependência e, sem reserva no botão de baixar, não havia como gerar o arquivo do AVA.
+- Como testar: importar um Word com a correta em sombreamento amarelo e conferir o gabarito na prévia; como professor com questões de DP, abrir a prova da disciplina e conferir o botão "Baixar Dependência".
+- Como reverter: reverter o commit.
+
+### [2026-11-17] Banco MED: importar do Word não perde mais questão ("na qual") e avisa o que não leu
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-importar-na-qual
+- Arquivos alterados:
+  - `banco-med-fatec/ler-word.js`: no modelo por disciplina, quando as alternativas no fim começam com letra ("A) …", "B) …"), a pergunta é o parágrafo logo antes delas; uma linha com letra nunca é tomada como pergunta. Questão que não deu pra ler direito (menos de 2 alternativas ou sem enunciado) não some mais: volta na lista com `problema` escrito, e a lista traz `comProblema` com os números.
+  - `banco-med-fatec/avaliacoes.js`: a prévia avisa (no topo e numa notificação) quais questões do arquivo não foram lidas direito; cada uma aparece com o aviso vermelho, desmarcada, e o professor marca "Importar esta questão" se quiser subir mesmo assim e acertar na edição. Cada item mostra o nº da questão no arquivo.
+  - `banco-med-fatec/index.html`: `ler-word.js?v=6` (o navegador pega a versão nova).
+- Tipo: Correção
+- Motivo: a Milene importou um Word de 15 questões (Mecanismos de Defesas e Doenças, 2º bim, 1ª chamada) e entraram 12. As questões 4, 5 e 6 tinham alternativas como "Hipersensibilidade do tipo III, na qual…": o leitor achava "qual" e tomava a alternativa C pela pergunta, a questão ficava com 1 alternativa e era descartada sem aviso.
+- Como testar: importar um Word no modelo com alternativas contendo "na qual" e conferir que todas aparecem na prévia; apagar as alternativas B a D de uma questão e conferir o aviso vermelho com ela desmarcada.
+- Como reverter: reverter o commit.
+
 ### [2026-11-17] Contratos: quantidade de contratos por cidade no filtro
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/contratos-qtd-cidade

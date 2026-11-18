@@ -14,14 +14,17 @@ export const LIMITE_REVISAO = 20;
 
 // Versão literal (hex) — o SVG gerado como string não resolve var() em todo
 // navegador na hora de imprimir.
+// Faixas da discriminação conforme o material CADAM (RS19 p.562) — ver src/utils/parseEstatisticasAva.js.
+// Relatório gravado antes de 18/11/2026 e ainda não recalculado pode trazer os nomes antigos: cor de reserva.
 export const CORES_HEX = {
-  'Excelente': '#004F9F',
+  'Muito boa': '#004F9F',
   'Boa': '#009FE3',
-  'Razoável': '#E9B43A',
-  'Fraca': '#EC7A45',
-  'Problemática': '#B91C1C'
+  'Fraca': '#E9B43A',
+  'Muito fraca': '#EC7A45',
+  'Problemática': '#B91C1C',
+  'Excelente': '#004F9F', 'Razoável': '#E9B43A'
 };
-const ORDEM_FAIXAS = ['Excelente', 'Boa', 'Razoável', 'Fraca', 'Problemática'];
+const ORDEM_FAIXAS = ['Muito boa', 'Boa', 'Fraca', 'Muito fraca', 'Problemática'];
 
 const MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
 const DIAS = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'];
@@ -113,8 +116,8 @@ function svgBarras(questoes) {
   const largura = px / Math.max(questoes.length, 1);
   const barra = largura * 0.62;
 
-  const grade = [0, 20, 30, 50, 100].map(t =>
-    `<line x1="${L}" y1="${Y(t).toFixed(1)}" x2="${L + px}" y2="${Y(t).toFixed(1)}" stroke="#E4EAEC"${[20, 30].includes(t) ? ' stroke-dasharray="4 4"' : ''}></line>
+  const grade = [0, 10, 20, 40, 100].map(t =>
+    `<line x1="${L}" y1="${Y(t).toFixed(1)}" x2="${L + px}" y2="${Y(t).toFixed(1)}" stroke="#E4EAEC"${[10, 20].includes(t) ? ' stroke-dasharray="4 4"' : ''}></line>
      <text x="${L - 8}" y="${(Y(t) + 4).toFixed(1)}" text-anchor="end" class="rd-eixo">${t}</text>`
   ).join('');
 
@@ -131,7 +134,7 @@ function svgBarras(questoes) {
     ${grade}${barras}
     <line x1="${L}" y1="${Y(0).toFixed(1)}" x2="${L + px}" y2="${Y(0).toFixed(1)}" stroke="#C9D4D8"></line>
     ${rotulos}
-    <text x="${L}" y="${H - 8}" class="rd-eixo">Q# da questão · linhas tracejadas = referências 20% e 30%</text>
+    <text x="${L}" y="${H - 8}" class="rd-eixo">Q# da questão · linhas tracejadas = 10% (abaixo: muito fraca) e 20% (a partir daqui: boa)</text>
   </svg>`;
 }
 
@@ -144,25 +147,14 @@ export function miniBarra(valor, cor) {
 // ---------------- Tela: o relatório ----------------
 
 // O que o AVA chama de "coeficiente de consistência interna" É o Alfa de
-// Cronbach (a própria doc do Moodle diz isso). Mostramos com o nome que
-// quem lê psicometria procura, na escala 0–1 em que a literatura trabalha,
-// e com a faixa escrita por extenso — número solto não diz nada a quem não
-// convive com o indicador.
-const FAIXAS_ALFA = [
-  { min: 0.90, rotulo: 'excelente', cor: '#004F9F' },
-  { min: 0.80, rotulo: 'bom', cor: '#004F9F' },
-  { min: 0.70, rotulo: 'aceitável', cor: '#009FE3' },
-  { min: 0.60, rotulo: 'questionável', cor: '#E9B43A' },
-  { min: 0.50, rotulo: 'fraco', cor: '#EC7A45' },
-  { min: -Infinity, rotulo: 'inaceitável', cor: '#B91C1C' }
-];
-
-// Recebe o valor como o AVA manda (percentual) e devolve {valor, rotulo, cor}.
+// Cronbach (a própria doc do Moodle diz isso). Mostramos na escala 0–1.
+// 18/11/2026: SEM rótulo de qualidade ("excelente", "fraco"...). O material CADAM trata o alfa/KR-20 como
+// medida de confiabilidade, mas não dá faixas — e lembra que nota confiável pede ~100 questões ou mais
+// (NBME22 p.7; NBME16 p.4): prova bimestral tem alfa menor por natureza. As faixas antigas não tinham fonte.
 export function alfaCronbach(percentual) {
   if (percentual === null || percentual === undefined || !Number.isFinite(percentual)) return null;
   const v = percentual / 100;
-  const faixa = FAIXAS_ALFA.find(f => v >= f.min);
-  return { valor: v, texto: v.toFixed(2).replace('.', ','), rotulo: faixa.rotulo, cor: faixa.cor };
+  return { valor: v, texto: v.toFixed(2).replace('.', ','), rotulo: 'confiabilidade', cor: 'inherit' };
 }
 
 function campoEditavel(rotulo, valor, chave) {
@@ -240,8 +232,8 @@ export function montarRelatorioHTML(r) {
     </tr>`).join('');
 
   const legendaTabela = [
-    ['Excelente', 'Excelente ≥ 50%'], ['Boa', 'Boa 30–49%'], ['Razoável', 'Razoável 20–29%'],
-    ['Fraca', 'Fraca 0–19%'], ['Problemática', 'Problemática &lt; 0']
+    ['Muito boa', 'Muito boa ≥ 40%'], ['Boa', 'Boa 20–39%'], ['Fraca', 'Fraca 10–19%'],
+    ['Muito fraca', 'Muito fraca 0–9%'], ['Problemática', 'Problemática &lt; 0']
   ].map(([n, rot]) => `<span class="chip"><i style="--c:${CORES_HEX[n]};background:var(--c)"></i>${rot}</span>`).join('');
 
   const comAlts = qs.filter(q => (q.alternativas || []).length);
@@ -253,7 +245,8 @@ export function montarRelatorioHTML(r) {
       <h2>Detalhamento das alternativas por questão</h2>
       <p class="rd-secao-nota">Percentual de alunos em cada alternativa.
         <b style="color:var(--med-azul-escuro)">Azul</b> = correta ·
-        <b style="color:var(--q-fraca)">laranja</b> = distrator que mais atraiu.
+        <b style="color:var(--q-fraca)">laranja</b> = distrator que mais atraiu ·
+        <b>não funcional</b> = distrator escolhido por menos de 5% dos alunos — reescrever (RS19; ES21).
         Clique numa questão para recolher.</p>
       <div class="rd-2col">${comAlts.map(q => `
         <details class="rd-q" open>
@@ -265,13 +258,13 @@ export function montarRelatorioHTML(r) {
           </summary>
           <div class="rd-alts">
             ${(q.alternativas || []).map(a => {
-              const cor = a.correta ? CORES_HEX['Excelente'] : (a.distratorForte ? CORES_HEX['Fraca'] : '#B9C5CA');
+              const cor = a.correta ? CORES_HEX['Muito boa'] : (a.distratorForte ? CORES_HEX['Muito fraca'] : '#B9C5CA');
               const marca = a.correta
                 ? `<span class="rd-marca ok">${iconeCheck}</span>`
                 : (a.distratorForte ? `<span class="rd-marca dist">${iconeAlerta}</span>` : '<span class="rd-marca"></span>');
               const pill = a.correta
                 ? '<span class="pill ok">correta</span>'
-                : (a.distratorForte ? '<span class="pill dist">+ marcada errada</span>' : '');
+                : (a.distratorForte ? '<span class="pill dist">+ marcada errada</span>' : (a.naoFuncional ? '<span class="pill nf">não funcional</span>' : ''));
               const freq = Number.isFinite(a.frequencia) ? a.frequencia : 0;
               const cont = a.contagem != null ? `${a.contagem} aluno(s) · ` : '';
               return `<div class="rd-alt">
@@ -344,10 +337,15 @@ export function montarRelatorioHTML(r) {
         <div class="rd-card"><div class="v">${resumo.total || 0}</div><div class="r">Questões analisadas</div></div>
         <div class="rd-card escuro"><div class="v">${pct(resumo.discriminacaoMedia)}</div><div class="r">Discriminação média</div></div>
         <div class="rd-card"><div class="v">${pct(resumo.facilidadeMedia)}</div><div class="r">Facilidade média</div></div>
-        <div class="rd-card"><div class="v">${resumo.boasOuExcelentes || 0}</div><div class="r">Boas ou excelentes</div></div>
+        <div class="rd-card"><div class="v">${resumo.boasOuExcelentes || 0}</div><div class="r">Boas ou muito boas (disc. ≥ 20%)</div></div>
         <div class="rd-card alerta"><div class="v">${resumo.paraRevisar || 0}</div><div class="r">Para revisar</div></div>
         <div class="rd-card"><div class="v">${resumo.faceis != null ? resumo.faceis : qs.filter(q => q.situacao === 'facil').length}</div><div class="r">Fáceis — conteúdo dominado</div></div>
-        <div class="rd-card"><div class="v" style="color:${alfa ? alfa.cor : 'inherit'}">${alfa ? alfa.texto : '—'}</div><div class="r">Alfa de Cronbach${alfa ? ' · ' + alfa.rotulo : ''}</div></div>
+        <div class="rd-card"><div class="v">${alfa ? alfa.texto : '—'}</div><div class="r">Alfa de Cronbach (confiabilidade)</div></div>
+        ${(() => { // conta das questões (o resumo gravado pode não ter o campo)
+          const nf = qs.reduce((s, q) => s + (q.alternativas || []).filter(a => a.naoFuncional).length, 0);
+          const nq = qs.filter(q => (q.alternativas || []).some(a => a.naoFuncional)).length;
+          return qs.some(q => (q.alternativas || []).length) ? `<div class="rd-card"><div class="v">${nf}</div><div class="r">Distratores não funcionais (&lt; 5%) em ${nq} questão(ões)</div></div>` : '';
+        })()}
       </div>
     </section>
 
@@ -400,15 +398,19 @@ export function montarRelatorioHTML(r) {
     ${secaoAlts}
 
     <p class="rd-rodape">
-      <b>Como ler o Alfa de Cronbach:</b> é o que o AVA chama de "coeficiente de consistência interna" —
-      mede se as questões da prova estão avaliando a mesma coisa. Referências usuais:
-      ≥ 0,90 excelente · 0,80–0,89 bom · 0,70–0,79 aceitável · 0,60–0,69 questionável ·
-      0,50–0,59 fraco · abaixo de 0,50 inaceitável. Alfa baixo numa prova de muitos assuntos
-      é esperado; numa prova de um assunto só, é sinal de itens com problema.<br><br>
-      <b>Como ler o índice de discriminação:</b> ele mede o quanto uma questão separa os alunos de melhor
-      desempenho geral dos de pior desempenho. Quanto maior, melhor a questão diferencia quem domina o conteúdo.
-      Referências usuais: ≥ 50% excelente · 30–49% boa · 20–29% razoável · abaixo de 20% fraca ·
-      negativa indica problema no item.<br><br>
+      <b>Como ler o Alfa de Cronbach:</b> é o que o AVA chama de "coeficiente de consistência interna" e mede a
+      <b>confiabilidade</b> da prova (o mesmo papel do KR-20): o quanto as questões medem de forma consistente.
+      O relatório não dá nota ao alfa. O material da capacitação Avaliação CADAM não traz faixas para ele e lembra
+      que uma nota confiável pede cerca de 100 questões ou mais (NBME); numa prova bimestral, com menos questões e
+      vários assuntos, o alfa tende a ser menor sem que isso indique problema nos itens.<br><br>
+      <b>Como ler o índice de discriminação:</b> mede o quanto a questão separa os alunos de melhor desempenho geral
+      dos de pior desempenho. Faixas (RS19): abaixo de 10% muito fraca · 10–19% fraca · 20–39% boa · 40% ou mais
+      muito boa. Discriminação negativa ou perto de zero sugere gabarito errado ou duas alternativas corretas (NBME).<br><br>
+      <b>Como ler a facilidade:</b> é o percentual de acerto. Acima de 95% ou abaixo de 30% a questão informa pouco
+      sobre a turma (NBME); a prova deve ter predomínio de dificuldade média, 35–64% de acerto (RS19).<br><br>
+      <b>Distrator não funcional:</b> alternativa errada escolhida por menos de 5% dos alunos — reescrever (RS19; ES21).<br><br>
+      <b>Fontes</b> (material da capacitação Avaliação CADAM): NBME — Constructing Written Test Questions for the Basic and
+      Clinical Sciences (2016 e 2022); RS19 e ES21 — diretrizes de elaboração e análise de itens usadas na capacitação.<br><br>
       Gerado a partir do export de Estatísticas do questionário (AVA) em ${esc(dataCurta(r.createdAt) || '—')} ·
       Órbita Fatec · Ferramenta de apoio: a decisão pedagógica final é do(a) docente.
     </p>`;

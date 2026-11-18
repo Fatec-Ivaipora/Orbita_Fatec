@@ -1,0 +1,56 @@
+/* Unidades da disciplina EAD por link (18/11/2026) — professor preenche, coordenador valida.
+   Usa o topo/rodapé e as cores do enviar-questoes.css. */
+.ua-cabeca { margin-bottom: 20px; }
+.ua-cabeca h1 { font: 800 clamp(1.4rem, 3vw, 1.9rem)/1.2 var(--display); margin: 4px 0 6px; color: var(--marca); }
+.ua-para { color: var(--tinta-2); margin: 0; font-weight: 600; }
+.ua-instr { background: var(--papel); border: 1px solid var(--linha); border-radius: 12px; padding: 14px 18px; margin: 0 0 22px; color: var(--tinta-2); }
+.ua-instr ol { margin: 6px 0 0; padding-left: 20px; }
+.ua-instr a { color: var(--fatec); }
+
+.ua-disc { background: var(--papel); border: 1px solid var(--linha); border-radius: 14px; margin-bottom: 26px; overflow: hidden; }
+.ua-disc-topo { padding: 16px 20px; border-bottom: 1px solid var(--linha); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 20px; align-items: flex-start; }
+.ua-disc-topo h2 { font: 700 1.2rem/1.25 var(--display); margin: 0 0 4px; color: var(--tinta); }
+.ua-disc-meta { color: var(--mudo); font-size: 0.92rem; margin: 0; }
+.ua-disc-meta b { color: var(--tinta-2); font-weight: 600; }
+.ua-resumo { font-size: 0.88rem; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--linha-2); color: var(--tinta-2); white-space: nowrap; }
+.ua-resumo.ok { background: var(--bom-suave); color: var(--bom); }
+.ua-resumo.alerta { background: var(--alerta-suave); color: var(--alerta); }
+
+.ua-tabela { width: 100%; border-collapse: collapse; }
+.ua-tabela th { text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mudo); padding: 10px 12px; background: var(--linha-2); }
+.ua-tabela td { padding: 8px 12px; border-top: 1px solid var(--linha-2); vertical-align: middle; }
+.ua-tabela tr.ua-bim td { background: #f6f8fb; font: 700 0.82rem/1 var(--display); color: var(--marca); letter-spacing: 0.03em; padding: 9px 12px; }
+.ua-n { font: 700 0.95rem/1 var(--display); color: var(--marca); white-space: nowrap; width: 70px; }
+.ua-tabela input { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--linha); border-radius: 8px; background: #fff; color: var(--tinta); }
+.ua-tabela input:focus { border-color: var(--fatec); outline: none; box-shadow: 0 0 0 3px rgba(15, 78, 184, 0.12); }
+.ua-tabela input:disabled { background: var(--linha-2); color: var(--tinta-2); border-color: transparent; }
+.ua-col-cod { width: 140px; }
+.ua-col-sit { width: 240px; }
+.ua-sit { font-size: 0.88rem; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.ua-sit.ok { color: var(--bom); }
+.ua-sit.ajustar { color: var(--crit); }
+.ua-sit.esperando { color: var(--alerta); }
+.ua-sit.vazio { color: var(--mudo); font-weight: 500; }
+.ua-obs { display: block; font-weight: 500; color: var(--crit); font-size: 0.85rem; margin-top: 2px; }
+.ua-txt-cod { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+
+.ua-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid var(--linha); background: #fafbfd; }
+.ua-status { color: var(--mudo); font-size: 0.9rem; margin-right: auto; }
+.ua-btn { font: 600 0.95rem/1 var(--texto); padding: 11px 18px; border-radius: 10px; border: 1px solid var(--marca); background: var(--marca); color: #fff; cursor: pointer; }
+.ua-btn:hover { background: var(--marca-2); }
+.ua-btn:disabled { opacity: 0.55; cursor: default; }
+.ua-btn.sec { background: #fff; color: var(--marca); }
+.ua-btn.mini { padding: 7px 11px; font-size: 0.85rem; border-radius: 8px; }
+.ua-btn.bom { background: var(--bom); border-color: var(--bom); }
+.ua-btn.crit { background: #fff; color: var(--crit); border-color: var(--crit); }
+.ua-botoes-linha { display: flex; gap: 6px; flex-wrap: wrap; }
+.ua-ajuste { display: flex; gap: 6px; margin-top: 6px; }
+.ua-ajuste input { flex: 1; }
+
+@media (max-width: 720px) {
+  .ua-tabela thead { display: none; }
+  .ua-tabela, .ua-tabela tbody, .ua-tabela tr, .ua-tabela td { display: block; width: 100%; }
+  .ua-tabela tr:not(.ua-bim) { padding: 10px 14px; border-top: 1px solid var(--linha); }
+  .ua-tabela td { border: 0; padding: 4px 0; }
+  .ua-col-cod, .ua-col-sit, .ua-n { width: auto; }
+}

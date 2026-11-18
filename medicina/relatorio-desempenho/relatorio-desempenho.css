@@ -301,6 +301,14 @@ details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
     display: block !important; margin: 0 !important; padding: 0 !important;
     max-width: none !important; background: #fff !important;
   }
+  /* 18/11/2026: o layout v2 trava a tela (body com altura da janela + overflow hidden e o conteúdo
+     rolando por dentro). Na impressão isso cortava o relatório na 1ª tela — o PDF saía só com o começo.
+     Solta a altura e o overflow de toda a cadeia até o documento. */
+  html, body, .layout-wrapper, .layout-main, .layout-content, .mod-main {
+    height: auto !important; min-height: 0 !important; max-height: none !important;
+    overflow: visible !important;
+  }
+  body { display: block !important; }
   .rd-doc { border: none; border-radius: 0; padding: 0; }
   body { font-size: 10.5px; }
 
@@ -429,3 +437,6 @@ details.rd-q[open] .rd-q-seta { transform: rotate(90deg); }
 .rd-cal-campo input { min-height: 38px; border: 1px solid #CBD5E1; border-radius: 10px; padding: 0 0.7rem; font: inherit; font-weight: 600; }
 .rd-cal-campo small { font-weight: 500; color: #64748B; font-size: 0.74rem; line-height: 1.35; }
 @media (max-width: 640px) { .rd-cal-grade { grid-template-columns: 1fr; } }
+
+/* Distrator não funcional (< 5%) — material CADAM, 18/11/2026 */
+.rd-alt .pill.nf { background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }
