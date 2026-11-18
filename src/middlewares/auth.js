@@ -304,6 +304,7 @@ const requireModulePermission = (moduleName) => {
                 'agenda-espacos': 2
             },
             financeiro: {
+                'financeiro-medicina': 3, // filtrado por usuário na rota (só Lisa e Fábio)
                 'automacao-ava': 1,
                 emprestimo: 1,
                 usuarios: 1,

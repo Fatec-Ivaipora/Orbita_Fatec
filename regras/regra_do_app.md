@@ -109,6 +109,36 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Módulo novo: Financeiro Medicina (rematrícula por turma) — só Lisa e Fábio
+- Autor: Claude (pedido do Suporte AVA, com a explicação da Lisa sobre a planilha)
+- Branch: feat/financeiro-medicina
+- Arquivos criados: `src/rotas/financeiro-medicina.js`, `financeiro/medicina/index.html`, `app.js` e `financeiro-medicina.css`.
+- Arquivos alterados:
+  - `api/index.js`: rota `/api/financeiro-medicina`;
+  - `core/permissions.js`: módulo com `somenteUsuarios`;
+  - `core/layout.js`: menu e guarda de página respeitam `somenteUsuarios`, que vale até para ADM N1;
+  - `src/middlewares/auth.js`: nível 3 para `financeiro` (o filtro real é por usuário).
+- O que faz: substitui a "PLANILHA REMATRÍCULA" do Financeiro, que tinha uma aba por turma e semestre, e serve para calcular os valores que o Financeiro lança no Edubox. **Não grava nada no Edubox.**
+  - **Turma** (semestre, período, ingresso, valor integral) com as **colunas de saldo** dela: "soma no total" = saldo devido; sem marcar = histórico.
+  - **Aluno:** contrato mãe, % desconto, **mensal do acordo**, quitou o semestre, saldos por coluna, categoria (Pravaler, ProUni 50%/100%, ProUni + Pravaler, Quitou, Vai quitar, Inadimplente, Pendente com o Fábio, como as cores da planilha) e observação, tudo editável na tabela.
+  - **Saldo do semestre (calculado):** (contrato mãe − mensal) × 6, a mesma conta da planilha. **Total a receber** = colunas que somam + saldo do semestre. Totais por turma e geral, que é o "quanto tenho a receber" do Fábio.
+  - **Reajuste por turma:** % na parcela (contrato mãe e, opcionalmente, o mensal do acordo e o integral) e % nos saldos escolhidos (ex.: T2 10%, T3 12%), com prévia antes de confirmar e histórico na turma.
+  - **Trazer das Matrículas:** compara com a Medicina do semestre no período da turma (com nomes parecidos, como nos Contratos) e inclui quem falta, só o nome.
+  - **Nova turma:** pode copiar as colunas e os alunos de uma turma, para abrir o semestre seguinte.
+- **Acesso:** SÓ Lisa Marie (Financeiro) e Fábio Costa (direção), pelo uid em `USUARIOS_PERMITIDOS` (servidor) e em `MODULES['financeiro-medicina'].somenteUsuarios` (menu). Nem outros ADM N1 veem. Incluir alguém só a pedido, nos dois lugares.
+- Coleções: `fin_med_turmas/{semestre__turma}` e `fin_med_alunos`.
+- Dado (18/11/2026): carga das abas de 2027.1 da planilha "PLANILHA REMATRÍCULA 2025.2 - CORRETA.xlsx", com valores, saldos, categorias pela cor, observações e comentários:
+  - T1 6º: 57 alunos, saldos R$ 3.794.693,97;
+  - T2 5º: 67 alunos, R$ 1.955.847,42;
+  - T3 3º: 63 alunos, R$ 687.260,00.
+  - Os três valores são iguais ao "TOTAL GERAL TODOS OS SALDOS" de cada aba. Os nomes batem com as Matrículas da Medicina 2027.1 (6º, 5º e 3º).
+- Como testar (com o login da Lisa ou do Fábio):
+  - abrir Financeiro › Financeiro Medicina e conferir os totais das turmas;
+  - editar o mensal de um aluno e ver o saldo do semestre e o total mudarem;
+  - abrir Reajuste na T2 com 6% e 10% e ver a prévia;
+  - com outro login, o menu não mostra o módulo e a API responde 403.
+- Como reverter: tirar o módulo de `core/permissions.js`, a rota de `api/index.js`, a pasta `financeiro/medicina/` e o trecho `somenteUsuarios` de `core/layout.js`. As coleções `fin_med_*` podem ser apagadas.
+
 ### [2026-11-18] Contratos: número de cada curso conta só os ativos
 - Autor: Claude (pedido do Suporte AVA: "deixa somente o número de ativos para não enganar o pessoal do comercial")
 - Branch: fix/contratos-curso-so-ativos

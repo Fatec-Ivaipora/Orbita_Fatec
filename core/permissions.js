@@ -48,6 +48,17 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg>`,
     url: "/ti/ead-aulas/index.html"
   },
+  // Financeiro Medicina (18/11/2026) — rematrícula da Medicina: contrato mãe, mensal do acordo, saldos e reajuste
+  // por turma. SÓ os usuários de somenteUsuarios veem (Lisa e Fábio Costa) — nem outros ADM N1. A rota
+  // (src/rotas/financeiro-medicina.js, USUARIOS_PERMITIDOS) barra os outros. Incluir alguém só quando pedirem.
+  "financeiro-medicina": {
+    id: "financeiro-medicina",
+    category: "financeiro",
+    title: "Financeiro Medicina",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    url: "/financeiro/medicina/index.html",
+    somenteUsuarios: ["A6gsjqRTwdeAy29KVxcHJg2jYNy2", "EtrSfFo1FCYD6ZZOFQ6AL25axWX2"]
+  },
   acessos: {
     id: "acessos",
     category: "ti",

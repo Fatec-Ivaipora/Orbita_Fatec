@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financeiro Medicina - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/financeiro/medicina/financeiro-medicina.css?v=1">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header fm-header">
+                    <div>
+                        <h1 class="page-title"><span class="fm-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>Financeiro Medicina</h1>
+                        <p class="page-subtitle">Rematrícula por turma: contrato, mensal do acordo, saldos e reajuste — acesso só da Lisa e do Fábio</p>
+                    </div>
+                    <label class="fm-semestre">Semestre
+                        <select id="fm-semestre" class="select-filter"></select>
+                    </label>
+                </div>
+                <div id="fm-resumo"></div>
+                <div id="fm-turmas" class="fm-turmas" role="tablist"></div>
+                <div id="fm-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="fm-modal" class="fm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="fm-modal-titulo">
+        <div class="fm-modal-caixa">
+            <div class="fm-modal-topo">
+                <h2 id="fm-modal-titulo"></h2>
+                <button type="button" class="fm-fechar" id="fm-modal-fechar" aria-label="Fechar">×</button>
+            </div>
+            <div id="fm-modal-corpo"></div>
+        </div>
+    </div>
+    <div id="fm-toast" class="fm-toast hidden" role="status"></div>
+
+    <script type="module" src="/financeiro/medicina/app.js?v=1"></script>
+</body>
+</html>
