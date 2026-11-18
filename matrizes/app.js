@@ -715,7 +715,8 @@ function baixarCsvCarga() {
 function linhaHtml(a = {}) {
   return `<div class="mz-linha">
     <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div>
-      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label></div>
+      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label>
+      <label class="f-tit-rot">Professor<select class="f-vinc" aria-label="Professor novo ou veterano">${opcoesVinc(a.professor || '', a.vinculo || '')}</select></label></div>
     <select class="f-dia" aria-label="Dia da semana"><option value="">Dia a definir</option>${DIAS.map(d => `<option value="${d}" ${a.dia === d ? 'selected' : ''}>${DIA_LONGO[d]}</option>`).join('')}</select>
     <input type="time" class="f-ini" value="${esc(a.inicio || '')}" aria-label="Início">
     <input type="time" class="f-fim" value="${esc(a.fim || '')}" aria-label="Fim">
@@ -772,6 +773,53 @@ async function salvarTitulacoesModal(linhas) {
   return n;
 }
 
+// ---- Professor novo x veterano no cadastro (18/11/2026) — pedido da direção. Automático pelos diários do
+// Edubox dos últimos 5 anos (GET /matrizes/historico-docentes); o coordenador pode marcar Novo/Veterano.
+// Só vai pro relatório da direção (aba Titulação): NÃO sai no horário.
+const ROT_VINC = { novo: 'Novo', veterano: 'Veterano' };
+let histDoc = null;   // { semestre, ok, lista: [{ codfun, nome, cursos, toks }] }
+let histPromessa = null;
+function carregarHist() {
+  if (histDoc && histDoc.semestre === dados.semestre) return Promise.resolve(histDoc);
+  if (histPromessa) return histPromessa;
+  const sem = dados.semestre;
+  histPromessa = apiFetch(`/matrizes/historico-docentes?semestre=${encodeURIComponent(sem)}`)
+    .then(r => ({ semestre: sem, ok: !!r.ok, lista: (r.professores || []).map(x => ({ ...x, toks: normT(x.nome).split(' ') })) }))
+    .catch(() => ({ semestre: sem, ok: false, lista: [] }))
+    .then(h => { histDoc = h; histPromessa = null; return h; });
+  return histPromessa;
+}
+function vincAuto(nome) {
+  if (!histDoc || histDoc.semestre !== dados.semestre) return 'carregando';
+  if (!histDoc.ok) return null;
+  if (ehContratar(nome) || !normT(nome)) return null;
+  const c = cursoAtual();
+  const p = profTit(nome);
+  let h = p && p.codfun ? histDoc.lista.find(x => String(x.codfun) === String(p.codfun)) : null;
+  if (!h) {
+    const ex = histDoc.lista.filter(x => normT(x.nome) === normT(nome));
+    if (ex.length === 1) h = ex[0];
+    else {
+      const tk = normT(nome).split(' ').filter(Boolean);
+      const cand = histDoc.lista.filter(t => t.toks[0] === tk[0] && tk.slice(1).every(w => t.toks.slice(1).some(x => x === w || x.startsWith(w))));
+      if (cand.length === 1) h = cand[0];
+    }
+  }
+  return h ? 'veterano' : 'novo';   // já tem histórico na Fatec = veterano; o coordenador corrige se não bater
+}
+function opcoesVinc(nome, atual) {
+  const a = vincAuto(nome);
+  const rot = ehContratar(nome) || !normT(nome) ? '—' : a === 'carregando' ? 'consultando o Edubox…' : a ? ROT_VINC[a] : 'sem histórico';
+  return `<option value="">Pelo histórico (${esc(rot)})</option>`
+    + ['novo', 'veterano'].map(v => `<option value="${v}" ${v === atual ? 'selected' : ''}>${ROT_VINC[v]}</option>`).join('');
+}
+function atualizarVincModal() {
+  document.querySelectorAll('#mh-linhas .mz-linha').forEach(l => {
+    const sel = l.querySelector('.f-vinc');
+    if (sel) { const v = sel.value; sel.innerHTML = opcoesVinc(l.querySelector('.f-prof').value, v); }
+  });
+}
+
 // sugestões do nome correto embaixo do campo Professor (09/11/2026)
 function sugestoesHtml(digitado) {
   const v = String(digitado || '').trim();
@@ -798,6 +846,7 @@ function abrirModal(gi, li) {
   $('mh-erro').classList.add('hidden');
   $('modal-horario').classList.remove('hidden');
   $('mh-linhas').querySelector('.f-prof').focus();
+  if (!histDoc || histDoc.semestre !== dados.semestre) carregarHist().then(atualizarVincModal);
 }
 function fecharModal() { $('modal-horario').classList.add('hidden'); emEdicao = null; }
 
@@ -812,8 +861,10 @@ async function salvarHorario(ev) {
     dia: l.querySelector('.f-dia').value,
     inicio: l.querySelector('.f-ini').value,
     fim: l.querySelector('.f-fim').value,
-    sala: l.querySelector('.f-sala').value.trim()
+    sala: l.querySelector('.f-sala').value.trim(),
+    vinculo: l.querySelector('.f-vinc').value
   })).filter(a => a.professor || a.inicio || a.fim); // linha totalmente vazia é ignorada
+  aulas.forEach(a => { if (!a.vinculo) delete a.vinculo; });
   for (const [i, a] of aulas.entries()) {
     if (!a.professor) return erro(`Linha ${i + 1}: informe o professor.`);
     // só o professor (dia e horário ainda a definir) pode — 10/11/2026
@@ -843,6 +894,7 @@ async function salvarHorario(ev) {
     }
     let erroTit = '';
     try { await salvarTitulacoesModal(titsLinhas); } catch (e) { erroTit = e.message; }
+    titCache = null;   // professores/novos mudaram: o relatório da aba Titulação recalcula ao abrir
     listaProfessores();
     fecharModal();
     renderKpis(); renderCursos(); renderAbas();
@@ -870,6 +922,7 @@ function wireEventos() {
     const w = e.target.closest('.f-prof-wrap');
     w.querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
     w.querySelector('.f-tit').innerHTML = opcoesTit(e.target.value);
+    const sv = w.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(e.target.value, sv.value);
   });
   $('mh-linhas').addEventListener('click', (e) => {
     const op = e.target.closest('.f-sug-op');
@@ -878,6 +931,7 @@ function wireEventos() {
     wrap.querySelector('.f-prof').value = op.dataset.nome;
     wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
     wrap.querySelector('.f-tit').innerHTML = opcoesTit(op.dataset.nome);
+    const sv = wrap.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(op.dataset.nome, sv.value);
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tit-rapida]');
@@ -976,6 +1030,16 @@ function wireEventos() {
 // ---- Aba: Titulação dos professores (09/11/2026) — relatório do diretor, TODOS os cursos que o usuário vê.
 // Cada professor conta 1x por curso. Regra: mestres + doutores tem que ser MAIOR que especialistas.
 let titCache = null;   // { semestre, dados } — lê só ao abrir a aba
+let filtroVinc = '';   // '' | 'novos' | 'veteranos' — filtro da direção (18/11/2026)
+const ehNovo = (p) => p.vinculo === 'novo';
+function tagVinc(p) {
+  if (!p.vinculo) return '';
+  const dica = p.vinculoFonte === 'coordenador'
+    ? `Marcado pela coordenação${p.vinculoEdubox ? ` (pelo Edubox: ${ROT_VINC[p.vinculoEdubox]})` : ''}`
+    : p.vinculo === 'veterano' ? 'Já deu aula na Fatec nos últimos 5 anos (diários do Edubox)'
+    : 'Não aparece nos diários do Edubox dos últimos 5 anos (professor novo ou que voltou)';
+  return ` <span class="tt-vinc ${p.vinculo}" title="${esc(dica)}">${ROT_VINC[p.vinculo].toLowerCase()}${p.vinculoFonte === 'coordenador' ? ' ✎' : ''}</span>`;
+}
 const pctN = (n, t) => (t ? Math.round(n / t * 1000) / 10 : 0);
 // ---- Titulação editada pelo coordenador (18/11/2026): editada > Edubox. O backend confere se o professor é
 // de um curso do coordenador (src/rotas/matrizes.js, PUT/DELETE /matrizes/titulacao-professor).
@@ -993,7 +1057,7 @@ const liProfTit = (p) => htmlLiTit(p, titProfs.push(p) - 1);
 function htmlLiTit(p, i) {
   const digitado = p.digitado && normT(p.digitado) !== normT(p.nome) ? ` <small>digitado “${esc(p.digitado)}”</small>` : '';
   const btn = podeEditar ? ` <button type="button" class="tt-alterar mz-no-print" data-tit-prof="${i}" aria-label="Alterar a titulação de ${esc(tituloCaso(p.nome))}">Alterar</button>` : '';
-  return `<li data-tit-li="${i}"><span class="tt-prof">${esc(tituloCaso(p.nome))}</span>${digitado} ${seloFonte(p)}${btn}</li>`;
+  return `<li data-tit-li="${i}"><span class="tt-prof">${esc(tituloCaso(p.nome))}</span>${tagVinc(p)}${digitado} ${seloFonte(p)}${btn}</li>`;
 }
 function abrirEdicaoTit(i) {
   const p = titProfs[i], li = document.querySelector(`[data-tit-li="${i}"]`);
@@ -1115,6 +1179,10 @@ function desenharTitulacao() {
   const cumprem = comProf.filter(c => c.cumpre).length;
   const atencao = ordem.filter(c => c.total && !c.cumpre);
   const semProfTot = base.reduce((n, c) => n + (c.semProfessor || 0), 0);
+  const novosTot = base.reduce((n, c) => n + (c.novos || 0), 0);
+  const vetTot = base.reduce((n, c) => n + (c.veteranos || 0), 0);
+  const cursosComNovos = base.filter(c => c.novos).length;
+  const filtra = (ps) => (filtroVinc === 'novos' ? ps.filter(ehNovo) : filtroVinc === 'veteranos' ? ps.filter(p => p.vinculo === 'veterano') : ps);
   const fonte = planejamento
     ? `Planejamento de ${esc(r.semestre.replace('.', '/'))}: o Edubox ainda não tem professor nos diários, então os números vêm dos professores que os coordenadores definiram nos horários.`
     : `Professores lançados nos diários do Edubox em ${esc(r.semestre.replace('.', '/'))}.`;
@@ -1137,16 +1205,17 @@ function desenharTitulacao() {
       <div class="tt-nome"><b>${esc(curto(c.cursoNome))}</b><small>${c.total} ${c.total === 1 ? 'professor' : 'professores'}</small></div>
       ${barra(c)}
       <div class="tt-lado">${veredito(c)}<div class="tt-nums">${nums(c)}</div>
+        ${c.total && (c.novos || c.veteranos) ? `<span class="tt-vincs"><b>${c.novos}</b> ${c.novos === 1 ? 'novo' : 'novos'} · ${c.veteranos} ${c.veteranos === 1 ? 'veterano' : 'veteranos'}</span>` : ''}
         ${planejamento && c.semProfessor ? `<span class="tt-faltaprof">${c.semProfessor} ${c.semProfessor === 1 ? 'disciplina' : 'disciplinas'} sem professor</span>` : ''}</div>
     </div>
-    <div class="tt-det hidden" data-tit-det="${c.i}">${c.professores.length
+    <div class="tt-det ${filtroVinc && filtra(c.professores).length ? '' : 'hidden'}" data-tit-det="${c.i}">${filtra(c.professores).length
       ? ['Doutor', 'Mestre', 'Especialista', 'Graduado', ''].map(t => {
-          const ps = c.professores.filter(p => (p.titulacao || '') === t || (t === '' && !['Doutor', 'Mestre', 'Especialista', 'Graduado'].includes(p.titulacao)));
+          const ps = filtra(c.professores).filter(p => (p.titulacao || '') === t || (t === '' && !['Doutor', 'Mestre', 'Especialista', 'Graduado'].includes(p.titulacao)));
           if (!ps.length) return '';
           const rot = { Doutor: 'Doutores', Mestre: 'Mestres', Especialista: 'Especialistas', Graduado: 'Graduados', '': 'Sem titulação' }[t];
           return `<div class="tt-grupo ${t ? t.toLowerCase() : 'falta'}"><h4>${rot} <span>${ps.length}</span></h4><ul>${ps.map(p => liProfTit(p)).join('')}</ul></div>`;
         }).join('')
-      : '<p class="tt-sem">Nenhum professor definido nos horários deste curso ainda.</p>'}</div>`;
+      : `<p class="tt-sem">${filtroVinc && c.professores.length ? `Nenhum professor ${filtroVinc === 'novos' ? 'novo' : 'veterano'} neste curso.` : 'Nenhum professor definido nos horários deste curso ainda.'}</p>`}</div>`;
 
   const emissao = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   $('painel-titulacao').innerHTML = `
@@ -1164,6 +1233,13 @@ function desenharTitulacao() {
       </div>
     </section>
     ${atencao.length ? `<section class="tt-atencao"><h3>Precisam de atenção</h3><ul>${atencao.map(c => `<li><b>${esc(curto(c.cursoNome))}</b> ${c.pctMD.toLocaleString('pt-BR')}% · +${c.faltam} ${c.faltam === 1 ? 'mestre ou doutor' : 'mestres ou doutores'}</li>`).join('')}</ul></section>` : ''}
+    <section class="tt-vinc-resumo">
+      <p><b>${novosTot} ${novosTot === 1 ? 'professor novo' : 'professores novos'}</b> em ${cursosComNovos} ${cursosComNovos === 1 ? 'curso' : 'cursos'} · ${vetTot} ${vetTot === 1 ? 'veterano' : 'veteranos'}
+        <small>${r.historico && r.historico.erro ? 'Não consegui consultar o histórico do Edubox agora; aparecem só os marcados pela coordenação.' : `Novo = não aparece nos diários do Edubox desde ${esc(String((r.historico || {}).desde || '').replace('.', '/'))}; a coordenação pode corrigir no cadastro do professor.`}</small></p>
+      <div class="tt-filtro mz-no-print" role="group" aria-label="Filtrar professores">
+        ${[['', 'Todos'], ['novos', `Novos (${novosTot})`], ['veteranos', `Veteranos (${vetTot})`]].map(([v, rot]) => `<button type="button" class="tt-filtro-op ${filtroVinc === v ? 'ativo' : ''}" data-filtro-vinc="${v}" aria-pressed="${filtroVinc === v}">${rot}</button>`).join('')}
+      </div>
+    </section>
     ${planejamento && semProfTot ? `<p class="tt-aviso-falta"><b>${semProfTot} disciplinas</b> ainda estão sem professor ou “a contratar” — esses números mudam conforme os coordenadores completam os horários.</p>` : ''}
     <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores${podeEditar ? ' e corrigir a titulação que veio errada do Edubox' : ''}.</span></div>
     <div class="tt-lista">${ordem.map(linha).join('')}</div>
@@ -1173,6 +1249,8 @@ document.addEventListener('click', (e) => {
   const l = e.target.closest('[data-tit-curso]');
   if (l) { const det = document.querySelector(`[data-tit-det="${l.dataset.titCurso}"]`); det?.classList.toggle('hidden'); l.setAttribute('aria-expanded', det && !det.classList.contains('hidden') ? 'true' : 'false'); }
   if (e.target.id === 'btn-atualizar-tit') renderTitulacao(true);
+  const fv = e.target.closest('[data-filtro-vinc]');
+  if (fv && titCache) { filtroVinc = fv.dataset.filtroVinc; desenharTitulacao(); }
   if (e.target.id === 'btn-imprimir-tit') {
     const p = $('painel-titulacao');
     p.classList.add('imprimir');

@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Matrizes e Horários: professor novo x veterano (relatório da direção)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/matrizes-titulacao-semestre-turma
+- Arquivos alterados: src/rotas/matrizes.js, matrizes/app.js (`?v=17`), matrizes/matrizes.css (`?v=19`), matrizes/index.html, regras/regra_do_app.md
+- Tipo: funcionalidade
+- Motivo: a direção precisa saber quantos professores novos cada curso tem.
+- Impacto: regra simples, definida pela direção: **veterano** = já aparece nos diários do Edubox (qualquer curso da Fatec) nos 10 semestres anteriores; **novo** = não aparece (ou nem tem cadastro no Edubox; pode ser também quem saiu e voltou). O histórico vem do relay `/corpo-docente/lista` (rota existente; até 4 formatos por chamada, então 5 chamadas em paralelo, com cache de 10 min por instância) e acha o professor pelo código do Edubox ou pelo nome. No cadastro do professor (modal do horário) há o campo "Professor": "Pelo histórico (Novo/Veterano)", "Novo" ou "Veterano" — o que o coordenador marcar (`aula.vinculo` em `matrizes_grade`) vale no lugar do automático. Essa informação NÃO sai no horário nem no Semestre por turma: só no relatório da aba "Titulação dos professores", que ganhou o total de novos/veteranos, a contagem por curso, o selo novo/veterano por professor e o filtro Todos / Novos / Veteranos. Nova rota `GET /api/matrizes/historico-docentes?semestre=` (nomes e códigos de quem tem histórico; cursos só os do escopo de quem consulta).
+- Como testar: aba "Titulação dos professores" → conferir "N professores novos em X cursos", clicar em "Novos" e ver só os novos por curso. No Semestre por turma → Editar uma disciplina → campo "Professor" mostra o automático; marcar "Novo" ou "Veterano", salvar e conferir no relatório (selo com ✎). O horário impresso não muda.
+- Como reverter: reverter o commit; o campo `vinculo` gravado nas aulas fica sem uso.
+
 ### [2026-11-18] Matrizes e Horários: coordenador edita a titulação dos professores
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/matrizes-titulacao-editavel
