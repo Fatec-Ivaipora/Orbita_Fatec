@@ -129,6 +129,14 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
      - Cada unidade passa por Gravou (professor), Baixou, YouTube e AVA (T.I).
      - Marcar uma etapa marca as anteriores; desmarcar desmarca as seguintes.
   5. **Relatório do dia**: texto pronto para o coordenador EAD, escolhendo o bimestre e "até a UA". Separa o que falta gravar (por professor), o que foi gravado e falta publicar (com a etapa que falta) e o que está em dia.
+  6. **Datas das UAs (rastreabilidade)**, opcional, porque em 18/11/2026 ainda não há calendário das UAs:
+     - **Calendário das UAs** do semestre: início do 1º e do 2º bimestre e dias sem aula. Com o dia da semana da disciplina, a data prevista de cada UA e da revisão sai sozinha: semanal nas de 12 UAs, quinzenal nas de 6, pulando os dias sem aula.
+     - Na ficha, cada UA tem a data prevista, que pode ser trocada (reposição, duas UAs no mesmo dia), com aviso "mesma data de UA - xx".
+     - **Não gravou** guarda o motivo e sai sozinho quando a UA é marcada como gravada.
+     - Situação de cada UA: gravada, não gravou, atrasada (data passou sem gravar), hoje, prevista ou sem data. A lista mostra quantas estão atrasadas.
+     - O relatório passa a usar as datas quando existem: "previstas para hoje", "atrasadas" e "não gravadas, com motivo". Sem datas, continua com o "até a UA".
+     - Rotas: `PATCH /disciplinas/:id/item` (data/motivo) e `PUT /semestre/:s/calendario`. Os dados ficam em `gravacoes[item].data`, `gravacoes[item].naoGravou` e `ead_aulas_semestre.calendario`.
+  7. **Filtros tipo planilha** na lista: curso, dia da semana (ou sem dia), professor (ou sem professor), "UA prevista em" (data), busca, situação e "Limpar filtros".
 - Coleções: `ead_aulas_salas`, `ead_aulas_disc/{semestre__curso__disciplina__periodo}` e `ead_aulas_semestre/{semestre}` (`salaDoProfessor`, `ocupacoes`).
 - Dados já carregados (18/11/2026, pela própria tela, em teste local com o login do T.I):
   - 30 salas da LISTAGEM LINKS ZOOM 2026.2;

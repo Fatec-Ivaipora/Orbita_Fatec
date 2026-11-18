@@ -215,7 +215,8 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
                 .sort((a, b) => a.cursoNome.localeCompare(b.cursoNome, 'pt-BR') || String(a.periodo).localeCompare(String(b.periodo), 'pt-BR', { numeric: true }) || a.nome.localeCompare(b.nome, 'pt-BR')),
             salas: salasSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => ordemSala(a) - ordemSala(b)),
             salaDoProfessor: cfg.salaDoProfessor || {},
-            ocupacoes: cfg.ocupacoes || {}
+            ocupacoes: cfg.ocupacoes || {},
+            calendario: cfg.calendario || { inicio1: '', inicio2: '', semAula: [] }
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -336,9 +337,58 @@ router.patch('/disciplinas/:id/gravacao', verifyToken, checkPermission, async (r
             if (feito && i <= iEt && !atual[e]) atual[e] = marca;
             if (!feito && i >= iEt) atual[e] = null;
         });
+        if (feito && atual.gravou) delete atual.naoGravou; // gravou: deixa de valer o "não gravou"
         const gravacoes = { ...(d.gravacoes || {}), [item]: atual };
         await ref.update({ gravacoes, updatedAt: agora(), updatedBy: quemFez(req) });
         res.json({ id: snap.id, ...d, gravacoes, itens: itensGravacao(d.qtd || qtdPorCh(d.ch)) });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// PATCH /disciplinas/:id/item { item, data? ('AAAA-MM-DD' | '' = volta pra data do calendário), naoGravou? (motivo | '' = limpa) }
+// Rastreabilidade (18/11/2026): a data prevista de cada UA sai do calendário do semestre + dia da semana; quando a aula
+// muda (duas UAs no mesmo dia, reposição), o T.I troca a data da UA. "Não gravou" guarda o motivo.
+router.patch('/disciplinas/:id/item', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!soTi(req, res)) return;
+        const ref = db.collection(COL_DISC).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        const d = snap.data();
+        const b = req.body || {};
+        if (!itensGravacao(d.qtd || qtdPorCh(d.ch)).some(i => i.id === b.item)) return res.status(400).json({ error: 'Unidade inválida.' });
+        const atual = { ...((d.gravacoes || {})[b.item] || {}) };
+        if (b.data !== undefined) {
+            if (b.data && !/^\d{4}-\d{2}-\d{2}$/.test(b.data)) return res.status(400).json({ error: 'Data inválida.' });
+            if (b.data) atual.data = b.data; else delete atual.data;
+        }
+        if (b.naoGravou !== undefined) {
+            const motivo = texto(b.naoGravou, 200);
+            if (motivo) {
+                if (atual.gravou) return res.status(400).json({ error: 'Essa unidade já está marcada como gravada.' });
+                atual.naoGravou = { motivo, em: agora(), por: quemFez(req) };
+            } else delete atual.naoGravou;
+        }
+        const gravacoes = { ...(d.gravacoes || {}), [b.item]: atual };
+        await ref.update({ gravacoes, updatedAt: agora(), updatedBy: quemFez(req) });
+        res.json({ id: snap.id, ...d, gravacoes, itens: itensGravacao(d.qtd || qtdPorCh(d.ch)) });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// PUT /semestre/:semestre/calendario { inicio1, inicio2, semAula:['AAAA-MM-DD'] } — base das datas previstas
+router.put('/semestre/:semestre/calendario', verifyToken, checkPermission, async (req, res) => {
+    try {
+        if (!soTi(req, res)) return;
+        const semestre = req.params.semestre;
+        if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
+        const data = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+        const b = req.body || {};
+        const calendario = { inicio1: data(b.inicio1), inicio2: data(b.inicio2), semAula: [...new Set((Array.isArray(b.semAula) ? b.semAula : []).map(data).filter(Boolean))].sort() };
+        if (!calendario.inicio1) return res.status(400).json({ error: 'Informe o início do 1º bimestre.' });
+        if (calendario.inicio2 && calendario.inicio2 <= calendario.inicio1) return res.status(400).json({ error: 'O 2º bimestre começa depois do 1º.' });
+        const ref = db.collection(COL_SEM).doc(semestre);
+        await ref.set({ semestre }, { merge: true });
+        await ref.update({ calendario, updatedAt: agora(), updatedBy: quemFez(req) });
+        res.json({ calendario });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
