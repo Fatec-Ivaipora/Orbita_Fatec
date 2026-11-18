@@ -109,6 +109,21 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Relatório Desempenho (MED): critérios do material CADAM, com fonte, sem faixa inventada
+- Autor: Claude (pedido do Suporte AVA: "seguir normas e não inventar nada")
+- Branch: feat/relatorio-desempenho-cadam
+- Arquivos alterados: `src/utils/parseEstatisticasAva.js`, `medicina/relatorio-desempenho/relatorio-render.js`, `app.js`, `relatorio-desempenho.css` e `index.html` (versões dos arquivos).
+- Fonte: material da capacitação "Avaliação CADAM" (aula e diretrizes de questões: NBME 2016/2022, RS19, ES21).
+- O que mudou:
+  - **Discriminação** (faixas RS19 p.562): Problemática < 0 · Muito fraca 0–9% · Fraca 10–19% · Boa 20–39% · Muito boa ≥ 40%. Antes: fraca < 20 · razoável 20–29 · boa 30–49 · excelente ≥ 50, sem fonte. As linhas tracejadas do gráfico passam a 10% e 20%. "Boas ou excelentes" vira "Boas ou muito boas (disc. ≥ 20%)".
+  - **Alfa de Cronbach**: sai o rótulo "excelente / bom / aceitável…" (faixas sem fonte). Fica só o valor, como medida de confiabilidade. O rodapé explica que o CADAM não dá faixas e que nota confiável pede ~100 questões ou mais (NBME).
+  - **Calibração padrão**: fácil a partir de 95% (P > 0,95 informa pouco, NBME), antes 85. Revisar com discriminação < 10% (muito fraca, RS19), antes 15. Muito difícil < 30% (NBME), atenção < 20% (fraca, RS19) e eficiência < 15% (Moodle) seguem iguais.
+  - **Distrator não funcional**: alternativa errada escolhida por < 5% dos alunos (RS19; ES21). Ganha uma marca "não funcional" no anexo e um cartão no resumo.
+  - **Rodapé**: como ler alfa, discriminação, facilidade e distratores, com as fontes.
+- Dados: a calibração salva (`banco_med_config/desempenho`) passou para o padrão novo pela rota `PUT /calibracao`, e os 13 relatórios foram recalculados (18/11/2026). A responsável pelas avaliações continua podendo ajustar os cortes.
+- Como testar: abrir um relatório e conferir a legenda (Muito boa / Boa / Fraca / Muito fraca / Problemática), o alfa sem rótulo, o cartão de distratores não funcionais e o rodapé com as fontes.
+- Como reverter: desfazer o commit e salvar a calibração antiga (85/30/5/15/15/20). Ao salvar, os relatórios são recalculados.
+
 ### [2026-11-18] Relatório Desempenho (MED): PDF/impressão saía cortado na primeira tela
 - Autor: Claude (pedido do Suporte AVA)
 - Branch: fix/relatorio-desempenho-pdf
