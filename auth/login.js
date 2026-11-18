@@ -13,8 +13,25 @@ const loginPassword = document.getElementById('login-password');
 const loginError    = document.getElementById('login-error');
 const loginBtnText  = document.getElementById('login-btn-text');
 
+// Só aceita caminho relativo da própria origem — "?redirect=javascript:..."
+// ou "?redirect=//site-falso.com" rodava código/phishing na sessão de quem
+// clicasse num link do próprio domínio (achado do relatório de segurança de
+// 17/11). new URL(valor, origin) resolve "javascript:"/"//outro-site" para
+// uma origem diferente, que é recusada abaixo.
+function redirectSeguro(valor) {
+  const padrao = '/meu-espaco/index.html';
+  if (!valor || valor.trim().startsWith('//')) return padrao;
+  try {
+    const alvo = new URL(valor, window.location.origin);
+    if (alvo.origin !== window.location.origin) return padrao;
+    return alvo.pathname + alvo.search + alvo.hash;
+  } catch (e) {
+    return padrao;
+  }
+}
+
 const urlParams = new URLSearchParams(window.location.search);
-const redirectUrl = urlParams.get('redirect') || '/meu-espaco/index.html';
+const redirectUrl = redirectSeguro(urlParams.get('redirect'));
 
 // Se já estiver logado, vai direto pro Hub ou URL de redirecionamento
 onAuthStateChanged(auth, (user) => {

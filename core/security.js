@@ -115,7 +115,10 @@ export function escapeHTML(str) {
   if (!str) return "";
   const div = document.createElement('div');
   div.textContent = str;
-  return div.innerHTML;
+  // textContent->innerHTML escapa & < >, mas não aspas — texto assim ainda
+  // quebra fora de atributos como value="${escapeHTML(texto)}" (achado do
+  // relatório de segurança de 17/11).
+  return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**
