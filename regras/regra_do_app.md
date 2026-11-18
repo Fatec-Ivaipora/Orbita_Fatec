@@ -109,6 +109,23 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Licitação: itens da "COMPRAS SEMESTRAL 2027.1" importados dos levantamentos dos cursos
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: chore/importar-compras-2027-1
+- Arquivo criado: `scripts/importar-compras-2027-1.js`. Ele faz um dry-run por padrão e só grava com `--commit`. Não duplica: o mesmo curso com o mesmo produto em 2027.1 é pulado.
+- Dado: 77 itens gravados em `financeiro_itens`, semestre `2027.1`, todos pendentes e sem cotação (os fornecedores entram conforme a licitação):
+  - Medicina Veterinária: 11;
+  - Biomedicina: 41;
+  - Fisioterapia: 11 (com o link do produto em `linkReferencia`);
+  - Pedagogia: 14.
+- Fonte: planilhas "LEVANTAMENTO DE MATERIAIS - SEMESTRE 2027/1" da pasta COMPRAS. As planilhas não foram alteradas.
+- Regras da importação:
+  - Quantidade em texto composto ("20 cx P e 10 cx M", "1 frasco de cada") vira quantidade 1, com o texto inteiro na unidade.
+  - "15 unidades" vira quantidade 15, unidade "unidades".
+  - Disciplina e justificativa não existem no item da Licitação e ficaram só nas planilhas.
+  - O link do produto vale escrito na célula ou embutido como hiperlink. A Med. Vet. usa hiperlink no texto da observação: os 4 itens com link (laminários de parasitologia e microbiologia, histologia de pequenos e grandes animais) foram corrigidos na segunda rodada, que só atualiza o link de item já gravado.
+- Como reverter: apagar em `financeiro_itens` os itens com `createdBy: 'importacao-planilha-2027.1'`.
+
 ### [2026-11-18] Módulo novo: Aulas EAD (Gestão de T.I.) — salas Zoom, grade da semana e gravações das UAs
 - Autor: Claude (pedido do Suporte AVA)
 - Branch: feat/ead-aulas
