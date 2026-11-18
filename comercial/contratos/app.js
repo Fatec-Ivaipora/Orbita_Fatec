@@ -32,6 +32,9 @@ let equipe = null;  // [{uid, nome}] do Comercial, pra "quem vai coletar"
 let equipePromise = null;
 let abaAtual = 'todos';
 const naAba = (r) => abaAtual === 'todos' || r.status === abaAtual;
+// 18/11/2026: na aba "Todos", os números dos cursos e das cidades contam só os ATIVOS — desistente (cancelou,
+// 1ª evasão…) somava no total do curso e enganava o Comercial. Na aba "Desistentes" continuam contando os desistentes.
+const contaComoAtivo = (r) => abaAtual !== 'todos' || r.status !== 'desistente';
 let tipoAtual = ''; // '' | 'calouro' | 'outros' | 'sem' (tipo de matrícula = período de ingresso)
 
 // O período de ingresso vem SÓ do Relatório de Matrículas (o que o Financeiro lança é o correto).
@@ -420,7 +423,7 @@ function passaFiltros(r, f, ignorar = '') {
 
 function renderCursos(f) {
   // Contagem por curso dentro da aba atual, respeitando os outros filtros.
-  const daAba = registros.filter(r => naAba(r) && passaFiltros(r, f, 'curso'));
+  const daAba = registros.filter(r => naAba(r) && contaComoAtivo(r) && passaFiltros(r, f, 'curso'));
   const porCurso = {};
   daAba.forEach(r => { const c = (r.curso || '').trim() || 'SEM CURSO'; porCurso[c] = (porCurso[c] || 0) + 1; });
   const cursos = Object.entries(porCurso).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -443,7 +446,7 @@ function renderCursos(f) {
 // Quantidade de contratos por cidade no select (17/11/2026): segue a aba atual
 // (Todos, Sem assinatura...) e os outros filtros, ignorando o próprio filtro de cidade.
 function renderCidades(f) {
-  const daAba = registros.filter(r => naAba(r) && passaFiltros(r, f, 'cidade'));
+  const daAba = registros.filter(r => naAba(r) && contaComoAtivo(r) && passaFiltros(r, f, 'cidade'));
   const porCidade = {};
   daAba.forEach(r => { const c = (r.cidade || '').trim(); if (c) porCidade[c] = (porCidade[c] || 0) + 1; });
   const sel = document.getElementById('filtro-cidade');

@@ -109,6 +109,13 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Contratos: número de cada curso conta só os ativos
+- Autor: Claude (pedido do Suporte AVA: "deixa somente o número de ativos para não enganar o pessoal do comercial")
+- Branch: fix/contratos-curso-so-ativos
+- Arquivos alterados: `comercial/contratos/app.js` (`contaComoAtivo`, usado em `renderCursos` e `renderCidades`) e `index.html` (`app.js?v=19`).
+- O que muda: na aba "Todos", os números dos botões de curso, do select de curso e do select de cidade deixam de somar os desistentes. Em 2027.1, "Todos os cursos" foi de 385 para 376 e Fisioterapia de 69 para 66. Na aba "Desistentes", os números continuam sendo os desistentes. A lista de alunos não muda.
+- Como reverter: desfazer o commit.
+
 ### [2026-11-18] Matrículas: veterano lançado à mão não conta como "matrícula nova em outro período"
 - Autor: Claude (pedido do Suporte AVA: os números do relatório de Matrículas e dos Contratos têm que bater)
 - Branch: fix/matriculas-veterano-lancado-a-mao
