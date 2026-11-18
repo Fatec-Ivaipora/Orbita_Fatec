@@ -109,6 +109,19 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Licitação: lembra a licitação, o curso e o filtro de status escolhidos
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: feat/licitacao-lembrar-escolhas
+- Arquivo alterado: `financeiro/licitacao/app.js`.
+- O que muda:
+  - Licitação, Relatório e Negociação abriam sempre na licitação "ativa" (configuração do financeiro), e era preciso trocar para 2027.1 toda vez.
+  - Agora as três abrem na **última licitação escolhida** e no **último curso**. A Licitação lembra também o **filtro de status** (pendentes, fechados ou todos).
+  - Fica guardado em `localStorage` (`orbita:licitacao:escolhas`), por navegador.
+  - Sem nada lembrado, ou se a licitação ou o curso não existirem mais, vale o padrão de antes (a ativa).
+  - O `?cursoId=` dos links internos continua valendo mais que o lembrado.
+- Escopo: só a Licitação. A ideia de lembrar o semestre no sistema todo foi descartada a pedido do usuário.
+- Como testar: na Licitação, escolher 2027.1, um curso e o status "todos", recarregar a página e confirmar que volta igual. Abrir o Relatório e a Negociação e conferir que já abrem em 2027.1 com o mesmo curso.
+- Como reverter: desfazer o commit (só `financeiro/licitacao/app.js`).
 ### [2026-11-18] Licitação: itens da "COMPRAS SEMESTRAL 2027.1" importados dos levantamentos dos cursos
 - Autor: Claude (pedido do Suporte AVA)
 - Branch: chore/importar-compras-2027-1
