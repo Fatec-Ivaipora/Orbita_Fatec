@@ -109,6 +109,12 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Financeiro Medicina: Paulo Henrique passa a ver (só leitura)
+- Autor: Claude (pedido do próprio Paulo Henrique, Suporte AVA)
+- Branch: feat/financeiro-medicina-paulo-ver
+- Arquivos alterados: `src/rotas/financeiro-medicina.js` (`USUARIOS_SO_VER`: só GET) e `core/permissions.js` (o uid dele em `somenteUsuarios`, para o menu).
+- Lisa e Fábio continuam sendo os únicos que editam. Paulo vê a tela sem os campos de edição (`podeEditar` false), e qualquer alteração dele responde 403.
+
 ### [2026-11-18] Módulo novo: Financeiro Medicina (rematrícula por turma) — só Lisa e Fábio
 - Autor: Claude (pedido do Suporte AVA, com a explicação da Lisa sobre a planilha)
 - Branch: feat/financeiro-medicina
