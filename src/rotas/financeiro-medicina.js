@@ -25,8 +25,13 @@ const USUARIOS_PERMITIDOS = [
     'A6gsjqRTwdeAy29KVxcHJg2jYNy2', // LISA MARIE (Financeiro)
     'EtrSfFo1FCYD6ZZOFQ6AL25axWX2'  // FABIO COSTA (direção)
 ];
+// Só VER (sem editar), a pedido (18/11/2026): Paulo Henrique (Suporte AVA). Também precisa estar em somenteUsuarios.
+const USUARIOS_SO_VER = [
+    'rhQ6fe4HQfMOCCejry1sPx0hA1v1' // Paulo henrique (Suporte AVA) — só leitura
+];
 const somentePermitidos = (req, res, next) => (USUARIOS_PERMITIDOS.includes(req.user && req.user.uid)
-    ? next() : res.status(403).json({ error: 'Acesso restrito: só a Lisa e o Fábio veem o Financeiro da Medicina.' }));
+    || (USUARIOS_SO_VER.includes(req.user && req.user.uid) && req.method === 'GET')
+    ? next() : res.status(403).json({ error: USUARIOS_SO_VER.includes(req.user && req.user.uid) ? 'Seu acesso ao Financeiro da Medicina é só de leitura.' : 'Acesso restrito: só a Lisa e o Fábio veem o Financeiro da Medicina.' }));
 const checkPermission = [verifyToken.requireModulePermission('financeiro-medicina'), somentePermitidos];
 const COL_T = 'fin_med_turmas';
 const COL_A = 'fin_med_alunos';
