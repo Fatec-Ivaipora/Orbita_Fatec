@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Relatório Desempenho (MED): PDF/impressão saía cortado na primeira tela
+- Autor: Claude (pedido do Suporte AVA)
+- Branch: fix/relatorio-desempenho-pdf
+- Arquivos alterados: `medicina/relatorio-desempenho/relatorio-desempenho.css` (bloco `@media print`) e `index.html` (css `?v=7`).
+- Causa: o padrão visual v2 trava a tela. O `body` e o `.layout-wrapper` ficam com a altura da janela e `overflow: hidden`, e o conteúdo rola por dentro. Na impressão (Imprimir / Salvar como PDF) isso continuava valendo: a página tinha 905 px e o relatório, cerca de 7.300 px. Saía só o começo, sem a tabela das questões nem o anexo de alternativas.
+- Correção: no `@media print`, `html`, `body`, `.layout-wrapper`, `.layout-main` e `.layout-content` passam a ter `height: auto` e `overflow: visible` (e o `body` vira bloco). O conteúdo do relatório e os cálculos não mudam.
+- Como testar: abrir um relatório, clicar em "Imprimir" (ou "Imprimir resumo") e escolher "Salvar como PDF". Devem sair todas as páginas.
+- Observação: outras telas com impressão pelo navegador podem ter o mesmo corte desde o v2, se não soltarem a altura no `@media print`.
+- Como reverter: tirar o bloco marcado "18/11/2026" do `@media print`.
+
 ### [2026-11-18] Licitação: lembra a licitação, o curso e o filtro de status escolhidos
 - Autor: Claude (pedido do Suporte AVA)
 - Branch: feat/licitacao-lembrar-escolhas
