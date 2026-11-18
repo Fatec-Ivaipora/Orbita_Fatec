@@ -109,6 +109,16 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Matrizes e Horários: coordenador edita a titulação dos professores
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/matrizes-titulacao-editavel
+- Arquivos alterados: src/rotas/matrizes.js, matrizes/app.js, matrizes/matrizes.css, matrizes/index.html (cache do CSS v16), regras/regra_do_app.md
+- Tipo: funcionalidade
+- Motivo: a titulação vinha só do Edubox (relay /automacao-ava/titulacoes e /corpo-docente/lista) e às vezes está errada ou desatualizada; os coordenadores precisam corrigir sem depender do Edubox.
+- Impacto: nova coleção `matrizes_titulacoes` (um doc por professor: `F{codfun}` quando ele existe no Edubox; `N_{NOME_NORMALIZADO}` quando só foi digitado nos horários) com titulação, titulação do Edubox, quem alterou e quando; log de cada alteração e reversão em `matrizes_titulacoes_log`. Regra: titulação editada > Edubox, no relatório "Titulação dos professores" (contagens por curso) e no selo dos horários. Novas rotas `PUT` e `DELETE /api/matrizes/titulacao-professor` (nível 3 no módulo): o coordenador só altera professor que dá aula num curso dele no semestre (diário do Edubox ou horário definido no Órbita); ADM/RH alteram qualquer um. Quando vem o `codfun`, o nome é o do Edubox (não o enviado pela tela). Na tela, cada professor mostra o selo "Edubox" ou "editada · quem, data", com o botão "Alterar" e a opção "Voltar ao Edubox". A titulação da Automação AVA (valor pago) continua só do Edubox.
+- Como testar: aba "Titulação dos professores" → abrir um curso → "Alterar" num professor → escolher a titulação → Salvar; o selo vira "editada" e a contagem do curso muda; recarregar e conferir que persiste; "Voltar ao Edubox" desfaz. Com um coordenador, tentar alterar professor de outro curso pela API → 403.
+- Como reverter: reverter o commit; os docs de `matrizes_titulacoes` podem ficar (sem a rota, são ignorados) ou ser apagados.
+
 ### [2026-11-18] Financeiro Medicina: tabela com cara de planilha (grade, zebra, "—" no vazio)
 - Autor: Claude (pedido do Paulo Henrique: "número em cima de número… ficou muito solto… onde tem número, onde não tem")
 - Branch: fix/financeiro-medicina-rodape

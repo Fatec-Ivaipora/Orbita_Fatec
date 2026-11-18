@@ -286,6 +286,20 @@ details.mz-card[open] > summary { border-bottom: 1px solid var(--border-color); 
 .tt-grupo ul { margin: 0; padding-left: 16px; font-size: 0.82rem; color: var(--tt-texto); line-height: 1.55; }
 .tt-grupo small { color: #94a3b8; }
 .tt-sem { color: var(--tt-falta); font-size: 0.85rem; margin: 6px 0; }
+/* titulação editada pelo coordenador (18/11/2026) */
+.mz-tit.editada { box-shadow: inset 0 0 0 1px currentColor; }
+.tt-grupo li { margin: 2px 0; }
+.tt-fonte { display: inline-block; font-size: 0.68rem; font-weight: 600; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0 7px; vertical-align: 1px; }
+.tt-fonte.editada { color: #0F766E; background: #E6F6F3; }
+.tt-alterar { font: inherit; font-size: 0.72rem; font-weight: 600; color: var(--orb-azul, #1f6fb2); background: none; border: 0; padding: 0 2px; margin-left: 2px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tt-alterar:hover { color: var(--orb-marca, #12294d); }
+.tt-edit { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin: 4px 0 6px -16px; background: var(--orb-sup, #fff); border: 1px solid var(--orb-linha, #e3e8f0); border-radius: var(--orb-raio-card, 12px); }
+.tt-edit-linha { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tt-edit select { font: inherit; font-size: 0.82rem; padding: 0.35rem 0.5rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: var(--orb-raio-ctrl, 8px); background: #fff; min-height: 32px; }
+.tt-edit select:focus { border-color: var(--orb-azul, #1f6fb2); box-shadow: 0 0 0 3px rgba(31,111,178,.15); outline: none; }
+.tt-voltar { align-self: flex-start; font: inherit; font-size: 0.76rem; color: #9a3412; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tt-edit-nota { color: #64748b; font-size: 0.74rem; }
+@media print { .tt-alterar { display: none; } }
 
 @media (max-width: 760px) {
   .tt-curso { grid-template-columns: 1fr; gap: 8px; }

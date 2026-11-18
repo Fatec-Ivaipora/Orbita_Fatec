@@ -173,7 +173,7 @@ function titulacaoDe(prof) {
   const cand = titIndex.filter(t => t.toks[0] === tk[0] && tk.slice(1).every(w => t.toks.slice(1).some(x => x === w || x.startsWith(w))));
   if (!cand.length) return { tit: '', nomes: [] };
   const tits = [...new Set(cand.map(c => c.titulacao))];
-  return { tit: tits.length === 1 ? tits[0] : '?', nomes: cand.map(c => c.nome) };
+  return { tit: tits.length === 1 ? tits[0] : '?', nomes: cand.map(c => c.nome), editada: cand.length === 1 && cand[0].fonte === 'coordenador' ? cand[0] : null };
 }
 function seloTitulacao(prof) {
   if (ehContratar(prof)) return '<span class="mz-tit contratar">a contratar</span>';
@@ -181,6 +181,7 @@ function seloTitulacao(prof) {
   if (!t) return '';
   if (!t.nomes.length) return '<span class="mz-tit nao" title="Não achei esse nome entre os professores do Edubox — escolha o nome completo da lista">sem titulação</span>';
   if (t.tit === '?') return `<span class="mz-tit nao" title="Mais de um professor no Edubox com esse nome: ${esc(t.nomes.join(' | '))} — escolha o nome completo da lista">?</span>`;
+  if (t.editada) return `<span class="mz-tit ${esc(t.tit.toLowerCase())} editada" title="${esc(t.nomes.join(' | '))} — titulação editada${t.editada.editadoPor ? ' por ' + esc(t.editada.editadoPor) : ''} (Edubox: ${esc(t.editada.titulacaoEdubox || 'sem titulação')})">${esc(t.tit)} ✎</span>`;
   return `<span class="mz-tit ${esc(t.tit.toLowerCase())}" title="Edubox: ${esc(t.nomes.join(' | '))}">${esc(t.tit || '—')}</span>`;
 }
 // sugestões do campo Professor: os nomes completos do Edubox (com a titulação) + os já usados nos horários
@@ -891,6 +892,88 @@ function wireEventos() {
 // Cada professor conta 1x por curso. Regra: mestres + doutores tem que ser MAIOR que especialistas.
 let titCache = null;   // { semestre, dados } — lê só ao abrir a aba
 const pctN = (n, t) => (t ? Math.round(n / t * 1000) / 10 : 0);
+// ---- Titulação editada pelo coordenador (18/11/2026): editada > Edubox. O backend confere se o professor é
+// de um curso do coordenador (src/rotas/matrizes.js, PUT/DELETE /matrizes/titulacao-professor).
+const TITS = ['Doutor', 'Mestre', 'Especialista', 'Graduado'];
+let titProfs = [];   // professores do relatório, pelo índice usado em data-tit-prof
+const fmtData = (iso) => { try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return ''; } };
+function seloFonte(p) {
+  if (p.fonte === 'coordenador') {
+    const quem = [p.editadoPor, p.editadoEm ? fmtData(p.editadoEm) : ''].filter(Boolean).join(', ');
+    return `<span class="tt-fonte editada" title="Edubox: ${esc(p.titulacaoEdubox || 'sem titulação')}">editada${quem ? ` · ${esc(quem)}` : ''}</span>`;
+  }
+  return p.titulacao ? '<span class="tt-fonte">Edubox</span>' : '';
+}
+const liProfTit = (p) => htmlLiTit(p, titProfs.push(p) - 1);
+function htmlLiTit(p, i) {
+  const digitado = p.digitado && normT(p.digitado) !== normT(p.nome) ? ` <small>digitado “${esc(p.digitado)}”</small>` : '';
+  const btn = podeEditar ? ` <button type="button" class="tt-alterar mz-no-print" data-tit-prof="${i}" aria-label="Alterar a titulação de ${esc(tituloCaso(p.nome))}">Alterar</button>` : '';
+  return `<li data-tit-li="${i}"><span class="tt-prof">${esc(tituloCaso(p.nome))}</span>${digitado} ${seloFonte(p)}${btn}</li>`;
+}
+function abrirEdicaoTit(i) {
+  const p = titProfs[i], li = document.querySelector(`[data-tit-li="${i}"]`);
+  if (!p || !li) return;
+  const ops = TITS.map(t => `<option value="${t}" ${t === p.titulacao ? 'selected' : ''}>${t}</option>`).join('');
+  li.innerHTML = `<form class="tt-edit" data-tit-form="${i}">
+      <span class="tt-prof">${esc(tituloCaso(p.nome))}</span>
+      <div class="tt-edit-linha">
+        <select aria-label="Titulação" name="titulacao">${p.titulacao && TITS.includes(p.titulacao) ? '' : '<option value="" selected disabled>Escolha…</option>'}${ops}</select>
+        <button type="submit" class="mz-btn mz-btn-pri mz-btn-mini">Salvar</button>
+        <button type="button" class="mz-btn mz-btn-sec mz-btn-mini" data-tit-cancelar="${i}">Cancelar</button>
+      </div>
+      ${p.fonte === 'coordenador' ? `<button type="button" class="tt-voltar" data-tit-voltar="${i}">Voltar ao Edubox (${esc(p.titulacaoEdubox || 'sem titulação')})</button>` : '<small class="tt-edit-nota">No Edubox: ' + esc(p.titulacao || 'sem titulação') + '</small>'}
+    </form>`;
+  li.querySelector('select').focus();
+}
+// aplica o resultado em todos os cursos (o mesmo professor pode estar em vários) e no selo dos horários
+function aplicarTitLocal(p, r) {
+  const mesmo = (x) => (p.codfun && x.codfun ? String(x.codfun) === String(p.codfun) : normT(x.nome) === normT(p.nome));
+  const novo = r.fonte === 'coordenador'
+    ? { titulacao: r.titulacao, fonte: 'coordenador', titulacaoEdubox: r.titulacaoEdubox || '', editadoPor: r.editadoPor, editadoEm: r.editadoEm }
+    : { titulacao: r.titulacao || '', fonte: 'edubox', titulacaoEdubox: undefined, editadoPor: undefined, editadoEm: undefined };
+  (titCache?.dados.cursos || []).forEach(c => {
+    c.professores.forEach(x => { if (mesmo(x)) Object.assign(x, novo); });
+    const n = (t) => c.professores.filter(x => x.titulacao === t).length;
+    Object.assign(c, { doutor: n('Doutor'), mestre: n('Mestre'), especialista: n('Especialista'), graduado: n('Graduado') });
+    c.semTitulacao = c.total - c.doutor - c.mestre - c.especialista - c.graduado;
+  });
+  [titIndex, dados.titulacoes || []].forEach(l => l.forEach(x => { if (mesmo(x)) Object.assign(x, novo); }));
+}
+async function salvarTit(i, titulacao) {
+  const p = titProfs[i];
+  const corpo = { semestre: titCache.semestre, codfun: p.codfun || null, nome: p.nome };
+  const abertos = [...document.querySelectorAll('.tt-det:not(.hidden)')].map(d => titCache.dados.cursos[d.dataset.titDet]?.cursoId);
+  try {
+    const r = await apiFetch('/matrizes/titulacao-professor', { method: titulacao ? 'PUT' : 'DELETE', body: JSON.stringify(titulacao ? { ...corpo, titulacao } : corpo) });
+    aplicarTitLocal(p, r);
+    toast(titulacao ? `Titulação de ${tituloCaso(r.nome)} alterada para ${r.titulacao}.` : `${tituloCaso(r.nome)} voltou à titulação do Edubox.`);
+    desenharTitulacao();
+    abertos.forEach(id => {
+      const k = titCache.dados.cursos.findIndex(c => c.cursoId === id);
+      const det = document.querySelector(`[data-tit-det="${k}"]`);
+      if (det) { det.classList.remove('hidden'); document.querySelector(`[data-tit-curso="${k}"]`)?.setAttribute('aria-expanded', 'true'); }
+    });
+  } catch (err) {
+    toast(err.message, 'erro');
+  }
+}
+document.addEventListener('submit', (e) => {
+  const f = e.target.closest('[data-tit-form]');
+  if (!f) return;
+  e.preventDefault();
+  const v = f.querySelector('select').value;
+  if (!v) return toast('Escolha a titulação.', 'erro');
+  f.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  salvarTit(Number(f.dataset.titForm), v);
+});
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-tit-prof]');
+  if (a) return abrirEdicaoTit(Number(a.dataset.titProf));
+  const c = e.target.closest('[data-tit-cancelar]');
+  if (c) { const i = Number(c.dataset.titCancelar); const li = document.querySelector(`[data-tit-li="${i}"]`); if (li) li.outerHTML = htmlLiTit(titProfs[i], i); return; }
+  const v = e.target.closest('[data-tit-voltar]');
+  if (v) { v.disabled = true; salvarTit(Number(v.dataset.titVoltar), null); }
+});
 async function renderTitulacao(forcar = false) {
   const p = $('painel-titulacao');
   if (!forcar && titCache && titCache.semestre === dados.semestre) return desenharTitulacao();
@@ -904,6 +987,7 @@ async function renderTitulacao(forcar = false) {
 }
 function desenharTitulacao() {
   const r = titCache.dados;
+  titProfs = [];
   const curto = (n) => tituloCaso(String(n).replace(/^(BACHARELADO|LICENCIATURA|SUPERIOR DE TECNOLOGIA) EM /i, '').replace(/ - FORMAÇÃO.*/i, '').trim());
   const planejamento = r.fonte === 'matrizes';
   const base = r.cursos.map((c, i) => {
@@ -947,8 +1031,8 @@ function desenharTitulacao() {
       ? ['Doutor', 'Mestre', 'Especialista', 'Graduado', ''].map(t => {
           const ps = c.professores.filter(p => (p.titulacao || '') === t || (t === '' && !['Doutor', 'Mestre', 'Especialista', 'Graduado'].includes(p.titulacao)));
           if (!ps.length) return '';
-          const rot = { Doutor: 'Doutores', Mestre: 'Mestres', Especialista: 'Especialistas', Graduado: 'Graduados', '': 'Sem titulação no Edubox' }[t];
-          return `<div class="tt-grupo ${t ? t.toLowerCase() : 'falta'}"><h4>${rot} <span>${ps.length}</span></h4><ul>${ps.map(p => `<li>${esc(tituloCaso(p.nome))}${p.digitado && normT(p.digitado) !== normT(p.nome) ? ` <small>digitado “${esc(p.digitado)}”</small>` : ''}</li>`).join('')}</ul></div>`;
+          const rot = { Doutor: 'Doutores', Mestre: 'Mestres', Especialista: 'Especialistas', Graduado: 'Graduados', '': 'Sem titulação' }[t];
+          return `<div class="tt-grupo ${t ? t.toLowerCase() : 'falta'}"><h4>${rot} <span>${ps.length}</span></h4><ul>${ps.map(p => liProfTit(p)).join('')}</ul></div>`;
         }).join('')
       : '<p class="tt-sem">Nenhum professor definido nos horários deste curso ainda.</p>'}</div>`;
 
@@ -969,9 +1053,9 @@ function desenharTitulacao() {
     </section>
     ${atencao.length ? `<section class="tt-atencao"><h3>Precisam de atenção</h3><ul>${atencao.map(c => `<li><b>${esc(curto(c.cursoNome))}</b> ${c.pctMD.toLocaleString('pt-BR')}% · +${c.faltam} ${c.faltam === 1 ? 'mestre ou doutor' : 'mestres ou doutores'}</li>`).join('')}</ul></section>` : ''}
     ${planejamento && semProfTot ? `<p class="tt-aviso-falta"><b>${semProfTot} disciplinas</b> ainda estão sem professor ou “a contratar” — esses números mudam conforme os coordenadores completam os horários.</p>` : ''}
-    <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores.</span></div>
+    <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores${podeEditar ? ' e corrigir a titulação que veio errada do Edubox' : ''}.</span></div>
     <div class="tt-lista">${ordem.map(linha).join('')}</div>
-    <p class="mz-rel-emissao tt-so-impressao">Emitido em ${esc(emissao)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}. ${r.fonte === 'edubox' ? 'Titulação e professores conforme os diários do Edubox.' : 'Planejamento conforme os horários definidos pelos coordenadores; titulação conforme o Edubox.'}</p>`;
+    <p class="mz-rel-emissao tt-so-impressao">Emitido em ${esc(emissao)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}. ${r.fonte === 'edubox' ? 'Titulação e professores conforme os diários do Edubox.' : 'Planejamento conforme os horários definidos pelos coordenadores; titulação conforme o Edubox.'} Titulações marcadas “editada” foram corrigidas pela coordenação no Órbita e valem no lugar da do Edubox.</p>`;
 }
 document.addEventListener('click', (e) => {
   const l = e.target.closest('[data-tit-curso]');
