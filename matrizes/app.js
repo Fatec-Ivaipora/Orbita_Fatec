@@ -516,7 +516,7 @@ function renderSemestre() {
         <div class="mz-tags">${tags} <span class="mz-tag ${ok ? 'ok' : 'conferir'}">${ok ? 'confere' : 'conferir'}</span></div></div>
       ${g.dp ? '' : faixaEnsalamento(c, g)}
       ${avisos}
-      <div class="mz-tabela-wrap"><table class="mz-tabela">${COLGROUP_HOR}<thead><tr><th>Disciplina</th><th>Tipo</th>${CH_COLUNAS}<th>Professor e horário</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <div class="mz-tabela-wrap"><table class="mz-tabela mz-tab-sem">${COLGROUP_HOR}<thead><tr><th>Disciplina</th><th>Tipo</th>${CH_COLUNAS}<th>Professor e horário</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
       ${podeEditar && !filtroSemProf ? `<div class="mz-card-pe"><button type="button" class="mz-btn mz-btn-sec mz-btn-mini" data-incluir="${gi}">+ Incluir disciplina</button><span>Matriz nova que ainda não está no Edubox? Inclua aqui e imprima em <b>Alterações p/ Secretaria</b>.</span></div>` : ''}
     </div>`;
   }).join('');
@@ -576,7 +576,7 @@ function tabelaComparacao(c) {
       <td>${soA.length ? `<ul class="so">${soA.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<span class="mz-sem">—</span>'}</td>
       <td>${soB.length ? `<ul class="so">${soB.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<span class="mz-sem">—</span>'}</td></tr>`;
   }).join('');
-  return `<div class="mz-tabela-wrap"><table class="mz-tabela"><thead><tr><th>Período</th><th>Só na matriz A</th><th>Só na matriz B</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+  return `<div class="mz-tabela-wrap"><table class="mz-tabela mz-cmp"><thead><tr><th>Período</th><th>Só na matriz A</th><th>Só na matriz B</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
 // ---- Aba 3: relatório padronizado
@@ -609,7 +609,7 @@ function renderHorario() {
     const corpo = linhas.map(({ a, d }) => `<tr><td>${DIA_LONGO[a.dia]}</td><td>${esc(a.inicio)}–${esc(a.fim)}</td><td>${esc(nomeBonito(d.nome))}</td><td>${esc(a.professor)}</td><td>${a.sala ? esc(salaTxt(a.sala)) : '<span class="mz-sem">—</span>'}</td><td>${modalidade(d)}</td><td class="num">${d.ch.total} h</td></tr>`).join('')
       + pendentes.map(({ d, profs }) => `<tr><td colspan="2" class="mz-sem">a definir</td><td>${esc(nomeBonito(d.nome))}</td><td${profs.length ? '' : ' class="mz-sem"'}>${profs.length ? esc(profs.join(' / ')) : 'a definir'}</td><td class="mz-sem">—</td><td>${modalidade(d)}</td><td class="num">${d.ch.total} h</td></tr>`).join('');
     return `<h3>${esc(tituloGrupo(c, g))}${g.dp ? '' : ` <span class="mz-rel-per">(${esc(rotuloPeriodos(g.periodos))})</span>`}</h3>
-      <div class="mz-tabela-wrap"><table class="mz-tabela"><thead><tr><th>Dia</th><th>Horário</th><th>Disciplina</th><th>Professor</th><th>Sala</th><th>Modalidade</th><th class="num">CH</th></tr></thead><tbody>${corpo || '<tr><td colspan="7" class="mz-sem">Sem disciplinas.</td></tr>'}</tbody></table></div>`;
+      <div class="mz-tabela-wrap"><table class="mz-tabela mz-tab-hor"><thead><tr><th>Dia</th><th>Horário</th><th>Disciplina</th><th>Professor</th><th>Sala</th><th>Modalidade</th><th class="num">CH</th></tr></thead><tbody>${corpo || '<tr><td colspan="7" class="mz-sem">Sem disciplinas.</td></tr>'}</tbody></table></div>`;
   }).join('');
 
   $('painel-horario').innerHTML = `
@@ -712,16 +712,20 @@ function baixarCsvCarga() {
 }
 
 // ---------- MODAL DE HORÁRIO ----------
+// titulação e novo/veterano só fazem sentido com um professor de verdade (não vazio nem "contratar")
+const semProfReal = (nome) => !String(nome || '').trim() || ehContratar(nome);
 function linhaHtml(a = {}) {
   return `<div class="mz-linha">
-    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div>
-      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label>
-      <label class="f-tit-rot">Professor<select class="f-vinc" aria-label="Professor novo ou veterano">${opcoesVinc(a.professor || '', a.vinculo || '')}</select></label></div>
+    <div class="f-prof-wrap"><input type="text" list="lista-professores" class="f-prof" placeholder="Professor (nome como no Edubox)" value="${esc(a.professor || '')}" maxlength="120" aria-label="Professor" autocomplete="off"><div class="f-sug" aria-live="polite">${sugestoesHtml(a.professor || '')}</div></div>
     <select class="f-dia" aria-label="Dia da semana"><option value="">Dia a definir</option>${DIAS.map(d => `<option value="${d}" ${a.dia === d ? 'selected' : ''}>${DIA_LONGO[d]}</option>`).join('')}</select>
     <input type="time" class="f-ini" value="${esc(a.inicio || '')}" aria-label="Início">
     <input type="time" class="f-fim" value="${esc(a.fim || '')}" aria-label="Fim">
     <input type="text" list="lista-salas" class="f-sala" placeholder="Sala" value="${esc(a.sala || '')}" maxlength="80" aria-label="Sala">
     <button type="button" class="f-rem" title="Remover este horário" aria-label="Remover horário">×</button>
+    <div class="f-extra ${semProfReal(a.professor) ? 'hidden' : ''}">
+      <label class="f-tit-rot">Titulação<select class="f-tit" aria-label="Titulação do professor">${opcoesTit(a.professor || '')}</select></label>
+      <label class="f-tit-rot">Novo ou veterano<select class="f-vinc" aria-label="Professor novo ou veterano">${opcoesVinc(a.professor || '', a.vinculo || '')}</select></label>
+    </div>
     <div class="mz-pre" aria-label="Horários padrão">
       ${PRESETS.map(p => `<button type="button" class="mz-btn mz-btn-sec mz-btn-mini f-pre" data-ini="${p.ini}" data-fim="${p.fim}">${p.rotulo}</button>`).join('')}
     </div>
@@ -777,14 +781,14 @@ async function salvarTitulacoesModal(linhas) {
 // Edubox dos últimos 5 anos (GET /matrizes/historico-docentes); o coordenador pode marcar Novo/Veterano.
 // Só vai pro relatório da direção (aba Titulação): NÃO sai no horário.
 const ROT_VINC = { novo: 'Novo', veterano: 'Veterano' };
-let histDoc = null;   // { semestre, ok, lista: [{ codfun, nome, cursos, toks }] }
+let histDoc = null;   // { semestre, ok, lista: [{ nome, toks }] } — quem já deu aula na Fatec
 let histPromessa = null;
 function carregarHist() {
   if (histDoc && histDoc.semestre === dados.semestre) return Promise.resolve(histDoc);
   if (histPromessa) return histPromessa;
   const sem = dados.semestre;
   histPromessa = apiFetch(`/matrizes/historico-docentes?semestre=${encodeURIComponent(sem)}`)
-    .then(r => ({ semestre: sem, ok: !!r.ok, lista: (r.professores || []).map(x => ({ ...x, toks: normT(x.nome).split(' ') })) }))
+    .then(r => ({ semestre: sem, ok: !!r.ok, lista: (r.nomes || []).map(nome => ({ nome, toks: normT(nome).split(' ') })) }))
     .catch(() => ({ semestre: sem, ok: false, lista: [] }))
     .then(h => { histDoc = h; histPromessa = null; return h; });
   return histPromessa;
@@ -793,9 +797,8 @@ function vincAuto(nome) {
   if (!histDoc || histDoc.semestre !== dados.semestre) return 'carregando';
   if (!histDoc.ok) return null;
   if (ehContratar(nome) || !normT(nome)) return null;
-  const c = cursoAtual();
-  const p = profTit(nome);
-  let h = p && p.codfun ? histDoc.lista.find(x => String(x.codfun) === String(p.codfun)) : null;
+  const p = profTit(nome);   // nome completo do Edubox, quando o digitado casa com um professor
+  let h = p ? histDoc.lista.find(x => normT(x.nome) === normT(p.nome)) : null;
   if (!h) {
     const ex = histDoc.lista.filter(x => normT(x.nome) === normT(nome));
     if (ex.length === 1) h = ex[0];
@@ -812,6 +815,15 @@ function opcoesVinc(nome, atual) {
   const rot = ehContratar(nome) || !normT(nome) ? '—' : a === 'carregando' ? 'consultando o Edubox…' : a ? ROT_VINC[a] : 'sem histórico';
   return `<option value="">Pelo histórico (${esc(rot)})</option>`
     + ['novo', 'veterano'].map(v => `<option value="${v}" ${v === atual ? 'selected' : ''}>${ROT_VINC[v]}</option>`).join('');
+}
+function atualizarExtras(linha, nome) {
+  if (!linha) return;
+  linha.querySelector('.f-extra').classList.toggle('hidden', semProfReal(nome));
+  const st = linha.querySelector('.f-tit'), sv = linha.querySelector('.f-vinc');
+  const t = st.value;
+  st.innerHTML = opcoesTit(nome);
+  if (t && [...st.options].some(o => o.value === t)) st.value = t;   // mantém o que o coordenador já escolheu
+  sv.innerHTML = opcoesVinc(nome, sv.value);
 }
 function atualizarVincModal() {
   document.querySelectorAll('#mh-linhas .mz-linha').forEach(l => {
@@ -919,10 +931,9 @@ function wireEventos() {
   $('sel-semestre').addEventListener('change', (e) => carregar(e.target.value));
   $('mh-linhas').addEventListener('input', (e) => {
     if (!e.target.classList.contains('f-prof')) return;
-    const w = e.target.closest('.f-prof-wrap');
+    const w = e.target.closest('.f-prof-wrap'), linha = e.target.closest('.mz-linha');
     w.querySelector('.f-sug').innerHTML = sugestoesHtml(e.target.value);
-    w.querySelector('.f-tit').innerHTML = opcoesTit(e.target.value);
-    const sv = w.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(e.target.value, sv.value);
+    atualizarExtras(linha, e.target.value);
   });
   $('mh-linhas').addEventListener('click', (e) => {
     const op = e.target.closest('.f-sug-op');
@@ -930,8 +941,7 @@ function wireEventos() {
     const wrap = op.closest('.f-prof-wrap');
     wrap.querySelector('.f-prof').value = op.dataset.nome;
     wrap.querySelector('.f-sug').innerHTML = sugestoesHtml(op.dataset.nome);
-    wrap.querySelector('.f-tit').innerHTML = opcoesTit(op.dataset.nome);
-    const sv = wrap.querySelector('.f-vinc'); sv.innerHTML = opcoesVinc(op.dataset.nome, sv.value);
+    atualizarExtras(op.closest('.mz-linha'), op.dataset.nome);
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tit-rapida]');
@@ -1049,9 +1059,9 @@ const fmtData = (iso) => { try { return new Date(iso).toLocaleDateString('pt-BR'
 function seloFonte(p) {
   if (p.fonte === 'coordenador') {
     const quem = [p.editadoPor, p.editadoEm ? fmtData(p.editadoEm) : ''].filter(Boolean).join(', ');
-    return `<span class="tt-fonte editada" title="Edubox: ${esc(p.titulacaoEdubox || 'sem titulação')}">editada${quem ? ` · ${esc(quem)}` : ''}</span>`;
+    return `<span class="tt-origem editada" title="Edubox: ${esc(p.titulacaoEdubox || 'sem titulação')}">editada${quem ? ` · ${esc(quem)}` : ''}</span>`;
   }
-  return p.titulacao ? '<span class="tt-fonte">Edubox</span>' : '';
+  return p.titulacao ? '<span class="tt-origem">Edubox</span>' : '';
 }
 const liProfTit = (p) => htmlLiTit(p, titProfs.push(p) - 1);
 function htmlLiTit(p, i) {
@@ -1242,7 +1252,8 @@ function desenharTitulacao() {
     </section>
     ${planejamento && semProfTot ? `<p class="tt-aviso-falta"><b>${semProfTot} disciplinas</b> ainda estão sem professor ou “a contratar” — esses números mudam conforme os coordenadores completam os horários.</p>` : ''}
     <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores${podeEditar ? ' e corrigir a titulação que veio errada do Edubox' : ''}.</span></div>
-    <div class="tt-lista">${ordem.map(linha).join('')}</div>
+    <div class="tt-lista">${(filtroVinc ? ordem.filter(c => filtra(c.professores).length) : ordem).map(linha).join('')
+      || `<p class="tt-sem">Nenhum professor ${filtroVinc === 'novos' ? 'novo' : 'veterano'} neste semestre.</p>`}</div>
     <p class="mz-rel-emissao tt-so-impressao">Emitido em ${esc(emissao)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}. ${r.fonte === 'edubox' ? 'Titulação e professores conforme os diários do Edubox.' : 'Planejamento conforme os horários definidos pelos coordenadores; titulação conforme o Edubox.'} Titulações marcadas “editada” foram corrigidas pela coordenação no Órbita e valem no lugar da do Edubox.</p>`;
 }
 document.addEventListener('click', (e) => {

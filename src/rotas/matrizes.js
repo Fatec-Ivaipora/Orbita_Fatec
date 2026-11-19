@@ -215,7 +215,7 @@ async function titulacoesEdubox(semestre) {
 // ==========================================
 const COL_TIT = 'matrizes_titulacoes';
 const TITULACOES = ['Doutor', 'Mestre', 'Especialista', 'Graduado'];
-const normNomeTit = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const normNomeTit = (s) => normNome(s);   // mesma normalização do resto do módulo
 const chaveTit = (codfun, nome) => (codfun != null && String(codfun).trim() ? `F${String(codfun).trim()}` : `N_${normNomeTit(nome).replace(/ /g, '_')}`);
 
 // { porChave: Map(docId → dados), porNome: Map(nomeNorm → dados) }
@@ -227,7 +227,9 @@ async function overridesTitulacao() {
 }
 // Professor {codfun?, nome, titulacao} → o mesmo com a titulação que vale + de onde ela veio.
 function comOverride(p, ov) {
-    const o = (p.codfun != null && ov.porChave.get(chaveTit(p.codfun))) || ov.porNome.get(normNomeTit(p.nome)) || null;
+    const porNome = ov.porNome.get(normNomeTit(p.nome));
+    const deOutro = porNome && porNome.codfun && p.codfun != null && String(porNome.codfun) !== String(p.codfun);
+    const o = (p.codfun != null && ov.porChave.get(chaveTit(p.codfun))) || (deOutro ? null : porNome) || null;
     if (!o) return { ...p, fonte: 'edubox' };
     const em = o.alteradoEm && o.alteradoEm.toDate ? o.alteradoEm.toDate().toISOString() : (o.alteradoEm || null);
     return { ...p, titulacao: o.titulacao, titulacaoEdubox: p.titulacao || '', fonte: 'coordenador', editadoPor: (o.alteradoPor || {}).nome || '', editadoEm: em };
@@ -261,6 +263,7 @@ async function professorNoEscopo(semestre, escopo, codfun, nome) {
         return Object.values(x.alocacoes || {}).some(a => (a.aulas || []).some(au => {
             if (ehContratar(au.professor)) return false;
             if (normNomeTit(au.professor) === normNomeTit(nome)) return true;
+            if (normNomeTit(au.professor).split(' ').length < 2) return false;
             const achado = acharProfessor([alvo], au.professor);
             return !!(achado && !achado.ambiguo);
         }));
@@ -272,17 +275,16 @@ async function prepararTitulacao(req, res) {
     const b = req.body || {};
     const semestre = SEMESTRE.test(String(b.semestre || '')) ? b.semestre : '';
     if (!semestre) { res.status(400).json({ error: 'Informe o semestre.' }); return null; }
-    const codfun = b.codfun != null && /^\d{1,12}$/.test(String(b.codfun).trim()) ? String(b.codfun).trim() : null;
+    let codfun = b.codfun != null && /^\d{1,12}$/.test(String(b.codfun).trim()) ? String(b.codfun).trim() : null;
     let nome = String(b.nome || '').replace(/\s+/g, ' ').trim().slice(0, 120);
     let titulacaoEdubox = '';
     const tits = await titulacoesEdubox(semestre);
-    if (codfun) {
-        const e = tits.find(t => t.codfun === codfun);
-        if (e) { nome = e.nome; titulacaoEdubox = e.titulacao || ''; }
-        else if (!nome) { res.status(400).json({ error: 'Professor não encontrado no Edubox.' }); return null; }
-    } else {
-        const e = tits.find(t => normNomeTit(t.nome) === normNomeTit(nome));
-        if (e) titulacaoEdubox = e.titulacao || '';
+    let e = codfun ? tits.find(t => t.codfun === codfun) : null;
+    if (codfun && !e) codfun = null;   // código desconhecido: segue só pelo nome (chave N_), nunca grava em F{codfun}
+    if (e) { nome = e.nome; titulacaoEdubox = e.titulacao || ''; }
+    else {
+        const porNome = tits.find(t => normNomeTit(t.nome) === normNomeTit(nome));
+        if (porNome) titulacaoEdubox = porNome.titulacao || '';
     }
     if (!nome || ehContratar(nome)) { res.status(400).json({ error: 'Informe o professor.' }); return null; }
     const escopo = await escopoDe(req);
@@ -317,8 +319,8 @@ router.put('/titulacao-professor', verifyToken, verifyToken.requireModulePermiss
 });
 
 // PUT /api/matrizes/professor-nome  { semestre, de, para } — corrige o nome do professor em TODOS os horários
-// do semestre nos cursos que a pessoa vê (coordenador: os dele; ADM/RH: todos). A titulação editada do nome
-// antigo (professor sem Edubox) vai junto pro nome novo.
+// do semestre nos cursos que a pessoa vê (coordenador: os dele; ADM/RH: todos), numa gravação só. A titulação
+// editada do nome antigo (professor sem Edubox) é copiada pro nome novo.
 router.put('/professor-nome', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
     try {
         const b = req.body || {};
@@ -346,16 +348,18 @@ router.put('/professor-nome', verifyToken, verifyToken.requireModulePermission('
             if (Object.keys(mudou).length) docs.push({ ref: d.ref, mudou });
         }
         if (!aulasTrocadas) return res.status(404).json({ error: 'Não achei esse professor nos horários dos seus cursos neste semestre.' });
-        for (const { ref, mudou } of docs) await ref.set({ alocacoes: mudou }, { merge: true });
         const quem = { uid: req.user.uid, nome: req.user.name || req.user.email || '' };
-        // leva a titulação editada (chave por nome) junto, se o nome novo ainda não tiver uma
+        const lote = db.batch();
+        docs.forEach(({ ref, mudou }) => lote.set(ref, { alocacoes: mudou }, { merge: true }));
+        // a titulação editada do nome antigo (chave por nome) é copiada pro nome novo, se ele ainda não tiver
+        // uma; a antiga fica, porque outros cursos (fora do escopo de quem renomeou) podem usar o nome antigo
         const velho = db.collection(COL_TIT).doc(chaveTit(null, de)), novo = db.collection(COL_TIT).doc(chaveTit(null, para));
         const [sv, sn] = await Promise.all([velho.get(), novo.get()]);
         if (sv.exists && !sn.exists && velho.id !== novo.id) {
-            await novo.set({ ...sv.data(), nome: para, nomeNorm: normNomeTit(para), alteradoPor: quem, alteradoEm: admin.firestore.FieldValue.serverTimestamp() });
-            await velho.delete();
+            lote.set(novo, { ...sv.data(), nome: para, nomeNorm: normNomeTit(para), alteradoPor: quem, alteradoEm: admin.firestore.FieldValue.serverTimestamp() });
         }
-        await db.collection(`${COL_TIT}_log`).add({ acao: 'renomear', de, para, semestre, aulas: aulasTrocadas, cursos: docs.map(x => x.ref.id), por: quem, em: admin.firestore.FieldValue.serverTimestamp() });
+        lote.set(db.collection(`${COL_TIT}_log`).doc(), { acao: 'renomear', de, para, semestre, aulas: aulasTrocadas, cursos: docs.map(x => x.ref.id), por: quem, em: admin.firestore.FieldValue.serverTimestamp() });
+        await lote.commit();
         res.json({ ok: true, de, para, aulas: aulasTrocadas, cursos: docs.length });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -442,8 +446,8 @@ async function historicoDocentes(semestre) {
 function vinculoAuto(hist, cursoId, codfun, nome) {
     if (!hist.ok) return null;
     let f = codfun ? String(codfun) : null;
-    if (!f || !hist.fatec.has(f)) {
-        // sem código (ou código sem diário): procura pelo nome nos diários anteriores
+    if (!f) {
+        // sem código (professor só digitado no horário): procura pelo nome nos diários anteriores
         const ex = hist.lista.filter(x => normNome(x.nome) === normNome(nome));
         const ach = ex.length === 1 ? ex[0] : acharProfessor(hist.lista, nome);
         if (ach && !ach.ambiguo && ach.codfun) f = ach.codfun;
@@ -453,16 +457,15 @@ function vinculoAuto(hist, cursoId, codfun, nome) {
     return f && hist.fatec.has(f) ? 'veterano' : 'novo';
 }
 
-// GET /api/matrizes/historico-docentes?semestre=2027.1 — pro cadastro do professor mostrar o automático
+// GET /api/matrizes/historico-docentes?semestre=2027.1 — pro cadastro do professor mostrar o automático (só nomes)
 router.get('/historico-docentes', verifyToken, verifyToken.requireModulePermission('matrizes'), async (req, res) => {
     try {
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : '';
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
-        const [hist, escopo] = await Promise.all([historicoDocentes(semestre), escopoDe(req)]);
+        const hist = await historicoDocentes(semestre);
         if (!hist.ok) return res.json({ ok: false, erro: hist.erro });
-        // quem deu aula na Fatec nos últimos 5 anos + em quais dos cursos que a pessoa vê
-        const professores = hist.lista.map(x => ({ codfun: x.codfun, nome: x.nome, cursos: [...x.cursos].filter(c => podeVer(escopo, c)) }));
-        res.json({ ok: true, desde: hist.desde, professores });
+        // só os nomes de quem já deu aula na Fatec (é o que a tela precisa pra mostrar "Pelo histórico")
+        res.json({ ok: true, desde: hist.desde, nomes: [...new Set(hist.lista.map(x => x.nome))] });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
