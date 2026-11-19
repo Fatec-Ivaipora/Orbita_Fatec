@@ -516,7 +516,7 @@ function renderSemestre() {
         <div class="mz-tags">${tags} <span class="mz-tag ${ok ? 'ok' : 'conferir'}">${ok ? 'confere' : 'conferir'}</span></div></div>
       ${g.dp ? '' : faixaEnsalamento(c, g)}
       ${avisos}
-      <div class="mz-tabela-wrap"><table class="mz-tabela">${COLGROUP_HOR}<thead><tr><th>Disciplina</th><th>Tipo</th>${CH_COLUNAS}<th>Professor e horário</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <div class="mz-tabela-wrap"><table class="mz-tabela mz-tab-sem">${COLGROUP_HOR}<thead><tr><th>Disciplina</th><th>Tipo</th>${CH_COLUNAS}<th>Professor e horário</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
       ${podeEditar && !filtroSemProf ? `<div class="mz-card-pe"><button type="button" class="mz-btn mz-btn-sec mz-btn-mini" data-incluir="${gi}">+ Incluir disciplina</button><span>Matriz nova que ainda não está no Edubox? Inclua aqui e imprima em <b>Alterações p/ Secretaria</b>.</span></div>` : ''}
     </div>`;
   }).join('');
@@ -576,7 +576,7 @@ function tabelaComparacao(c) {
       <td>${soA.length ? `<ul class="so">${soA.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<span class="mz-sem">—</span>'}</td>
       <td>${soB.length ? `<ul class="so">${soB.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<span class="mz-sem">—</span>'}</td></tr>`;
   }).join('');
-  return `<div class="mz-tabela-wrap"><table class="mz-tabela"><thead><tr><th>Período</th><th>Só na matriz A</th><th>Só na matriz B</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+  return `<div class="mz-tabela-wrap"><table class="mz-tabela mz-cmp"><thead><tr><th>Período</th><th>Só na matriz A</th><th>Só na matriz B</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
 // ---- Aba 3: relatório padronizado
@@ -609,7 +609,7 @@ function renderHorario() {
     const corpo = linhas.map(({ a, d }) => `<tr><td>${DIA_LONGO[a.dia]}</td><td>${esc(a.inicio)}–${esc(a.fim)}</td><td>${esc(nomeBonito(d.nome))}</td><td>${esc(a.professor)}</td><td>${a.sala ? esc(salaTxt(a.sala)) : '<span class="mz-sem">—</span>'}</td><td>${modalidade(d)}</td><td class="num">${d.ch.total} h</td></tr>`).join('')
       + pendentes.map(({ d, profs }) => `<tr><td colspan="2" class="mz-sem">a definir</td><td>${esc(nomeBonito(d.nome))}</td><td${profs.length ? '' : ' class="mz-sem"'}>${profs.length ? esc(profs.join(' / ')) : 'a definir'}</td><td class="mz-sem">—</td><td>${modalidade(d)}</td><td class="num">${d.ch.total} h</td></tr>`).join('');
     return `<h3>${esc(tituloGrupo(c, g))}${g.dp ? '' : ` <span class="mz-rel-per">(${esc(rotuloPeriodos(g.periodos))})</span>`}</h3>
-      <div class="mz-tabela-wrap"><table class="mz-tabela"><thead><tr><th>Dia</th><th>Horário</th><th>Disciplina</th><th>Professor</th><th>Sala</th><th>Modalidade</th><th class="num">CH</th></tr></thead><tbody>${corpo || '<tr><td colspan="7" class="mz-sem">Sem disciplinas.</td></tr>'}</tbody></table></div>`;
+      <div class="mz-tabela-wrap"><table class="mz-tabela mz-tab-hor"><thead><tr><th>Dia</th><th>Horário</th><th>Disciplina</th><th>Professor</th><th>Sala</th><th>Modalidade</th><th class="num">CH</th></tr></thead><tbody>${corpo || '<tr><td colspan="7" class="mz-sem">Sem disciplinas.</td></tr>'}</tbody></table></div>`;
   }).join('');
 
   $('painel-horario').innerHTML = `
@@ -1059,9 +1059,9 @@ const fmtData = (iso) => { try { return new Date(iso).toLocaleDateString('pt-BR'
 function seloFonte(p) {
   if (p.fonte === 'coordenador') {
     const quem = [p.editadoPor, p.editadoEm ? fmtData(p.editadoEm) : ''].filter(Boolean).join(', ');
-    return `<span class="tt-fonte editada" title="Edubox: ${esc(p.titulacaoEdubox || 'sem titulação')}">editada${quem ? ` · ${esc(quem)}` : ''}</span>`;
+    return `<span class="tt-origem editada" title="Edubox: ${esc(p.titulacaoEdubox || 'sem titulação')}">editada${quem ? ` · ${esc(quem)}` : ''}</span>`;
   }
-  return p.titulacao ? '<span class="tt-fonte">Edubox</span>' : '';
+  return p.titulacao ? '<span class="tt-origem">Edubox</span>' : '';
 }
 const liProfTit = (p) => htmlLiTit(p, titProfs.push(p) - 1);
 function htmlLiTit(p, i) {
@@ -1252,7 +1252,8 @@ function desenharTitulacao() {
     </section>
     ${planejamento && semProfTot ? `<p class="tt-aviso-falta"><b>${semProfTot} disciplinas</b> ainda estão sem professor ou “a contratar” — esses números mudam conforme os coordenadores completam os horários.</p>` : ''}
     <div class="tt-acoes mz-no-print"><button type="button" class="mz-btn mz-btn-sec" id="btn-imprimir-tit">Imprimir</button><button type="button" class="mz-btn mz-btn-sec" id="btn-atualizar-tit">Atualizar</button><span class="tt-dica">Clique no curso pra ver os professores${podeEditar ? ' e corrigir a titulação que veio errada do Edubox' : ''}.</span></div>
-    <div class="tt-lista">${ordem.map(linha).join('')}</div>
+    <div class="tt-lista">${(filtroVinc ? ordem.filter(c => filtra(c.professores).length) : ordem).map(linha).join('')
+      || `<p class="tt-sem">Nenhum professor ${filtroVinc === 'novos' ? 'novo' : 'veterano'} neste semestre.</p>`}</div>
     <p class="mz-rel-emissao tt-so-impressao">Emitido em ${esc(emissao)}${currentUserNome ? ' por ' + esc(currentUserNome) : ''}. ${r.fonte === 'edubox' ? 'Titulação e professores conforme os diários do Edubox.' : 'Planejamento conforme os horários definidos pelos coordenadores; titulação conforme o Edubox.'} Titulações marcadas “editada” foram corrigidas pela coordenação no Órbita e valem no lugar da do Edubox.</p>`;
 }
 document.addEventListener('click', (e) => {

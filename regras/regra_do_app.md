@@ -112,7 +112,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 ### [2026-11-18] Matrizes e Horários: pente fino (segurança da titulação, troca de nome, modal do horário)
 - Autor: Claude Code (a pedido do usuário: "faz um pente fino nesse módulo")
 - Branch: fix/matrizes-pente-fino
-- Arquivos alterados: src/rotas/matrizes.js, matrizes/app.js (`?v=18`), matrizes/matrizes.css (`?v=20`), matrizes/index.html, regras/regra_do_app.md
+- Arquivos alterados: src/rotas/matrizes.js, matrizes/app.js (`?v=22`), matrizes/matrizes.css (`?v=31`), matrizes/index.html, regras/regra_do_app.md
 - Tipo: correção + ajuste visual
 - Motivo: revisão do código das mudanças de titulação/novo x veterano e tela do horário espremida (relato do usuário com print).
 - Impacto:
@@ -121,6 +121,13 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - Troca de nome (`PUT /professor-nome`): grava tudo de uma vez (batch: horários + titulação + log) e a titulação editada do nome antigo é COPIADA para o novo, não movida — outros cursos que ainda usam o nome antigo não perdem a titulação.
   - Novo x veterano: professor com código do Edubox é classificado só pelo código (sem histórico = novo); a busca por nome fica só para quem foi digitado sem cadastro.
   - `GET /historico-docentes` devolve só os nomes (sem código e sem cursos).
+  - Pente fino visual (revisado na tela com dados reais, em notebook 1366px e tablet 768px):
+    - Semestre por turma: a coluna Disciplina era espremida até 77px (nome quebrando letra a letra) — botões Editar/Disciplina empilhados e colunas de carga horária/professor mais estreitas; em tela até 1100px some o detalhe da carga horária (fica só o Total) e a tabela cabe sem rolar pro lado; etiqueta "Síncrona mediada" não vaza mais pra coluna Total; selo de titulação volta a ser etiqueta pequena (estava esticando como barra da largura toda).
+    - Topo: os 7 cartões cabem numa linha em notebook (antes 5 + 2 soltos); as abas cabem numa linha.
+    - Aba Titulação: o parágrafo de fonte do relatório tinha virado uma "bolha" (conflito de nome com o selo Edubox/editada, renomeado para `.tt-origem`); a frase do resumo novos x veteranos não quebra mais em pedaços; com o filtro Novos/Veteranos ligado aparecem só os cursos que têm alguém no filtro.
+    - Horário de aula (relatório): "Presencial" e "19:30–22:30" não quebram mais no meio.
+    - Alterações p/ Secretaria: a carga horária detalhada não passa mais por cima do professor.
+    - Matrizes em uso: coluna "Só na matriz B" alinhada à esquerda e nomes longos quebram linha em vez de cortar.
   - Modal do horário: janela até 880px; em tela estreita a linha quebra (professor em cima; dia, início e fim; sala); Titulação e Novo/veterano numa linha própria, que só aparece quando há professor (não aparece para "contratar" nem vazio).
 - Como testar: Semestre por turma → Editar → com "CONTRATAR" os campos de titulação/novo-veterano somem; com um nome, aparecem numa linha própria e legível. Testes do backend com Firestore em memória e relay stub (30 casos).
 - Como reverter: reverter o commit.
