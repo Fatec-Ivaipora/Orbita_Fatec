@@ -109,6 +109,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Aulas EAD: X no "não gravou", observação por UA, tipo da revisão, Zoom em destaque e filtros do relatório
+- Autor: Claude Code (pedido do Suporte AVA)
+- Branch: fix/ead-aulas-ajustes
+- Arquivos alterados: `src/rotas/ead-aulas.js`, `ti/ead-aulas/app.js` (`?v=3`), `ti/ead-aulas/ead-aulas.css` (`?v=3`), `ti/ead-aulas/index.html`, `regras/regra_do_app.md`
+- Tipo: ajuste
+- Motivo: pedidos do Suporte AVA: "quando colocar não gravou e o motivo precisa colocar X nos campos", "na revisão informar se foi feito vídeo ou outro tipo de material", "deixar mais destacado e-mail e sala do Zoom", "nas UAs, mesmo gravadas, um campo opcional, pois tem professor que grava mais de uma UA no mesmo vídeo, sem slide, sem áudio" e "no relatório, filtros de período, professor, disciplina e só com observação".
+- Impacto:
+  - **Não gravou**: com o motivo preenchido, as 4 etapas (Gravou, Baixou, YouTube, No AVA) da UA mostram **X** (não se aplica) no lugar das caixas. "limpar" o motivo volta as caixas.
+  - **Observação por UA** (coluna nova "Observação", opcional): vale para qualquer UA, gravada ou não. Tem sugestões (mais de uma UA no mesmo vídeo, sem slide, sem áudio, áudio ruim, vídeo incompleto, gravou a UA errada), mas aceita texto livre. Salva ao sair do campo; texto vazio apaga. Fica em `gravacoes[item].obs = { texto, em, por }`.
+  - **Revisão: vídeo ou outro material**: seletor na linha da revisão. Fica em `gravacoes[REV-x].tipo = { tipo: 'video'|'material', em, por }`. O servidor recusa tipo em UA que não é revisão e valor fora da lista.
+  - **Zoom em destaque**: a ficha da disciplina abre com um cartão "E-mail do Zoom" e "Sala do Zoom", com botões de copiar e-mail e copiar link. Quando o professor não tem sala, o cartão avisa. Na lista, a coluna virou "Zoom (e-mail · sala)", com o e-mail em destaque e o aviso "sem sala".
+  - **Relatório**: filtros **De / Até** (período das datas previstas; sem "Até", vai até hoje), **Professor**, **Disciplina** (lista só as do professor escolhido) e **Só com observação**, que gera um texto só com as UAs que têm observação e a situação de cada uma. O relatório normal ganhou a seção "OBSERVAÇÕES", e a revisão aparece com "[Vídeo]" ou "[Outro material]".
+  - Rota: `PATCH /disciplinas/:id/item` aceita também `obs` e `tipo`. Nenhum dado existente muda.
+- Como testar (feito localmente com um servidor de teste: o roteador real com Firestore em memória, sem gravar em produção):
+  - Abrir uma disciplina, clicar em "não gravou…" e informar o motivo: aparecem X nas 4 etapas.
+  - Marcar uma UA como "No AVA" e escrever uma observação: ela salva e continua lá ao reabrir.
+  - Na revisão, escolher "Outro material".
+  - Na aba Relatório do dia, filtrar período, professor e disciplina e marcar "Só com observação".
+- Como reverter: reverter o commit. Os campos `obs` e `tipo` gravados nas UAs podem ficar (a versão anterior ignora).
+
 ### [2026-11-18] Matrizes e Horários: pente fino (segurança da titulação, troca de nome, modal do horário)
 - Autor: Claude Code (a pedido do usuário: "faz um pente fino nesse módulo")
 - Branch: fix/matrizes-pente-fino

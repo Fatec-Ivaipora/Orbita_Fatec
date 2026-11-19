@@ -23,6 +23,8 @@ const NIVEL_PADRAO = { adm_l2: 3, ti: 3 };
 const DIA_ROTULO = { segunda: 'Segunda', terca: 'Terça', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta', sabado: 'Sábado' };
 const ETAPA_ROTULO = { gravou: 'Gravou', baixou: 'Baixou', youtube: 'YouTube', ava: 'No AVA' };
 const ETAPA_QUEM = { gravou: 'professor', baixou: 'T.I', youtube: 'T.I', ava: 'T.I' };
+const TIPO_REVISAO = { video: 'Vídeo', material: 'Outro material' };
+const OBS_SUGESTOES = ['Mais de uma UA no mesmo vídeo', 'Sem slide', 'Sem áudio', 'Áudio ruim', 'Vídeo incompleto', 'Gravou a UA errada'];
 const CURSOS = [['agronegocio', 'Agronegócio'], ['agronomia', 'Agronomia'], ['arquitetura-urbanismo', 'Arquitetura e Urbanismo'], ['biomedicina', 'Biomedicina'],
   ['contabeis', 'Ciências Contábeis'], ['direito', 'Direito'], ['enfermagem', 'Enfermagem'], ['engenharia-civil', 'Engenharia Civil'], ['fisioterapia', 'Fisioterapia'],
   ['gestao-comercial', 'Gestão Comercial'], ['gestao-financeira', 'Gestão Financeira'], ['logistica', 'Logística'], ['medicina-veterinaria', 'Medicina Veterinária'],
@@ -46,6 +48,7 @@ let currentUser = null, appInitialized = false, initializedRole = null, podeEdit
 let dados = null;
 let aba = 'gravacoes', filtroCurso = '', busca = '', filtroSit = 'todas', diaGrade = 'segunda', relBim = '1', relAte = 6, relModo = 'data';
 let filtroDia = '', filtroProf = '', filtroData = ''; // filtros tipo planilha (18/11/2026)
+let relIni = '', relFim = '', relProf = '', relDisc = '', relSoObs = false; // filtros do relatório (18/11/2026)
 let importando = null; // { tipo: 'disciplinas'|'salas', base64, previa }
 const senhasVisiveis = new Set();
 
@@ -208,12 +211,12 @@ function renderGravacoes() {
     </div>
     <section class="ea-card ea-card-tabela">
       ${lista.length ? `<div class="ea-tabela-wrap"><table class="ea-tabela">
-        <thead><tr><th>Disciplina</th><th>Professor</th><th>Dia e horário</th><th>Sala Zoom</th><th>Gravações</th></tr></thead>
+        <thead><tr><th>Disciplina</th><th>Professor</th><th>Dia e horário</th><th>Zoom<span class="ea-sub">e-mail · sala</span></th><th>Gravações</th></tr></thead>
         <tbody>${lista.map(d => { const s = salaDoProf(d.professor); return `<tr class="ea-clicavel" data-ea-disc="${esc(d.id)}" tabindex="0">
           <td><b>${esc(nomeBonito(d.nome))}</b><span class="ea-sub">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''} · ${d.qtd || ''} UAs</span></td>
           <td>${d.professor ? esc(d.professor) : '<span class="ea-pill alerta">definir</span>'}</td>
           <td class="ea-nowrap">${d.dia ? esc(DIA_ROTULO[d.dia]) : '<span class="ea-sub">—</span>'}${d.horario ? `<span class="ea-sub">${esc(d.horario)}</span>` : ''}</td>
-          <td class="ea-nowrap">${s ? `${esc(s.conta)}<span class="ea-sub">${esc(s.nome)}</span>` : d.professor ? '<span class="ea-sub">sem sala</span>' : ''}</td>
+          <td class="ea-nowrap">${s ? `<span class="ea-zoom-cel"><b>${esc(s.conta)}</b><span>${esc(s.nome)}</span></span>` : d.professor ? '<span class="ea-pill alerta">sem sala</span>' : ''}</td>
           <td>${barraGrav(d)}${filtroData ? (() => { const dt = datasPrevistas(d); const its = d.itens.filter(it => dt[it.id].data === filtroData); return its.length ? `<span class="ea-pill marca" style="margin-top:.3rem">${dataBR(filtroData)}: ${its.map(it => esc(it.rotulo)).join(', ')}</span>` : ''; })() : ''}</td></tr>`; }).join('')}</tbody></table></div>`
       : '<p class="ea-vazio">Nenhuma disciplina neste filtro.</p>'}
     </section>
@@ -245,32 +248,57 @@ function abrirDisciplina(id) {
   d.itens.forEach(it => { const dt = datas[it.id].data; if (dt) (porData[dt] = porData[dt] || []).push(it.rotulo); });
   const SIT = { gravou: ['bom', 'gravada'], 'nao-gravou': ['alerta', 'não gravou'], atrasada: ['crit', 'atrasada'], hoje: ['marca', 'hoje'], prevista: ['', 'prevista'], 'sem-data': ['', 'sem data'] };
   const linhas = d.itens.map((it, i) => {
-    const sep = (i === 0 || (it.bimestre === 2 && d.itens[i - 1].bimestre === 1)) ? `<tr class="ea-sep"><td colspan="7">${it.bimestre}º bimestre</td></tr>` : '';
+    const sep = (i === 0 || (it.bimestre === 2 && d.itens[i - 1].bimestre === 1)) ? `<tr class="ea-sep"><td colspan="8">${it.bimestre}º bimestre</td></tr>` : '';
     const gi = g[it.id] || {};
     const dt = datas[it.id];
     const sit = situacaoItem(d, it, datas);
     const juntas = dt.data && porData[dt.data].length > 1 ? porData[dt.data].filter(r => r !== it.rotulo) : [];
+    const tipoRev = gi.tipo?.tipo || '';
+    const tipoHtml = !it.revisao ? '' : podeEditar
+      ? `<select class="ea-tipo-rev" data-ea-tipo="${esc(it.id)}" aria-label="O que foi entregue na ${esc(it.rotulo)}"><option value="">entregou…</option>${Object.entries(TIPO_REVISAO).map(([k, r]) => `<option value="${k}" ${tipoRev === k ? 'selected' : ''}>${r}</option>`).join('')}</select>`
+      : (tipoRev ? `<span class="ea-sub">${esc(TIPO_REVISAO[tipoRev])}</span>` : '');
+    // 18/11/2026: "não gravou" → as etapas não se aplicam: X no lugar das caixas (limpar o motivo volta as caixas)
+    const etapasHtml = gi.naoGravou
+      ? dados.etapas.map(e => `<td class="ea-check-td"><span class="ea-x" title="Não se aplica: não gravou" aria-label="${esc(it.rotulo)}: ${ETAPA_ROTULO[e]} não se aplica">X</span></td>`).join('')
+      : dados.etapas.map(e => `<td class="ea-check-td">
+        <input type="checkbox" class="ea-check" data-ea-grav="${esc(it.id)}" data-ea-etapa="${e}" ${gi[e] ? 'checked' : ''} ${podeEditar ? '' : 'disabled'} aria-label="${esc(it.rotulo)}: ${ETAPA_ROTULO[e]}">
+        ${gi[e] ? `<span class="ea-quem" title="${esc(gi[e].por || '')}">${esc(quando(gi[e].em))}</span>` : ''}</td>`).join('');
+    const obsHtml = podeEditar
+      ? `<input type="text" class="ea-input ea-obs" data-ea-obs="${esc(it.id)}" value="${esc(gi.obs?.texto || '')}" maxlength="300" list="ea-obs-sugestoes" placeholder="opcional" aria-label="Observação ${esc(it.rotulo)}" title="${esc(gi.obs ? `${gi.obs.por || ''} · ${quando(gi.obs.em)}` : 'Problema do vídeo: mais de uma UA no mesmo vídeo, sem slide, sem áudio...')}">`
+      : (gi.obs ? esc(gi.obs.texto) : '');
     return `${sep}<tr class="${it.revisao ? 'ea-rev' : ''}">
-      <td><b>${esc(it.rotulo)}</b><span class="ea-sub"><span class="ea-pill ${SIT[sit.id][0]}">${SIT[sit.id][1]}</span></span></td>
+      <td><b>${esc(it.rotulo)}</b><span class="ea-sub"><span class="ea-pill ${SIT[sit.id][0]}">${SIT[sit.id][1]}</span></span>${tipoHtml}</td>
       <td class="ea-data-td">${podeEditar ? `<input type="date" class="ea-input ea-data" data-ea-data="${esc(it.id)}" value="${esc(dt.data)}" aria-label="Data prevista ${esc(it.rotulo)}">` : esc(dataBR(dt.data) || '—')}
         <span class="ea-sub">${dt.manual ? 'data ajustada' : dt.data ? 'pelo calendário' : ''}${dt.manual && podeEditar ? ` · <button type="button" class="ea-link" data-ea-data-limpar="${esc(it.id)}">voltar ao calendário</button>` : ''}</span>
         ${juntas.length ? `<span class="ea-sub ea-alerta">mesma data de ${juntas.map(esc).join(', ')}</span>` : ''}</td>
-      ${dados.etapas.map(e => `<td class="ea-check-td">
-        <input type="checkbox" class="ea-check" data-ea-grav="${esc(it.id)}" data-ea-etapa="${e}" ${gi[e] ? 'checked' : ''} ${podeEditar ? '' : 'disabled'} aria-label="${esc(it.rotulo)}: ${ETAPA_ROTULO[e]}">
-        ${gi[e] ? `<span class="ea-quem" title="${esc(gi[e].por || '')}">${esc(quando(gi[e].em))}</span>` : ''}</td>`).join('')}
+      ${etapasHtml}
       <td>${gi.naoGravou ? `<span class="ea-alerta">${esc(gi.naoGravou.motivo)}</span>${podeEditar ? `<span class="ea-sub"><button type="button" class="ea-link" data-ea-nao-gravou-limpar="${esc(it.id)}">limpar</button></span>` : ''}`
-        : (!gi.gravou && podeEditar ? `<button type="button" class="ea-link" data-ea-nao-gravou="${esc(it.id)}">não gravou…</button>` : '')}</td></tr>`;
+        : (!gi.gravou && podeEditar ? `<button type="button" class="ea-link" data-ea-nao-gravou="${esc(it.id)}">não gravou…</button>` : '')}</td>
+      <td class="ea-obs-td">${obsHtml}</td></tr>`;
   }).join('');
   const semCal = !dados.calendario?.inicio1;
   abrirModal(nomeBonito(d.nome), `
-    <p class="ea-sub" style="margin:-.4rem 0 1rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}${s ? ` · Zoom: <b>${esc(nomeSala(s))}</b> <button type="button" class="ea-link" data-ea-copiar-link="${esc(s.id)}">copiar link</button>` : ''}</p>
+    <p class="ea-sub" style="margin:-.4rem 0 .8rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}${d.professor ? ` · Prof. ${esc(d.professor)}` : ''}</p>
+    ${htmlZoomDestaque(s, d)}
     <section><h3>Dados da disciplina</h3>${htmlFormDisc(d)}
       ${podeEditar ? `<div class="ea-modal-acoes"><button type="button" class="btn-secondary ea-perigo" data-ea-excluir-disc="${esc(d.id)}">Excluir disciplina</button><button type="button" class="btn-primary" data-ea-salvar-disc="${esc(d.id)}">Salvar dados</button></div>` : ''}</section>
     <section><h3>Gravações <span class="ea-sub" style="display:inline">· marcar uma etapa marca as anteriores; desmarcar desmarca as seguintes</span></h3>
       ${semCal ? `<p class="ea-sub" style="margin:0 0 .5rem">Sem calendário das UAs neste semestre: as datas ficam em branco. Dá para digitar a data de cada UA aqui ou definir o calendário (botão "Calendário das UAs").</p>` : !d.dia ? '<p class="ea-sub" style="margin:0 0 .5rem">A disciplina está sem dia da semana: o calendário não consegue calcular as datas. Preencha o dia acima ou digite a data de cada UA.</p>' : ''}
       <div class="ea-tabela-wrap"><table class="ea-tabela ea-grav" data-ea-disc-grav="${esc(d.id)}">
-        <thead><tr><th>Unidade</th><th>Data prevista</th>${dados.etapas.map(e => `<th class="ea-check-td">${ETAPA_ROTULO[e]}<span class="ea-sub">${ETAPA_QUEM[e]}</span></th>`).join('')}<th>Não gravou</th></tr></thead>
-        <tbody>${linhas}</tbody></table></div></section>`);
+        <thead><tr><th>Unidade</th><th>Data prevista</th>${dados.etapas.map(e => `<th class="ea-check-td">${ETAPA_ROTULO[e]}<span class="ea-sub">${ETAPA_QUEM[e]}</span></th>`).join('')}<th>Não gravou</th><th>Observação<span class="ea-sub">opcional</span></th></tr></thead>
+        <tbody>${linhas}</tbody></table></div>
+      <datalist id="ea-obs-sugestoes">${OBS_SUGESTOES.map(o => `<option value="${esc(o)}">`).join('')}</datalist>
+      <p class="ea-sub" style="margin-top:.5rem">Observação: vale também para UA gravada (ex.: mais de uma UA no mesmo vídeo, sem slide, sem áudio). Salva ao sair do campo; apague o texto para limpar.</p></section>`);
+}
+
+// Destaque do Zoom (18/11/2026): e-mail (conta) e sala do professor em cartão próprio no topo da ficha
+function htmlZoomDestaque(s, d) {
+  if (!d.professor) return '<div class="ea-zoom ea-zoom-vazio">Defina o professor para ver o e-mail e a sala do Zoom.</div>';
+  if (!s) return '<div class="ea-zoom ea-zoom-vazio">Professor <b>sem sala Zoom</b> neste semestre. Escolha na aba Grade da semana › Sala de cada professor.</div>';
+  return `<div class="ea-zoom">
+    <div class="ea-zoom-campo"><span>E-mail do Zoom</span><b>${esc(s.conta || '—')}</b>${s.conta ? `<button type="button" class="ea-link" data-ea-copiar-txt="${esc(s.conta)}">copiar e-mail</button>` : ''}</div>
+    <div class="ea-zoom-campo"><span>Sala do Zoom</span><b>${esc(s.nome || '—')}</b><button type="button" class="ea-link" data-ea-copiar-link="${esc(s.id)}">copiar link</button></div>
+  </div>`;
 }
 
 function abrirCalendario() {
@@ -381,36 +409,62 @@ function abrirSala(id) {
 //  ABA: RELATÓRIO DO DIA (texto para o coordenador EAD)
 // ================================================================
 function temDatas() { return dados.disciplinas.some(d => d.professor && Object.values(datasPrevistas(d)).some(x => x.data)); }
+// Filtros do relatório (18/11/2026): período (data inicial e final; sem final = até hoje), professor, disciplina e
+// "só com observação" (lista apenas as UAs com observação, para cobrar o professor ou o T.I).
+function discsDoRelatorio() {
+  return dados.disciplinas.filter(d => d.professor && (!relProf || chaveProf(d.professor) === relProf) && (!relDisc || d.id === relDisc));
+}
+const rotuloItem = (it, gi) => `${it.rotulo}${it.revisao && gi?.tipo ? ` [${TIPO_REVISAO[gi.tipo.tipo] || gi.tipo.tipo}]` : ''}`;
 function textoRelatorio() {
   const pelaData = relModo === 'data' && temDatas();
   const bim = Number(relBim), ate = Number(relAte);
   const hoje = hojeIso();
   const hojeBR = new Date().toLocaleDateString('pt-BR');
-  // o que já deveria estar gravado: pela data (prevista até hoje) ou até a UA "ate" do bimestre
+  const ini = relIni || '', fim = relFim || hoje;
+  const noPeriodo = (dt) => !!dt && (!ini || dt >= ini) && dt <= fim;
+  // o que já deveriam estar gravado: pela data (prevista no período e até hoje) ou até a UA "ate" do bimestre
   // (nas de 6 UAs, proporcional: 3 por bimestre; a revisão entra quando ate = 6)
-  const devidas = (d, ds) => d.itens.filter(it => {
-    if (pelaData) return ds[it.id].data && ds[it.id].data <= hoje;
+  const doRecorte = (d, it, ds) => {
+    if (pelaData) return noPeriodo(ds[it.id].data);
     if (it.bimestre !== bim) return false;
     if (it.revisao) return ate >= 6;
     const n = Number(it.id.slice(3)); const meio = (d.qtd || 12) / 2;
     return n - (bim === 2 ? meio : 0) <= Math.ceil(ate * meio / 6);
-  });
-  const ds0 = dados.disciplinas.filter(d => d.professor);
-  const pendGrav = new Map(), pendPub = [], ok = [], naoGravou = [], deHoje = [];
+  };
+  const devidas = (d, ds) => d.itens.filter(it => doRecorte(d, it, ds) && (!pelaData || ds[it.id].data <= hoje));
+  const ds0 = discsDoRelatorio();
+  const pendGrav = new Map(), pendPub = [], ok = [], naoGravou = [], deHoje = [], comObs = [];
   ds0.forEach(d => {
     const ds = datasPrevistas(d); const g = d.gravacoes || {};
     const its = devidas(d, ds);
-    d.itens.forEach(it => { if (ds[it.id].data === hoje) deHoje.push(`${nomeBonito(d.nome)} (${d.cursoNome}) — Prof. ${d.professor}: ${it.rotulo}${g[it.id]?.gravou ? ' ✓ gravada' : ''}`); });
-    d.itens.forEach(it => { if (g[it.id]?.naoGravou) naoGravou.push(`${nomeBonito(d.nome)} (${d.cursoNome}) — Prof. ${d.professor}: ${it.rotulo}${ds[it.id].data ? ` (${dataBR(ds[it.id].data)})` : ''} — ${g[it.id].naoGravou.motivo}`); });
+    const quem = `${nomeBonito(d.nome)} (${d.cursoNome}) — Prof. ${d.professor}`;
+    const dtTxt = (it) => (ds[it.id].data ? ` (${dataBR(ds[it.id].data)})` : '');
+    // UA sem data entra em "não gravou"/"observação" só quando não há período escolhido
+    const noRecorte = (it) => (pelaData ? (ds[it.id].data ? noPeriodo(ds[it.id].data) : !relIni && !relFim) : doRecorte(d, it, ds));
+    if (pelaData && noPeriodo(hoje)) d.itens.forEach(it => { if (ds[it.id].data === hoje) deHoje.push(`${quem}: ${rotuloItem(it, g[it.id])}${g[it.id]?.gravou ? ' ✓ gravada' : ''}`); });
+    d.itens.forEach(it => { if (g[it.id]?.naoGravou && noRecorte(it)) naoGravou.push(`${quem}: ${it.rotulo}${dtTxt(it)} — ${g[it.id].naoGravou.motivo}`); });
+    d.itens.forEach(it => {
+      const gi = g[it.id];
+      if (!gi?.obs || !noRecorte(it)) return;
+      const est = gi.naoGravou ? 'não gravou' : gi.ava ? 'no AVA' : gi.gravou ? 'gravada' : 'sem gravar';
+      comObs.push(`${quem}: ${rotuloItem(it, gi)}${dtTxt(it)} [${est}] — ${gi.obs.texto}`);
+    });
     const semGravar = its.filter(it => !g[it.id]?.gravou && !g[it.id]?.naoGravou);
     const semPublicar = its.filter(it => g[it.id]?.gravou && !g[it.id]?.ava);
-    if (semGravar.length) { const k = d.professor; if (!pendGrav.has(k)) pendGrav.set(k, []); pendGrav.get(k).push(`${nomeBonito(d.nome)} (${d.cursoNome}): ${semGravar.map(it => `${it.rotulo}${ds[it.id].data ? ` (${dataBR(ds[it.id].data)})` : ''}`).join(', ')}`); }
-    if (semPublicar.length) pendPub.push(`${nomeBonito(d.nome)} (${d.cursoNome}) — Prof. ${d.professor}: ${semPublicar.map(it => { const gi = g[it.id]; const falta = !gi.baixou ? 'baixar' : !gi.youtube ? 'YouTube' : 'AVA'; return `${it.rotulo} (falta ${falta})`; }).join(', ')}`);
+    if (semGravar.length) { const k = d.professor; if (!pendGrav.has(k)) pendGrav.set(k, []); pendGrav.get(k).push(`${nomeBonito(d.nome)} (${d.cursoNome}): ${semGravar.map(it => `${it.rotulo}${dtTxt(it)}`).join(', ')}`); }
+    if (semPublicar.length) pendPub.push(`${quem}: ${semPublicar.map(it => { const gi = g[it.id]; const falta = !gi.baixou ? 'baixar' : !gi.youtube ? 'YouTube' : 'AVA'; return `${rotuloItem(it, gi)} (falta ${falta})`; }).join(', ')}`);
     if (its.length && !semGravar.length && !semPublicar.length) ok.push(d);
   });
-  const L = [`GRAVAÇÕES EAD — ${hojeBR} · semestre ${dados.semestre.replace('.', '/')}`,
-    pelaData ? 'UAs com data prevista até hoje' : `${bim}º bimestre, até a ${ate === 6 ? 'revisão' : `UA ${String(ate).padStart(2, '0')}`}`, ''];
-  if (pelaData) { L.push(`PREVISTAS PARA HOJE (${deHoje.length})`); if (!deHoje.length) L.push('• Nenhuma.'); deHoje.forEach(t => L.push(`• ${t}`)); L.push(''); }
+  const recorte = pelaData ? `UAs com data prevista ${ini ? `de ${dataBR(ini)} ` : ''}até ${fim === hoje ? 'hoje' : dataBR(fim)}` : `${bim}º bimestre, até a ${ate === 6 ? 'revisão' : `UA ${String(ate).padStart(2, '0')}`}`;
+  const filtros = [relProf && ds0[0] ? `Prof. ${ds0[0].professor}` : '', relDisc && ds0[0] ? `${nomeBonito(ds0[0].nome)} (${ds0[0].cursoNome})` : ''].filter(Boolean).join(' · ');
+  const L = [`${relSoObs ? 'OBSERVAÇÕES DAS GRAVAÇÕES EAD' : 'GRAVAÇÕES EAD'} — ${hojeBR} · semestre ${dados.semestre.replace('.', '/')}`, recorte + (filtros ? ` · ${filtros}` : ''), ''];
+  if (relSoObs) {
+    L.push(`UAs COM OBSERVAÇÃO (${comObs.length})`);
+    if (!comObs.length) L.push('• Nenhuma.');
+    comObs.forEach(t => L.push(`• ${t}`));
+    return L.join('\n');
+  }
+  if (pelaData && noPeriodo(hoje)) { L.push(`PREVISTAS PARA HOJE (${deHoje.length})`); if (!deHoje.length) L.push('• Nenhuma.'); deHoje.forEach(t => L.push(`• ${t}`)); L.push(''); }
   L.push(`${pelaData ? 'ATRASADAS — ' : ''}PENDENTES DE GRAVAÇÃO (${pendGrav.size} professor(es))`);
   if (!pendGrav.size) L.push('• Nenhuma.');
   [...pendGrav.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR')).forEach(([p, itens]) => { L.push(`• Prof. ${p}`); itens.forEach(t => L.push(`   - ${t}`)); });
@@ -418,26 +472,39 @@ function textoRelatorio() {
   L.push('', `GRAVADAS, AGUARDANDO PUBLICAÇÃO PELO T.I (${pendPub.length})`);
   if (!pendPub.length) L.push('• Nenhuma.');
   pendPub.forEach(t => L.push(`• ${t}`));
+  if (comObs.length) { L.push('', `OBSERVAÇÕES (${comObs.length})`); comObs.forEach(t => L.push(`• ${t}`)); }
   L.push('', `EM DIA (gravadas e no AVA): ${ok.length} disciplina(s)`);
   ok.forEach(d => L.push(`• ${nomeBonito(d.nome)} (${d.cursoNome}) — Prof. ${d.professor}`));
   const semProf = dados.disciplinas.filter(d => !d.professor).length;
-  if (semProf) L.push('', `Obs.: ${semProf} disciplina(s) ainda sem professor definido não entram neste relatório.`);
+  if (semProf && !relProf && !relDisc) L.push('', `Obs.: ${semProf} disciplina(s) ainda sem professor definido não entram neste relatório.`);
   return L.join('\n');
 }
 function renderRelatorio() {
   const comDatas = temDatas();
   const pelaData = relModo === 'data' && comDatas;
+  const comProf = dados.disciplinas.filter(d => d.professor);
+  const profs = [...new Map(comProf.map(d => [chaveProf(d.professor), d.professor])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  if (relProf && !profs.some(([k]) => k === relProf)) relProf = '';
+  const discs = comProf.filter(d => !relProf || chaveProf(d.professor) === relProf).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.cursoNome.localeCompare(b.cursoNome, 'pt-BR'));
+  if (relDisc && !discs.some(d => d.id === relDisc)) relDisc = '';
+  const algumFiltro = relIni || relFim || relProf || relDisc || relSoObs;
   tela().innerHTML = `
     <div class="ea-ferramentas">
       <label>Considerar<select class="select-filter" data-ea-rel-modo>
-        <option value="data" ${pelaData ? 'selected' : ''} ${comDatas ? '' : 'disabled'}>Pelas datas (previstas até hoje)${comDatas ? '' : ' — sem calendário'}</option>
+        <option value="data" ${pelaData ? 'selected' : ''} ${comDatas ? '' : 'disabled'}>Pelas datas previstas${comDatas ? '' : ' — sem calendário'}</option>
         <option value="ua" ${pelaData ? '' : 'selected'}>Até uma unidade</option></select></label>
-      ${pelaData ? '' : `<label>Bimestre<select class="select-filter" data-ea-rel-bim>${['1', '2'].map(b => `<option value="${b}" ${relBim === b ? 'selected' : ''}>${b}º bimestre</option>`).join('')}</select></label>
+      ${pelaData ? `<label>De<input type="date" class="ea-input" data-ea-rel-ini value="${esc(relIni)}" aria-label="Data inicial"></label>
+      <label>Até<input type="date" class="ea-input" data-ea-rel-fim value="${esc(relFim)}" aria-label="Data final (vazio = hoje)" title="Vazio = até hoje"></label>`
+      : `<label>Bimestre<select class="select-filter" data-ea-rel-bim>${['1', '2'].map(b => `<option value="${b}" ${relBim === b ? 'selected' : ''}>${b}º bimestre</option>`).join('')}</select></label>
       <label>Até a unidade<select class="select-filter" data-ea-rel-ate>${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${Number(relAte) === n ? 'selected' : ''}>${n === 6 ? 'UA 06 + revisão' : `UA ${String(n).padStart(2, '0')}`}</option>`).join('')}</select></label>`}
+      <label>Professor<select class="select-filter" data-ea-rel-prof style="max-width:240px"><option value="">Todos</option>${profs.map(([k, n]) => `<option value="${esc(k)}" ${relProf === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <label>Disciplina<select class="select-filter" data-ea-rel-disc style="max-width:280px"><option value="">Todas</option>${discs.map(d => `<option value="${esc(d.id)}" ${relDisc === d.id ? 'selected' : ''}>${esc(nomeBonito(d.nome))} · ${esc(d.cursoNome)}</option>`).join('')}</select></label>
+      <label class="ea-check-label"><input type="checkbox" data-ea-rel-obs ${relSoObs ? 'checked' : ''}> Só com observação</label>
+      ${algumFiltro ? '<button type="button" class="btn-secondary" data-ea-rel-limpar>Limpar filtros</button>' : ''}
       <div class="ea-direita"><button type="button" class="btn-primary" data-ea-copiar-rel>Copiar relatório</button></div>
     </div>
     <section class="ea-card"><pre class="ea-relatorio" id="ea-rel-texto">${esc(textoRelatorio())}</pre></section>
-    <p class="ea-legenda">${comDatas ? '"Pelas datas" usa a data prevista de cada UA (calendário ou data ajustada na ficha): mostra o que é para hoje e o que já passou sem gravar.' : 'Quando houver calendário das UAs (ou datas digitadas nas fichas), o relatório passa a usar as datas: o que é para hoje e o que está atrasado.'} "Até a unidade" conta as UAs do bimestre que já deveriam estar gravadas (nas de 6 UAs, a proporção: UA 06 das de 12 = UA 03 das de 6). Copie e cole no WhatsApp ou no e-mail do coordenador EAD.</p>`;
+    <p class="ea-legenda">${comDatas ? '"Pelas datas" usa a data prevista de cada UA (calendário ou data ajustada na ficha). Sem "Até", o período vai até hoje; UA com data futura dentro do período não conta como atrasada.' : 'Quando houver calendário das UAs (ou datas digitadas nas fichas), o relatório passa a usar as datas e o filtro de período.'} "Até a unidade" conta as UAs do bimestre que já deveriam estar gravadas (nas de 6 UAs, a proporção: UA 06 das de 12 = UA 03 das de 6). "Só com observação" lista apenas as UAs com observação. Copie e cole no WhatsApp ou no e-mail do coordenador EAD.</p>`;
 }
 
 // ================================================================
@@ -487,11 +554,13 @@ async function acao(e) {
     if (t.dataset.eaFecharModal !== undefined) return fecharModal();
     if (t.dataset.eaSit) { filtroSit = t.dataset.eaSit; return render(); }
     if (t.dataset.eaLimparFiltros !== undefined) { filtroCurso = filtroDia = filtroProf = filtroData = busca = ''; filtroSit = 'todas'; return render(); }
+    if (t.dataset.eaRelLimpar !== undefined) { relIni = relFim = relProf = relDisc = ''; relSoObs = false; return render(); }
     if (t.dataset.eaDia) { diaGrade = t.dataset.eaDia; return render(); }
     if (t.dataset.eaDisc && t.tagName === 'TR') return abrirDisciplina(t.dataset.eaDisc);
     if (t.dataset.eaImportar) { $('ea-arquivo').dataset.tipo = t.dataset.eaImportar; $('ea-arquivo').value = ''; return $('ea-arquivo').click(); }
     if (t.dataset.eaConfirmarImport !== undefined) return confirmarImportacao(t);
     if (t.dataset.eaCopiarLink) { const s = salaPorId(t.dataset.eaCopiarLink); return s && copiar(s.link, `Link copiado: ${nomeSala(s)}`); }
+    if (t.dataset.eaCopiarTxt) return copiar(t.dataset.eaCopiarTxt, `Copiado: ${t.dataset.eaCopiarTxt}`);
     if (t.dataset.eaVerSenha) { senhasVisiveis.has(t.dataset.eaVerSenha) ? senhasVisiveis.delete(t.dataset.eaVerSenha) : senhasVisiveis.add(t.dataset.eaVerSenha); return render(); }
     if (t.dataset.eaCopiarRel !== undefined) return copiar(textoRelatorio(), 'Relatório copiado.');
     if (t.dataset.eaNovaDisc !== undefined) return abrirModal('Nova disciplina EAD', `${htmlFormDisc(null)}<div class="ea-modal-acoes"><button type="button" class="btn-primary" data-ea-criar-disc>Cadastrar</button></div>`);
@@ -572,6 +641,11 @@ async function mudanca(e) {
     if (t.dataset.eaRelBim !== undefined) { relBim = t.value; return render(); }
     if (t.dataset.eaRelModo !== undefined) { relModo = t.value; return render(); }
     if (t.dataset.eaRelAte !== undefined) { relAte = Number(t.value); return render(); }
+    if (t.dataset.eaRelIni !== undefined) { relIni = t.value; return render(); }
+    if (t.dataset.eaRelFim !== undefined) { relFim = t.value; return render(); }
+    if (t.dataset.eaRelProf !== undefined) { relProf = t.value; relDisc = ''; return render(); }
+    if (t.dataset.eaRelDisc !== undefined) { relDisc = t.value; return render(); }
+    if (t.dataset.eaRelObs !== undefined) { relSoObs = t.checked; return render(); }
     if (t.dataset.eaSalaProf !== undefined) {
       const r = await apiFetch(`/${MODULO}/semestre/${dados.semestre}/sala-professor`, { method: 'PUT', body: JSON.stringify({ professor: t.dataset.eaSalaProf, salaId: t.value }) });
       dados.salaDoProfessor = r.salaDoProfessor; toast('Sala do professor salva.'); return render();
@@ -596,12 +670,17 @@ function ligarEventos() {
   });
   tela().addEventListener('keydown', (e) => { const l = e.target.closest('tr[data-ea-disc]'); if (l && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirDisciplina(l.dataset.eaDisc); } });
   $('ea-modal').addEventListener('change', async (e) => {
-    const i = e.target.closest('[data-ea-data]');
+    const i = e.target.closest('[data-ea-data], [data-ea-obs], [data-ea-tipo]');
     if (!i) return;
     const tab = i.closest('[data-ea-disc-grav]');
+    const corpo = i.dataset.eaData ? { item: i.dataset.eaData, data: i.value }
+      : i.dataset.eaObs ? { item: i.dataset.eaObs, obs: i.value.trim() }
+        : { item: i.dataset.eaTipo, tipo: i.value };
+    const msg = i.dataset.eaData ? 'Data da UA salva.' : i.dataset.eaObs ? (corpo.obs ? 'Observação salva.' : 'Observação apagada.') : 'Tipo da revisão salvo.';
+    const rolagem = $('ea-modal').scrollTop;
     try {
-      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(tab.dataset.eaDiscGrav)}/item`, { method: 'PATCH', body: JSON.stringify({ item: i.dataset.eaData, data: i.value }) });
-      trocaDisc(nova); toast('Data da UA salva.'); render(); abrirDisciplina(nova.id);
+      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(tab.dataset.eaDiscGrav)}/item`, { method: 'PATCH', body: JSON.stringify(corpo) });
+      trocaDisc(nova); toast(msg); render(); abrirDisciplina(nova.id); $('ea-modal').scrollTop = rolagem;
     } catch (err) { toast(err.message, 'erro'); }
   });
   $('ea-modal').addEventListener('click', (e) => {

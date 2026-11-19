@@ -344,9 +344,13 @@ router.patch('/disciplinas/:id/gravacao', verifyToken, checkPermission, async (r
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
-// PATCH /disciplinas/:id/item { item, data? ('AAAA-MM-DD' | '' = volta pra data do calendário), naoGravou? (motivo | '' = limpa) }
+// PATCH /disciplinas/:id/item { item, data? ('AAAA-MM-DD' | '' = volta pra data do calendário), naoGravou? (motivo | '' = limpa),
+//   obs? (texto | '' = limpa), tipo? ('video' | 'material' | '' — só nas revisões) }
 // Rastreabilidade (18/11/2026): a data prevista de cada UA sai do calendário do semestre + dia da semana; quando a aula
 // muda (duas UAs no mesmo dia, reposição), o T.I troca a data da UA. "Não gravou" guarda o motivo.
+// Observação (18/11/2026): opcional em qualquer UA, gravada ou não — registra problema do vídeo (mais de uma UA no
+// mesmo vídeo, sem slide, sem áudio...). Tipo da revisão: o professor entregou vídeo ou outro tipo de material.
+const TIPOS_REVISAO = ['video', 'material'];
 router.patch('/disciplinas/:id/item', verifyToken, checkPermission, async (req, res) => {
     try {
         if (!soTi(req, res)) return;
@@ -355,8 +359,18 @@ router.patch('/disciplinas/:id/item', verifyToken, checkPermission, async (req, 
         if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
         const d = snap.data();
         const b = req.body || {};
-        if (!itensGravacao(d.qtd || qtdPorCh(d.ch)).some(i => i.id === b.item)) return res.status(400).json({ error: 'Unidade inválida.' });
+        const itemDef = itensGravacao(d.qtd || qtdPorCh(d.ch)).find(i => i.id === b.item);
+        if (!itemDef) return res.status(400).json({ error: 'Unidade inválida.' });
         const atual = { ...((d.gravacoes || {})[b.item] || {}) };
+        if (b.tipo !== undefined) {
+            if (!itemDef.revisao) return res.status(400).json({ error: 'O tipo (vídeo ou outro material) é só da revisão.' });
+            if (b.tipo && !TIPOS_REVISAO.includes(b.tipo)) return res.status(400).json({ error: 'Tipo inválido: vídeo ou outro material.' });
+            if (b.tipo) atual.tipo = { tipo: b.tipo, em: agora(), por: quemFez(req) }; else delete atual.tipo;
+        }
+        if (b.obs !== undefined) {
+            const obs = texto(b.obs, 300);
+            if (obs) atual.obs = { texto: obs, em: agora(), por: quemFez(req) }; else delete atual.obs;
+        }
         if (b.data !== undefined) {
             if (b.data && !/^\d{4}-\d{2}-\d{2}$/.test(b.data)) return res.status(400).json({ error: 'Data inválida.' });
             if (b.data) atual.data = b.data; else delete atual.data;
