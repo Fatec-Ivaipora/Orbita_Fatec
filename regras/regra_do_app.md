@@ -99,6 +99,19 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Matrículas › Diferenças com o Edubox: status da rematrícula é aplicado sozinho
+- Autor: Claude Code (pedido do Suporte AVA)
+- Branch: fix/edubox-rematricula-automatica
+- Arquivos alterados: `src/utils/matriculas-edubox.js` (`aplicaSozinha()`, `REMATRICULA`, laço de aplicação automática do `sincronizar()`).
+- Tipo: Ajuste de regra
+- Motivo: a aba "Esperando confirmação" enchia de "Situação no Órbita "Rematrícula Assinada" → pelo Edubox "Não Assinou"". O usuário: "esses que são rematrículas é só marcar sozinho, não tem nada a conferir, é só o status; mudança de curso e outras pendências deixa pra Lisa decidir".
+- Impacto:
+  - Pendência de situação em que o antes e o depois são "Rematrícula Assinada" ou "Não Assinou" (nos dois sentidos) é aplicada na sincronização, igual à matrícula nova de calouro (desde 12/11). Fica em "Resolvidas" por "Edubox (automático)" e atualiza o contrato do Comercial.
+  - Vale também para as que já tinham sido IGNORADAS (pedido do usuário, "Aplicar também"): voltam para pendente (`reabertaEm`, `ignoradaAntesPor`) e são aplicadas. Em 23/11/2026 eram 153 na Graduação 2027.1 (151 ignoradas pela Lisa, a maioria em 16/11) e 18 na Medicina 2027.1 (14 pendentes + 4 novas).
+  - Continuam esperando a Lisa: mudança de curso, saída (Cancelou, Trancou…), período, formando, "conferir", criar matrícula que não é de calouro, duplicadas.
+- Como testar: abrir Matrículas › 2027.1 e sincronizar com o Edubox; a aba "Esperando confirmação" não tem mais "Rematrícula Assinada ↔ Não Assinou", e elas aparecem em "Resolvidas" por "Edubox (automático)".
+- Como reverter: em `aplicaSozinha()` tirar a linha da `REMATRICULA` (as já aplicadas ficam aplicadas; voltar o status à mão no cadastro, se for o caso).
+
 ### [2026-11-23] Segurança: correção do fix anterior do Vercel — regras/*.md continuava 200
 - Autor: Claude Code (a pedido do usuário, corrigindo a entrada anterior "Vercel para de servir regras/, scripts/ e arquivos de configuração")
 - Branch: fix/vercel-routes-404-de-verdade
