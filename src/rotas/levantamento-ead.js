@@ -70,8 +70,9 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
         const disciplinas = discSnap.docs.map(d => {
             const x = d.data();
             const g = x.gravacoes || {};
+            // 24/11/2026: data da UA ajustada pelo EAD (duas UAs no mesmo dia, reposição) — campo datasUa
             const datasManuais = {};
-            Object.entries(g).forEach(([item, v]) => { if (v && v.data) datasManuais[item] = v.data; });
+            Object.entries(x.datasUa || {}).forEach(([item, v]) => { if (v && v.data) datasManuais[item] = v.data; });
             return {
                 id: d.id, cursoId: x.cursoId, cursoNome: x.cursoNome, periodo: x.periodo || '', nome: x.nome, ch: x.ch || null, qtd: x.qtd || ((Number(x.ch) || 0) >= 60 ? 12 : 6),
                 dia: x.dia || '', horario: x.horario || '', professor: x.professor || '', obs: x.obs || '',
@@ -148,6 +149,75 @@ router.put('/semestre/:semestre/calendario', verifyToken, checkPermission, async
             catch (e) { console.error('levantamento-ead: registro do calendário falhou', e); }
         }
         res.json({ calendario, cronograma: { fechamento, feriados } });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// PUT /disciplinas/:id/data-ua { item: 'UA-03' | 'REV-1', data: 'AAAA-MM-DD' | '' (volta ao calendário) } — 24/11/2026
+// O EAD (Carlos) define a data de uma UA quando foge do calendário: duas UAs no mesmo dia, reposição. Vale no
+// cronograma e na Aulas EAD do T.I (que só acompanha). Fica registrado como mudança (aviso pro T.I depois do início).
+router.put('/disciplinas/:id/data-ua', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_DISC).doc(req.params.id);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+        const x = snap.data();
+        const { item } = req.body || {};
+        const data = String((req.body || {}).data || '');
+        const qtd = x.qtd || ((Number(x.ch) || 0) >= 60 ? 12 : 6);
+        const def = eadAulas._interno.itensGravacao(qtd).find(i => i.id === item);
+        if (!def) return res.status(400).json({ error: 'Unidade inválida.' });
+        if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) return res.status(400).json({ error: 'Data inválida.' });
+        if (data && (data < '2020-01-01' || data > '2099-12-31')) return res.status(400).json({ error: `Data com ano errado: ${data.split('-').reverse().join('/')}. Confira o ano (4 dígitos).` });
+        const datasUa = { ...(x.datasUa || {}) };
+        const antes = (datasUa[item] && datasUa[item].data) || '';
+        if (antes === data) return res.json({ datasUa });
+        if (data) datasUa[item] = { data, em: agora(), por: quemFez(req) }; else delete datasUa[item];
+        await ref.update({ datasUa, updatedAt: agora(), updatedBy: quemFez(req) });
+        await registrar(req, { semestre: x.semestre, acao: 'alterada', discId: snap.id, curso: x.cursoNome, periodo: x.periodo, disciplina: x.nome,
+            mudancas: [{ campo: `data da ${def.rotulo || item}`, de: antes || 'pelo calendário', para: data || 'pelo calendário' }] }).catch(e => console.error('levantamento-ead: registro falhou', e));
+        res.json({ datasUa });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// POST /datas-ua/lote { semestre, ajustes: [{ discId, item, data }] } — 24/11/2026
+// Mesma mudança de data em várias disciplinas de uma vez (ex.: toda a quarta 10/03 passa pra 11/03). A tela escolhe
+// quais (todas as do dia ou só uma); aqui confere cada uma e grava. Um registro só de mudança, com a lista.
+router.post('/datas-ua/lote', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { semestre } = req.body || {};
+        if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
+        const ajustes = (Array.isArray(req.body.ajustes) ? req.body.ajustes : []).slice(0, 400);
+        if (!ajustes.length) return res.status(400).json({ error: 'Nada para ajustar.' });
+        for (const a of ajustes) {
+            const data = String((a && a.data) || '');
+            if (data && (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data < '2020-01-01' || data > '2099-12-31')) return res.status(400).json({ error: `Data inválida: ${data}. Confira o ano (4 dígitos).` });
+        }
+        const ids = [...new Set(ajustes.map(a => String(a.discId || '')))].filter(Boolean);
+        const snaps = await Promise.all(ids.map(id => db.collection(COL_DISC).doc(id).get()));
+        const porId = new Map(snaps.filter(s => s.exists && s.data().semestre === semestre).map(s => [s.id, s]));
+        const novos = new Map(), itens = [];
+        for (const a of ajustes) {
+            const s = porId.get(String(a.discId));
+            if (!s) continue;
+            const x = s.data();
+            const def = eadAulas._interno.itensGravacao(x.qtd || ((Number(x.ch) || 0) >= 60 ? 12 : 6)).find(i => i.id === a.item);
+            if (!def) continue;
+            const datasUa = novos.get(s.id) || { ...(x.datasUa || {}) };
+            const antes = (datasUa[a.item] && datasUa[a.item].data) || '';
+            const data = String(a.data || '');
+            if (antes === data) continue;
+            if (data) datasUa[a.item] = { data, em: agora(), por: quemFez(req) }; else delete datasUa[a.item];
+            novos.set(s.id, datasUa);
+            itens.push({ discId: s.id, curso: x.cursoNome, periodo: x.periodo, disciplina: x.nome, acao: 'alterada', mudancas: [{ campo: `data da ${def.rotulo}`, de: antes || 'pelo calendário', para: data || 'pelo calendário' }] });
+        }
+        if (!novos.size) return res.json({ alteradas: 0, datasUa: {}, message: 'Nada mudou.' });
+        const batch = db.batch();
+        novos.forEach((datasUa, id) => batch.update(db.collection(COL_DISC).doc(id), { datasUa, updatedAt: agora(), updatedBy: quemFez(req) }));
+        await batch.commit();
+        await registrar(req, itens.length === 1
+            ? { semestre, ...itens[0] }
+            : { semestre, acao: 'importacao', disciplina: `Data de UA ajustada em ${novos.size} disciplina(s)`, itens }).catch(e => console.error('levantamento-ead: registro falhou', e));
+        res.json({ alteradas: novos.size, datasUa: Object.fromEntries(novos), message: `Data ajustada em ${novos.size} disciplina(s).` });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 

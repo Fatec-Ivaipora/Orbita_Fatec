@@ -92,3 +92,8 @@
 .le-pill-coord { background: #e3eefb; color: #1d4f8a; }
 .le-edubox { font-size: .84rem; margin: -.3rem 0 .8rem; color: var(--orb-alerta); }
 .le-preenchido { outline: 2px solid #2563a8; outline-offset: 1px; }
+
+/* 24/11/2026: datas das UAs ajustadas pelo EAD */
+.le-datas-ua { margin: .2rem 0 1rem; }
+.le-datas-ua summary { cursor: pointer; padding: .4rem 0; }
+.le-datas-ua .ea-tabela td { padding: .3rem .5rem; }
