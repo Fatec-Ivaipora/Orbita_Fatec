@@ -36,7 +36,16 @@ const MAX_TEXTO = 400000;
 
 const podeEditar = (u) => ['adm_l1', 'adm_l2', 'coord_medicina'].includes(u.role) || u.avaliacoesMed === true;
 const ehProfessorMed = (u) => u.role === 'professor_medicina' || u.professorMedicina === true;
-router.use(verifyToken, (req, res, next) => ((podeEditar(req.user) || ehProfessorMed(req.user)) ? next() : checkPermission(req, res, next)));
+// 23/11/2026 (pedido do Suporte AVA): por enquanto SÓ a coordenação usa (ADM N1/N2, coord_medicina — inclui a
+// secretária acadêmica — e a responsável CADAM). Professor fica barrado aqui mesmo que alguém dê nível na Gerência
+// de Acessos. Para liberar aos professores corretores: trocar para true e devolver "portfolio-med" ao
+// professor_medicina em core/permissions.js e no padrão de src/middlewares/auth.js.
+const PROFESSOR_LIBERADO = false;
+router.use(verifyToken, (req, res, next) => {
+    if (podeEditar(req.user)) return next();
+    if (!PROFESSOR_LIBERADO) return res.status(403).json({ error: 'O Portfólio Reflexivo ainda está liberado só para a coordenação de Medicina.' });
+    return ehProfessorMed(req.user) ? next() : checkPermission(req, res, next);
+});
 
 const agora = () => new Date().toISOString();
 const quem = (req) => req.user.name || req.user.email || 'Usuário';
