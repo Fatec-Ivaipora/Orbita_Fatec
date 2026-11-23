@@ -7,6 +7,7 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
+import { tutorialHtml } from "./tutorial.js?v=1";
 
 const M = window.PortfolioMatriz;
 const fbApp = initializeApp(firebaseConfig);
@@ -78,8 +79,34 @@ async function carregar() {
     el('pf-conteudo').innerHTML = `<div class="pf-vazio pf-erro">${esc(e.message)}</div>`;
     return;
   }
+  if (location.hash === '#ajuda') return renderAjuda();
   const m = /[#&]a=([\w-]+)/.exec(location.hash);
   if (m) return abrirAtividade(m[1]);
+  // primeira visita: abre o "Como usar" uma vez
+  let viu = true;
+  try { viu = localStorage.getItem('pf_tutorial_visto') === '1'; localStorage.setItem('pf_tutorial_visto', '1'); } catch (e) { /* sem storage */ }
+  if (!viu) return renderAjuda();
+  renderTurmas();
+}
+
+// ============================================================ como usar
+let voltarDaAjuda = null;
+function renderAjuda() {
+  history.replaceState(null, '', '#ajuda');
+  trilha([{ t: 'Turmas', ir: 'turmas' }, { t: 'Como usar' }]);
+  el('pf-conteudo').innerHTML = tutorialHtml(!!(dados && dados.editor)) +
+    `<div class="pf-barra pf-tut-fim"><span></span><button type="button" class="pf-btn pf-btn-pri" data-acao="sair-ajuda">Entendi, ir para as turmas</button></div>`;
+  window.scrollTo({ top: 0 });
+}
+async function abrirAjuda() {
+  if (!sairDaCorrecao()) return;
+  voltarDaAjuda = ativ ? ativ.atividade.id : null;
+  corr = null;
+  renderAjuda();
+}
+function sairAjuda() {
+  if (voltarDaAjuda) { const id = voltarDaAjuda; voltarDaAjuda = null; return abrirAtividade(id); }
+  history.replaceState(null, '', location.pathname);
   renderTurmas();
 }
 
@@ -91,7 +118,8 @@ function renderTurmas() {
       ${editor ? `Nenhuma turma configurada em ${esc(dados.semestre)}.<br><br>
         <button type="button" class="pf-btn pf-btn-pri" data-acao="copiar-semestre">Copiar turmas de outro semestre</button>
         <button type="button" class="pf-btn" data-acao="nova-turma">Configurar turma</button>`
-      : `Você ainda não está como professor corretor de nenhuma turma em ${esc(dados.semestre)}. Peça à coordenação de Medicina para incluir você.`}
+      : `Você ainda não está como professor corretor de nenhuma turma em ${esc(dados.semestre)}. Peça à coordenação de Medicina para incluir você.<br><br>
+        <button type="button" class="pf-btn" data-acao="ajuda">Como usar</button>`}
     </div>`;
     return;
   }
@@ -259,7 +287,8 @@ function renderAtividade() {
         <li>No AVA, abra a <b>Tarefa</b> do portfólio → <b>Ver todos os envios</b>.</li>
         <li>Em <b>Ação de avaliação</b>, escolha <b>Baixar todas as tarefas enviadas</b>. Vem um arquivo .zip.</li>
         <li>Aqui, clique em <b>Importar ZIP do AVA</b> e escolha esse arquivo. Os PDFs são lidos no seu computador.</li>
-      </ol></div>`;
+      </ol>
+      <button type="button" class="pf-btn pf-btn-peq" data-acao="ajuda">Ver o passo a passo completo</button></div>`;
     return;
   }
   renderAba();
@@ -777,6 +806,7 @@ async function imprimirRelatorio() {
 function ligarEventos() {
   el('pf-semestre').addEventListener('change', () => { if (!sairDaCorrecao()) return; corr = null; history.replaceState(null, '', location.pathname); carregar(); });
   el('pf-trilha').addEventListener('click', (e) => { const b = e.target.closest('[data-ir]'); if (b) irPara(b.dataset.ir); });
+  el('pf-ajuda').addEventListener('click', abrirAjuda);
   el('pf-zip').addEventListener('change', async (e) => {
     const f = e.target.files[0]; e.target.value = '';
     if (!f) return;
@@ -793,6 +823,8 @@ function ligarEventos() {
   conteudo.addEventListener('click', async (e) => {
     const aba = e.target.closest('[data-aba]');
     if (aba) { abaAtiv = aba.dataset.aba; renderAtividade(); return; }
+    const tut = e.target.closest('[data-tut]');
+    if (tut) { const alvo = el(tut.dataset.tut); if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     const lt = e.target.closest('[data-leitor]');
     if (lt && !lt.disabled) { el('pf-leitor').dataset.modo = lt.dataset.leitor; renderLeitor(); return; }
     const b = e.target.closest('[data-acao]');
@@ -824,6 +856,8 @@ function ligarEventos() {
       const alvo = ativ.entregas[i + (a === 'proximo' ? 1 : -1)];
       if (alvo) abrirCorrecao(alvo.id);
     }
+    else if (a === 'ajuda') abrirAjuda();
+    else if (a === 'sair-ajuda') sairAjuda();
     else if (a === 'csv') baixarCsvResumo();
     else if (a === 'planilha-ava') el('pf-planilha').click();
     else if (a === 'imprimir') imprimirRelatorio();
