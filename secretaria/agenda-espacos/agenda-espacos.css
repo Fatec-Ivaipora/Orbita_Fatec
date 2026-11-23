@@ -127,3 +127,9 @@
 /* "É o(a) coordenador(a) X? [Sim, usar]" no campo Responsável */
 #f-responsavel-coord { margin-top: 0.35rem; }
 #f-responsavel-coord .ae-btn-coord { padding: 0.15rem 0.6rem; font-size: 0.78rem; margin-left: 0.3rem; }
+
+/* Calendário Acadêmico (23/11/2026): faixa de dia inteiro, lida do módulo da Direção */
+.ae-cal { display: block; margin: 0 0 4px; padding: 3px 6px; border-radius: 6px; border-left: 3px solid var(--cal); background: color-mix(in srgb, var(--cal) 10%, #fff); color: var(--cal); font-size: .72rem; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+.ae-cal small { display: block; font-weight: 600; opacity: .85; font-size: .66rem; }
+.ae-cel .ae-cal { white-space: nowrap; }
+.ae-cel .ae-cal small { display: none; }

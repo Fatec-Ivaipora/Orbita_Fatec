@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendário Acadêmico - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <link rel="stylesheet" href="/docencia/calendario-academico/calendario.css?v=2">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Calendário Acadêmico</h1>
+                        <p class="page-subtitle">Monte o semestre copiando um anterior e ajuste as datas. Publicado, ele aparece na Agenda Interna e no site.</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button type="button" class="btn-secondary" id="ca-btn-site">Link para o site</button>
+                        <button type="button" class="btn-primary" id="ca-btn-novo">+ Evento</button>
+                    </div>
+                </div>
+
+                <section class="ca-barra card">
+                    <div class="ca-abas" role="tablist" aria-label="Calendário">
+                        <button type="button" role="tab" data-cal="graduacao" aria-selected="true">Graduação</button>
+                        <button type="button" role="tab" data-cal="medicina" aria-selected="false">Medicina</button>
+                    </div>
+                    <label class="ca-campo-sem"><span>Semestre</span><select id="ca-semestre"></select></label>
+                    <span id="ca-status" class="ca-status"></span>
+                    <div class="ca-barra-acoes">
+                        <button type="button" class="btn-secondary" id="ca-btn-copiar">Copiar de outro semestre</button>
+                        <button type="button" class="btn-primary" id="ca-btn-publicar">Publicar</button>
+                    </div>
+                </section>
+
+                <section id="ca-resumo" class="ca-resumo"></section>
+                <div class="ca-vistas" role="tablist" aria-label="Visualização">
+                    <button type="button" role="tab" data-vista="lista" aria-selected="true">Lista</button>
+                    <button type="button" role="tab" data-vista="mes" aria-selected="false">Mês a mês</button>
+                    <button type="button" role="tab" data-vista="dias" aria-selected="false">Dias letivos</button>
+                </div>
+                <div id="ca-conteudo"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- evento -->
+    <div class="ca-modal-fundo hidden" id="ca-modal-ev" role="dialog" aria-modal="true" aria-labelledby="ca-ev-tit">
+        <form class="ca-modal" id="ca-form-ev">
+            <header class="ca-modal-cab"><h2 id="ca-ev-tit">Evento</h2><button type="button" class="ca-x" data-fechar aria-label="Fechar">×</button></header>
+            <div class="ca-modal-corpo">
+                <label class="ca-campo"><span>Nome do evento</span><input id="ev-titulo" required maxlength="160" placeholder="Ex.: SEMANA DE AVALIAÇÃO"></label>
+                <label class="ca-campo"><span>Complemento <small>(para quem, curso, detalhe)</small></span><input id="ev-complemento" maxlength="200" placeholder="Ex.: DISCIPLINAS PRESENCIAIS"></label>
+                <div class="ca-2col">
+                    <label class="ca-campo"><span>Início</span><input type="date" id="ev-inicio" required></label>
+                    <label class="ca-campo"><span>Fim <small>(igual ao início se for um dia)</small></span><input type="date" id="ev-fim" required></label>
+                </div>
+                <p class="ca-dica" id="ev-dica"></p>
+                <label class="ca-campo"><span>Tipo</span><select id="ev-tipo"></select></label>
+                <div class="ca-checks">
+                    <label><input type="checkbox" id="ev-agenda" checked> Mostrar na Agenda Interna</label>
+                    <label><input type="checkbox" id="ev-site" checked> Mostrar no site</label>
+                </div>
+                <label class="ca-campo"><span>Observação interna <small>(não vai para o site)</small></span><textarea id="ev-obs" rows="2" maxlength="500"></textarea></label>
+                <p class="ca-origem" id="ev-origem"></p>
+            </div>
+            <footer class="ca-modal-rodape">
+                <button type="button" class="btn-secondary ca-perigo" id="ev-excluir">Excluir</button>
+                <span class="ca-espaco"></span>
+                <button type="button" class="btn-secondary" data-fechar>Cancelar</button>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </footer>
+        </form>
+    </div>
+
+    <!-- copiar -->
+    <div class="ca-modal-fundo hidden" id="ca-modal-copiar" role="dialog" aria-modal="true" aria-labelledby="ca-cp-tit">
+        <form class="ca-modal ca-modal-p" id="ca-form-copiar">
+            <header class="ca-modal-cab"><h2 id="ca-cp-tit">Copiar de outro semestre</h2><button type="button" class="ca-x" data-fechar aria-label="Fechar">×</button></header>
+            <div class="ca-modal-corpo">
+                <p class="ca-dica">Os eventos se repetem a cada semestre. A cópia leva tudo para o semestre novo, mantendo o dia da semana; os feriados vão para a data certa do ano (Carnaval, Paixão e Corpus Christi pela Páscoa). Depois é só conferir o que ficar marcado.</p>
+                <div class="ca-2col">
+                    <label class="ca-campo"><span>Copiar de</span><select id="cp-de"></select></label>
+                    <label class="ca-campo"><span>Para o semestre</span><input id="cp-para" pattern="\d{4}\.[12]" placeholder="2027.1" required></label>
+                </div>
+                <label class="ca-campo"><span>Início do semestre letivo novo</span><input type="date" id="cp-inicio" required></label>
+                <p class="ca-dica" id="cp-dica"></p>
+                <label class="ca-check-sub hidden" id="cp-subst-l"><input type="checkbox" id="cp-subst"> O semestre já tem eventos: apagar e copiar de novo</label>
+            </div>
+            <footer class="ca-modal-rodape"><span class="ca-espaco"></span><button type="button" class="btn-secondary" data-fechar>Cancelar</button><button type="submit" class="btn-primary" id="cp-ok">Copiar</button></footer>
+        </form>
+    </div>
+
+    <!-- site -->
+    <div class="ca-modal-fundo hidden" id="ca-modal-site" role="dialog" aria-modal="true" aria-labelledby="ca-st-tit">
+        <div class="ca-modal ca-modal-p">
+            <header class="ca-modal-cab"><h2 id="ca-st-tit">Calendário no site</h2><button type="button" class="ca-x" data-fechar aria-label="Fechar">×</button></header>
+            <div class="ca-modal-corpo" id="ca-site-corpo"></div>
+        </div>
+    </div>
+
+    <div id="ca-toast" class="ca-toast hidden" role="status"></div>
+    <script type="module" src="/docencia/calendario-academico/app.js?v=2"></script>
+</body>
+</html>

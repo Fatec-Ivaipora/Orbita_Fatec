@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendário Acadêmico · Fatec Ivaiporã</title>
+<!-- Página pública (23/11/2026): mostra o Calendário Acadêmico PUBLICADO no Órbita. Feita para entrar no site novo
+     (fatec-site-novo) por iframe, com as mesmas cores e fonte. Dados: /api/publico/calendario-academico -->
+<style>
+  :root { --azul: #0051b2; --azul-700: #00458f; --azul-900: #003263; --azul-050: #ecf3fb; --laranja: #f05a24; --amarelo: #ffb000;
+    --tinta: #0f1b33; --tinta2: #4b5a72; --linha: #e3e9f2;
+    --c-feriado: #c8252c; --c-recesso: #f05a24; --c-letivo: #0051b2; --c-avaliacao: #8200da; --c-prazo: #a86f00; --c-evento: #3d7a00; --c-outro: #475569; --c-reuniao: #5b6b80; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Gotham, "Montserrat", "Segoe UI", Arial, sans-serif; color: var(--tinta); background: #fff; }
+  .cal { max-width: 980px; margin: 0 auto; padding: 24px 16px 40px; }
+  .cal-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 4px solid var(--azul); padding-bottom: 14px; margin-bottom: 18px; }
+  .cal-topo h1 { margin: 0; font-size: clamp(22px, 4vw, 30px); color: var(--azul-900); line-height: 1.1; }
+  .cal-topo p { margin: 4px 0 0; color: var(--tinta2); font-size: 14px; }
+  .cal-abas { display: inline-flex; background: var(--azul-050); border-radius: 999px; padding: 4px; }
+  .cal-abas button { border: 0; background: none; border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; font-size: 14px; color: var(--azul-700); cursor: pointer; }
+  .cal-abas button[aria-selected="true"] { background: var(--azul); color: #fff; }
+  .cal-abas button:focus-visible { outline: 3px solid var(--amarelo); outline-offset: 2px; }
+  .cal-legenda { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 18px; padding: 0; list-style: none; font-size: 13px; color: var(--tinta2); }
+  .cal-legenda li { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-legenda i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .cal-mes { margin-bottom: 22px; }
+  .cal-mes h2 { font-size: 18px; color: #fff; background: var(--azul); margin: 0 0 8px; padding: 8px 14px; border-radius: 10px; }
+  .cal-ev { display: grid; grid-template-columns: 112px 1fr; gap: 14px; padding: 10px 14px; border-left: 4px solid var(--cor); border-bottom: 1px solid var(--linha); }
+  .cal-ev:last-child { border-bottom: 0; }
+  .cal-data { font-weight: 800; color: var(--azul-900); font-variant-numeric: tabular-nums; }
+  .cal-data small { display: block; font-weight: 600; color: var(--tinta2); font-size: 12px; text-transform: capitalize; }
+  .cal-tit { font-weight: 700; }
+  .cal-comp { color: var(--tinta2); font-size: 14px; margin-top: 2px; }
+  .cal-tipo { display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 800; color: var(--cor); background: color-mix(in srgb, var(--cor) 12%, #fff); padding: 2px 8px; border-radius: 999px; }
+  .cal-msg { padding: 40px 16px; text-align: center; color: var(--tinta2); border: 1px dashed var(--linha); border-radius: 12px; }
+  @media (max-width: 560px) { .cal-ev { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body>
+<main class="cal">
+  <header class="cal-topo">
+    <div><h1>Calendário Acadêmico</h1><p id="cal-sub">Fatec Ivaiporã</p></div>
+    <div class="cal-abas" role="tablist" aria-label="Calendário">
+      <button type="button" role="tab" data-cal="graduacao" aria-selected="true">Graduação</button>
+      <button type="button" role="tab" data-cal="medicina" aria-selected="false">Medicina</button>
+    </div>
+  </header>
+  <ul class="cal-legenda" id="cal-legenda"></ul>
+  <div id="cal-lista"><div class="cal-msg">Carregando o calendário…</div></div>
+</main>
+<script>
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var semestre = qs.get('semestre') || '';
+  var calendario = qs.get('calendario') === 'medicina' ? 'medicina' : 'graduacao';
+  var API = '/api'; // a página é servida pelo próprio Órbita (no site novo entra por iframe)
+  var MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var DIAS = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  var COR = { feriado: 'var(--c-feriado)', recesso: 'var(--c-recesso)', letivo: 'var(--c-letivo)', avaliacao: 'var(--c-avaliacao)', prazo: 'var(--c-prazo)', evento: 'var(--c-evento)', reuniao: 'var(--c-reuniao)', outro: 'var(--c-outro)' };
+  var dados = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function dia(iso) { var p = iso.split('-'); return new Date(+p[0], +p[1] - 1, +p[2], 12); }
+  function ddmm(iso) { return iso.slice(8, 10) + '/' + iso.slice(5, 7); }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
+  function render() {
+    var evs = (dados.eventos || []).filter(function (e) { return e.calendario === calendario; });
+    var sems = Array.from(new Set(evs.map(function (e) { return e.semestre; }))).sort();
+    document.getElementById('cal-sub').textContent = 'Fatec Ivaiporã · ' + (calendario === 'medicina' ? 'Medicina' : 'Graduação') + (sems.length ? ' · ' + sems.join(' e ') : '');
+    var usados = Array.from(new Set(evs.map(function (e) { return e.tipo; })));
+    document.getElementById('cal-legenda').innerHTML = usados.map(function (t) { return '<li><i style="background:' + (COR[t] || COR.outro) + '"></i>' + esc(dados.tipos[t] || t) + '</li>'; }).join('');
+    if (!evs.length) { document.getElementById('cal-lista').innerHTML = '<div class="cal-msg">O calendário deste período ainda não foi publicado.</div>'; return; }
+    var porMes = {};
+    evs.forEach(function (e) { var k = e.inicio.slice(0, 7); (porMes[k] = porMes[k] || []).push(e); });
+    document.getElementById('cal-lista').innerHTML = Object.keys(porMes).sort().map(function (k) {
+      var p = k.split('-');
+      return '<section class="cal-mes"><h2>' + cap(MESES[+p[1] - 1]) + ' de ' + p[0] + '</h2>' + porMes[k].map(function (e) {
+        var umDia = !e.fim || e.fim === e.inicio;
+        var data = umDia ? ddmm(e.inicio) + '<small>' + DIAS[dia(e.inicio).getDay()] + '</small>' : ddmm(e.inicio) + ' a ' + ddmm(e.fim) + '<small>' + DIAS[dia(e.inicio).getDay()] + ' a ' + DIAS[dia(e.fim).getDay()] + '</small>';
+        return '<article class="cal-ev" style="--cor:' + (COR[e.tipo] || COR.outro) + '"><div class="cal-data">' + data + '</div><div><div class="cal-tit">' + esc(cap(e.titulo)) + '</div>' + (e.complemento ? '<div class="cal-comp">' + esc(cap(e.complemento)) + '</div>' : '') + '<span class="cal-tipo">' + esc(dados.tipos[e.tipo] || e.tipo) + '</span></div></article>';
+      }).join('') + '</section>';
+    }).join('');
+  }
+  document.querySelectorAll('.cal-abas [data-cal]').forEach(function (b) {
+    b.setAttribute('aria-selected', String(b.dataset.cal === calendario));
+    b.addEventListener('click', function () { calendario = b.dataset.cal; document.querySelectorAll('.cal-abas [data-cal]').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); }); if (dados) render(); });
+  });
+  fetch(API + '/publico/calendario-academico' + (semestre ? '?semestre=' + encodeURIComponent(semestre) : ''))
+    .then(function (r) { return r.json(); })
+    .then(function (j) { dados = j; render(); })
+    .catch(function () { document.getElementById('cal-lista').innerHTML = '<div class="cal-msg">Não foi possível carregar o calendário agora.</div>'; });
+})();
+</script>
+</body>
+</html>

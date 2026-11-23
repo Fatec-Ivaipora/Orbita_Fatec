@@ -221,6 +221,7 @@ async function carregarPeriodo() {
   try {
     const r = await apiFetch(`/agenda-espacos?de=${de}&ate=${ate}`);
     reservas = r.reservas;
+    calendarioAcad = r.calendario || [];
     ajustarPermissao(r.podeEditar);
     renderTudo();
     if (podeEditar) atualizarContadorPedidos();
@@ -462,6 +463,14 @@ function tagsDe(r) {
     + (r.tipo === 'externo' ? '<span class="ae-tag ext">EXTERNO</span>' : '');
 }
 
+// Calendário Acadêmico (23/11/2026): eventos de dia inteiro, por cima das reservas
+let calendarioAcad = [];
+const COR_CAL = { feriado: '#c8252c', recesso: '#f05a24', letivo: '#0051b2', avaliacao: '#8200da', prazo: '#a86f00', evento: '#3d7a00', reuniao: '#5b6b80', outro: '#475569' };
+const calDoDia = (k) => calendarioAcad.filter(e => e.inicio <= k && e.fim >= k);
+function calChip(e) {
+  const cor = COR_CAL[e.tipo] || COR_CAL.outro;
+  return `<div class="ae-cal" style="--cal:${cor}" title="${esc(`${e.rotuloTipo} · Calendário Acadêmico (${e.rotuloCalendario})${e.complemento ? ' — ' + e.complemento : ''}`)}">📅 ${esc(e.titulo)}${e.complemento ? `<small>${esc(e.complemento)}</small>` : ''}</div>`;
+}
 function renderSemana(lista, de) {
   const ini = dataLocal(de);
   const cols = [];
@@ -472,6 +481,7 @@ function renderSemana(lista, de) {
       <div class="ae-dia ${k === hoje() ? 'hoje' : ''} ${d.getDay() % 6 === 0 ? 'fds' : ''}">
         <div class="ae-dia-topo"><strong>${DIAS_LONGOS[d.getDay()]}</strong><span>${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}</span></div>
         <div class="ae-dia-corpo" data-dia="${k}" title="Clique num espaço vazio para ${podeEditar ? 'reservar' : 'solicitar'} neste dia">
+          ${calDoDia(k).map(calChip).join('')}
           ${doDia.length ? doDia.map(r => `
             <div class="ae-item ${r.status}" data-id="${r.id}" style="${estiloCor(r.espaco)}">
               <div class="ae-item-hora">${r.inicio} – ${r.fim}${tagsDe(r)}</div>
@@ -494,6 +504,7 @@ function renderMes(lista, de, ate) {
     cels.push(`
       <div class="ae-cel ${d.getMonth() !== mesAtual ? 'fora' : ''} ${k === hoje() ? 'hoje' : ''}" data-dia="${k}">
         <div class="ae-cel-dia">${d.getDate()}</div>
+        ${calDoDia(k).map(calChip).join('')}
         ${doDia.slice(0, 3).map(r => `<span class="ae-chip ${r.status}" data-id="${r.id}" style="${estiloCor(r.espaco)}" title="${esc(`${r.inicio}–${r.fim} · ${r.espaco} · ${r.evento}`)}">${r.inicio} ${esc(r.espaco)} · ${esc(r.evento)}</span>`).join('')}
         ${doDia.length > 3 ? `<span class="ae-mais">+${doDia.length - 3} mais</span>` : ''}
       </div>`);

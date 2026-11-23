@@ -99,6 +99,22 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Docência — novo módulo Calendário Acadêmico (Direção) + Agenda Interna + site
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/calendario-academico
+- Arquivos alterados: docencia/calendario-academico/{index.html, app.js, calendario.css} (novos), calendario/index.html (página pública, nova), src/rotas/calendario-academico.js (nova), src/utils/calendarioAcademico.js (novo), scripts/calendario-academico-importar.js (novo), api/index.js, core/permissions.js, src/rotas/agenda-espacos.js, secretaria/agenda-espacos/{app.js, agenda-espacos.css, index.html}, regras/regra_do_app.md
+- Tipo: nova funcionalidade
+- Motivo: o diretor acadêmico quer montar o calendário acadêmico no Órbita (e não só no Edubox), refletir na Agenda Interna e mostrar no site novo. Como os eventos se repetem a cada semestre, o semestre novo nasce como cópia de um anterior.
+- Impacto:
+  - Módulo "Calendário Acadêmico" (Docência) SÓ para Roni (diretor), Thalia (ajudante), Paulo Henrique e Administrador (somenteUsuarios + USUARIOS_PERMITIDOS na rota; nem outros ADM N1 veem).
+  - Calendários Graduação e Medicina. "Copiar de outro semestre": desloca em semanas inteiras (mesmo dia da semana), recalcula feriados (fixos pela data; Carnaval/Paixão/Corpus Christi pela Páscoa) e atualiza anos/semestres citados no texto; tudo entra "a conferir". Avisos: domingo, sábado, começa/termina em feriado, fora do semestre.
+  - Publicar → Agenda Interna mostra os eventos (dia inteiro, lidos na hora: editou lá, muda aqui) e o site recebe GET /api/publico/calendario-academico (sem login, qualquer origem, cache 5 min; reuniões internas não vão por padrão) e a página /calendario/ (cores/fonte do site novo, para iframe).
+  - Coleções: calendario_academico_semestres e calendario_academico_eventos. Carga do Edubox (tca_calendario/tca_evento) por script local: 2026.1 e 2026.2 carregados como modelo; 2027.1 (graduação 67, Medicina 48) criado como rascunho a partir de 2026.1 (início letivo 01/02/2027).
+  - Aba "Dias letivos" (mesma conta da planilha "DIAS LETIVOS - CALENDÁRIO 2025"): segunda a sábado entre o primeiro e o último dia letivo (automático: Início das aulas → Término do 2º bimestre; editável), sem feriados e recessos; meses × SEG..SÁB, subtotal por semestre, total do ano, meta 120/semestre (editável). Validado com 2025: 10 de 11 meses iguais à planilha (out/2025: a planilha contou o 13/10 "Dia do Professor – recesso").
+  - 2027.2 (graduação 71, Medicina 43) criado como rascunho a partir de 2026.2 (início letivo 19/07/2027).
+- Como testar: entrar como Roni/Thalia → Docência → Calendário Acadêmico → 2027.1 → conferir/editar → Publicar → ver na Agenda Interna (fev/2027) e em /calendario/?semestre=2027.1.
+- Como reverter: reverter os arquivos acima (as coleções novas podem ficar; nada mais as lê).
+
 ### [AAAA-MM-DD] Título da alteração
 - Autor:
 - Branch:

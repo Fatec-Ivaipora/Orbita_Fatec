@@ -518,9 +518,12 @@ function getModulosPorCategoria() {
     const semCategoria = PERM_MODULES.filter(m => !m.category);
     if (semCategoria.length) grupos.push({ label: 'Geral', modulos: semCategoria });
   }
-  Object.entries(CATEGORIES).forEach(([catKey, catLabel]) => {
+  Object.entries(CATEGORIES)
+    .sort(([, a], [, b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+    .forEach(([catKey, catLabel]) => {
     if (filtroCategoria !== 'todos' && filtroCategoria !== catKey) return;
-    const mods = PERM_MODULES.filter(m => m.category === catKey);
+    const mods = PERM_MODULES.filter(m => m.category === catKey)
+      .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' }));
     if (mods.length) grupos.push({ label: catLabel, modulos: mods });
   });
   return grupos;

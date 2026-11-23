@@ -36,6 +36,8 @@ const corsOptions = {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
     optionsSuccessStatus: 200
 };
+// Calendário Acadêmico público (site novo e qualquer site): aberto a qualquer origem, só leitura do que foi publicado
+app.get('/api/publico/calendario-academico', cors(), (req, res) => require('../src/rotas/calendario-academico').publico(req, res));
 app.use(cors(corsOptions));
 
 // Responder a preflights OPTIONS explicitamente
@@ -78,6 +80,7 @@ const rotasContratos = require('../src/rotas/contratos');
 const rotasAulaExperimental = require('../src/rotas/aula-experimental');
 const rotasAuloes = require('../src/rotas/auloes');
 const rotasPalestras = require('../src/rotas/palestras');
+const rotasCalendarioAcademico = require('../src/rotas/calendario-academico');
 const rotasAgendaEspacos = require('../src/rotas/agenda-espacos');
 const rotasMatrizes = require('../src/rotas/matrizes');
 const rotasCpa = require('../src/rotas/cpa');
@@ -129,6 +132,7 @@ app.use('/api/automacao-ava', rotasAutomacaoAva);
 app.use('/api/ead-aulas', rotasEadAulas);
 app.use('/api/levantamento-ead', rotasLevantamentoEad);
 app.use('/api/financeiro-medicina', rotasFinanceiroMedicina);
+app.use('/api/calendario-academico', rotasCalendarioAcademico);
 
 // Exportação obrigatória para o Vercel Serverless
 

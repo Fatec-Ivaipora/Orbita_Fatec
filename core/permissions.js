@@ -51,6 +51,18 @@ export const MODULES = {
   // Financeiro Medicina (18/11/2026) — rematrícula da Medicina: contrato mãe, mensal do acordo, saldos e reajuste
   // por turma. SÓ os usuários de somenteUsuarios veem (Lisa e Fábio Costa) — nem outros ADM N1. A rota
   // (src/rotas/financeiro-medicina.js, USUARIOS_PERMITIDOS) barra os outros. Incluir alguém só quando pedirem.
+  // Calendário Acadêmico (23/11/2026) — o diretor acadêmico (Roni) e a ajudante (Thalia) montam o calendário do
+  // semestre (copiam um anterior do Edubox e ajustam); publicado, vai pra Agenda Interna e pro site novo.
+  // SÓ os usuários de somenteUsuarios veem (nem outros ADM N1). A rota (src/rotas/calendario-academico.js,
+  // USUARIOS_PERMITIDOS) barra os outros. Incluir alguém só quando pedirem.
+  "calendario-academico": {
+    id: "calendario-academico",
+    category: "docencia",
+    title: "Calendário Acadêmico",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>`,
+    url: "/docencia/calendario-academico/index.html",
+    somenteUsuarios: ["M5GxyogXA9d6aAIBOaKmU9Pjkwk1", "WmDuym3nSRemrNVMZFrNvd8232I2", "rhQ6fe4HQfMOCCejry1sPx0hA1v1", "rSw36LAa8fPI94aYFoVv7JggB6w2"] // Roni, Thalia, Paulo henrique e Administrador
+  },
   "financeiro-medicina": {
     id: "financeiro-medicina",
     category: "financeiro",
