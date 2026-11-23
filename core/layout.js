@@ -104,10 +104,13 @@ export function setupLayout(user, role, activeModuleId, onLogout) {
   });
 
   // 2. Renderizar por Categorias
-  Object.entries(CATEGORIES).forEach(([catKey, catLabel]) => {
+  Object.entries(CATEGORIES)
+    .sort(([, a], [, b]) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+    .forEach(([catKey, catLabel]) => {
     // Filtrar módulos desta categoria que o usuário tem permissão
     const permittedInCat = Object.values(MODULES).filter(mod =>
-      mod.category === catKey && mod.menu !== false && podeVerModulo(mod.id));
+      mod.category === catKey && mod.menu !== false && podeVerModulo(mod.id))
+      .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' }));
 
     if (permittedInCat.length > 0) {
       const catWrapper = document.createElement('div');
