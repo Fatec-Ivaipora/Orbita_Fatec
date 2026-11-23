@@ -151,8 +151,11 @@ function datasDe(d) {
       });
     });
   }
-  itens.forEach(it => { out[it.id] = (d.datasManuais || {})[it.id] || auto[it.id] || ''; });
-  return { itens, datas: out };
+  // data ajustada pelo T.I vale, menos a de antes do início do semestre (sobra de teste/outro semestre)
+  const manualOk = (x) => x && (!cal.inicio1 || x >= cal.inicio1);
+  const ignoradas = [];
+  itens.forEach(it => { const man = (d.datasManuais || {})[it.id]; if (man && !manualOk(man)) ignoradas.push({ ua: it.ua, data: man }); out[it.id] = (manualOk(man) ? man : '') || auto[it.id] || ''; });
+  return { itens, datas: out, ignoradas };
 }
 
 // Feriados nacionais (sugestão pro coordenador conferir; o calendário acadêmico da Fatec pode ter outros dias)
@@ -436,7 +439,7 @@ function htmlCronograma(d, bim) {
       <div><span class="le-cr-rot">DIA DA SEMANA</span><b class="le-cr-dia">${esc(d.dia ? DIA_ROTULO[d.dia].toUpperCase() : 'A DEFINIR')}${ehQuinzenal(d) ? '<span class="le-cr-quinz">QUINZENAL</span>' : ''}</b></div>
       <div><span class="le-cr-rot">HORÁRIO</span><b>${esc(d.horario || 'a definir')}</b></div>
     </div>
-    <div class="le-cr-fech"><span class="le-cr-fech-ico">!</span><b>FECHAMENTO DAS TRILHAS:</b><span class="le-cr-fech-val">${fech ? `${esc(dataBR(fech.data))} (${esc(diaSemanaDe(fech.data))})` : 'a definir'}</span>${fech && fech.hora ? `<span class="le-cr-fech-val">${esc(fech.hora.replace(':', 'h'))}</span>` : ''}</div>
+    <div class="le-cr-fech"><span class="le-cr-fech-ico">!</span><b>FECHAMENTO DAS TRILHAS:</b><span class="le-cr-fech-val">${fech && fech.data >= '2020-01-01' ? `${esc(dataBR(fech.data))} (${esc(diaSemanaDe(fech.data))})` : fech ? 'data a corrigir' : 'a definir'}</span>${fech && fech.hora ? `<span class="le-cr-fech-val">${esc(fech.hora.replace(':', 'h'))}</span>` : ''}</div>
     <div class="le-cr-corpo">
       <section class="le-cr-aulas">
         <div class="le-cr-aulas-topo"><b>CRONOGRAMA DAS AULAS</b>${d.dia ? `<span>${esc(DIA_ROTULO[d.dia].toUpperCase())}${ehQuinzenal(d) ? ' · QUINZENAL' : ''}</span>` : ''}</div>
@@ -467,6 +470,22 @@ function renderCronograma() {
     <div class="ea-card le-nao-imprime le-cr-status">
       ${temCal ? `Calendário das UAs: 1º bimestre a partir de <b>${esc(dataBRano(cal.inicio1))}</b>${cal.inicio2 ? `, 2º a partir de <b>${esc(dataBRano(cal.inicio2))}</b>` : ', 2º bimestre sem início'} · ${(cal.semAula || []).length} dia(s) sem aula · fechamento das trilhas: ${fech[bim] ? `<b>${esc(dataBRano(fech[bim].data))}${fech[bim].hora ? ` às ${esc(fech[bim].hora)}` : ''}</b>` : '<span class="ea-alerta">a definir</span>'}.`
         : '<span class="ea-alerta"><b>O calendário das UAs ainda não foi definido.</b></span> Sem ele, as datas ficam em branco. Clique em "Calendário e fechamento" (o coordenador do EAD preenche; o T.I usa o mesmo calendário).'}
+      ${(() => {
+        const ruins = [1, 2].filter(b => fech[b] && fech[b].data && (fech[b].data < '2020-01-01' || fech[b].data > '2099-12-31'));
+        return ruins.length ? `<br><span class="ea-alerta">⚠️ Fechamento das trilhas do ${ruins.map(b => `${b}º bimestre (${esc(dataBRano(fech[b].data))})`).join(' e do ')} com o ano errado.</span> <span class="ea-sub">Corrija em "Calendário e fechamento": o ano tem 4 dígitos (ex.: 2027).</span>` : '';
+      })()}
+      ${(() => {
+        if (!cal.inicio1 || !cal.inicio2) return '';
+        const passam = dados.disciplinas.filter(d => { const { itens, datas } = datasDe(d); return itens.some(it => it.bimestre === 1 && datas[it.id] && datas[it.id] >= cal.inicio2); });
+        if (!passam.length) return '';
+        const ult = passam.map(d => { const { itens, datas } = datasDe(d); return itens.filter(it => it.bimestre === 1).map(it => datas[it.id]).filter(Boolean).sort().pop(); }).sort().pop();
+        return `<br><span class="ea-alerta">⚠️ Em ${passam.length} disciplina(s) as aulas do 1º bimestre vão até ${esc(dataBRano(ult))}, depois do início do 2º (${esc(dataBRano(cal.inicio2))}).</span> <span class="ea-sub">Cada disciplina semanal tem 6 UAs e a revisão no 1º bimestre (7 semanas a partir do início). Confira as datas de início em "Calendário e fechamento".</span>`;
+      })()}
+      ${(() => {
+        const com = dados.disciplinas.map(d => ({ d, ig: datasDe(d).ignoradas })).filter(x => x.ig.length);
+        if (!com.length) return '';
+        return `<br><span class="ea-alerta">⚠️ ${com.length} disciplina(s) com data de UA ajustada na Aulas EAD antes do início do semestre:</span> ${com.map(x => `<b>${esc(nomeDisc(x.d))}</b> (${esc(x.d.cursoNome)}: ${x.ig.map(i => `${esc(i.ua)} em ${esc(dataBRano(i.data))}`).join(', ')})`).join('; ')}. <span class="ea-sub">Essas datas foram ignoradas e o cronograma usa o calendário. Peça ao T.I para clicar em "voltar ao calendário" nessas UAs.</span>`;
+      })()}
       ${alvo.length > 1 ? `<br><span class="ea-sub">${alvo.length} cronogramas: um por disciplina. Para um só, escolha a disciplina.</span>` : ''}
     </div>
     <div class="le-cr-lista">${alvo.map(d => htmlCronograma(d, bim)).join('') || '<p class="ea-vazio">Nenhuma disciplina.</p>'}</div>`;
@@ -479,10 +498,10 @@ function abrirCalendario() {
   abrirModal(`Calendário e fechamento · ${dados.semestre}`, `
     <p class="ea-sub" style="margin:-.3rem 0 .9rem;font-size:.85rem">É o mesmo calendário das UAs da Aulas EAD: o T.I usa estas datas. Com o início de cada bimestre e o dia da semana da disciplina, a data de cada UA sai sozinha (toda semana nas de 12 UAs, a cada 15 dias nas de 6), pulando os dias sem aula.${pode ? '' : ' Só o coordenador do EAD altera.'}</p>
     <div class="ea-form">
-      <label>Início do 1º bimestre<input type="date" id="le-c-ini1" value="${esc(c.inicio1 || '')}" ${pode ? '' : 'disabled'}></label>
-      <label>Início do 2º bimestre<input type="date" id="le-c-ini2" value="${esc(c.inicio2 || '')}" ${pode ? '' : 'disabled'}></label>
-      <label>Fechamento das trilhas · 1º bim.<span class="le-dupla"><input type="date" id="le-c-f1" value="${esc((fe[1] || {}).data || '')}" ${pode ? '' : 'disabled'}><input type="time" id="le-c-h1" value="${esc((fe[1] || {}).hora || '23:55')}" ${pode ? '' : 'disabled'}></span></label>
-      <label>Fechamento das trilhas · 2º bim.<span class="le-dupla"><input type="date" id="le-c-f2" value="${esc((fe[2] || {}).data || '')}" ${pode ? '' : 'disabled'}><input type="time" id="le-c-h2" value="${esc((fe[2] || {}).hora || '23:55')}" ${pode ? '' : 'disabled'}></span></label>
+      <label>Início do 1º bimestre<input type="date" id="le-c-ini1" min="2020-01-01" max="2099-12-31" value="${esc(c.inicio1 || '')}" ${pode ? '' : 'disabled'}></label>
+      <label>Início do 2º bimestre<input type="date" id="le-c-ini2" min="2020-01-01" max="2099-12-31" value="${esc(c.inicio2 || '')}" ${pode ? '' : 'disabled'}></label>
+      <label>Fechamento das trilhas · 1º bim.<span class="le-dupla"><input type="date" id="le-c-f1" min="2020-01-01" max="2099-12-31" value="${esc((fe[1] || {}).data || '')}" ${pode ? '' : 'disabled'}><input type="time" id="le-c-h1" value="${esc((fe[1] || {}).hora || '23:55')}" ${pode ? '' : 'disabled'}></span></label>
+      <label>Fechamento das trilhas · 2º bim.<span class="le-dupla"><input type="date" id="le-c-f2" min="2020-01-01" max="2099-12-31" value="${esc((fe[2] || {}).data || '')}" ${pode ? '' : 'disabled'}><input type="time" id="le-c-h2" value="${esc((fe[2] || {}).hora || '23:55')}" ${pode ? '' : 'disabled'}></span></label>
     </div>
     <h3 style="margin:1rem 0 .4rem">Feriados e dias sem aula</h3>
     ${pode ? `<p class="ea-sub" style="margin:0 0 .5rem">"Sugerir feriados nacionais" traz os feriados do Brasil no semestre (com a Páscoa calculada). Confira, tire o que não vale e acrescente os da Fatec e do município quando sair o calendário acadêmico.</p>` : ''}

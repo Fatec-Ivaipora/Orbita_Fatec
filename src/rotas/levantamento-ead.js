@@ -123,6 +123,9 @@ router.put('/semestre/:semestre/calendario', verifyToken, checkPermission, async
         const semestre = req.params.semestre;
         if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
         const data = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+        const anoRuim = [b => b.inicio1, b => b.inicio2, b => ((b.fechamento || {})[1] || {}).data, b => ((b.fechamento || {})[2] || {}).data, ...(Array.isArray((req.body || {}).semAula) ? req.body.semAula : []).map(x => () => x && x.data)]
+            .map(f => data(f(req.body || {}))).find(x => x && (x < '2020-01-01' || x > '2099-12-31'));
+        if (anoRuim) return res.status(400).json({ error: `Data com ano errado: ${anoRuim.split('-').reverse().join('/')}. Confira o ano (4 dígitos).` });
         const hora = (v) => (/^\d{2}:\d{2}$/.test(String(v || '')) ? String(v) : '');
         const b = req.body || {};
         const sem = (Array.isArray(b.semAula) ? b.semAula : []).map(x => ({ data: data(x && x.data), nome: texto(x && x.nome, 80) })).filter(x => x.data);

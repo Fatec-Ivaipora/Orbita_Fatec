@@ -102,7 +102,8 @@ function datasPrevistas(d) {
       });
     });
   }
-  d.itens.forEach(it => { const man = g[it.id]?.data; out[it.id] = man ? { data: man, manual: true } : auto[it.id] ? { data: auto[it.id], manual: false } : { data: '', manual: false }; });
+  // data ajustada antes do início do semestre (sobra de teste/outro semestre) não vale: volta ao calendário
+  d.itens.forEach(it => { const m0 = g[it.id]?.data; const man = m0 && (!cal.inicio1 || m0 >= cal.inicio1) ? m0 : ''; out[it.id] = (m0 && !man) ? { data: auto[it.id] || '', manual: false, velha: m0 } : man ? { data: man, manual: true } : auto[it.id] ? { data: auto[it.id], manual: false } : { data: '', manual: false }; });
   return out;
 }
 // situação da UA: gravada / não gravou (motivo) / atrasada (data passou) / hoje / prevista / sem data
@@ -320,7 +321,7 @@ function abrirDisciplina(id) {
     return `${sep}<tr class="${it.revisao ? 'ea-rev' : ''}">
       <td><b>${esc(it.rotulo)}</b><span class="ea-sub"><span class="ea-pill ${SIT[sit.id][0]}">${SIT[sit.id][1]}</span></span>${tipoHtml}</td>
       <td class="ea-data-td">${podeEditar ? `<input type="date" class="ea-input ea-data" data-ea-data="${esc(it.id)}" value="${esc(dt.data)}" aria-label="Data prevista ${esc(it.rotulo)}">` : esc(dataBR(dt.data) || '—')}
-        <span class="ea-sub">${dt.manual ? 'data ajustada' : dt.data ? 'pelo calendário' : ''}${dt.manual && podeEditar ? ` · <button type="button" class="ea-link" data-ea-data-limpar="${esc(it.id)}">voltar ao calendário</button>` : ''}</span>
+        <span class="ea-sub">${dt.velha ? `<span class="ea-alerta">ajuste de ${esc(dataBR(dt.velha))} ignorado (antes do início do semestre)</span>${podeEditar ? ` · <button type="button" class="ea-link" data-ea-data-limpar="${esc(it.id)}">limpar</button>` : ''}` : ''}${dt.manual ? 'data ajustada' : dt.data && !dt.velha ? 'pelo calendário' : ''}${dt.manual && podeEditar ? ` · <button type="button" class="ea-link" data-ea-data-limpar="${esc(it.id)}">voltar ao calendário</button>` : ''}</span>
         ${juntas.length ? `<span class="ea-sub ea-alerta">mesma data de ${juntas.map(esc).join(', ')}</span>` : ''}</td>
       ${etapasHtml}
       <td>${gi.naoGravou ? `<span class="ea-alerta">${esc(gi.naoGravou.motivo)}</span>${podeEditar ? `<span class="ea-sub"><button type="button" class="ea-link" data-ea-nao-gravou-limpar="${esc(it.id)}">limpar</button></span>` : ''}`
