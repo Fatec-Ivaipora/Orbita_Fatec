@@ -99,6 +99,12 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-24] Aulas EAD segue o Levantamento EaD: o EAD define, o T.I acompanha
+- Autor: Claude Code (pedido do Suporte AVA)
+- Regra: disciplina (dia, horário, professor, unidades), calendário das UAs e data de cada UA são definidos só pelo EAD (Carlos) no Levantamento EaD. Na Aulas EAD do T.I tudo isso fica só para leitura: saíram Importar, Nova disciplina, Salvar/Excluir disciplina, o campo de data da UA e o Salvar calendário. O T.I continua marcando as gravações (etapas, não gravou, observação, tipo da revisão) e cuidando das salas Zoom.
+- `src/rotas/ead-aulas.js`: as rotas de disciplina e de calendário da Aulas EAD devolvem 403 ("definido pelo EAD no Levantamento EaD"). O PATCH /disciplinas/:id/item não aceita data nova, só limpar um ajuste antigo do T.I. O ajuste antigo (gravacoes[UA].data) deixou de valer.
+- Data da UA ajustada pelo EAD: novo campo `datasUa` na disciplina. As rotas são PUT /api/levantamento-ead/disciplinas/:id/data-ua e POST /api/levantamento-ead/datas-ua/lote. Na aba Cronograma, ao escolher uma disciplina, aparece a tabela "Datas das UAs" (fica fora da impressão e da imagem). Ao mudar uma data, se outras disciplinas do mesmo dia da semana têm aula naquela data, a tela pergunta: "Só nesta disciplina (exceção)" ou "Em todas as N de quarta-feira com aula em 10/03". Vale no cronograma e aparece pronta na Aulas EAD como "data ajustada pelo EAD". Também fica registrada como mudança.
+
 ### [2026-11-23] Levantamento EaD: horário em lista, mesma disciplina em várias turmas, e avisos do T.I só em laranja
 - Autor: Claude Code (pedido do Suporte AVA)
 - Levantamento EaD (`docencia/levantamento-ead/app.js`, `levantamento.css`): o horário passa a ser escolhido numa lista (19h30min - 20h30min, 20h30min - 21h30min e os que já estão cadastrados) com "Outro horário…" para digitar. O campo antigo mostrava o horário de exemplo em cinza e parecia preenchido. Quando a mesma disciplina existe em outros cursos, a tela mostra essas turmas com uma caixa marcada; ao salvar, o mesmo dia e horário vão também para as turmas marcadas.

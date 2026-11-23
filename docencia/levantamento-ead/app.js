@@ -286,6 +286,65 @@ function htmlFormDisc(d) {
   </div>
   <datalist id="le-profs">${professores().map(p => `<option value="${esc(p)}">`).join('')}</datalist>`;
 }
+// 24/11/2026: datas das UAs — saem do calendário; o EAD ajusta uma UA quando precisa (duas UAs no mesmo dia, reposição)
+function htmlDatasUa(d) {
+  const { itens, datas } = datasDe(d);
+  if (!dados.calendario?.inicio1 && !Object.keys(d.datasManuais || {}).length) return '<p class="ea-sub">Datas das UAs: defina o calendário em Cronograma › "Calendário e fechamento".</p>';
+  const porData = {};
+  itens.forEach(it => { const x = datas[it.id]; if (x) (porData[x] = porData[x] || []).push(it.ua === 'REVISÃO' ? `revisão ${it.bimestre}º bim.` : it.ua); });
+  return `<details class="le-datas-ua" open><summary><b>Datas das UAs · ${esc(nomeDisc(d))}</b> <span class="ea-sub" style="display:inline">· pelo calendário; ajuste uma UA quando precisar (ex.: duas UAs no mesmo dia)</span></summary>
+    <div class="ea-tabela-wrap"><table class="ea-tabela"><thead><tr><th>Unidade</th><th>Data</th><th></th></tr></thead><tbody>
+    ${itens.map(it => { const man = (d.datasManuais || {})[it.id]; const x = datas[it.id]; const rot = it.ua === 'REVISÃO' ? `Revisão (${it.bimestre}º bim.)` : it.ua; const juntas = x && porData[x].length > 1 ? porData[x].filter(r => r !== (it.ua === 'REVISÃO' ? `revisão ${it.bimestre}º bim.` : it.ua)) : [];
+      return `<tr><td><b>${esc(rot)}</b></td>
+        <td>${podeEditar ? `<input type="date" class="ea-input" min="2020-01-01" max="2099-12-31" data-le-data-ua="${esc(it.id)}" value="${esc(x || '')}" aria-label="Data ${esc(rot)}">` : esc(dataBRano(x) || '—')}</td>
+        <td><span class="ea-sub">${man ? 'ajustada' : x ? 'pelo calendário' : ''}${man && podeEditar ? ` · <button type="button" class="ea-link" data-le-data-ua-limpar="${esc(it.id)}">voltar ao calendário</button>` : ''}</span>${juntas.length ? `<span class="ea-sub">mesmo dia de ${esc(juntas.join(', '))}</span>` : ''}</td></tr>`; }).join('')}
+    </tbody></table></div><div data-le-ua-escolha></div></details>`;
+}
+// ajustes: [{ discId, item, data }] ('' = volta ao calendário)
+async function gravarDatasUa(ajustes) {
+  const r = await apiFetch(`/${MODULO}/datas-ua/lote`, { method: 'POST', body: JSON.stringify({ semestre: dados.semestre, ajustes }) });
+  Object.entries(r.datasUa || {}).forEach(([id, du]) => {
+    const d = dados.disciplinas.find(x => x.id === id);
+    if (d) { d.datasManuais = {}; Object.entries(du || {}).forEach(([k, v]) => { if (v && v.data) d.datasManuais[k] = v.data; }); }
+  });
+  return r;
+}
+async function gravarDataUa(item, data) {
+  const d = dados.disciplinas.find(x => x.id === discAberta);
+  if (!d) return;
+  await gravarDatasUa([{ discId: d.id, item, data }]);
+  toast(data ? 'Data da UA ajustada. Vale no cronograma e na Aulas EAD do T.I.' : 'A UA voltou para a data do calendário.');
+  reabrirDatas(d.id);
+}
+function reabrirDatas() { render(); }
+// Mudou a data de uma UA: outras disciplinas do mesmo dia da semana com aula naquela data? Pergunta se é só nesta
+// (exceção) ou em todas as do dia (ex.: a quarta 10/03 inteira passa pra 11/03).
+let dataUaPendente = null;
+function mudarDataUa(item, nova) {
+  const d = dados.disciplinas.find(x => x.id === discAberta);
+  if (!d) return;
+  const antiga = datasDe(d).datas[item];
+  const calc = datasDe({ ...d, datasManuais: {} }).datas[item];
+  const outras = [];
+  if (antiga && nova) {
+    dados.disciplinas.forEach(o => {
+      if (o.id === d.id || !o.dia || o.dia !== d.dia) return;
+      const { itens, datas } = datasDe(o);
+      itens.forEach(it => { if (datas[it.id] === antiga) outras.push({ o, it }); });
+    });
+  }
+  if (!outras.length) return gravarDataUa(item, nova === calc ? '' : nova).catch(err => toast(err.message, 'erro'));
+  dataUaPendente = { item, nova, antiga, calc, outras };
+  const caixa = document.querySelector('[data-le-ua-escolha]');
+  const nDisc = new Set(outras.map(x => x.o.id)).size;
+  caixa.innerHTML = `<div class="ea-card le-aviso le-aviso-coord"><b>Mudar a aula de ${esc(dataBRano(antiga))} para ${esc(dataBRano(nova))}</b>
+    <span class="ea-sub">Mais ${nDisc} disciplina(s) de ${esc((DIA_ROTULO[d.dia] || '').toLowerCase())} têm aula em ${esc(dataBRano(antiga))}: ${esc([...new Set(outras.map(x => `${nomeDisc(x.o)} (${x.o.cursoNome})`))].slice(0, 8).join('; '))}${nDisc > 8 ? '…' : ''}.</span>
+    <div class="ea-modal-acoes" style="justify-content:flex-start;margin-top:.5rem">
+      <button type="button" class="btn-secondary btn-mini" data-le-ua-so>Só nesta disciplina (exceção)</button>
+      <button type="button" class="btn-primary btn-mini" data-le-ua-todas>Em todas as ${nDisc + 1} de ${esc((DIA_ROTULO[d.dia] || '').toLowerCase())} com aula em ${esc(dataBRano(antiga))}</button>
+      <button type="button" class="ea-link" data-le-ua-cancelar>cancelar</button></div></div>`;
+  caixa.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 function abrirDisciplina(id) {
   const d = dados.disciplinas.find(x => x.id === id);
   if (!d) return;
@@ -488,7 +547,9 @@ function renderCronograma() {
       })()}
       ${alvo.length > 1 ? `<br><span class="ea-sub">${alvo.length} cronogramas: um por disciplina. Para um só, escolha a disciplina.</span>` : ''}
     </div>
+    ${alvo.length === 1 ? `<section class="ea-card le-nao-imprime">${htmlDatasUa(alvo[0])}</section>` : podeEditar ? '<p class="ea-sub le-nao-imprime">Para ajustar a data de uma UA (ex.: duas UAs no mesmo dia), escolha a disciplina acima.</p>' : ''}
     <div class="le-cr-lista">${alvo.map(d => htmlCronograma(d, bim)).join('') || '<p class="ea-vazio">Nenhuma disciplina.</p>'}</div>`;
+  discAberta = alvo.length === 1 ? alvo[0].id : '';
 }
 function abrirCalendario() {
   const c = dados.calendario || {}, cr = dados.cronograma || {}, fe = cr.fechamento || {}, nomes = cr.feriados || {};
@@ -692,6 +753,21 @@ async function acao(e) {
       const r = await apiFetch(`/${MODULO}/professores/renomear`, { method: 'POST', body: JSON.stringify({ semestre: dados.semestre, trocas }) });
       fecharModal(); toast(r.message); return carregar();
     }
+    if (t.dataset.leDataUaLimpar) return gravarDataUa(t.dataset.leDataUaLimpar, '');
+    if (t.dataset.leUaCancelar !== undefined) { dataUaPendente = null; return reabrirDatas(discAberta); }
+    if (t.dataset.leUaSo !== undefined && dataUaPendente) {
+      const p = dataUaPendente; dataUaPendente = null;
+      return gravarDataUa(p.item, p.nova === p.calc ? '' : p.nova);
+    }
+    if (t.dataset.leUaTodas !== undefined && dataUaPendente) {
+      const p = dataUaPendente; dataUaPendente = null;
+      t.disabled = true;
+      const ajustes = [{ discId: discAberta, item: p.item, data: p.nova === p.calc ? '' : p.nova },
+        ...p.outras.map(({ o, it }) => ({ discId: o.id, item: it.id, data: p.nova === datasDe({ ...o, datasManuais: {} }).datas[it.id] ? '' : p.nova }))];
+      const r = await gravarDatasUa(ajustes);
+      toast(`${r.message} Vale no cronograma e na Aulas EAD do T.I.`);
+      return reabrirDatas(discAberta);
+    }
     if (t.dataset.leExcluir) {
       if (!confirm('Excluir esta disciplina do levantamento? Ela sai também da Aulas EAD do T.I.')) return;
       await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leExcluir)}`, { method: 'DELETE' });
@@ -746,7 +822,8 @@ function ligarEventos() {
   $('le-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (!b) return; aba = b.dataset.aba; render(); });
   tela().addEventListener('click', acao);
   tela().addEventListener('change', mudanca);
-  $('le-modal-corpo').addEventListener('change', (e) => {
+  tela().addEventListener('change', (e) => { if (e.target.dataset.leDataUa) mudarDataUa(e.target.dataset.leDataUa, e.target.value); });
+  $('le-modal-corpo').addEventListener('change', async (e) => {
     if (e.target.id !== 'le-f-hor-sel') return;
     const outro = e.target.value === '__outro';
     $('le-f-hor').classList.toggle('hidden', !outro);
