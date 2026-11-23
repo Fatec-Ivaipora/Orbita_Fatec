@@ -148,5 +148,109 @@ router.put('/semestre/:semestre/calendario', verifyToken, checkPermission, async
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+// ------------------------------ Matrizes (coordenação) e nomes do Edubox — 23/11/2026 ------------------------------
+// O coordenador de cada curso define professor, dia e hora de cada disciplina no Matrizes e Horários
+// (matrizes_grade). Aqui o EAD vê o que a coordenação definiu para as disciplinas EAD e pode ACEITAR (preenche o
+// formulário; quem salva é a pessoa). O nome do professor é conferido com o cadastro do Edubox (relay, o mesmo da
+// titulação do Matrizes): "Luiz Fernando" → "Luiz Fernando Camargo".
+const mz = require('./matrizes')._interno;
+const DIA_MATRIZ = { seg: 'segunda', ter: 'terca', qua: 'quarta', qui: 'quinta', sex: 'sexta', sab: 'sabado' };
+const horaTxt = (h) => { const [hh, mm] = String(h || '').split(':'); return !hh ? '' : (mm && mm !== '00' ? `${Number(hh)}h${mm}min` : `${Number(hh)}h`); };
+const MINUSC = new Set(['da', 'de', 'do', 'das', 'dos', 'e']);
+const nomeProprio = (s) => String(s || '').toLowerCase().split(/\s+/).filter(Boolean).map((w, i) => (i && MINUSC.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+// períodos de uma disciplina EAD ("6", "3 e 4", "1º e 2º"); sem número = todos ("TODOS")
+const periodosDe = (p) => (String(p || '').match(/\d+/g) || []).map(Number);
+
+async function professoresEdubox(semestre) {
+    const lista = await mz.titulacoesEdubox(semestre); // [] se o Edubox não responder
+    return lista.map(t => ({ ...t, toks: mz.normNome(t.nome).split(' ') }));
+}
+// nome digitado → { nome } (do Edubox, com maiúscula só no começo) | { status: 'nao-achou' | 'ambiguo' } | null (a contratar / vazio)
+function nomeNoEdubox(lista, nome) {
+    if (!lista.length || mz.ehContratar(nome)) return null;
+    const a = mz.acharProfessor(lista, String(nome).replace(/\(.*?\)/g, ' '));
+    if (!a) return { status: 'nao-achou' };
+    if (a.ambiguo) return { status: 'ambiguo' };
+    return { nome: nomeProprio(a.nome) };
+}
+
+// GET /sugestoes?semestre= → { sugestoes: { discId: [{ dia, horario, professor, coordenador, em, turmas }] },
+//                              professores: { "nome no levantamento": { nome } | { status } | null }, eduboxOk }
+router.get('/sugestoes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const semestre = req.query.semestre;
+        if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
+        const [discSnap, gradeSnap, profs] = await Promise.all([
+            db.collection(COL_DISC).where('semestre', '==', semestre).get(),
+            db.collection('matrizes_grade').where('semestre', '==', semestre).get(),
+            professoresEdubox(semestre)
+        ]);
+        const porCursoDisc = new Map(); // cursoId|NOME → [alocação]
+        gradeSnap.docs.forEach(g => {
+            const x = g.data();
+            const cursoId = x.cursoId || g.id.split('__')[1];
+            Object.values(x.alocacoes || {}).forEach(a => {
+                const k = `${cursoId}|${mz.normNome(a.disciplina)}`;
+                if (!porCursoDisc.has(k)) porCursoDisc.set(k, []);
+                porCursoDisc.get(k).push(a);
+            });
+        });
+        const cacheNome = new Map();
+        const oficial = (nome) => { const k = mz.normNome(nome); if (!cacheNome.has(k)) cacheNome.set(k, nomeNoEdubox(profs, nome)); return cacheNome.get(k); };
+        const sugestoes = {}, professores = {};
+        discSnap.docs.forEach(d => {
+            const x = d.data();
+            if (x.professor && !(x.professor in professores)) professores[x.professor] = oficial(x.professor);
+            const pers = periodosDe(x.periodo);
+            const alocs = (porCursoDisc.get(`${x.cursoId}|${mz.normNome(x.nome)}`) || []).filter(a => !pers.length || pers.includes(Number(a.periodo)));
+            const grupos = new Map();
+            alocs.forEach(a => (a.aulas || []).forEach(au => {
+                const ofi = oficial(au.professor);
+                const professor = (ofi && ofi.nome) || String(au.professor || '').trim();
+                const s = { dia: DIA_MATRIZ[au.dia] || '', horario: au.inicio && au.fim ? `${horaTxt(au.inicio)} - ${horaTxt(au.fim)}` : '', professor };
+                const k = `${s.dia}|${s.horario}|${mz.normNome(s.professor)}`;
+                if (!grupos.has(k)) grupos.set(k, { ...s, coordenador: (a.atualizadoPor && a.atualizadoPor.nome) || '', em: a.atualizadoEm || '', turmas: [] });
+                const gr = grupos.get(k);
+                if (a.turma && !gr.turmas.includes(a.turma)) gr.turmas.push(a.turma);
+                if ((a.atualizadoEm || '') > gr.em) { gr.em = a.atualizadoEm; gr.coordenador = (a.atualizadoPor && a.atualizadoPor.nome) || gr.coordenador; }
+            }));
+            if (grupos.size) sugestoes[d.id] = [...grupos.values()];
+        });
+        res.json({ sugestoes, professores, eduboxOk: profs.length > 0 });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /professores/renomear { semestre, trocas: [{ de, para }] } — corrige o nome do professor em todas as disciplinas
+// EAD do semestre e leva junto a sala Zoom que o T.I deu (a sala é guardada pelo nome do professor).
+router.post('/professores/renomear', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { semestre } = req.body || {};
+        if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
+        const trocas = (Array.isArray(req.body.trocas) ? req.body.trocas : []).slice(0, 200)
+            .map(t => ({ de: texto(t && t.de, 120), para: texto(t && t.para, 120) })).filter(t => t.de && t.para && t.de !== t.para);
+        if (!trocas.length) return res.status(400).json({ error: 'Nada para corrigir.' });
+        const [discSnap, semSnap] = await Promise.all([db.collection(COL_DISC).where('semestre', '==', semestre).get(), db.collection(COL_SEM).doc(semestre).get()]);
+        const salas = { ...((semSnap.exists && semSnap.data().salaDoProfessor) || {}) };
+        let mudouSala = false, n = 0;
+        const itens = [];
+        const batch = db.batch();
+        trocas.forEach(t => {
+            discSnap.docs.filter(d => d.data().professor === t.de).forEach(d => {
+                const x = d.data();
+                batch.update(d.ref, { professor: t.para, updatedAt: agora(), updatedBy: quemFez(req) });
+                itens.push({ discId: d.id, curso: x.cursoNome, periodo: x.periodo, disciplina: x.nome, acao: 'alterada', mudancas: [{ campo: 'professor', de: t.de, para: t.para }] });
+                n++;
+            });
+            const kDe = chaveProf(t.de), kPara = chaveProf(t.para);
+            if (salas[kDe] && !salas[kPara]) { salas[kPara] = { ...salas[kDe], professor: t.para }; mudouSala = true; }
+        });
+        if (!n) return res.status(400).json({ error: 'Nenhuma disciplina com esses nomes.' });
+        if (mudouSala) batch.set(db.collection(COL_SEM).doc(semestre), { salaDoProfessor: salas }, { merge: true });
+        await batch.commit();
+        await registrar(req, { semestre, acao: 'importacao', disciplina: `Nome de professor corrigido pelo Edubox em ${n} disciplina(s)`, itens: itens.slice(0, 200) }).catch(e => console.error('levantamento-ead: registro falhou', e));
+        res.json({ alteradas: n, message: `Nome corrigido em ${n} disciplina(s).` });
+    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 module.exports = router;
 module.exports._interno = { chaveProf };
