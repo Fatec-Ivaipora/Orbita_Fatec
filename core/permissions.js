@@ -224,6 +224,16 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 15l4-4 3 3 5-6"/><circle cx="18" cy="8" r="1.4"/></svg>`,
     url: "/docencia/trilha-ead/index.html"
   },
+  // Levantamento EaD (23/11/2026) — disciplinas EAD do semestre (dia, horário, professor) editadas pelo EAD na
+  // MESMA lista da Aulas EAD do T.I (aviso pro T.I a cada mudança), tutor de cada curso, relatório por curso/professor
+  // com a sala Zoom do professor e mensagem pronta, e o Cronograma EaD de cada disciplina.
+  "levantamento-ead": {
+    id: "levantamento-ead",
+    category: "docencia",
+    title: "Levantamento EaD",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M7 13h4M7 17h7"/></svg>`,
+    url: "/docencia/levantamento-ead/index.html"
+  },
   // Plano de Ação dos Coordenadores (21/10/2026) — atividades diárias/semanais/mensais/semestrais do
   // coordenador, com datas do calendário acadêmico do Edubox; Direção (ADM) acompanha por coordenação.
   "plano-acao": {
@@ -313,15 +323,15 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios"]
   },
   ti: {
     label: "T.I.",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava", "ead-aulas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava", "ead-aulas", "levantamento-ead"]
   },
   rh: {
     label: "RH",
@@ -375,7 +385,7 @@ export const ROLE_PERMISSIONS = {
   // cursos da graduação (escopo em src/rotas/cpa.js escopoDe). Sem nada da Secretaria.
   ead: {
     label: "EAD",
-    modules: ["dashboard", "fidelidade", "correcao-provas", "trilha-ead", "banco-provas", "automacao-ava"]
+    modules: ["dashboard", "fidelidade", "correcao-provas", "trilha-ead", "banco-provas", "automacao-ava", "levantamento-ead"]
   },
   // Robô da ODTech (16/10/2026) — faz processos de matrícula pra ajudar a
   // Secretaria. Só Matrículas, e só de 2027.1 em diante (trava no backend

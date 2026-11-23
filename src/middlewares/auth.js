@@ -220,6 +220,7 @@ const requireModulePermission = (moduleName) => {
             adm_l2: {
                 'automacao-ava': 3,
                 'ead-aulas': 3,
+                'levantamento-ead': 3,
                 cad: 3,
                 'correcao-provas': 3,
                 cpa: 3,
@@ -254,6 +255,7 @@ const requireModulePermission = (moduleName) => {
             ti: {
                 'automacao-ava': 3,
                 'ead-aulas': 3,
+                'levantamento-ead': 2,
                 emprestimo: 3,
                 usuarios: 1,
                 ferida: 1,
@@ -485,6 +487,7 @@ const requireModulePermission = (moduleName) => {
             // Setor EAD (15/10/2026) — Correção de Provas; 21/10 também o Banco de Provas.
             ead: {
                 'automacao-ava': 3,
+                'levantamento-ead': 3,
                 emprestimo: 1,
                 usuarios: 1,
                 ferida: 1,

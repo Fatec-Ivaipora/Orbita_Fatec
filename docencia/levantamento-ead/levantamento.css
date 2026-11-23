@@ -1,0 +1,85 @@
+/* Levantamento EaD (Docência) — 23/11/2026. Usa as classes ea-* da Aulas EAD (/ti/ead-aulas/ead-aulas.css);
+   aqui só o que é desta tela: relatório, calendário e o card do Cronograma EaD. */
+.le-rel-bloco { margin-bottom: 1rem; }
+.le-rel-topo { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1rem; margin-bottom: .6rem; }
+.le-rel-topo h3 { margin: 0; font-size: 1.02rem; }
+.le-rel-topo .btn-primary { margin-left: auto; }
+.le-zoom-linha { margin: 0 0 .6rem; font-size: .88rem; }
+.le-imprime-titulo { display: none; }
+.le-dupla { display: flex; gap: .4rem; }
+.le-dupla input[type="date"] { flex: 1; }
+.le-fer-linha { display: grid; grid-template-columns: 160px 1fr auto; gap: .4rem; margin-bottom: .35rem; align-items: center; }
+/* sinais: quinzenal, disciplina comum a várias turmas, quinzenal a conferir */
+.le-sinais { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+.le-aviso { border-left: 4px solid #e0a100; font-size: .88rem; }
+.le-aviso-ok { border-left-color: #1f7a5a; }
+.le-outras { margin: .4rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .2rem; }
+.le-cr-status { margin-bottom: 1rem; font-size: .88rem; line-height: 1.6; }
+.le-cr-lista { display: flex; flex-direction: column; gap: 1.5rem; align-items: center; }
+
+/* ---------- Card do Cronograma EaD (formato da arte do EAD) ---------- */
+.le-cr {
+  --cr-azul: #0f2f66; --cr-azul2: #1b4a96; --cr-vermelho: #d62828; --cr-verde: #1f7a5a;
+  width: 100%; max-width: 900px; background: #fff; color: #0f2f66; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 47, 102, .12); font-family: 'Barlow Condensed', 'Source Sans 3', Arial, sans-serif;
+}
+.le-cr-topo { display: flex; align-items: center; gap: 1.2rem; padding: .9rem 1.4rem; background: linear-gradient(90deg, var(--cr-azul), var(--cr-azul2)); color: #fff; }
+.le-cr-logo { background: #fff; border-radius: 8px; padding: .35rem .6rem; display: flex; }
+.le-cr-logo img { height: 38px; width: auto; display: block; }
+.le-cr-titulo { display: flex; flex-direction: column; padding-left: 1.2rem; border-left: 2px solid rgba(255, 255, 255, .5); }
+.le-cr-titulo b { font-size: 2.1rem; font-weight: 800; letter-spacing: .02em; line-height: 1; }
+.le-cr-titulo span { font-size: 1.05rem; font-weight: 700; letter-spacing: .04em; margin-top: .2rem; }
+.le-cr-ico { width: 64px; height: 54px; margin-left: auto; color: #fff; opacity: .9; }
+.le-cr-info { display: grid; grid-template-columns: repeat(5, 1fr); gap: .6rem; padding: .9rem 1.2rem .5rem; text-align: center; }
+.le-cr-info > div { display: flex; flex-direction: column; gap: .15rem; }
+.le-cr-rot { font-size: 1.05rem; font-weight: 800; letter-spacing: .03em; }
+.le-cr-info b { font-family: 'Source Sans 3', Arial, sans-serif; font-size: .95rem; font-weight: 600; color: #1d2b44; }
+.le-cr-info b small { display: block; font-size: .8rem; font-weight: 600; color: #4a5a78; }
+.le-cr-quinz { display: block; width: fit-content; margin: .15rem auto 0; background: #e0a100; color: #fff; border-radius: 5px; padding: 0 .45rem; font-size: .85rem; letter-spacing: .03em; }
+.le-cr-info b.le-cr-dia { color: var(--cr-vermelho); font-family: 'Barlow Condensed', Arial, sans-serif; font-size: 1.2rem; font-weight: 800; }
+.le-cr-fech { margin: .4rem 1.2rem .9rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1rem;
+  background: var(--cr-vermelho); color: #fff; border-radius: 10px; padding: .55rem 1rem; font-size: 1.35rem; }
+.le-cr-fech b { font-weight: 800; letter-spacing: .02em; }
+.le-cr-fech-ico { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 1.1rem; }
+.le-cr-fech-val { background: #fff; color: var(--cr-vermelho); border-radius: 6px; padding: .05rem .6rem; font-weight: 800; }
+.le-cr-corpo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 1rem; padding: 0 1.2rem 1.2rem; align-items: start; }
+.le-cr-aulas { border: 2px solid var(--cr-azul); border-radius: 10px; overflow: hidden; }
+.le-cr-aulas-topo { display: flex; justify-content: space-between; align-items: center; background: var(--cr-azul); color: #fff; padding: .4rem .8rem; font-size: 1.15rem; }
+.le-cr-aulas-topo span { background: var(--cr-verde); border-radius: 5px; padding: 0 .5rem; font-size: .95rem; font-weight: 700; }
+.le-cr-linha { display: grid; grid-template-columns: 38px 1fr 1fr 70px; align-items: center; gap: .5rem; padding: .28rem .8rem; border-top: 1px solid #dde5f2; font-size: 1.05rem; }
+.le-cr-linha:nth-child(odd) { background: #f3f6fb; }
+.le-cr-num { width: 32px; height: 26px; border-radius: 6px; background: var(--cr-azul2); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: .95rem; }
+.le-cr-linha.rev .le-cr-num { background: var(--cr-verde); }
+.le-cr-ua { background: #e3ebf8; border-radius: 5px; text-align: center; font-weight: 600; font-size: .92rem; padding: .05rem .3rem; }
+.le-cr-data { font-weight: 700; text-align: right; }
+.le-cr-alertas { display: flex; flex-direction: column; gap: .7rem; }
+.le-cr-alerta { border: 2px solid var(--cr-verde); border-radius: 10px; overflow: hidden; }
+.le-cr-alerta-topo { background: #e4f2ec; color: var(--cr-verde); font-weight: 800; font-size: 1.1rem; padding: .3rem .8rem; }
+.le-cr-alerta-corpo { padding: .45rem .8rem; display: flex; flex-direction: column; font-size: 1.15rem; color: var(--cr-azul); }
+.le-cr-alerta-corpo b { font-weight: 800; }
+.le-cr-alerta-corpo span { font-weight: 600; }
+
+@media (max-width: 720px) {
+  .le-cr-topo { flex-wrap: wrap; gap: .6rem; padding: .8rem; }
+  .le-cr-titulo { padding-left: .8rem; }
+  .le-cr-titulo b { font-size: 1.6rem; }
+  .le-cr-ico { display: none; }
+  .le-cr-info { grid-template-columns: repeat(2, 1fr); }
+  .le-cr-info > div:first-child { grid-column: 1 / -1; }
+  .le-cr-corpo { grid-template-columns: 1fr; }
+  .le-cr-fech { font-size: 1.1rem; }
+  .le-fer-linha { grid-template-columns: 1fr auto; }
+  .le-fer-linha [data-le-fer-nome] { grid-column: 1 / -1; grid-row: 2; }
+}
+
+@media print {
+  .le-nao-imprime, .layout-sidebar, .layout-topbar, header.layout-header, nav { display: none !important; }
+  .layout-main, .layout-content { margin: 0 !important; padding: 0 !important; }
+  .le-imprime-titulo { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .le-imprime-titulo img { height: 40px; }
+  .le-imprime-titulo div { display: flex; flex-direction: column; }
+  .le-rel-bloco { break-inside: avoid; box-shadow: none; border: 1px solid #ccd; }
+  .le-cr { box-shadow: none; break-inside: avoid; page-break-after: always; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .le-cr-lista { gap: 0; }
+  .ea-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

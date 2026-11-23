@@ -23,6 +23,7 @@ const checkPermission = verifyToken.requireModulePermission('ead-aulas');
 const COL_SALAS = 'ead_aulas_salas';
 const COL_DISC = 'ead_aulas_disc';
 const COL_SEM = 'ead_aulas_semestre';
+const COL_ALT = 'ead_aulas_alteracoes'; // mudanças feitas pelo EAD no Levantamento EaD (aviso pro T.I)
 const SEMESTRE = /^\d{4}\.[12]$/;
 const DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 const ETAPAS = ['gravou', 'baixou', 'youtube', 'ava'];
@@ -187,17 +188,6 @@ function lerPlanilhaLevantamento(wb, semestre) {
 }
 const idDisc = (semestre, cursoId, nome, periodo) => `${semestre}__${cursoId}__${slug(chaveNome(nome))}__${slug(periodo || 'x')}`;
 
-router.get('/semestres', verifyToken, checkPermission, async (req, res) => {
-    try {
-        const hoje = new Date();
-        let ano = hoje.getFullYear(), s = hoje.getMonth() < 6 ? 1 : 2;
-        const base = [];
-        for (let i = 0; i < 3; i++) { base.push(`${ano}.${s}`); if (s === 1) s = 2; else { s = 1; ano++; } }
-        const snap = await db.collection(COL_SEM).get();
-        res.json([...new Set([...base, ...snap.docs.map(d => d.id)])].filter(x => SEMESTRE.test(x)).sort());
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 // GET /?semestre= — tudo da página: disciplinas, salas, sala de cada professor e ocupações avulsas
 router.get('/', verifyToken, checkPermission, async (req, res) => {
     try {
@@ -221,100 +211,138 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /disciplinas/importar { semestre, arquivoBase64, aplicar }
-// Disciplina nova entra; a que já existe só recebe dia/horário/professor que vierem preenchidos na planilha
-// (célula vazia não apaga o que o T.I já tinha posto). Gravações nunca são mexidas pela importação.
-router.post('/disciplinas/importar', verifyToken, checkPermission, async (req, res) => {
-    try {
-        if (!soTi(req, res)) return;
-        const { semestre } = req.body || {};
-        if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
-        const linhas = lerPlanilhaLevantamento(lerXlsx(req.body.arquivoBase64), semestre);
-        if (!linhas.length) return res.status(400).json({ error: `Não achei linhas de ${semestre} na planilha (colunas Semestre, Curso, Disciplina, Professor).` });
-        const snap = await db.collection(COL_DISC).where('semestre', '==', semestre).get();
-        const existentes = new Map(snap.docs.map(d => [d.id, d.data()]));
-        const vistos = new Set();
-        const previa = [], ignoradas = [];
-        linhas.forEach(l => {
-            if (!l.cursoId) { ignoradas.push({ ...l, motivo: 'curso não reconhecido' }); return; }
-            const id = idDisc(semestre, l.cursoId, l.nome, l.periodo);
-            if (vistos.has(id)) { ignoradas.push({ ...l, motivo: 'linha repetida' }); return; }
-            vistos.add(id);
-            const atual = existentes.get(id);
-            const muda = atual ? ['dia', 'horario', 'professor'].filter(k => l[k] && l[k] !== atual[k]) : [];
-            previa.push({ id, ...l, acao: !atual ? 'nova' : muda.length ? 'atualizar' : 'igual', muda });
-        });
-        if (!req.body.aplicar) return res.json({ semestre, previa, ignoradas });
-        const gravar = previa.filter(p => p.acao !== 'igual');
-        for (let i = 0; i < gravar.length; i += 400) {
-            const batch = db.batch();
-            gravar.slice(i, i + 400).forEach(p => {
-                const ref = db.collection(COL_DISC).doc(p.id);
-                if (p.acao === 'nova') {
-                    batch.set(ref, { semestre, cursoId: p.cursoId, cursoNome: p.cursoNome, periodo: p.periodo, nome: p.nome, ch: p.ch, qtd: qtdPorCh(p.ch),
-                        dia: p.dia, horario: p.horario, professor: p.professor, gravacoes: {}, createdAt: agora(), createdBy: `${quemFez(req)} (planilha)` });
-                } else {
-                    const upd = { updatedAt: agora(), updatedBy: `${quemFez(req)} (planilha)` };
-                    p.muda.forEach(k => { upd[k] = p[k]; });
-                    batch.set(ref, upd, { merge: true });
-                }
+// Rotas das disciplinas, compartilhadas com o Levantamento EaD (Docência, 23/11/2026): as duas telas gravam
+// na MESMA coleção (ead_aulas_disc), então o que o EAD muda lá aparece aqui e vice-versa.
+//   Aulas EAD:       só o T.I grava (soTi), nada é registrado.
+//   Levantamento EaD: o EAD grava; cada mudança vira um registro em ead_aulas_alteracoes (aviso pro T.I) e
+//                     não deixa excluir disciplina que já tem gravação marcada pelo T.I.
+function rotasDisciplinas(r, checkPerm, { podeGravar = () => true, registrar = null, protegerGravacoes = false } = {}) {
+    const reg = async (req, alt) => { if (!registrar) return; try { await registrar(req, alt); } catch (e) { console.error('ead-aulas: registro da alteração falhou', e); } };
+    r.get('/semestres', verifyToken, checkPerm, async (req, res) => {
+        try {
+            const hoje = new Date();
+            let ano = hoje.getFullYear(), s = hoje.getMonth() < 6 ? 1 : 2;
+            const base = [];
+            for (let i = 0; i < 3; i++) { base.push(`${ano}.${s}`); if (s === 1) s = 2; else { s = 1; ano++; } }
+            const snap = await db.collection(COL_SEM).get();
+            res.json([...new Set([...base, ...snap.docs.map(d => d.id)])].filter(x => SEMESTRE.test(x)).sort());
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+    
+    // POST /disciplinas/importar { semestre, arquivoBase64, aplicar }
+    // Disciplina nova entra; a que já existe só recebe dia/horário/professor que vierem preenchidos na planilha
+    // (célula vazia não apaga o que o T.I já tinha posto). Gravações nunca são mexidas pela importação.
+    r.post('/disciplinas/importar', verifyToken, checkPerm, async (req, res) => {
+        try {
+            if (!podeGravar(req, res)) return;
+            const { semestre } = req.body || {};
+            if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
+            const linhas = lerPlanilhaLevantamento(lerXlsx(req.body.arquivoBase64), semestre);
+            if (!linhas.length) return res.status(400).json({ error: `Não achei linhas de ${semestre} na planilha (colunas Semestre, Curso, Disciplina, Professor).` });
+            const snap = await db.collection(COL_DISC).where('semestre', '==', semestre).get();
+            const existentes = new Map(snap.docs.map(d => [d.id, d.data()]));
+            const vistos = new Set();
+            const previa = [], ignoradas = [];
+            linhas.forEach(l => {
+                if (!l.cursoId) { ignoradas.push({ ...l, motivo: 'curso não reconhecido' }); return; }
+                const id = idDisc(semestre, l.cursoId, l.nome, l.periodo);
+                if (vistos.has(id)) { ignoradas.push({ ...l, motivo: 'linha repetida' }); return; }
+                vistos.add(id);
+                const atual = existentes.get(id);
+                const muda = atual ? ['dia', 'horario', 'professor'].filter(k => l[k] && l[k] !== atual[k]) : [];
+                previa.push({ id, ...l, acao: !atual ? 'nova' : muda.length ? 'atualizar' : 'igual', muda });
             });
-            await batch.commit();
-        }
-        await db.collection(COL_SEM).doc(semestre).set({ semestre, atualizadoEm: agora() }, { merge: true });
-        res.json({ gravadas: gravar.length, message: `${gravar.length} disciplina(s) gravada(s).` });
-    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
-});
-
-function discDoCorpo(b, parcial) {
-    const d = {};
-    if (!parcial || b.nome !== undefined) d.nome = texto(b.nome, 200);
-    if (!parcial || b.periodo !== undefined) d.periodo = texto(b.periodo, 30);
-    if (b.ch !== undefined) d.ch = Number(b.ch) || null;
-    if (b.qtd !== undefined) { if (![6, 12].includes(Number(b.qtd))) { const e = new Error('A disciplina tem 6 ou 12 UAs.'); e.status = 400; throw e; } d.qtd = Number(b.qtd); }
-    if (b.dia !== undefined) { if (b.dia && !DIAS.includes(b.dia)) { const e = new Error('Dia inválido.'); e.status = 400; throw e; } d.dia = b.dia || ''; }
-    if (b.horario !== undefined) d.horario = texto(b.horario, 40);
-    if (b.professor !== undefined) d.professor = texto(b.professor, 120);
-    if (b.obs !== undefined) d.obs = texto(b.obs, 600);
-    return d;
+            if (!req.body.aplicar) return res.json({ semestre, previa, ignoradas });
+            const gravar = previa.filter(p => p.acao !== 'igual');
+            for (let i = 0; i < gravar.length; i += 400) {
+                const batch = db.batch();
+                gravar.slice(i, i + 400).forEach(p => {
+                    const ref = db.collection(COL_DISC).doc(p.id);
+                    if (p.acao === 'nova') {
+                        batch.set(ref, { semestre, cursoId: p.cursoId, cursoNome: p.cursoNome, periodo: p.periodo, nome: p.nome, ch: p.ch, qtd: qtdPorCh(p.ch),
+                            dia: p.dia, horario: p.horario, professor: p.professor, gravacoes: {}, createdAt: agora(), createdBy: `${quemFez(req)} (planilha)` });
+                    } else {
+                        const upd = { updatedAt: agora(), updatedBy: `${quemFez(req)} (planilha)` };
+                        p.muda.forEach(k => { upd[k] = p[k]; });
+                        batch.set(ref, upd, { merge: true });
+                    }
+                });
+                await batch.commit();
+            }
+            await db.collection(COL_SEM).doc(semestre).set({ semestre, atualizadoEm: agora() }, { merge: true });
+            if (gravar.length) await reg(req, { semestre, acao: 'importacao', disciplina: `Planilha importada: ${gravar.length} disciplina(s)`,
+                itens: gravar.slice(0, 200).map(p => ({ discId: p.id, curso: p.cursoNome, periodo: p.periodo, disciplina: p.nome, acao: p.acao === 'nova' ? 'nova' : 'alterada',
+                    mudancas: p.acao === 'nova' ? [] : p.muda.map(k => ({ campo: k, de: (existentes.get(p.id) || {})[k] || '', para: p[k] })) })) });
+            res.json({ gravadas: gravar.length, message: `${gravar.length} disciplina(s) gravada(s).` });
+        } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+    });
+    
+    function discDoCorpo(b, parcial) {
+        const d = {};
+        if (!parcial || b.nome !== undefined) d.nome = texto(b.nome, 200);
+        if (!parcial || b.periodo !== undefined) d.periodo = texto(b.periodo, 30);
+        if (b.ch !== undefined) d.ch = Number(b.ch) || null;
+        if (b.qtd !== undefined) { if (![6, 12].includes(Number(b.qtd))) { const e = new Error('A disciplina tem 6 ou 12 UAs.'); e.status = 400; throw e; } d.qtd = Number(b.qtd); }
+        if (b.dia !== undefined) { if (b.dia && !DIAS.includes(b.dia)) { const e = new Error('Dia inválido.'); e.status = 400; throw e; } d.dia = b.dia || ''; }
+        if (b.horario !== undefined) d.horario = texto(b.horario, 40);
+        if (b.professor !== undefined) d.professor = texto(b.professor, 120);
+        if (b.obs !== undefined) d.obs = texto(b.obs, 600);
+        return d;
+    }
+    r.post('/disciplinas', verifyToken, checkPerm, async (req, res) => {
+        try {
+            if (!podeGravar(req, res)) return;
+            const b = req.body || {};
+            if (!SEMESTRE.test(b.semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
+            const curso = CURSO_DA_PLANILHA.find(c => c[1] === b.cursoId);
+            if (!curso) return res.status(400).json({ error: 'Escolha o curso.' });
+            const d = discDoCorpo(b, false);
+            if (!d.nome) return res.status(400).json({ error: 'Informe a disciplina.' });
+            const id = idDisc(b.semestre, curso[1], d.nome, d.periodo);
+            const ref = db.collection(COL_DISC).doc(id);
+            if ((await ref.get()).exists) return res.status(400).json({ error: 'Essa disciplina já está cadastrada neste curso e período.' });
+            const dados = { semestre: b.semestre, cursoId: curso[1], cursoNome: curso[2], qtd: d.qtd || qtdPorCh(d.ch), gravacoes: {}, ...d, createdAt: agora(), createdBy: quemFez(req) };
+            await ref.set(dados);
+            await db.collection(COL_SEM).doc(b.semestre).set({ semestre: b.semestre }, { merge: true });
+            await reg(req, { semestre: b.semestre, acao: 'nova', discId: id, curso: curso[2], periodo: d.periodo, disciplina: d.nome,
+                mudancas: ['professor', 'dia', 'horario', 'ch'].filter(k => d[k]).map(k => ({ campo: k, de: '', para: d[k] })) });
+            res.status(201).json({ id, ...dados, itens: itensGravacao(dados.qtd) });
+        } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+    });
+    r.put('/disciplinas/:id', verifyToken, checkPerm, async (req, res) => {
+        try {
+            if (!podeGravar(req, res)) return;
+            const ref = db.collection(COL_DISC).doc(req.params.id);
+            const snap = await ref.get();
+            if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+            const d = discDoCorpo(req.body || {}, true);
+            const antes = snap.data();
+            const mudancas = Object.keys(d).filter(k => String(antes[k] ?? '') !== String(d[k] ?? '')).map(k => ({ campo: k, de: antes[k] ?? '', para: d[k] ?? '' }));
+            if (!mudancas.length) return res.json({ id: snap.id, ...antes, itens: itensGravacao(antes.qtd || qtdPorCh(antes.ch)) });
+            await ref.set({ ...d, updatedAt: agora(), updatedBy: quemFez(req) }, { merge: true });
+            await reg(req, { semestre: antes.semestre, acao: 'alterada', discId: snap.id, curso: antes.cursoNome, periodo: antes.periodo, disciplina: antes.nome, mudancas });
+            const final = { ...antes, ...d };
+            res.json({ id: snap.id, ...final, itens: itensGravacao(final.qtd || qtdPorCh(final.ch)) });
+        } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+    });
+    r.delete('/disciplinas/:id', verifyToken, checkPerm, async (req, res) => {
+        try {
+            if (!podeGravar(req, res)) return;
+            const ref = db.collection(COL_DISC).doc(req.params.id);
+            const snap = await ref.get();
+            if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
+            const x = snap.data();
+            if (protegerGravacoes && Object.values(x.gravacoes || {}).some(g => g && (g.gravou || g.baixou || g.youtube || g.ava))) {
+                return res.status(400).json({ error: 'Essa disciplina já tem gravação marcada pelo T.I. Peça ao T.I para excluir pela Aulas EAD.' });
+            }
+            await ref.delete();
+            await reg(req, { semestre: x.semestre, acao: 'excluida', discId: snap.id, curso: x.cursoNome, periodo: x.periodo, disciplina: x.nome, mudancas: [] });
+            res.json({ message: 'Disciplina excluída.' });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+    
 }
-router.post('/disciplinas', verifyToken, checkPermission, async (req, res) => {
-    try {
-        if (!soTi(req, res)) return;
-        const b = req.body || {};
-        if (!SEMESTRE.test(b.semestre || '')) return res.status(400).json({ error: 'Escolha o semestre.' });
-        const curso = CURSO_DA_PLANILHA.find(c => c[1] === b.cursoId);
-        if (!curso) return res.status(400).json({ error: 'Escolha o curso.' });
-        const d = discDoCorpo(b, false);
-        if (!d.nome) return res.status(400).json({ error: 'Informe a disciplina.' });
-        const id = idDisc(b.semestre, curso[1], d.nome, d.periodo);
-        const ref = db.collection(COL_DISC).doc(id);
-        if ((await ref.get()).exists) return res.status(400).json({ error: 'Essa disciplina já está cadastrada neste curso e período.' });
-        const dados = { semestre: b.semestre, cursoId: curso[1], cursoNome: curso[2], qtd: d.qtd || qtdPorCh(d.ch), gravacoes: {}, ...d, createdAt: agora(), createdBy: quemFez(req) };
-        await ref.set(dados);
-        await db.collection(COL_SEM).doc(b.semestre).set({ semestre: b.semestre }, { merge: true });
-        res.status(201).json({ id, ...dados, itens: itensGravacao(dados.qtd) });
-    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
-});
-router.put('/disciplinas/:id', verifyToken, checkPermission, async (req, res) => {
-    try {
-        if (!soTi(req, res)) return;
-        const ref = db.collection(COL_DISC).doc(req.params.id);
-        const snap = await ref.get();
-        if (!snap.exists) return res.status(404).json({ error: 'Disciplina não encontrada.' });
-        const d = discDoCorpo(req.body || {}, true);
-        await ref.set({ ...d, updatedAt: agora(), updatedBy: quemFez(req) }, { merge: true });
-        const final = { ...snap.data(), ...d };
-        res.json({ id: snap.id, ...final, itens: itensGravacao(final.qtd || qtdPorCh(final.ch)) });
-    } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
-});
-router.delete('/disciplinas/:id', verifyToken, checkPermission, async (req, res) => {
-    try {
-        if (!soTi(req, res)) return;
-        await db.collection(COL_DISC).doc(req.params.id).delete();
-        res.json({ message: 'Disciplina excluída.' });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
+rotasDisciplinas(router, checkPermission, { podeGravar: soTi });
 
 // PATCH /disciplinas/:id/gravacao { item:'UA-01'|'REV-1', etapa:'gravou'|'baixou'|'youtube'|'ava', feito }
 // Marcar uma etapa marca as anteriores (não dá pra subir no YouTube o que não foi gravado); desmarcar
@@ -479,5 +507,42 @@ router.put('/semestre/:semestre/ocupacao', verifyToken, checkPermission, async (
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+// ------------------------------ Mudanças do EAD (Levantamento EaD) ------------------------------
+// 23/11/2026: o EAD (Carlos e tutores) edita as disciplinas pelo Levantamento EaD (Docência). Cada mudança fica
+// em ead_aulas_alteracoes; aqui o T.I vê o que mudou e marca como visto (cada pessoa marca o seu: vistoPor).
+// GET /alteracoes?dias=30 → { pendentes, itens } (itens: as dos últimos N dias, mais nova primeiro, com visto)
+router.get('/alteracoes', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 180);
+        const desde = new Date(Date.now() - dias * 86400000).toISOString();
+        const snap = await db.collection(COL_ALT).where('em', '>=', desde).get();
+        const uid = req.user.uid;
+        const itens = snap.docs.map(d => { const x = d.data(); const { vistoPor, ...resto } = x; return { id: d.id, ...resto, visto: (vistoPor || []).includes(uid) || x.porUid === uid }; })
+            .sort((a, b) => String(b.em).localeCompare(String(a.em)));
+        res.json({ pendentes: itens.filter(i => !i.visto).length, itens: itens.slice(0, 300) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// POST /alteracoes/visto { ids: [...] } ou { todas: true } — marca como visto só pra quem clicou
+router.post('/alteracoes/visto', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { FieldValue } = require('firebase-admin/firestore');
+        const uid = req.user.uid;
+        let ids = Array.isArray((req.body || {}).ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 300) : [];
+        if (req.body && req.body.todas) {
+            const desde = new Date(Date.now() - 180 * 86400000).toISOString();
+            const snap = await db.collection(COL_ALT).where('em', '>=', desde).get();
+            ids = snap.docs.filter(d => !(d.data().vistoPor || []).includes(uid)).map(d => d.id);
+        }
+        for (let i = 0; i < ids.length; i += 400) {
+            const batch = db.batch();
+            ids.slice(i, i + 400).forEach(id => batch.set(db.collection(COL_ALT).doc(id), { vistoPor: FieldValue.arrayUnion(uid) }, { merge: true }));
+            await batch.commit();
+        }
+        res.json({ marcadas: ids.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
+module.exports.rotasDisciplinas = rotasDisciplinas;
+module.exports.comum = { COL_SALAS, COL_DISC, COL_SEM, COL_ALT, SEMESTRE, DIAS, ordemSala, agora, quemFez, texto, chaveProf, CURSO_DA_PLANILHA };
 module.exports._interno = { itensGravacao, lerPlanilhaZoom, lerPlanilhaLevantamento, semestreDaCelula, cursoDe, diaDe, chaveNome };
