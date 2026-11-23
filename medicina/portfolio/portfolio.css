@@ -207,3 +207,34 @@
   .pi-aluno { break-inside: avoid-page; page-break-inside: avoid; margin-bottom: 12pt; }
   .pi-conf { font-size: 9pt; color: #333; margin: 2pt 0; }
 }
+
+/* "Como usar" (tutorial dentro do módulo) */
+.pf-cab-ctrl { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.pf-btn-ajuda { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
+.pf-btn-ajuda:hover { background: rgba(255,255,255,0.12); }
+.pf-tut { max-width: 860px; display: flex; flex-direction: column; gap: 1rem; }
+.pf-tut-intro { margin: 0; font-size: 0.95rem; color: var(--orb-tinta2); max-width: 70ch; }
+.pf-tut-idx { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+@media (max-width: 700px) { .pf-tut-idx { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pf-tut-idx button { display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; text-align: left; background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 0.7rem 0.9rem; font: inherit; color: var(--orb-tinta); cursor: pointer; }
+.pf-tut-idx button:hover { border-color: var(--orb-azul); }
+.pf-tut-idx span { font-size: 0.8rem; color: var(--orb-mudo); }
+.pf-tut-bloco { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 1.2rem 1.3rem; display: flex; flex-direction: column; gap: 0.8rem; scroll-margin-top: 1rem; }
+.pf-tut-bloco h2 { margin: 0; font-size: 1.2rem; }
+.pf-tut-bloco h3 { margin: 0.2rem 0 0; font-size: 0.98rem; }
+.pf-tut-bloco p { margin: 0; max-width: 70ch; font-size: 0.92rem; }
+.pf-tut-quem { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--orb-azul); }
+.pf-tut-passos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; counter-reset: p; }
+.pf-tut-passos > li { counter-increment: p; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0.75rem; }
+.pf-tut-passos > li::before { content: counter(p); display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 99px; background: var(--orb-marca); color: #fff; font-weight: 800; font-size: 0.9rem; }
+.pf-tut-passos p, .pf-tut-passos ul { color: var(--orb-tinta2); font-size: 0.9rem; }
+.pf-tut-passos ul { margin: 0.3rem 0; padding-left: 1.1rem; }
+.pf-tut-cam { font-weight: 600; background: var(--orb-sup2); border: 1px solid var(--orb-linha); border-radius: 6px; padding: 0 0.35rem; color: var(--orb-tinta); }
+.pf-tut-nota { background: var(--orb-marca-suave); border-radius: var(--orb-raio-ctrl); padding: 0.6rem 0.85rem; }
+.pf-tut-alerta { background: var(--orb-alerta-suave); border-left: 3px solid var(--orb-alerta); }
+.pf-tut-tab { min-width: 480px; }
+.pf-tut-tab tbody tr { cursor: default; }
+.pf-tut details { border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); padding: 0.6rem 0.9rem; }
+.pf-tut summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; }
+.pf-tut details p { margin-top: 0.45rem; color: var(--orb-tinta2); }
+.pf-tut-fim { max-width: 860px; margin-top: 1rem; }
