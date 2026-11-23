@@ -227,7 +227,9 @@ router.get('/', verifyToken, checkPermission, async (req, res) => {
             // recusado/cancelado só aparece pra quem edita e pra quem pediu
             .filter(r => ['confirmada', 'pendente'].includes(r.status) || editor || (r.pedidoPor && r.pedidoPor.uid === req.user.uid));
         lista.sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
-        res.json({ reservas: lista, podeEditar: editor });
+        // Calendário Acadêmico publicado (23/11/2026): lido na hora — editou lá, muda aqui. Falha não derruba a agenda.
+        const calendario = await require('./calendario-academico')._interno.eventosParaAgenda(de, ate).catch(() => []);
+        res.json({ reservas: lista, podeEditar: editor, calendario });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

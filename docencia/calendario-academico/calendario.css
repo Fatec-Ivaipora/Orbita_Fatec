@@ -1,0 +1,122 @@
+/* Calendário Acadêmico (23/11/2026) — cores por tipo seguem as do site novo (azul Fatec, laranja, amarelo) */
+:root {
+  --ca-azul: #0051b2; --ca-azul-esc: #003263; --ca-azul-cl: #ecf3fb;
+  --ca-feriado: #c8252c; --ca-recesso: #f05a24; --ca-letivo: #0051b2; --ca-avaliacao: #8200da;
+  --ca-prazo: #b07a00; --ca-evento: #3d7a00; --ca-reuniao: #5b6b80; --ca-outro: #475569;
+  --ca-linha: #e2e8f0; --ca-tinta: #0f1b33; --ca-tinta2: #4b5a72;
+}
+.btn-primary, .btn-secondary { padding: 0 1rem; min-height: 38px; font-size: 0.86rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none; white-space: nowrap; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.hidden { display: none !important; }
+.ca-barra { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; padding: .8rem 1rem; margin-bottom: .9rem; }
+.ca-abas, .ca-vistas { display: inline-flex; background: #eef2f7; border-radius: 10px; padding: 3px; gap: 2px; }
+.ca-abas button, .ca-vistas button { border: 0; background: none; padding: .45rem .9rem; border-radius: 8px; font: inherit; font-weight: 700; font-size: .85rem; color: var(--ca-tinta2); cursor: pointer; }
+.ca-abas button[aria-selected="true"], .ca-vistas button[aria-selected="true"] { background: #fff; color: var(--ca-azul); box-shadow: 0 1px 2px rgba(15,27,51,.12); }
+.ca-abas button:focus-visible, .ca-vistas button:focus-visible { outline: 2px solid var(--ca-azul); outline-offset: 2px; }
+.ca-campo-sem { display: inline-flex; align-items: center; gap: .45rem; font-weight: 700; font-size: .85rem; color: var(--ca-tinta2); }
+.ca-campo-sem select { font: inherit; font-weight: 700; padding: .4rem .6rem; border: 1px solid var(--ca-linha); border-radius: 8px; background: #fff; color: var(--ca-tinta); }
+.ca-status { font-size: .75rem; font-weight: 800; padding: .2rem .6rem; border-radius: 999px; }
+.ca-status.modelo { background: #eef2f7; color: var(--ca-tinta2); }
+.ca-status.rascunho { background: #fff5e0; color: #8a5c00; }
+.ca-status.publicado { background: #dcfce7; color: #166534; }
+.ca-barra-acoes { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+.ca-resumo { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .8rem; }
+.ca-chip-f { border: 1px solid var(--ca-linha); background: #fff; border-radius: 999px; padding: .35rem .75rem; font: inherit; font-size: .8rem; font-weight: 700; color: var(--ca-tinta); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+.ca-chip-f b { font-variant-numeric: tabular-nums; }
+.ca-chip-f.ativo { border-color: var(--ca-azul); background: var(--ca-azul-cl); color: var(--ca-azul); }
+.ca-chip-f.alerta b { color: var(--ca-feriado); }
+.ca-chip-f.conferir b { color: #8a5c00; }
+.ca-bola { width: .6rem; height: .6rem; border-radius: 50%; display: inline-block; flex: none; }
+.ca-vistas { margin-bottom: .8rem; }
+
+/* lista */
+.ca-mes { margin-bottom: 1rem; }
+.ca-mes h3 { font-size: .9rem; color: var(--ca-azul-esc); margin: 0 0 .4rem; text-transform: none; letter-spacing: 0; }
+.ca-mes h3 small { color: var(--ca-tinta2); font-weight: 600; margin-left: .35rem; }
+.ca-item { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: .8rem; align-items: start; background: #fff; border: 1px solid var(--ca-linha); border-left: 4px solid var(--cor, var(--ca-outro)); border-radius: 10px; padding: .6rem .8rem; margin-bottom: .4rem; }
+.ca-item.conferir { background: #fffbf0; }
+.ca-data { font-weight: 800; color: var(--ca-tinta); font-variant-numeric: tabular-nums; font-size: .9rem; }
+.ca-data small { display: block; font-weight: 600; color: var(--ca-tinta2); font-size: .75rem; }
+.ca-tit { font-weight: 700; color: var(--ca-tinta); font-size: .9rem; }
+.ca-comp { color: var(--ca-tinta2); font-size: .8rem; margin-top: .1rem; }
+.ca-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+.ca-tag { font-size: .68rem; font-weight: 800; padding: .1rem .45rem; border-radius: 999px; background: #eef2f7; color: var(--ca-tinta2); }
+.ca-tag.tipo { background: color-mix(in srgb, var(--cor) 12%, #fff); color: var(--cor); }
+.ca-tag.oculto { text-decoration: line-through; opacity: .75; }
+.ca-tag.erro { background: #fde8e8; color: var(--ca-feriado); }
+.ca-tag.aviso { background: #fff5e0; color: #8a5c00; }
+.ca-tag.conf { background: #fff5e0; color: #8a5c00; }
+.ca-acoes { display: flex; gap: .35rem; align-items: center; }
+.ca-btn-mini { border: 1px solid var(--ca-linha); background: #fff; border-radius: 8px; padding: .3rem .55rem; font: inherit; font-size: .75rem; font-weight: 700; color: var(--ca-tinta); cursor: pointer; }
+.ca-btn-mini:hover { border-color: var(--ca-azul); color: var(--ca-azul); }
+.ca-btn-mini.ok { border-color: #86efac; color: #166534; }
+.ca-vazio { padding: 2rem 1rem; text-align: center; color: var(--ca-tinta2); background: #fff; border: 1px dashed var(--ca-linha); border-radius: 12px; }
+
+/* mês */
+.ca-grade-mes { background: #fff; border: 1px solid var(--ca-linha); border-radius: 12px; overflow: hidden; margin-bottom: 1rem; }
+.ca-grade-mes h3 { margin: 0; padding: .55rem .8rem; font-size: .9rem; color: #fff; background: var(--ca-azul); }
+.ca-grade { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ca-grade .cab { font-size: .7rem; font-weight: 800; color: var(--ca-tinta2); padding: .35rem; text-align: center; background: #f7f9fc; border-bottom: 1px solid var(--ca-linha); }
+.ca-cel { min-height: 5.4rem; border-right: 1px solid var(--ca-linha); border-bottom: 1px solid var(--ca-linha); padding: .25rem; font-size: .7rem; }
+.ca-cel.fds { background: #f7f9fc; }
+.ca-cel.feriado { background: #fdf0f0; }
+.ca-cel.fora { background: #fbfcfe; color: #b8c2d1; }
+.ca-cel-n { font-weight: 800; color: var(--ca-tinta2); }
+.ca-ev { display: block; margin-top: .15rem; padding: .1rem .3rem; border-radius: 5px; background: color-mix(in srgb, var(--cor) 14%, #fff); color: var(--cor); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border: 0; width: 100%; text-align: left; font-size: .68rem; font-family: inherit; }
+
+/* modais */
+.ca-modal-fundo { position: fixed; inset: 0; background: rgba(15,27,51,.45); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1000; }
+.ca-modal-fundo.hidden { display: none; }
+.ca-modal { background: #fff; border-radius: 14px; width: min(640px, 100%); max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(15,27,51,.25); }
+.ca-modal-p { width: min(560px, 100%); }
+.ca-modal-cab { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.1rem; border-bottom: 3px solid var(--ca-azul); }
+.ca-modal-cab h2 { margin: 0; font-size: 1.05rem; color: var(--ca-azul-esc); }
+.ca-x { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--ca-tinta2); }
+.ca-modal-corpo { padding: 1rem 1.1rem; overflow: auto; display: flex; flex-direction: column; gap: .7rem; }
+.ca-modal-rodape { display: flex; gap: .5rem; padding: .8rem 1.1rem; border-top: 1px solid var(--ca-linha); align-items: center; }
+.ca-espaco { flex: 1; }
+.ca-campo { display: flex; flex-direction: column; gap: .3rem; font-weight: 700; font-size: .82rem; color: var(--ca-tinta); }
+.ca-campo small { font-weight: 500; color: var(--ca-tinta2); }
+.ca-campo input, .ca-campo select, .ca-campo textarea { font: inherit; font-weight: 500; padding: .5rem .6rem; border: 1px solid var(--ca-linha); border-radius: 8px; }
+.ca-2col { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+.ca-checks { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: .85rem; font-weight: 600; }
+.ca-dica { margin: 0; font-size: .8rem; color: var(--ca-tinta2); line-height: 1.45; }
+.ca-dica.erro { color: var(--ca-feriado); font-weight: 700; }
+.ca-dica.aviso { color: #8a5c00; font-weight: 700; }
+.ca-origem { margin: 0; font-size: .72rem; color: var(--ca-tinta2); }
+.ca-check-sub { font-size: .82rem; font-weight: 700; color: var(--ca-feriado); }
+.ca-check-sub.hidden { display: none; }
+.ca-perigo { color: var(--ca-feriado) !important; }
+.ca-codigo { font-family: Consolas, monospace; font-size: .75rem; background: #f3f6fa; border: 1px solid var(--ca-linha); border-radius: 8px; padding: .5rem; word-break: break-all; }
+.ca-toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--ca-azul-esc); color: #fff; padding: .7rem 1.1rem; border-radius: 10px; font-weight: 600; z-index: 1100; max-width: 90vw; }
+.ca-toast.erro { background: var(--ca-feriado); }
+.ca-toast.hidden { display: none; }
+
+@media (max-width: 720px) {
+  .ca-item { grid-template-columns: 1fr; gap: .4rem; }
+  .ca-barra-acoes { margin-left: 0; width: 100%; }
+  .ca-2col { grid-template-columns: 1fr; }
+  .ca-cel { min-height: 3.6rem; }
+  .ca-ev { font-size: .6rem; }
+}
+
+/* dias letivos */
+.ca-dl-bloco { background: #fff; border: 1px solid var(--ca-linha); border-radius: 12px; padding: .9rem 1rem; margin-bottom: 1rem; }
+.ca-dl-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; }
+.ca-dl-cab h3 { margin: 0; font-size: 1rem; color: var(--ca-azul-esc); }
+.ca-dl-cab h3 small { font-size: .72rem; color: var(--ca-tinta2); font-weight: 600; margin-left: .3rem; }
+.ca-dl-res { font-size: .85rem; font-weight: 700; padding: .25rem .7rem; border-radius: 999px; }
+.ca-dl-res b { font-size: 1.05rem; }
+.ca-dl-res.ok { background: #dcfce7; color: #166534; }
+.ca-dl-res.baixo { background: #fde8e8; color: var(--ca-feriado); }
+.ca-dl-lim { display: flex; flex-wrap: wrap; gap: .7rem 1rem; align-items: flex-end; margin-bottom: .7rem; }
+.ca-dl-lim .ca-campo { min-width: 160px; }
+.ca-dl-lim .ca-campo small { font-weight: 500; }
+.ca-dl-tab-wrap { overflow-x: auto; }
+.ca-dl-tab { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.ca-dl-tab th, .ca-dl-tab td { border: 1px solid var(--ca-linha); padding: .35rem .5rem; text-align: center; }
+.ca-dl-tab thead th { background: var(--ca-azul); color: #fff; font-size: .75rem; }
+.ca-dl-tab tbody th { text-align: left; background: #f7f9fc; font-size: .78rem; }
+.ca-dl-tab .ca-dl-tot { font-weight: 800; background: var(--ca-azul-cl); color: var(--ca-azul-esc); }
+.ca-dl-tab .ca-dl-sub th, .ca-dl-tab .ca-dl-sub td { font-weight: 800; background: #eef2f7; }
+.ca-dl-ano { border-color: var(--ca-azul); }
