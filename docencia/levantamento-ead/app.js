@@ -67,6 +67,20 @@ async function copiar(txt, msg = 'Copiado.') {
 }
 const fecharModal = () => $('le-modal').classList.add('hidden');
 function abrirModal(titulo, html) { $('le-modal-titulo').textContent = titulo; $('le-modal-corpo').innerHTML = html; $('le-modal').classList.remove('hidden'); }
+// 23/11/2026: horário escolhido numa lista (os horários das aulas EAD + os que já estão na lista); "Outro horário" abre o campo livre
+const HORARIOS_PADRAO = ['19h30min - 20h30min', '20h30min - 21h30min'];
+const horariosConhecidos = () => [...new Set([...HORARIOS_PADRAO, ...(dados ? dados.disciplinas.map(d => d.horario).filter(Boolean) : [])])];
+function htmlHorario(atual) {
+  const lista = horariosConhecidos();
+  const outro = !!atual && !lista.includes(atual);
+  return `<label>Horário<select id="le-f-hor-sel"><option value="">— sem horário —</option>${lista.map(h => `<option value="${esc(h)}" ${h === atual ? 'selected' : ''}>${esc(h)}</option>`).join('')}<option value="__outro" ${outro ? 'selected' : ''}>Outro horário…</option></select>
+    <input type="text" id="le-f-hor" maxlength="40" value="${esc(outro ? atual : '')}" placeholder="ex.: 19h - 20h" class="${outro ? '' : 'hidden'}" style="margin-top:.35rem" aria-label="Outro horário"></label>`;
+}
+function lerHorario() {
+  const sel = $('le-f-hor-sel');
+  if (!sel) return undefined;
+  return sel.value === '__outro' ? ($('le-f-hor').value || '').trim() : sel.value;
+}
 
 // ---------------- dados derivados ----------------
 const salaDoProf = (prof) => (prof && dados.salaDoProfessor[chaveProf(prof)]) || null;
@@ -222,7 +236,7 @@ function renderDisciplinas() {
           <td><span class="ea-sub">${esc(quando(d.updatedAt))}<br>${esc(d.updatedBy || '')}</span></td></tr>`; }).join('')}</tbody></table></div>`
       : '<p class="ea-vazio">Nenhuma disciplina neste filtro.</p>'}
     </section>
-    <p class="ea-legenda">Clique na disciplina para editar. Esta é a mesma lista da Aulas EAD do T.I: o que você muda aqui aparece lá na hora, e o T.I recebe um aviso com o que mudou.</p>`;
+    <p class="ea-legenda">Clique na disciplina para editar. Esta é a mesma lista da Aulas EAD do T.I: o que você muda aqui aparece lá na hora. Depois que as aulas começam (início do 1º bimestre no calendário), a disciplina mudada fica em laranja para o T.I dar ciente.</p>`;
 }
 
 function htmlFormDisc(d) {
@@ -234,7 +248,7 @@ function htmlFormDisc(d) {
     <label>Carga horária<input type="text" id="le-f-ch" inputmode="numeric" maxlength="4" value="${v('ch')}"></label>
     <label>Professor (dá a aula)<input type="text" id="le-f-prof" maxlength="120" value="${v('professor')}" list="le-profs"></label>
     <label>Dia<select id="le-f-dia"><option value="">—</option>${DIAS.map(k => `<option value="${k}" ${d && d.dia === k ? 'selected' : ''}>${DIA_ROTULO[k]}</option>`).join('')}</select></label>
-    <label>Horário<input type="text" id="le-f-hor" maxlength="40" value="${v('horario')}" placeholder="19h30min - 20h30min"></label>
+    ${htmlHorario(d ? d.horario || '' : '')}
     <label>Unidades<select id="le-f-qtd">${[12, 6].map(q => `<option value="${q}" ${(d ? d.qtd : 12) === q ? 'selected' : ''}>${q} (${q === 12 ? 'semanal' : 'quinzenal'})</option>`).join('')}</select></label>
     <label class="ea-largo">Observação<input type="text" id="le-f-obs" maxlength="600" value="${v('obs')}"></label>
   </div>
@@ -249,15 +263,15 @@ function abrirDisciplina(id) {
     <p class="ea-sub" style="margin:-.4rem 0 1rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${ehQuinzenal(d) ? ' · <b>quinzenal</b> (6 UAs, a cada 15 dias)' : ' · semanal (12 UAs)'}${s ? ` · Zoom: <b>${esc(s.conta)} · ${esc(s.nome)}</b>` : d.professor ? ' · o T.I ainda não deu sala Zoom a este professor' : ''}${d.updatedBy ? `<br>Última mudança: ${esc(d.updatedBy)} em ${esc(quando(d.updatedAt))}` : ''}</p>
     ${quinzDivergente(d) ? `<div class="ea-card le-aviso">⚠️ ${ehQuinzenal(d) ? 'Está com 6 UAs (quinzenal), mas o nome não diz quinzenal.' : 'O nome diz quinzenal, mas está com 12 UAs (semanal).'} Confira o campo Unidades: ele define as datas do cronograma.</div>` : ''}
     ${outras.length ? `<div class="ea-card le-aviso${diasDiferentes(d) ? '' : ' le-aviso-ok'}"><b>A mesma disciplina em outras turmas</b>${diasDiferentes(d) ? ' · <span class="ea-alerta">dias ou horários diferentes</span>' : outras.every(x => x.dia) && d.dia ? ' · mesmo dia e horário' : ''}<br>
-      <span class="ea-sub">Cada turma tem o seu dia e horário: mudar aqui não muda as outras.</span>
-      <ul class="le-outras">${outras.map(x => `<li><button type="button" class="ea-link" data-le-abrir="${esc(x.id)}">${esc(x.cursoNome)} · ${esc(periodoTxt(x.periodo))}</button>: ${esc(diaHor(x))}${x.professor ? ` · ${esc(x.professor)}` : ''}${ehQuinzenal(x) ? ' · quinzenal' : ''}</li>`).join('')}</ul></div>` : ''}
+      <span class="ea-sub">${podeEditar ? 'Marque as turmas que devem ficar com o mesmo dia e horário desta: ao salvar, elas mudam junto.' : 'Cada turma tem o seu dia e horário.'}</span>
+      <ul class="le-outras">${outras.map(x => `<li>${podeEditar ? `<label class="le-outra-check"><input type="checkbox" data-le-junto="${esc(x.id)}" checked> ` : ''}<b>${esc(x.cursoNome)} · ${esc(periodoTxt(x.periodo))}</b>${podeEditar ? '</label>' : ''}: ${esc(diaHor(x))}${x.professor ? ` · ${esc(x.professor)}` : ''}${ehQuinzenal(x) ? ' · quinzenal' : ''} <button type="button" class="ea-link" data-le-abrir="${esc(x.id)}">abrir</button></li>`).join('')}</ul></div>` : ''}
     ${htmlFormDisc(d)}
     ${podeEditar ? `<div class="ea-modal-acoes">${d.temGravacao ? '<span class="ea-sub" style="margin-right:auto">Tem gravação marcada pelo T.I: só o T.I exclui.</span>' : `<button type="button" class="btn-secondary ea-perigo" data-le-excluir="${esc(d.id)}">Excluir disciplina</button>`}<button type="button" class="btn-primary" data-le-salvar="${esc(d.id)}">Salvar</button></div>` : ''}`);
   if (!podeEditar) $('le-modal-corpo').querySelectorAll('input,select').forEach(i => { i.disabled = true; });
 }
 function lerForm(novo) {
   const v = (id) => ($(id) ? $(id).value : undefined);
-  const corpo = { nome: v('le-f-nome'), periodo: v('le-f-periodo'), ch: v('le-f-ch'), professor: v('le-f-prof'), dia: v('le-f-dia'), horario: v('le-f-hor'), qtd: Number(v('le-f-qtd')), obs: v('le-f-obs') };
+  const corpo = { nome: v('le-f-nome'), periodo: v('le-f-periodo'), ch: v('le-f-ch'), professor: v('le-f-prof'), dia: v('le-f-dia'), horario: lerHorario(), qtd: Number(v('le-f-qtd')), obs: v('le-f-obs') };
   if (novo) Object.assign(corpo, { semestre: dados.semestre, cursoId: v('le-f-curso') });
   return corpo;
 }
@@ -559,18 +573,27 @@ async function acao(e) {
     if (t.dataset.leCriar !== undefined) {
       t.disabled = true;
       const nova = await apiFetch(`/${MODULO}/disciplinas`, { method: 'POST', body: JSON.stringify(lerForm(true)) });
-      trocaDisc({ ...nova, temGravacao: false, datasManuais: {} }); fecharModal(); toast('Disciplina cadastrada. O T.I foi avisado.'); return render();
+      trocaDisc({ ...nova, temGravacao: false, datasManuais: {} }); fecharModal(); toast('Disciplina cadastrada.'); return render();
     }
     if (t.dataset.leSalvar) {
       t.disabled = true;
-      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leSalvar)}`, { method: 'PUT', body: JSON.stringify(lerForm(false)) });
+      const corpo = lerForm(false);
+      const juntos = [...document.querySelectorAll('[data-le-junto]:checked')].map(i => i.dataset.leJunto);
+      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leSalvar)}`, { method: 'PUT', body: JSON.stringify(corpo) });
       const { itens, gravacoes, ...resto } = nova;
-      trocaDisc(resto); fecharModal(); toast('Salvo. O T.I foi avisado da mudança.'); return render();
+      trocaDisc(resto);
+      // mesma disciplina em outros cursos: leva o mesmo dia e horário pras turmas marcadas
+      let feitas = 0;
+      for (const id of juntos) {
+        const o = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ dia: corpo.dia, horario: corpo.horario }) });
+        const { itens: _i, gravacoes: _g, ...r2 } = o; trocaDisc(r2); feitas++;
+      }
+      fecharModal(); toast(feitas ? `Salvo nesta turma e em mais ${feitas}.` : 'Salvo.'); return render();
     }
     if (t.dataset.leExcluir) {
       if (!confirm('Excluir esta disciplina do levantamento? Ela sai também da Aulas EAD do T.I.')) return;
       await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leExcluir)}`, { method: 'DELETE' });
-      dados.disciplinas = dados.disciplinas.filter(d => d.id !== t.dataset.leExcluir); fecharModal(); toast('Disciplina excluída. O T.I foi avisado.'); return render();
+      dados.disciplinas = dados.disciplinas.filter(d => d.id !== t.dataset.leExcluir); fecharModal(); toast('Disciplina excluída.'); return render();
     }
     if (t.dataset.leRelModo) { relModo = t.dataset.leRelModo; return render(); }
     if (t.dataset.leMsg) return copiar(mensagemProfessor(t.dataset.leMsg), `Mensagem para ${t.dataset.leMsg} copiada. É só colar no WhatsApp.`);
@@ -621,6 +644,12 @@ function ligarEventos() {
   $('le-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (!b) return; aba = b.dataset.aba; render(); });
   tela().addEventListener('click', acao);
   tela().addEventListener('change', mudanca);
+  $('le-modal-corpo').addEventListener('change', (e) => {
+    if (e.target.id !== 'le-f-hor-sel') return;
+    const outro = e.target.value === '__outro';
+    $('le-f-hor').classList.toggle('hidden', !outro);
+    if (outro) $('le-f-hor').focus();
+  });
   let tBusca;
   tela().addEventListener('input', (e) => {
     if (e.target.dataset.leBusca === undefined) return;

@@ -99,6 +99,14 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Levantamento EaD: horário em lista, mesma disciplina em várias turmas, e avisos do T.I só em laranja
+- Autor: Claude Code (pedido do Suporte AVA)
+- Levantamento EaD (`docencia/levantamento-ead/app.js`, `levantamento.css`): o horário passa a ser escolhido numa lista (19h30min - 20h30min, 20h30min - 21h30min e os que já estão cadastrados) com "Outro horário…" para digitar. O campo antigo mostrava o horário de exemplo em cinza e parecia preenchido. Quando a mesma disciplina existe em outros cursos, a tela mostra essas turmas com uma caixa marcada; ao salvar, o mesmo dia e horário vão também para as turmas marcadas.
+- Aulas EAD do T.I (`ti/ead-aulas/app.js`, `ead-aulas.css`): a disciplina que o EAD mudou fica em laranja na lista, com o que mudou. Dentro dela aparece o quadro "O EAD mudou esta disciplina" e o botão "Ciente". O quadro do topo virou "Mudanças do EAD", com "Ciente" por item e "Ciente de todas".
+- `core/notificacoes.js`: saiu o aviso "Levantamento EaD" que aparecia em toda tela do T.I.
+- `src/rotas/ead-aulas.js` (GET /alteracoes): uma mudança feita antes do início do 1º bimestre do semestre (calendário das UAs, definido pelo coordenador do EAD) não fica pendente para o T.I, porque o semestre ainda está sendo montado. Sem calendário, também não fica. O histórico continua gravado.
+- Permissões (Firestore, sem código): Carlos Durlo (coordenador EAD) com nível individual 3 no Levantamento EaD e 2 (só ver) na Aulas EAD; cargo EAD com nível 3 no Levantamento EaD; Portfólio Reflexivo com nível 3 para Coordenação Medicina e ADM N2.
+
 ### [2026-11-23] Medicina: módulo Portfólio Reflexivo (correção dos portfólios da SCIC com a mesma matriz)
 - Autor: Claude Code (pedido do Suporte AVA)
 - Branch: feat/portfolio-med

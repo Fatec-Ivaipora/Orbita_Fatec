@@ -83,3 +83,6 @@
   .le-cr-lista { gap: 0; }
   .ea-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* 23/11/2026: marcar as outras turmas da mesma disciplina que recebem o mesmo dia e horário */
+.le-outra-check { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+.le-outra-check input { width: 18px; height: 18px; }

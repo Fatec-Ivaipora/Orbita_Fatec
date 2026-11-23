@@ -515,9 +515,13 @@ router.get('/alteracoes', verifyToken, checkPermission, async (req, res) => {
     try {
         const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 180);
         const desde = new Date(Date.now() - dias * 86400000).toISOString();
-        const snap = await db.collection(COL_ALT).where('em', '>=', desde).get();
+        const [snap, semSnap] = await Promise.all([db.collection(COL_ALT).where('em', '>=', desde).get(), db.collection(COL_SEM).get()]);
         const uid = req.user.uid;
-        const itens = snap.docs.map(d => { const x = d.data(); const { vistoPor, ...resto } = x; return { id: d.id, ...resto, visto: (vistoPor || []).includes(uid) || x.porUid === uid }; })
+        // 23/11/2026: mudança feita antes de as aulas do semestre começarem (início do 1º bimestre no calendário das UAs)
+        // não vira aviso pro T.I — o EAD ainda está montando o semestre. Sem calendário = ainda não começou.
+        const inicio = new Map(semSnap.docs.map(d => [d.id, ((d.data() || {}).calendario || {}).inicio1 || '']));
+        const antesDasAulas = (x) => { const i = inicio.get(x.semestre); return !i || String(x.em || '').slice(0, 10) < i; };
+        const itens = snap.docs.map(d => { const x = d.data(); const { vistoPor, ...resto } = x; return { id: d.id, ...resto, visto: (vistoPor || []).includes(uid) || x.porUid === uid || antesDasAulas(x) }; })
             .sort((a, b) => String(b.em).localeCompare(String(a.em)));
         res.json({ pendentes: itens.filter(i => !i.visto).length, itens: itens.slice(0, 300) });
     } catch (err) { res.status(500).json({ error: err.message }); }

@@ -135,3 +135,10 @@
 .ea-zoom-cel span { font-size: 0.8rem; font-weight: 600; color: var(--orb-tinta); }
 .ea-ferramentas label.ea-check-label { flex-direction: row; align-items: center; gap: 0.4rem; min-height: 38px; font-size: 0.84rem; cursor: pointer; }
 .ea-check-label input { width: 17px; height: 17px; accent-color: var(--orb-marca); }
+/* 23/11/2026: disciplina que o EAD mudou (depois do início das aulas) fica em laranja até o T.I dar "Ciente" */
+.ea-aviso-ead { border-left-color: var(--orb-laranja); }
+.ea-tabela tr.ea-mudou td { background: var(--orb-alerta-suave); }
+.ea-tabela tr.ea-mudou td:first-child { box-shadow: inset 4px 0 0 var(--orb-laranja); }
+.ea-pill-mudou { background: var(--orb-laranja); color: #fff; }
+.ea-aviso-disc { margin-bottom: .9rem; }
+.ea-aviso-disc .ea-aviso-lista { padding-left: 1.2rem; max-height: none; }
