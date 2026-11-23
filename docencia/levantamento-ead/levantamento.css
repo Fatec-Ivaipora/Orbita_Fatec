@@ -83,3 +83,12 @@
   .le-cr-lista { gap: 0; }
   .ea-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* 23/11/2026: marcar as outras turmas da mesma disciplina que recebem o mesmo dia e horário */
+.le-outra-check { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+.le-outra-check input { width: 18px; height: 18px; }
+
+/* 23/11/2026: o que a coordenação definiu no Matrizes e Horários; nome do professor conferido no Edubox */
+.le-aviso-coord { border-left-color: #2563a8; }
+.le-pill-coord { background: #e3eefb; color: #1d4f8a; }
+.le-edubox { font-size: .84rem; margin: -.3rem 0 .8rem; color: var(--orb-alerta); }
+.le-preenchido { outline: 2px solid #2563a8; outline-offset: 1px; }

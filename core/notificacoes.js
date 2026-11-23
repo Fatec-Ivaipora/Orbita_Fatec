@@ -54,7 +54,7 @@ export function iniciarNotificacoes(role) {
     await atualizar(token);
     oferecerPermissao();
     setInterval(() => atualizar(token), RECARREGAR_MS);
-    if (ROLES_AVISO_EAD.includes(role)) { avisarMudancasEad(token); setInterval(() => avisarMudancasEad(token), RECARREGAR_MS); }
+    // 23/11/2026: as mudanças do EAD não aparecem mais em toda tela do T.I — ficam em laranja na própria Aulas EAD
     setInterval(conferirLembretes, CONFERIR_MS);
   });
 }
@@ -79,36 +79,6 @@ async function atualizar(token) {
   atividades = dados.atividades || [];
   avisarAvisosNovos(dados.avisos || []);
   conferirLembretes();
-}
-
-// ---------- Mudanças do EAD no Levantamento EaD (23/11/2026) ----------
-// O EAD edita as disciplinas EAD (a mesma lista da Aulas EAD) e o calendário das UAs pelo Levantamento EaD;
-// o T.I recebe aqui "o EAD mudou N coisa(s)" em qualquer tela, até marcar como visto na Aulas EAD.
-// Na própria Aulas EAD não aparece (lá tem o quadro com o que mudou).
-const ROLES_AVISO_EAD = ['ti'];
-const K_EAD_ALT = 'orbita_ead_alt_cache';
-async function avisarMudancasEad(token) {
-  if (location.pathname.includes('/ti/ead-aulas')) return;
-  try {
-    let c = ler(localStorage, K_EAD_ALT, null);
-    if (!c || c.uid !== meuUid || Date.now() - c.ts > CACHE_FRESCO_MS) {
-      const r = await apiGet('/ead-aulas/alteracoes?dias=30', token);
-      const pend = (r.itens || []).filter(i => !i.visto);
-      c = { uid: meuUid, ts: Date.now(), total: pend.length, ultimo: pend[0] ? { id: pend[0].id, por: pend[0].por, em: pend[0].em, disciplina: pend[0].disciplina } : null };
-      gravar(localStorage, K_EAD_ALT, c);
-    }
-    if (!c.total || !c.ultimo) return;
-    const quando = c.ultimo.em ? new Date(c.ultimo.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às') : '';
-    mostrar({
-      titulo: '📝 Levantamento EaD',
-      texto: `O EAD mudou ${c.total} coisa(s) nas disciplinas EAD (dia, horário, professor ou calendário).`,
-      meta: `Última: ${nomeProprio(c.ultimo.por)}${quando ? ' · ' + quando : ''}`,
-      acao: 'Ver na Aulas EAD',
-      link: '/ti/ead-aulas/index.html',
-      tag: `ead-alt|${c.ultimo.id}`,
-      classe: 'notif-aviso'
-    });
-  } catch (e) { /* sem acesso ou sem conexão: tenta na próxima rodada */ }
 }
 
 // ---------- Avisos não lidos do Quadro de Avisos ----------

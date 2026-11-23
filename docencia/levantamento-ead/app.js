@@ -49,6 +49,8 @@ let filtroCurso = '', filtroDia = '', filtroProf = '', filtroSinal = '', busca =
 let relModo = 'curso', relCurso = '', relProf = '';
 let crCurso = '', crDisc = '', crBim = '1';
 let importando = null;
+// 23/11/2026: o que a coordenação definiu no Matrizes e Horários + nome do professor conferido no Edubox
+let sug = null, discAberta = '';
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -67,6 +69,20 @@ async function copiar(txt, msg = 'Copiado.') {
 }
 const fecharModal = () => $('le-modal').classList.add('hidden');
 function abrirModal(titulo, html) { $('le-modal-titulo').textContent = titulo; $('le-modal-corpo').innerHTML = html; $('le-modal').classList.remove('hidden'); }
+// 23/11/2026: horário escolhido numa lista (os horários das aulas EAD + os que já estão na lista); "Outro horário" abre o campo livre
+const HORARIOS_PADRAO = ['19h30min - 20h30min', '20h30min - 21h30min'];
+const horariosConhecidos = () => [...new Set([...HORARIOS_PADRAO, ...(dados ? dados.disciplinas.map(d => d.horario).filter(Boolean) : [])])];
+function htmlHorario(atual) {
+  const lista = horariosConhecidos();
+  const outro = !!atual && !lista.includes(atual);
+  return `<label>Horário<select id="le-f-hor-sel"><option value="">— sem horário —</option>${lista.map(h => `<option value="${esc(h)}" ${h === atual ? 'selected' : ''}>${esc(h)}</option>`).join('')}<option value="__outro" ${outro ? 'selected' : ''}>Outro horário…</option></select>
+    <input type="text" id="le-f-hor" maxlength="40" value="${esc(outro ? atual : '')}" placeholder="ex.: 19h - 20h" class="${outro ? '' : 'hidden'}" style="margin-top:.35rem" aria-label="Outro horário"></label>`;
+}
+function lerHorario() {
+  const sel = $('le-f-hor-sel');
+  if (!sel) return undefined;
+  return sel.value === '__outro' ? ($('le-f-hor').value || '').trim() : sel.value;
+}
 
 // ---------------- dados derivados ----------------
 const salaDoProf = (prof) => (prof && dados.salaDoProfessor[chaveProf(prof)]) || null;
@@ -98,6 +114,9 @@ function sinais(d) {
     const resumo = dif ? ' · dias/horários diferentes' : comDia.length > 1 && comDia.length === o.length + 1 ? ' · mesmo dia' : '';
     out.push(`<span class="ea-pill ${dif ? 'alerta' : ''}" title="${esc(o.map(x => `${x.cursoNome} (${periodoTxt(x.periodo)}): ${diaHor(x)}`).join('\n'))}">em ${o.length + 1} turmas${resumo}</span>`);
   }
+  const sd = sugDiferente(d);
+  if (sd.length) out.push(`<span class="ea-pill le-pill-coord" title="${esc(sd.map(x => `${diaHor(x)} · ${x.professor}`).join('\n'))}">coordenação definiu: ${esc(diaHor(sd[0]))}${sd.length > 1 ? ` (+${sd.length - 1})` : ''}</span>`);
+  if (nomeAConferir(d)) { const r = nomeEdubox(d.professor); out.push(r.nome ? `<span class="ea-pill alerta">no Edubox: ${esc(r.nome)}</span>` : `<span class="ea-pill alerta">professor não achado no Edubox</span>`); }
   if (quinzDivergente(d)) out.push(`<span class="ea-pill crit">${ehQuinzenal(d) ? 'tem 6 UAs, mas o nome não diz quinzenal' : 'nome diz quinzenal, mas tem 12 UAs'}</span>`);
   return out.length ? `<span class="le-sinais">${out.join('')}</span>` : '';
 }
@@ -160,8 +179,26 @@ function feriadosNacionais(semestre) {
 async function carregar() {
   const sem = $('le-semestre').value;
   tela().innerHTML = '<p class="ea-vazio">Carregando...</p>';
+  sug = null;
   try { dados = await apiFetch(`/${MODULO}/?semestre=${encodeURIComponent(sem)}`); render(); }
-  catch (e) { tela().innerHTML = `<div class="ea-card ea-erro">${esc(e.message)}</div>`; }
+  catch (e) { tela().innerHTML = `<div class="ea-card ea-erro">${esc(e.message)}</div>`; return; }
+  carregarSugestoes(sem);
+}
+async function carregarSugestoes(sem) {
+  try { const r = await apiFetch(`/${MODULO}/sugestoes?semestre=${encodeURIComponent(sem)}`); if (dados && dados.semestre === sem) { sug = r; if (aba === 'disciplinas' && $('le-modal').classList.contains('hidden')) render(); } }
+  catch (e) { sug = null; }
+}
+const sugDe = (d) => (sug && sug.sugestoes[d.id]) || [];
+const igualSug = (d, x) => x.dia === (d.dia || '') && norm(x.horario) === norm(d.horario) && chaveProf(x.professor) === chaveProf(d.professor);
+const sugDiferente = (d) => sugDe(d).filter(x => !igualSug(d, x));
+const nomeEdubox = (p) => (sug && p ? sug.professores[p] || null : null);
+const nomeAConferir = (d) => { const r = nomeEdubox(d.professor); return !!(r && (r.status || r.nome !== d.professor)); };
+// professores com nome diferente do Edubox → [{ de, para, n }]
+function trocasNome() {
+  if (!sug || !dados) return [];
+  const m = new Map();
+  dados.disciplinas.forEach(d => { const r = nomeEdubox(d.professor); if (r && r.nome && r.nome !== d.professor) { const t = m.get(d.professor) || { de: d.professor, para: r.nome, n: 0 }; t.n++; m.set(d.professor, t); } });
+  return [...m.values()].sort((a, b) => a.de.localeCompare(b.de, 'pt-BR'));
 }
 function render() {
   document.querySelectorAll('#le-abas .aba').forEach(b => { const on = b.dataset.aba === aba; b.classList.toggle('ativa', on); b.setAttribute('aria-selected', on); });
@@ -188,7 +225,7 @@ function renderDisciplinas() {
   const lista = ds.filter(d => (!filtroCurso || d.cursoId === filtroCurso) && (!b || norm(`${d.nome} ${d.professor}`).includes(b))
     && (!filtroDia || (filtroDia === '-' ? !d.dia : d.dia === filtroDia))
     && (!filtroProf || (filtroProf === '-' ? !d.professor : chaveProf(d.professor) === filtroProf))
-    && (!filtroSinal || (filtroSinal === 'quinzenal' ? ehQuinzenal(d) : filtroSinal === 'comum' ? comuns(d).length > 0 : filtroSinal === 'dif' ? diasDiferentes(d) : quinzDivergente(d))));
+    && (!filtroSinal || (filtroSinal === 'coord' ? sugDiferente(d).length > 0 : filtroSinal === 'nome' ? nomeAConferir(d) : filtroSinal === 'quinzenal' ? ehQuinzenal(d) : filtroSinal === 'comum' ? comuns(d).length > 0 : filtroSinal === 'dif' ? diasDiferentes(d) : quinzDivergente(d))));
   const semProf = lista.filter(d => !d.professor).length, semDia = lista.filter(d => !d.dia || !d.horario).length;
   const semSala = lista.filter(d => d.professor && !salaDoProf(d.professor)).length;
   const nDif = ds.filter(diasDiferentes).length, nQuinz = ds.filter(ehQuinzenal).length, nDiverg = ds.filter(quinzDivergente).length;
@@ -202,11 +239,17 @@ function renderDisciplinas() {
       <div class="ea-num"><b class="${nDif ? 'ea-alerta' : ''}">${nDif}</b><span>em turmas com dias diferentes</span></div>
     </section>
     ${nDiverg ? `<div class="ea-card le-aviso">⚠️ <b>${nDiverg} disciplina(s)</b> com o nome "quinzenal" e 12 UAs (ou 6 UAs sem "quinzenal" no nome). Confira o campo Unidades: ele define as datas do cronograma. <button type="button" class="ea-link" data-le-sinal="diverge">ver quais</button></div>` : ''}
+    ${(() => {
+      const nc = ds.filter(d => sugDiferente(d).length).length, tn = trocasNome();
+      return (nc ? `<div class="ea-card le-aviso le-aviso-coord">📋 <b>${nc} disciplina(s)</b> com dia, horário ou professor definido pela coordenação no Matrizes e Horários diferente do levantamento. Abra a disciplina para aceitar. <button type="button" class="ea-link" data-le-sinal="coord">ver quais</button></div>` : '')
+        + (tn.length ? `<div class="ea-card le-aviso">👤 <b>${tn.length} professor(es)</b> com o nome diferente do Edubox (ex.: ${esc(tn[0].de)} → ${esc(tn[0].para)}). ${podeEditar ? '<button type="button" class="ea-link" data-le-nomes>Corrigir nomes pelo Edubox</button> · ' : ''}<button type="button" class="ea-link" data-le-sinal="nome">ver quais</button></div>` : '')
+        + (sug && !sug.eduboxOk ? '<div class="ea-card le-aviso">O Edubox não respondeu agora: os nomes dos professores não foram conferidos.</div>' : '');
+    })()}
     <div class="ea-ferramentas">
       <label>Curso<select class="select-filter" data-le-f="curso"><option value="">Todos os cursos</option>${cursosComDisc().map(([id, n]) => `<option value="${esc(id)}" ${filtroCurso === id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
       <label>Dia<select class="select-filter" data-le-f="dia"><option value="">Todos os dias</option>${DIAS.map(k => `<option value="${k}" ${filtroDia === k ? 'selected' : ''}>${DIA_ROTULO[k]}</option>`).join('')}<option value="-" ${filtroDia === '-' ? 'selected' : ''}>Sem dia</option></select></label>
       <label>Professor<select class="select-filter" data-le-f="prof" style="max-width:240px"><option value="">Todos</option>${professores().map(p => `<option value="${esc(chaveProf(p))}" ${filtroProf === chaveProf(p) ? 'selected' : ''}>${esc(p)}</option>`).join('')}<option value="-" ${filtroProf === '-' ? 'selected' : ''}>Sem professor</option></select></label>
-      <label>Sinal<select class="select-filter" data-le-f="sinal"><option value="">Todas</option><option value="quinzenal" ${filtroSinal === 'quinzenal' ? 'selected' : ''}>Quinzenais</option><option value="comum" ${filtroSinal === 'comum' ? 'selected' : ''}>Comuns a várias turmas</option><option value="dif" ${filtroSinal === 'dif' ? 'selected' : ''}>Turmas com dias diferentes</option><option value="diverge" ${filtroSinal === 'diverge' ? 'selected' : ''}>Quinzenal a conferir</option></select></label>
+      <label>Sinal<select class="select-filter" data-le-f="sinal"><option value="">Todas</option><option value="quinzenal" ${filtroSinal === 'quinzenal' ? 'selected' : ''}>Quinzenais</option><option value="comum" ${filtroSinal === 'comum' ? 'selected' : ''}>Comuns a várias turmas</option><option value="dif" ${filtroSinal === 'dif' ? 'selected' : ''}>Turmas com dias diferentes</option><option value="diverge" ${filtroSinal === 'diverge' ? 'selected' : ''}>Quinzenal a conferir</option><option value="coord" ${filtroSinal === 'coord' ? 'selected' : ''}>Coordenação definiu diferente</option><option value="nome" ${filtroSinal === 'nome' ? 'selected' : ''}>Nome do professor a conferir</option></select></label>
       <label>Buscar<input class="ea-input ea-busca" data-le-busca value="${esc(busca)}" placeholder="Disciplina ou professor"></label>
       ${filtroCurso || filtroDia || filtroProf || filtroSinal || busca ? '<button type="button" class="btn-secondary" data-le-limpar>Limpar filtros</button>' : ''}
       <div class="ea-direita">${botoes}</div>
@@ -222,7 +265,7 @@ function renderDisciplinas() {
           <td><span class="ea-sub">${esc(quando(d.updatedAt))}<br>${esc(d.updatedBy || '')}</span></td></tr>`; }).join('')}</tbody></table></div>`
       : '<p class="ea-vazio">Nenhuma disciplina neste filtro.</p>'}
     </section>
-    <p class="ea-legenda">Clique na disciplina para editar. Esta é a mesma lista da Aulas EAD do T.I: o que você muda aqui aparece lá na hora, e o T.I recebe um aviso com o que mudou.</p>`;
+    <p class="ea-legenda">Clique na disciplina para editar. Esta é a mesma lista da Aulas EAD do T.I: o que você muda aqui aparece lá na hora. Depois que as aulas começam (início do 1º bimestre no calendário), a disciplina mudada fica em laranja para o T.I dar ciente.</p>`;
 }
 
 function htmlFormDisc(d) {
@@ -234,7 +277,7 @@ function htmlFormDisc(d) {
     <label>Carga horária<input type="text" id="le-f-ch" inputmode="numeric" maxlength="4" value="${v('ch')}"></label>
     <label>Professor (dá a aula)<input type="text" id="le-f-prof" maxlength="120" value="${v('professor')}" list="le-profs"></label>
     <label>Dia<select id="le-f-dia"><option value="">—</option>${DIAS.map(k => `<option value="${k}" ${d && d.dia === k ? 'selected' : ''}>${DIA_ROTULO[k]}</option>`).join('')}</select></label>
-    <label>Horário<input type="text" id="le-f-hor" maxlength="40" value="${v('horario')}" placeholder="19h30min - 20h30min"></label>
+    ${htmlHorario(d ? d.horario || '' : '')}
     <label>Unidades<select id="le-f-qtd">${[12, 6].map(q => `<option value="${q}" ${(d ? d.qtd : 12) === q ? 'selected' : ''}>${q} (${q === 12 ? 'semanal' : 'quinzenal'})</option>`).join('')}</select></label>
     <label class="ea-largo">Observação<input type="text" id="le-f-obs" maxlength="600" value="${v('obs')}"></label>
   </div>
@@ -243,21 +286,38 @@ function htmlFormDisc(d) {
 function abrirDisciplina(id) {
   const d = dados.disciplinas.find(x => x.id === id);
   if (!d) return;
+  discAberta = id;
   const s = salaDoProf(d.professor);
   const outras = comuns(d);
   abrirModal(nomeDisc(d), `
     <p class="ea-sub" style="margin:-.4rem 0 1rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${ehQuinzenal(d) ? ' · <b>quinzenal</b> (6 UAs, a cada 15 dias)' : ' · semanal (12 UAs)'}${s ? ` · Zoom: <b>${esc(s.conta)} · ${esc(s.nome)}</b>` : d.professor ? ' · o T.I ainda não deu sala Zoom a este professor' : ''}${d.updatedBy ? `<br>Última mudança: ${esc(d.updatedBy)} em ${esc(quando(d.updatedAt))}` : ''}</p>
     ${quinzDivergente(d) ? `<div class="ea-card le-aviso">⚠️ ${ehQuinzenal(d) ? 'Está com 6 UAs (quinzenal), mas o nome não diz quinzenal.' : 'O nome diz quinzenal, mas está com 12 UAs (semanal).'} Confira o campo Unidades: ele define as datas do cronograma.</div>` : ''}
     ${outras.length ? `<div class="ea-card le-aviso${diasDiferentes(d) ? '' : ' le-aviso-ok'}"><b>A mesma disciplina em outras turmas</b>${diasDiferentes(d) ? ' · <span class="ea-alerta">dias ou horários diferentes</span>' : outras.every(x => x.dia) && d.dia ? ' · mesmo dia e horário' : ''}<br>
-      <span class="ea-sub">Cada turma tem o seu dia e horário: mudar aqui não muda as outras.</span>
-      <ul class="le-outras">${outras.map(x => `<li><button type="button" class="ea-link" data-le-abrir="${esc(x.id)}">${esc(x.cursoNome)} · ${esc(periodoTxt(x.periodo))}</button>: ${esc(diaHor(x))}${x.professor ? ` · ${esc(x.professor)}` : ''}${ehQuinzenal(x) ? ' · quinzenal' : ''}</li>`).join('')}</ul></div>` : ''}
+      <span class="ea-sub">${podeEditar ? 'Marque as turmas que devem ficar com o mesmo dia e horário desta: ao salvar, elas mudam junto.' : 'Cada turma tem o seu dia e horário.'}</span>
+      <ul class="le-outras">${outras.map(x => `<li>${podeEditar ? `<label class="le-outra-check"><input type="checkbox" data-le-junto="${esc(x.id)}" checked> ` : ''}<b>${esc(x.cursoNome)} · ${esc(periodoTxt(x.periodo))}</b>${podeEditar ? '</label>' : ''}: ${esc(diaHor(x))}${x.professor ? ` · ${esc(x.professor)}` : ''}${ehQuinzenal(x) ? ' · quinzenal' : ''} <button type="button" class="ea-link" data-le-abrir="${esc(x.id)}">abrir</button></li>`).join('')}</ul></div>` : ''}
+    ${(() => {
+      const ss = sugDe(d);
+      if (!ss.length) return '';
+      return `<div class="ea-card le-aviso le-aviso-coord"><b>Definido pela coordenação no Matrizes e Horários</b>
+        <ul class="le-outras">${ss.map((x, i) => `<li><b>${esc(diaHor(x))}</b>${x.professor ? ` · ${esc(x.professor)}` : ''}
+          ${igualSug(d, x) ? ' <span class="ea-pill bom">igual ao levantamento</span>' : podeEditar ? ` <button type="button" class="btn-secondary btn-mini" data-le-aceitar="${i}">Aceitar</button>` : ''}
+          <span class="ea-sub">${esc(nomeBonito(x.coordenador || 'Coordenação'))} definiu${x.em ? ` em ${esc(quando(x.em))}` : ''} · ${esc(x.turmas.join(', '))}</span></li>`).join('')}</ul>
+        ${podeEditar ? '<span class="ea-sub">Aceitar preenche o formulário abaixo. Confira e clique em Salvar.</span>' : ''}</div>`;
+    })()}
     ${htmlFormDisc(d)}
+    ${(() => {
+      const r = nomeEdubox(d.professor);
+      if (!r) return '';
+      if (r.nome && r.nome !== d.professor) return `<p class="le-edubox">No Edubox o nome é <b>${esc(r.nome)}</b>.${podeEditar ? ` <button type="button" class="ea-link" data-le-renomear="${esc(d.professor)}" data-le-para="${esc(r.nome)}">Corrigir em todas as disciplinas</button>` : ''}</p>`;
+      if (r.status) return `<p class="le-edubox">${r.status === 'ambiguo' ? 'Há mais de um professor no Edubox com esse nome: escreva o nome completo.' : 'Não achei esse professor no Edubox: confira o nome.'}</p>`;
+      return '';
+    })()}
     ${podeEditar ? `<div class="ea-modal-acoes">${d.temGravacao ? '<span class="ea-sub" style="margin-right:auto">Tem gravação marcada pelo T.I: só o T.I exclui.</span>' : `<button type="button" class="btn-secondary ea-perigo" data-le-excluir="${esc(d.id)}">Excluir disciplina</button>`}<button type="button" class="btn-primary" data-le-salvar="${esc(d.id)}">Salvar</button></div>` : ''}`);
   if (!podeEditar) $('le-modal-corpo').querySelectorAll('input,select').forEach(i => { i.disabled = true; });
 }
 function lerForm(novo) {
   const v = (id) => ($(id) ? $(id).value : undefined);
-  const corpo = { nome: v('le-f-nome'), periodo: v('le-f-periodo'), ch: v('le-f-ch'), professor: v('le-f-prof'), dia: v('le-f-dia'), horario: v('le-f-hor'), qtd: Number(v('le-f-qtd')), obs: v('le-f-obs') };
+  const corpo = { nome: v('le-f-nome'), periodo: v('le-f-periodo'), ch: v('le-f-ch'), professor: v('le-f-prof'), dia: v('le-f-dia'), horario: lerHorario(), qtd: Number(v('le-f-qtd')), obs: v('le-f-obs') };
   if (novo) Object.assign(corpo, { semestre: dados.semestre, cursoId: v('le-f-curso') });
   return corpo;
 }
@@ -559,18 +619,64 @@ async function acao(e) {
     if (t.dataset.leCriar !== undefined) {
       t.disabled = true;
       const nova = await apiFetch(`/${MODULO}/disciplinas`, { method: 'POST', body: JSON.stringify(lerForm(true)) });
-      trocaDisc({ ...nova, temGravacao: false, datasManuais: {} }); fecharModal(); toast('Disciplina cadastrada. O T.I foi avisado.'); return render();
+      trocaDisc({ ...nova, temGravacao: false, datasManuais: {} }); fecharModal(); toast('Disciplina cadastrada.'); return render();
     }
     if (t.dataset.leSalvar) {
       t.disabled = true;
-      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leSalvar)}`, { method: 'PUT', body: JSON.stringify(lerForm(false)) });
+      const corpo = lerForm(false);
+      const juntos = [...document.querySelectorAll('[data-le-junto]:checked')].map(i => i.dataset.leJunto);
+      const nova = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leSalvar)}`, { method: 'PUT', body: JSON.stringify(corpo) });
       const { itens, gravacoes, ...resto } = nova;
-      trocaDisc(resto); fecharModal(); toast('Salvo. O T.I foi avisado da mudança.'); return render();
+      trocaDisc(resto);
+      // mesma disciplina em outros cursos: leva o mesmo dia e horário pras turmas marcadas
+      let feitas = 0;
+      for (const id of juntos) {
+        const o = await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ dia: corpo.dia, horario: corpo.horario }) });
+        const { itens: _i, gravacoes: _g, ...r2 } = o; trocaDisc(r2); feitas++;
+      }
+      fecharModal(); toast(feitas ? `Salvo nesta turma e em mais ${feitas}.` : 'Salvo.'); return render();
+    }
+    if (t.dataset.leAceitar !== undefined) {
+      const d = dados.disciplinas.find(x => x.id === discAberta);
+      const x = d && sugDe(d)[Number(t.dataset.leAceitar)];
+      if (!x) return;
+      if (x.dia) $('le-f-dia').value = x.dia;
+      const sel = $('le-f-hor-sel');
+      if (x.horario) {
+        if ([...sel.options].some(o => o.value === x.horario)) { sel.value = x.horario; $('le-f-hor').classList.add('hidden'); }
+        else { sel.value = '__outro'; $('le-f-hor').value = x.horario; $('le-f-hor').classList.remove('hidden'); }
+      }
+      const mesmaPessoa = x.professor && nomeEdubox(d.professor) && nomeEdubox(d.professor).nome === x.professor;
+      if (x.professor && !mesmaPessoa) $('le-f-prof').value = x.professor;
+      ['le-f-dia', 'le-f-hor-sel', 'le-f-prof'].forEach(i => { $(i).classList.add('le-preenchido'); });
+      $('le-f-dia').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return toast(mesmaPessoa ? 'Dia e horário preenchidos. O nome do professor é corrigido em "Corrigir nomes pelo Edubox" (leva a sala Zoom junto). Confira e clique em Salvar.' : 'Preenchido com o que a coordenação definiu. Confira e clique em Salvar.');
+    }
+    if (t.dataset.leRenomear) {
+      const de = t.dataset.leRenomear, para = t.dataset.lePara;
+      if (!confirm(`Trocar "${de}" por "${para}" (nome do Edubox) em todas as disciplinas EAD de ${dados.semestre}? A sala Zoom do professor vai junto.`)) return;
+      const r = await apiFetch(`/${MODULO}/professores/renomear`, { method: 'POST', body: JSON.stringify({ semestre: dados.semestre, trocas: [{ de, para }] }) });
+      fecharModal(); toast(r.message); return carregar();
+    }
+    if (t.dataset.leNomes !== undefined) {
+      const tn = trocasNome();
+      return abrirModal('Corrigir nomes pelo Edubox', `<p class="ea-sub" style="margin:-.4rem 0 .8rem;font-size:.85rem">O nome que está no levantamento é trocado pelo nome do cadastro do Edubox em todas as disciplinas EAD de ${esc(dados.semestre)}. A sala Zoom que o T.I deu ao professor vai junto. Desmarque o que não for a mesma pessoa.</p>
+        <div class="ea-tabela-wrap"><table class="ea-tabela"><thead><tr><th></th><th>No levantamento</th><th>No Edubox</th><th>Disciplinas</th></tr></thead>
+        <tbody>${tn.map((x, i) => `<tr><td><input type="checkbox" data-le-troca="${i}" checked aria-label="Corrigir ${esc(x.de)}"></td><td>${esc(x.de)}</td><td><b>${esc(x.para)}</b></td><td>${x.n}</td></tr>`).join('')}</tbody></table></div>
+        <div class="ea-modal-acoes"><button type="button" class="btn-secondary" data-le-fechar>Cancelar</button><button type="button" class="btn-primary" data-le-confirmar-nomes>Corrigir os marcados</button></div>`);
+    }
+    if (t.dataset.leConfirmarNomes !== undefined) {
+      const tn = trocasNome();
+      const trocas = [...document.querySelectorAll('[data-le-troca]:checked')].map(i => tn[Number(i.dataset.leTroca)]).filter(Boolean).map(x => ({ de: x.de, para: x.para }));
+      if (!trocas.length) return toast('Marque pelo menos um professor.', 'erro');
+      t.disabled = true; t.textContent = 'Corrigindo...';
+      const r = await apiFetch(`/${MODULO}/professores/renomear`, { method: 'POST', body: JSON.stringify({ semestre: dados.semestre, trocas }) });
+      fecharModal(); toast(r.message); return carregar();
     }
     if (t.dataset.leExcluir) {
       if (!confirm('Excluir esta disciplina do levantamento? Ela sai também da Aulas EAD do T.I.')) return;
       await apiFetch(`/${MODULO}/disciplinas/${encodeURIComponent(t.dataset.leExcluir)}`, { method: 'DELETE' });
-      dados.disciplinas = dados.disciplinas.filter(d => d.id !== t.dataset.leExcluir); fecharModal(); toast('Disciplina excluída. O T.I foi avisado.'); return render();
+      dados.disciplinas = dados.disciplinas.filter(d => d.id !== t.dataset.leExcluir); fecharModal(); toast('Disciplina excluída.'); return render();
     }
     if (t.dataset.leRelModo) { relModo = t.dataset.leRelModo; return render(); }
     if (t.dataset.leMsg) return copiar(mensagemProfessor(t.dataset.leMsg), `Mensagem para ${t.dataset.leMsg} copiada. É só colar no WhatsApp.`);
@@ -621,6 +727,12 @@ function ligarEventos() {
   $('le-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (!b) return; aba = b.dataset.aba; render(); });
   tela().addEventListener('click', acao);
   tela().addEventListener('change', mudanca);
+  $('le-modal-corpo').addEventListener('change', (e) => {
+    if (e.target.id !== 'le-f-hor-sel') return;
+    const outro = e.target.value === '__outro';
+    $('le-f-hor').classList.toggle('hidden', !outro);
+    if (outro) $('le-f-hor').focus();
+  });
   let tBusca;
   tela().addEventListener('input', (e) => {
     if (e.target.dataset.leBusca === undefined) return;

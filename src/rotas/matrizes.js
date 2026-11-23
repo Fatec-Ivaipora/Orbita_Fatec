@@ -769,4 +769,4 @@ router.put('/ajuste/:semestre/:cursoId/:turma/:disciplina', verifyToken, verifyT
 });
 
 module.exports = router;
-module.exports._interno = { limparAulas, acharConflitos, podeVer, limparDisciplina, aplicarAjustes };
+module.exports._interno = { limparAulas, acharConflitos, podeVer, limparDisciplina, aplicarAjustes, normNome, acharProfessor, ehContratar, titulacoesEdubox };

@@ -99,6 +99,17 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Levantamento EaD: horário em lista, mesma disciplina em várias turmas, e avisos do T.I só em laranja
+- Autor: Claude Code (pedido do Suporte AVA)
+- Levantamento EaD (`docencia/levantamento-ead/app.js`, `levantamento.css`): o horário passa a ser escolhido numa lista (19h30min - 20h30min, 20h30min - 21h30min e os que já estão cadastrados) com "Outro horário…" para digitar. O campo antigo mostrava o horário de exemplo em cinza e parecia preenchido. Quando a mesma disciplina existe em outros cursos, a tela mostra essas turmas com uma caixa marcada; ao salvar, o mesmo dia e horário vão também para as turmas marcadas.
+- Aulas EAD do T.I (`ti/ead-aulas/app.js`, `ead-aulas.css`): a disciplina que o EAD mudou fica em laranja na lista, com o que mudou. Dentro dela aparece o quadro "O EAD mudou esta disciplina" e o botão "Ciente". O quadro do topo virou "Mudanças do EAD", com "Ciente" por item e "Ciente de todas".
+- `core/notificacoes.js`: saiu o aviso "Levantamento EaD" que aparecia em toda tela do T.I.
+- `src/rotas/ead-aulas.js` (GET /alteracoes): uma mudança feita antes do início do 1º bimestre do semestre (calendário das UAs, definido pelo coordenador do EAD) não fica pendente para o T.I, porque o semestre ainda está sendo montado. Sem calendário, também não fica. O histórico continua gravado.
+- Levantamento EaD × Matrizes e Horários: nova rota GET /api/levantamento-ead/sugestoes. Ela pega em matrizes_grade o dia, o horário e o professor que o coordenador do curso definiu para a mesma disciplina, pelo curso, nome e período. A tela mostra "Coordenação definiu" na lista, um quadro no topo e, dentro da disciplina, quem definiu, quando e para quais turmas, com o botão Aceitar. Aceitar só preenche o formulário; quem salva é a pessoa.
+- Nome do professor conferido com o Edubox, pela mesma lista da titulação do Matrizes (src/rotas/matrizes.js agora exporta normNome, acharProfessor, ehContratar e titulacoesEdubox em _interno). Exemplo: "Elisangela Consentino" vira "Elisangela Costa Consentino". A rota nova POST /api/levantamento-ead/professores/renomear troca o nome em todas as disciplinas do semestre e copia a sala Zoom do professor para o nome novo. A tela de "Corrigir nomes pelo Edubox" vem com tudo marcado e a pessoa confirma.
+- Sala Zoom: é uma por professor no semestre, o mesmo link em todos os dias e horários. A correção de nomes junta as salas das grafias antigas no nome do Edubox e tira as grafias antigas do mapa. Fica a sala que o nome novo já tinha; se não tiver, a da grafia com mais disciplinas. Se havia mais de uma sala, a resposta avisa para falar com o T.I. A busca no Edubox também aceita grafia parecida (Z/S, Y/I, PH/F, TH/T, letra dobrada): por exemplo, Elizangela → Elisangela Costa Consentino. O Aceitar do Matrizes não troca o nome quando é a mesma pessoa, porque isso criaria uma segunda sala; o nome é corrigido pela correção de nomes.
+- Permissões (Firestore, sem código): Carlos Durlo (coordenador EAD) com nível individual 3 no Levantamento EaD e 2 (só ver) na Aulas EAD; cargo EAD com nível 3 no Levantamento EaD; Portfólio Reflexivo com nível 3 para Coordenação Medicina e ADM N2.
+
 ### [2026-11-23] Medicina: módulo Portfólio Reflexivo (correção dos portfólios da SCIC com a mesma matriz)
 - Autor: Claude Code (pedido do Suporte AVA)
 - Branch: feat/portfolio-med
