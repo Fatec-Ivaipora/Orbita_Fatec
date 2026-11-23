@@ -45,7 +45,7 @@ const diaSemanaDe = (iso) => DIA_CURTO[new Date(`${iso}T12:00:00`).getDay()];
 
 let currentUser = null, appInitialized = false, initializedRole = null, podeEditar = false, meuUid = '';
 let dados = null, aba = 'disciplinas';
-let filtroCurso = '', filtroDia = '', filtroProf = '', busca = '';
+let filtroCurso = '', filtroDia = '', filtroProf = '', filtroSinal = '', busca = '';
 let relModo = 'curso', relCurso = '', relProf = '';
 let crCurso = '', crDisc = '', crBim = '1';
 let importando = null;
@@ -74,6 +74,33 @@ const tutorDo = (cursoId) => (dados.tutorDoCurso[cursoId] || null);
 const meusCursos = () => Object.entries(dados.tutorDoCurso).filter(([, t]) => t && t.uid === meuUid).map(([c]) => c);
 const cursosComDisc = () => [...new Map(dados.disciplinas.map(d => [d.cursoId, d.cursoNome])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
 const professores = () => [...new Set(dados.disciplinas.map(d => d.professor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+// Quinzenal (6 UAs, a cada 15 dias) e disciplina comum a várias turmas (23/11/2026, "para não acontecer erros").
+// Cada turma tem o seu registro (dia e horário próprios): Empreendedorismo da Agronomia pode ser na quinta e o do
+// Direito na sexta. A tela sinaliza quando a mesma disciplina está em dias/horários diferentes entre as turmas e
+// quando o nome diz "quinzenal" mas a disciplina tem 12 UAs (ou o contrário) — isso muda as datas do cronograma.
+const RE_QUINZ = /\s*\(\s*quinzenal\s*\)\s*/i;
+const ehQuinzenal = (d) => (d.qtd || 12) === 6;
+const nomeDisc = (d) => nomeBonito(String(d.nome || '').replace(RE_QUINZ, ' ').trim());
+const chaveDisc = (d) => norm(String(d.nome || '').replace(RE_QUINZ, ' '));
+const quinzDivergente = (d) => RE_QUINZ.test(d.nome || '') !== ehQuinzenal(d);
+const comuns = (d) => dados.disciplinas.filter(x => x.id !== d.id && chaveDisc(x) === chaveDisc(d));
+const diaHor = (d) => `${d.dia ? DIA_ROTULO[d.dia] : 'sem dia'}${d.horario ? ` · ${d.horario}` : ''}`;
+// só compara turmas que já têm dia (a que está sem dia já aparece como "sem dia")
+const chaveDiaHor = (x) => `${x.dia}|${norm(x.horario)}`;
+const diasDiferentes = (d) => !!d.dia && comuns(d).some(x => x.dia && chaveDiaHor(x) !== chaveDiaHor(d));
+const pillQuinz = (d) => (ehQuinzenal(d) ? ' <span class="ea-pill marca">quinzenal</span>' : '');
+function sinais(d) {
+  const o = comuns(d), out = [];
+  if (o.length) {
+    const dif = diasDiferentes(d);
+    const comDia = [d, ...o].filter(x => x.dia);
+    const resumo = dif ? ' · dias/horários diferentes' : comDia.length > 1 && comDia.length === o.length + 1 ? ' · mesmo dia' : '';
+    out.push(`<span class="ea-pill ${dif ? 'alerta' : ''}" title="${esc(o.map(x => `${x.cursoNome} (${periodoTxt(x.periodo)}): ${diaHor(x)}`).join('\n'))}">em ${o.length + 1} turmas${resumo}</span>`);
+  }
+  if (quinzDivergente(d)) out.push(`<span class="ea-pill crit">${ehQuinzenal(d) ? 'tem 6 UAs, mas o nome não diz quinzenal' : 'nome diz quinzenal, mas tem 12 UAs'}</span>`);
+  return out.length ? `<span class="le-sinais">${out.join('')}</span>` : '';
+}
 
 // Unidades da disciplina na ordem da Aulas EAD: UA-01..metade, REV-1, resto, REV-2
 function itensDe(d) {
@@ -160,31 +187,37 @@ function renderDisciplinas() {
   const b = norm(busca);
   const lista = ds.filter(d => (!filtroCurso || d.cursoId === filtroCurso) && (!b || norm(`${d.nome} ${d.professor}`).includes(b))
     && (!filtroDia || (filtroDia === '-' ? !d.dia : d.dia === filtroDia))
-    && (!filtroProf || (filtroProf === '-' ? !d.professor : chaveProf(d.professor) === filtroProf)));
+    && (!filtroProf || (filtroProf === '-' ? !d.professor : chaveProf(d.professor) === filtroProf))
+    && (!filtroSinal || (filtroSinal === 'quinzenal' ? ehQuinzenal(d) : filtroSinal === 'comum' ? comuns(d).length > 0 : filtroSinal === 'dif' ? diasDiferentes(d) : quinzDivergente(d))));
   const semProf = lista.filter(d => !d.professor).length, semDia = lista.filter(d => !d.dia || !d.horario).length;
   const semSala = lista.filter(d => d.professor && !salaDoProf(d.professor)).length;
+  const nDif = ds.filter(diasDiferentes).length, nQuinz = ds.filter(ehQuinzenal).length, nDiverg = ds.filter(quinzDivergente).length;
   tela().innerHTML = `
     <section class="ea-resumo">
       <div class="ea-num"><b>${lista.length}</b><span>disciplinas EAD</span></div>
       <div class="ea-num"><b class="${semProf ? 'ea-alerta' : ''}">${semProf}</b><span>sem professor</span></div>
       <div class="ea-num"><b class="${semDia ? 'ea-alerta' : ''}">${semDia}</b><span>sem dia ou horário</span></div>
       <div class="ea-num"><b>${semSala}</b><span>professor sem sala Zoom (T.I)</span></div>
+      <div class="ea-num"><b>${nQuinz}</b><span>quinzenais</span></div>
+      <div class="ea-num"><b class="${nDif ? 'ea-alerta' : ''}">${nDif}</b><span>em turmas com dias diferentes</span></div>
     </section>
+    ${nDiverg ? `<div class="ea-card le-aviso">⚠️ <b>${nDiverg} disciplina(s)</b> com o nome "quinzenal" e 12 UAs (ou 6 UAs sem "quinzenal" no nome). Confira o campo Unidades: ele define as datas do cronograma. <button type="button" class="ea-link" data-le-sinal="diverge">ver quais</button></div>` : ''}
     <div class="ea-ferramentas">
       <label>Curso<select class="select-filter" data-le-f="curso"><option value="">Todos os cursos</option>${cursosComDisc().map(([id, n]) => `<option value="${esc(id)}" ${filtroCurso === id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
       <label>Dia<select class="select-filter" data-le-f="dia"><option value="">Todos os dias</option>${DIAS.map(k => `<option value="${k}" ${filtroDia === k ? 'selected' : ''}>${DIA_ROTULO[k]}</option>`).join('')}<option value="-" ${filtroDia === '-' ? 'selected' : ''}>Sem dia</option></select></label>
       <label>Professor<select class="select-filter" data-le-f="prof" style="max-width:240px"><option value="">Todos</option>${professores().map(p => `<option value="${esc(chaveProf(p))}" ${filtroProf === chaveProf(p) ? 'selected' : ''}>${esc(p)}</option>`).join('')}<option value="-" ${filtroProf === '-' ? 'selected' : ''}>Sem professor</option></select></label>
+      <label>Sinal<select class="select-filter" data-le-f="sinal"><option value="">Todas</option><option value="quinzenal" ${filtroSinal === 'quinzenal' ? 'selected' : ''}>Quinzenais</option><option value="comum" ${filtroSinal === 'comum' ? 'selected' : ''}>Comuns a várias turmas</option><option value="dif" ${filtroSinal === 'dif' ? 'selected' : ''}>Turmas com dias diferentes</option><option value="diverge" ${filtroSinal === 'diverge' ? 'selected' : ''}>Quinzenal a conferir</option></select></label>
       <label>Buscar<input class="ea-input ea-busca" data-le-busca value="${esc(busca)}" placeholder="Disciplina ou professor"></label>
-      ${filtroCurso || filtroDia || filtroProf || busca ? '<button type="button" class="btn-secondary" data-le-limpar>Limpar filtros</button>' : ''}
+      ${filtroCurso || filtroDia || filtroProf || filtroSinal || busca ? '<button type="button" class="btn-secondary" data-le-limpar>Limpar filtros</button>' : ''}
       <div class="ea-direita">${botoes}</div>
     </div>
     <section class="ea-card ea-card-tabela">
       ${lista.length ? `<div class="ea-tabela-wrap"><table class="ea-tabela">
         <thead><tr><th>Disciplina</th><th>Professor</th><th>Dia e horário</th><th>Tutor do curso</th><th>Última mudança</th></tr></thead>
         <tbody>${lista.map(d => { const t = tutorDo(d.cursoId); return `<tr class="ea-clicavel" data-le-disc="${esc(d.id)}" tabindex="0">
-          <td><b>${esc(nomeBonito(d.nome))}</b><span class="ea-sub">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}</span></td>
+          <td><b>${esc(nomeDisc(d))}</b>${pillQuinz(d)}<span class="ea-sub">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}</span>${sinais(d)}</td>
           <td>${d.professor ? esc(d.professor) : '<span class="ea-pill alerta">definir</span>'}</td>
-          <td class="ea-nowrap">${d.dia ? esc(DIA_ROTULO[d.dia]) : '<span class="ea-pill alerta">sem dia</span>'}${d.horario ? `<span class="ea-sub">${esc(d.horario)}</span>` : ''}</td>
+          <td class="ea-nowrap">${d.dia ? esc(DIA_ROTULO[d.dia]) : '<span class="ea-pill alerta">sem dia</span>'}${d.horario ? `<span class="ea-sub">${esc(d.horario)}</span>` : ''}${ehQuinzenal(d) ? '<span class="ea-sub">a cada 15 dias</span>' : ''}</td>
           <td>${t ? esc(nomeBonito(t.nome)) : '<span class="ea-sub">—</span>'}</td>
           <td><span class="ea-sub">${esc(quando(d.updatedAt))}<br>${esc(d.updatedBy || '')}</span></td></tr>`; }).join('')}</tbody></table></div>`
       : '<p class="ea-vazio">Nenhuma disciplina neste filtro.</p>'}
@@ -211,8 +244,13 @@ function abrirDisciplina(id) {
   const d = dados.disciplinas.find(x => x.id === id);
   if (!d) return;
   const s = salaDoProf(d.professor);
-  abrirModal(nomeBonito(d.nome), `
-    <p class="ea-sub" style="margin:-.4rem 0 1rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${s ? ` · Zoom: <b>${esc(s.conta)} · ${esc(s.nome)}</b>` : d.professor ? ' · o T.I ainda não deu sala Zoom a este professor' : ''}${d.updatedBy ? `<br>Última mudança: ${esc(d.updatedBy)} em ${esc(quando(d.updatedAt))}` : ''}</p>
+  const outras = comuns(d);
+  abrirModal(nomeDisc(d), `
+    <p class="ea-sub" style="margin:-.4rem 0 1rem;font-size:.84rem">${esc(d.cursoNome)} · ${esc(periodoTxt(d.periodo))}${ehQuinzenal(d) ? ' · <b>quinzenal</b> (6 UAs, a cada 15 dias)' : ' · semanal (12 UAs)'}${s ? ` · Zoom: <b>${esc(s.conta)} · ${esc(s.nome)}</b>` : d.professor ? ' · o T.I ainda não deu sala Zoom a este professor' : ''}${d.updatedBy ? `<br>Última mudança: ${esc(d.updatedBy)} em ${esc(quando(d.updatedAt))}` : ''}</p>
+    ${quinzDivergente(d) ? `<div class="ea-card le-aviso">⚠️ ${ehQuinzenal(d) ? 'Está com 6 UAs (quinzenal), mas o nome não diz quinzenal.' : 'O nome diz quinzenal, mas está com 12 UAs (semanal).'} Confira o campo Unidades: ele define as datas do cronograma.</div>` : ''}
+    ${outras.length ? `<div class="ea-card le-aviso${diasDiferentes(d) ? '' : ' le-aviso-ok'}"><b>A mesma disciplina em outras turmas</b>${diasDiferentes(d) ? ' · <span class="ea-alerta">dias ou horários diferentes</span>' : outras.every(x => x.dia) && d.dia ? ' · mesmo dia e horário' : ''}<br>
+      <span class="ea-sub">Cada turma tem o seu dia e horário: mudar aqui não muda as outras.</span>
+      <ul class="le-outras">${outras.map(x => `<li><button type="button" class="ea-link" data-le-abrir="${esc(x.id)}">${esc(x.cursoNome)} · ${esc(periodoTxt(x.periodo))}</button>: ${esc(diaHor(x))}${x.professor ? ` · ${esc(x.professor)}` : ''}${ehQuinzenal(x) ? ' · quinzenal' : ''}</li>`).join('')}</ul></div>` : ''}
     ${htmlFormDisc(d)}
     ${podeEditar ? `<div class="ea-modal-acoes">${d.temGravacao ? '<span class="ea-sub" style="margin-right:auto">Tem gravação marcada pelo T.I: só o T.I exclui.</span>' : `<button type="button" class="btn-secondary ea-perigo" data-le-excluir="${esc(d.id)}">Excluir disciplina</button>`}<button type="button" class="btn-primary" data-le-salvar="${esc(d.id)}">Salvar</button></div>` : ''}`);
   if (!podeEditar) $('le-modal-corpo').querySelectorAll('input,select').forEach(i => { i.disabled = true; });
@@ -230,7 +268,7 @@ function lerForm(novo) {
 function mensagemProfessor(prof) {
   const ds = dados.disciplinas.filter(d => d.professor && chaveProf(d.professor) === chaveProf(prof));
   const s = salaDoProf(prof);
-  const linhas = ds.map(d => `📚 *${nomeBonito(d.nome)}* (${d.cursoNome}${d.periodo ? ` · ${periodoTxt(d.periodo)}` : ''})\n📅 ${d.dia ? DIA_ROTULO[d.dia] : 'dia a definir'}${d.horario ? ` · ${d.horario}` : ''}`).join('\n\n');
+  const linhas = ds.map(d => `📚 *${nomeDisc(d)}* (${d.cursoNome}${d.periodo ? ` · ${periodoTxt(d.periodo)}` : ''})\n📅 ${d.dia ? DIA_ROTULO[d.dia] : 'dia a definir'}${d.horario ? ` · ${d.horario}` : ''}${ehQuinzenal(d) ? ' · *QUINZENAL* (a cada 15 dias)' : ''}`).join('\n\n');
   const zoom = s ? `🔗 *Link da sala Zoom* (${s.conta} · ${s.nome}):\n${s.link}${s.senha ? `\n🔑 Senha da reunião: *${s.senha}*` : ''}` : '🔗 Link da sala Zoom: (o T.I ainda não definiu a sala)';
   const anfitriao = s && s.senhaAnfitriao ? `
 
@@ -259,14 +297,14 @@ function relDisciplinas() {
 }
 function textoRelatorio() {
   const ds = relDisciplinas();
-  const linha = (d) => `- ${nomeBonito(d.nome)}${d.periodo ? ` (${periodoTxt(d.periodo)})` : ''}: ${d.professor || 'sem professor'} · ${d.dia ? DIA_ROTULO[d.dia] : 'sem dia'}${d.horario ? ` · ${d.horario}` : ''}${(() => { const s = salaDoProf(d.professor); return s ? ` · Zoom ${s.conta}: ${s.link}` : ''; })()}`;
+  const linha = (d) => `- ${nomeDisc(d)}${d.periodo ? ` (${periodoTxt(d.periodo)})` : ''}: ${d.professor || 'sem professor'} · ${d.dia ? DIA_ROTULO[d.dia] : 'sem dia'}${d.horario ? ` · ${d.horario}` : ''}${ehQuinzenal(d) ? ' · QUINZENAL' : ''}${(() => { const s = salaDoProf(d.professor); return s ? ` · Zoom ${s.conta}: ${s.link}` : ''; })()}`;
   const out = [`DISCIPLINAS EaD ${dados.semestre}`];
   if (relModo === 'curso') {
     const grupos = new Map(); ds.forEach(d => { if (!grupos.has(d.cursoNome)) grupos.set(d.cursoNome, []); grupos.get(d.cursoNome).push(d); });
     grupos.forEach((l, curso) => { const t = tutorDo(l[0].cursoId); out.push('', `${curso.toUpperCase()}${t ? ` — tutor(a): ${nomeBonito(t.nome)}` : ''}`, ...l.map(linha)); });
   } else {
     const grupos = new Map(); ds.forEach(d => { if (!grupos.has(d.professor)) grupos.set(d.professor, []); grupos.get(d.professor).push(d); });
-    [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(p => out.push('', p.toUpperCase(), ...grupos.get(p).map(d => `- ${nomeBonito(d.nome)} (${d.cursoNome}${d.periodo ? `, ${periodoTxt(d.periodo)}` : ''}) · ${d.dia ? DIA_ROTULO[d.dia] : 'sem dia'}${d.horario ? ` · ${d.horario}` : ''}`), ...(salaDoProf(p) ? [`  Zoom ${salaDoProf(p).conta}: ${salaDoProf(p).link}`] : [])));
+    [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(p => out.push('', p.toUpperCase(), ...grupos.get(p).map(d => `- ${nomeDisc(d)}${ehQuinzenal(d) ? ' [QUINZENAL]' : ''} (${d.cursoNome}${d.periodo ? `, ${periodoTxt(d.periodo)}` : ''}) · ${d.dia ? DIA_ROTULO[d.dia] : 'sem dia'}${d.horario ? ` · ${d.horario}` : ''}`), ...(salaDoProf(p) ? [`  Zoom ${salaDoProf(p).conta}: ${salaDoProf(p).link}`] : [])));
   }
   return out.join('\n');
 }
@@ -279,7 +317,7 @@ function renderRelatorio() {
     return [...grupos.entries()].map(([cid, l]) => { const t = tutorDo(cid); return `<section class="ea-card le-rel-bloco">
       <div class="le-rel-topo"><h3>${esc(l[0].cursoNome)}</h3><span class="ea-sub">${t ? `Tutor(a): <b>${esc(nomeBonito(t.nome))}</b>` : 'Sem tutor definido'} · ${l.length} disciplina(s)</span></div>
       <div class="ea-tabela-wrap"><table class="ea-tabela"><thead><tr><th>Disciplina</th><th>Professor</th><th>Dia e horário</th><th>Sala Zoom</th><th class="le-nao-imprime"></th></tr></thead><tbody>
-      ${l.map(d => `<tr><td><b>${esc(nomeBonito(d.nome))}</b><span class="ea-sub">${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}</span></td>
+      ${l.map(d => `<tr><td><b>${esc(nomeDisc(d))}</b>${pillQuinz(d)}<span class="ea-sub">${esc(periodoTxt(d.periodo))}${d.ch ? ` · ${d.ch} h` : ''}</span>${sinais(d)}</td>
         <td>${d.professor ? esc(d.professor) : '<span class="ea-pill alerta">definir</span>'}</td>
         <td class="ea-nowrap">${d.dia ? esc(DIA_ROTULO[d.dia]) : '—'}<span class="ea-sub">${esc(d.horario || '')}</span></td>
         <td>${linhaZoom(d.professor)}</td>
@@ -292,7 +330,7 @@ function renderRelatorio() {
       <div class="le-rel-topo"><h3>${esc(p)}</h3><span class="ea-sub">${l.length} disciplina(s)</span><button type="button" class="btn-primary btn-mini le-nao-imprime" data-le-msg="${esc(p)}">Copiar mensagem ao professor</button></div>
       <p class="le-zoom-linha">${linhaZoom(p)}</p>
       <div class="ea-tabela-wrap"><table class="ea-tabela"><thead><tr><th>Disciplina</th><th>Curso</th><th>Dia e horário</th><th>Tutor do curso</th></tr></thead><tbody>
-      ${l.map(d => { const t = tutorDo(d.cursoId); return `<tr><td><b>${esc(nomeBonito(d.nome))}</b></td><td>${esc(d.cursoNome)}<span class="ea-sub">${esc(periodoTxt(d.periodo))}</span></td>
+      ${l.map(d => { const t = tutorDo(d.cursoId); return `<tr><td><b>${esc(nomeDisc(d))}</b>${pillQuinz(d)}${sinais(d)}</td><td>${esc(d.cursoNome)}<span class="ea-sub">${esc(periodoTxt(d.periodo))}</span></td>
         <td class="ea-nowrap">${d.dia ? esc(DIA_ROTULO[d.dia]) : '—'}<span class="ea-sub">${esc(d.horario || '')}</span></td><td>${t ? esc(nomeBonito(t.nome)) : '—'}</td></tr>`; }).join('')}
       </tbody></table></div></section>`; }).join('') || '<p class="ea-vazio">Nenhum professor neste filtro.</p>';
   };
@@ -325,22 +363,23 @@ function htmlCronograma(d, bim) {
   const fim = dd[dd.length - 1] || (fech && fech.data) || '';
   const alertas = ini && fim ? feriadosNoPeriodo(ini, fim) : [];
   let n = 0;
-  return `<article class="le-cr">
+  return `<article class="le-cr" data-le-cr-id="${esc(d.id)}">
     <header class="le-cr-topo">
       <div class="le-cr-logo"><img src="/img/fatec-ivp-horizontal.png" alt="FATEC Ivaiporã"></div>
       <div class="le-cr-titulo"><b>CRONOGRAMA EaD</b><span>${bim}º BIMESTRE • ${esc(dados.semestre)}</span></div>
       <svg class="le-cr-ico" viewBox="0 0 48 40" aria-hidden="true"><rect x="3" y="3" width="42" height="28" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 37h16M24 31v6" stroke="currentColor" stroke-width="3"/><rect x="9" y="9" width="14" height="8" rx="1" fill="currentColor" opacity=".5"/></svg>
     </header>
     <div class="le-cr-info">
-      <div><span class="le-cr-rot">DISCIPLINA</span><b>${esc(nomeBonito(d.nome))}</b></div>
+      <div><span class="le-cr-rot">CURSO</span><b>${esc(d.cursoNome)}${d.periodo ? `<small>${esc(periodoTxt(d.periodo))}</small>` : ''}</b></div>
+      <div><span class="le-cr-rot">DISCIPLINA</span><b>${esc(nomeDisc(d))}</b></div>
       <div><span class="le-cr-rot">PROFESSOR</span><b>${esc(d.professor || 'a definir')}</b></div>
-      <div><span class="le-cr-rot">DIA DA SEMANA</span><b class="le-cr-dia">${esc(d.dia ? DIA_ROTULO[d.dia].toUpperCase() : 'A DEFINIR')}</b></div>
+      <div><span class="le-cr-rot">DIA DA SEMANA</span><b class="le-cr-dia">${esc(d.dia ? DIA_ROTULO[d.dia].toUpperCase() : 'A DEFINIR')}${ehQuinzenal(d) ? '<span class="le-cr-quinz">QUINZENAL</span>' : ''}</b></div>
       <div><span class="le-cr-rot">HORÁRIO</span><b>${esc(d.horario || 'a definir')}</b></div>
     </div>
     <div class="le-cr-fech"><span class="le-cr-fech-ico">!</span><b>FECHAMENTO DAS TRILHAS:</b><span class="le-cr-fech-val">${fech ? `${esc(dataBR(fech.data))} (${esc(diaSemanaDe(fech.data))})` : 'a definir'}</span>${fech && fech.hora ? `<span class="le-cr-fech-val">${esc(fech.hora.replace(':', 'h'))}</span>` : ''}</div>
     <div class="le-cr-corpo">
       <section class="le-cr-aulas">
-        <div class="le-cr-aulas-topo"><b>CRONOGRAMA DAS AULAS</b>${d.dia ? `<span>${esc(DIA_ROTULO[d.dia].toUpperCase())}</span>` : ''}</div>
+        <div class="le-cr-aulas-topo"><b>CRONOGRAMA DAS AULAS</b>${d.dia ? `<span>${esc(DIA_ROTULO[d.dia].toUpperCase())}${ehQuinzenal(d) ? ' · QUINZENAL' : ''}</span>` : ''}</div>
         ${doBim.map(it => { if (!it.revisao) n++; return `<div class="le-cr-linha${it.revisao ? ' rev' : ''}"><span class="le-cr-num">${it.revisao ? '★' : String(n).padStart(2, '0')}</span><b>${it.revisao ? 'REVISÃO' : `AULA ${String(n).padStart(2, '0')}`}</b><span class="le-cr-ua">${esc(it.ua)}</span><span class="le-cr-data">${esc(dataBR(datas[it.id]) || '—')}</span></div>`; }).join('')}
       </section>
       <section class="le-cr-alertas">
@@ -361,9 +400,9 @@ function renderCronograma() {
   tela().innerHTML = `
     <div class="ea-ferramentas le-nao-imprime">
       <label>Curso<select class="select-filter" data-le-cr-curso><option value="">Todos os cursos</option>${cursosComDisc().map(([id, n]) => `<option value="${esc(id)}" ${crCurso === id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
-      <label>Disciplina<select class="select-filter" data-le-cr-disc style="max-width:300px"><option value="">Todas (${doCurso.length})</option>${doCurso.map(d => `<option value="${esc(d.id)}" ${crDisc === d.id ? 'selected' : ''}>${esc(nomeBonito(d.nome))} · ${esc(d.cursoNome)}</option>`).join('')}</select></label>
+      <label>Disciplina<select class="select-filter" data-le-cr-disc style="max-width:300px"><option value="">Todas (${doCurso.length})</option>${doCurso.map(d => `<option value="${esc(d.id)}" ${crDisc === d.id ? 'selected' : ''}>${esc(nomeDisc(d))}${ehQuinzenal(d) ? ' (quinzenal)' : ''} · ${esc(d.cursoNome)}${d.periodo ? ` · ${esc(periodoTxt(d.periodo))}` : ''}</option>`).join('')}</select></label>
       <label>Bimestre<select class="select-filter" data-le-cr-bim><option value="1" ${crBim === '1' ? 'selected' : ''}>1º bimestre</option><option value="2" ${crBim === '2' ? 'selected' : ''}>2º bimestre</option></select></label>
-      <div class="ea-direita"><button type="button" class="btn-secondary" data-le-calendario>Calendário e fechamento</button>${alvo.length ? `<button type="button" class="btn-secondary" data-le-png>Baixar imagem${alvo.length > 1 ? 'ns' : ''}</button><button type="button" class="btn-primary" data-le-imprimir>Imprimir / PDF</button>` : ''}</div>
+      <div class="ea-direita"><button type="button" class="btn-secondary" data-le-calendario>Calendário e fechamento</button>${alvo.length ? `<button type="button" class="btn-secondary" data-le-png>${alvo.length > 1 ? (crCurso ? 'Baixar imagens do curso (.zip)' : 'Baixar imagens (.zip, uma pasta por curso)') : 'Baixar imagem'}</button><button type="button" class="btn-primary" data-le-imprimir>Imprimir / PDF</button>` : ''}</div>
     </div>
     <div class="ea-card le-nao-imprime le-cr-status">
       ${temCal ? `Calendário das UAs: 1º bimestre a partir de <b>${esc(dataBRano(cal.inicio1))}</b>${cal.inicio2 ? `, 2º a partir de <b>${esc(dataBRano(cal.inicio2))}</b>` : ', 2º bimestre sem início'} · ${(cal.semAula || []).length} dia(s) sem aula · fechamento das trilhas: ${fech[bim] ? `<b>${esc(dataBRano(fech[bim].data))}${fech[bim].hora ? ` às ${esc(fech[bim].hora)}` : ''}</b>` : '<span class="ea-alerta">a definir</span>'}.`
@@ -441,21 +480,53 @@ function carregarHtml2canvas() {
   if (!h2cPromessa) h2cPromessa = new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; s.onload = () => ok(window.html2canvas); s.onerror = () => erro(new Error('Não consegui carregar o gerador de imagem.')); document.head.appendChild(s); });
   return h2cPromessa;
 }
+let zipPromessa = null;
+function carregarJsZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  if (!zipPromessa) zipPromessa = new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload = () => ok(window.JSZip); s.onerror = () => erro(new Error('Não consegui carregar o gerador do .zip.')); document.head.appendChild(s); });
+  return zipPromessa;
+}
+const nomeArquivo = (t) => String(t).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+// Um cronograma: baixa o PNG. Vários: um .zip com uma pasta por curso (cada turma tem o seu dia e horário,
+// então a mesma disciplina em cursos diferentes sai em arquivos diferentes, cada um na pasta do curso).
 async function baixarPng(btn) {
-  btn.disabled = true; const txt = btn.textContent; btn.textContent = 'Gerando...';
+  btn.disabled = true; const txt = btn.textContent;
   try {
     const h2c = await carregarHtml2canvas();
     const cards = [...tela().querySelectorAll('.le-cr')];
-    const discs = crDisc ? dados.disciplinas.filter(d => d.id === crDisc) : dados.disciplinas.filter(d => !crCurso || d.cursoId === crCurso);
-    for (let i = 0; i < cards.length; i++) {
-      const canvas = await h2c(cards[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-      const d = discs[i] || {};
+    const porId = new Map(dados.disciplinas.map(d => [d.id, d]));
+    const arquivo = (d) => nomeArquivo(`${nomeDisc(d)}${d.periodo ? ` - ${periodoTxt(d.periodo)}` : ''}${ehQuinzenal(d) ? ' - quinzenal' : ''}.png`);
+    if (cards.length === 1) {
+      btn.textContent = 'Gerando...';
+      const d = porId.get(cards[0].dataset.leCrId) || {};
+      const canvas = await h2c(cards[0], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
       const a = document.createElement('a');
-      a.download = `Cronograma EaD ${crBim}º bim ${dados.semestre} - ${nomeBonito(d.nome || 'disciplina')} - ${d.cursoNome || ''}.png`.replace(/[\\/:*?"<>|]+/g, '-');
+      a.download = nomeArquivo(`Cronograma EaD ${crBim}º bim ${dados.semestre} - ${d.cursoNome || ''} - ${arquivo(d)}`);
       a.href = canvas.toDataURL('image/png'); a.click();
-      await new Promise(r => setTimeout(r, 350));
+      toast('Imagem baixada.');
+    } else {
+      const JSZip = await carregarJsZip();
+      const zip = new JSZip();
+      const usados = new Set();
+      for (let i = 0; i < cards.length; i++) {
+        btn.textContent = `Gerando ${i + 1} de ${cards.length}...`;
+        const d = porId.get(cards[i].dataset.leCrId) || {};
+        const canvas = await h2c(cards[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        let caminho = `${nomeArquivo(d.cursoNome || 'Curso')}/${arquivo(d)}`;
+        for (let n = 2; usados.has(caminho); n++) caminho = caminho.replace(/( \(\d+\))?\.png$/, ` (${n}).png`);
+        usados.add(caminho);
+        zip.file(caminho, blob);
+      }
+      btn.textContent = 'Montando o .zip...';
+      const conteudo = await zip.generateAsync({ type: 'blob' });
+      const curso = crCurso ? (dados.cursos.find(c => c.id === crCurso) || {}).nome : '';
+      const a = document.createElement('a');
+      a.download = nomeArquivo(`Cronogramas EaD ${crBim}º bim ${dados.semestre}${curso ? ` - ${curso}` : ' - todos os cursos'}.zip`);
+      a.href = URL.createObjectURL(conteudo); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast(`${cards.length} cronogramas no .zip${curso ? '' : ', uma pasta por curso'}.`);
     }
-    toast(cards.length > 1 ? `${cards.length} imagens baixadas.` : 'Imagem baixada.');
   } catch (e) { toast(e.message, 'erro'); }
   btn.disabled = false; btn.textContent = txt;
 }
@@ -474,8 +545,10 @@ async function acao(e) {
   if (!t || t.disabled) return;
   try {
     if (t.dataset.leFechar !== undefined) return fecharModal();
-    if (t.dataset.leLimpar !== undefined) { filtroCurso = filtroDia = filtroProf = busca = ''; return render(); }
+    if (t.dataset.leLimpar !== undefined) { filtroCurso = filtroDia = filtroProf = filtroSinal = busca = ''; return render(); }
+    if (t.dataset.leSinal) { filtroSinal = t.dataset.leSinal; return render(); }
     if (t.dataset.leDisc && t.tagName === 'TR') return abrirDisciplina(t.dataset.leDisc);
+    if (t.dataset.leAbrir) return abrirDisciplina(t.dataset.leAbrir);
     if (t.dataset.leImportar !== undefined) { $('le-arquivo').value = ''; return $('le-arquivo').click(); }
     if (t.dataset.leConfirmarImport !== undefined) {
       t.disabled = true; t.textContent = 'Gravando...';
@@ -531,6 +604,7 @@ async function mudanca(e) {
     if (t.dataset.leF === 'curso') { filtroCurso = t.value; return render(); }
     if (t.dataset.leF === 'dia') { filtroDia = t.value; return render(); }
     if (t.dataset.leF === 'prof') { filtroProf = t.value; return render(); }
+    if (t.dataset.leF === 'sinal') { filtroSinal = t.value; return render(); }
     if (t.dataset.leRelCurso !== undefined) { relCurso = t.value; return render(); }
     if (t.dataset.leRelProf !== undefined) { relProf = t.value; return render(); }
     if (t.dataset.leCrCurso !== undefined) { crCurso = t.value; crDisc = ''; return render(); }
