@@ -18,6 +18,9 @@
 .ea-vazio { color: var(--orb-mudo); padding: 1.5rem 1rem; margin: 0; text-align: center; }
 .ea-card { background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 1rem 1.1rem; margin-bottom: 1rem; }
 .ea-card-tabela { padding: 0.4rem; }
+/* Aviso do que o EAD mudou no Levantamento EaD (23/11/2026) */
+.ea-aviso-ead { border-left: 4px solid #e0a100; }
+.ea-aviso-lista { margin: .3rem 0 0; padding: 0 .75rem 0 1.6rem; display: flex; flex-direction: column; gap: .5rem; font-size: .88rem; max-height: 50vh; overflow: auto; }
 .ea-card-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.55rem 0.75rem 0.45rem; }
 .ea-card-topo h3 { margin: 0; font-family: var(--orb-display); font-size: 1rem; color: var(--orb-tinta); }
 .ea-erro { color: var(--orb-crit); }

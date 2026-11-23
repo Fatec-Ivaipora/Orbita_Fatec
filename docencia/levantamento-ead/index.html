@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Levantamento EaD - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/ti/ead-aulas/ead-aulas.css?v=4">
+    <link rel="stylesheet" href="/docencia/levantamento-ead/levantamento.css?v=1">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content">
+                <div class="page-header ea-header le-nao-imprime">
+                    <div>
+                        <h1 class="page-title"><span class="ea-titulo-icone"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M7 13h4M7 17h7"/></svg></span>Levantamento EaD</h1>
+                        <p class="page-subtitle">Disciplinas EAD do semestre, tutores, links do Zoom e cronograma. É a mesma lista da Aulas EAD do T.I.</p>
+                    </div>
+                    <label class="ea-semestre">Semestre
+                        <select id="le-semestre" class="select-filter"></select>
+                    </label>
+                </div>
+
+                <div class="abas ea-abas le-nao-imprime" role="tablist" id="le-abas">
+                    <button type="button" class="aba ativa" role="tab" data-aba="disciplinas" aria-selected="true">Disciplinas</button>
+                    <button type="button" class="aba" role="tab" data-aba="relatorio" aria-selected="false">Relatório e links</button>
+                    <button type="button" class="aba" role="tab" data-aba="cronograma" aria-selected="false">Cronograma</button>
+                    <button type="button" class="aba" role="tab" data-aba="tutores" aria-selected="false">Tutores dos cursos</button>
+                </div>
+
+                <div id="le-tela" aria-live="polite"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="le-modal" class="ea-modal hidden le-nao-imprime" role="dialog" aria-modal="true" aria-labelledby="le-modal-titulo">
+        <div class="ea-modal-caixa">
+            <div class="ea-modal-topo">
+                <h2 id="le-modal-titulo"></h2>
+                <button type="button" class="ea-fechar" id="le-modal-fechar" aria-label="Fechar">×</button>
+            </div>
+            <div id="le-modal-corpo"></div>
+        </div>
+    </div>
+    <input type="file" id="le-arquivo" accept=".xlsx,.xls" class="hidden">
+    <div id="le-toast" class="ea-toast hidden le-nao-imprime" role="status"></div>
+
+    <script type="module" src="/docencia/levantamento-ead/app.js?v=1"></script>
+</body>
+</html>

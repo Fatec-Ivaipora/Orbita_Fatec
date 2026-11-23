@@ -155,6 +155,36 @@ async function carregar() {
   tela().innerHTML = '<p class="ea-vazio">Carregando...</p>';
   try { dados = await apiFetch(`/${MODULO}/?semestre=${encodeURIComponent(sem)}`); render(); }
   catch (e) { tela().innerHTML = `<div class="ea-card ea-erro">${esc(e.message)}</div>`; }
+  carregarAvisosEad();
+}
+
+// ================================================================
+//  AVISO: O QUE O EAD MUDOU NO LEVANTAMENTO EaD (23/11/2026)
+//  O EAD (Carlos e tutores) edita as disciplinas e o calendário pelo Levantamento EaD (Docência), na mesma
+//  lista desta página. Cada mudança chega aqui; cada pessoa do T.I marca como visto.
+// ================================================================
+const CAMPO_ALT = { professor: 'professor', dia: 'dia', horario: 'horário', ch: 'carga horária', nome: 'nome', periodo: 'período', qtd: 'unidades', obs: 'observação', inicio1: 'início do 1º bim.', inicio2: 'início do 2º bim.', semAula: 'dias sem aula' };
+const ACAO_ALT = { nova: 'cadastrou', alterada: 'alterou', excluida: 'excluiu', importacao: 'importou a planilha', calendario: 'mudou o calendário das UAs' };
+let avisosEad = null, avisosAbertos = false;
+const valorAlt = (campo, v) => (campo === 'dia' ? (DIA_ROTULO[v] || v) : String(v ?? '')) || '(vazio)';
+async function carregarAvisosEad() {
+  try { avisosEad = await apiFetch(`/${MODULO}/alteracoes?dias=30`); } catch (e) { avisosEad = null; }
+  renderAvisosEad();
+}
+function htmlMudancas(m) { return (m || []).map(x => `${esc(CAMPO_ALT[x.campo] || x.campo)}: <s>${esc(valorAlt(x.campo, x.de))}</s> → <b>${esc(valorAlt(x.campo, x.para))}</b>`).join(' · '); }
+function renderAvisosEad() {
+  const caixa = $('ea-avisos-ead');
+  if (!caixa) return;
+  const pend = avisosEad ? avisosEad.itens.filter(i => !i.visto) : [];
+  if (!pend.length) { caixa.innerHTML = ''; return; }
+  caixa.innerHTML = `<section class="ea-card ea-aviso-ead">
+    <div class="ea-card-topo"><h3>O EAD mudou ${pend.length} coisa(s) no Levantamento EaD</h3>
+      <div><button type="button" class="btn-secondary btn-mini" data-ea-avisos-abrir>${avisosAbertos ? 'Esconder' : 'Ver o que mudou'}</button> <button type="button" class="btn-primary btn-mini" data-ea-avisos-visto>Marcar como visto</button></div></div>
+    ${avisosAbertos ? `<ul class="ea-aviso-lista">${pend.map(a => `<li><span class="ea-sub">${esc(quando(a.em))} · ${esc(a.por || '')}</span>
+      ${esc(ACAO_ALT[a.acao] || a.acao)} <b>${esc(a.acao === 'importacao' || a.acao === 'calendario' ? (a.disciplina || '') : nomeBonito(a.disciplina || ''))}</b>${a.curso ? ` · ${esc(a.curso)}` : ''}
+      ${a.mudancas && a.mudancas.length ? `<div class="ea-sub">${htmlMudancas(a.mudancas)}</div>` : ''}
+      ${a.itens ? `<div class="ea-sub">${a.itens.slice(0, 30).map(i => `${esc(nomeBonito(i.disciplina))} (${esc(i.curso)}): ${i.acao === 'nova' ? 'nova' : htmlMudancas(i.mudancas)}`).join('<br>')}${a.itens.length > 30 ? `<br>e mais ${a.itens.length - 30}` : ''}</div>` : ''}</li>`).join('')}</ul>` : ''}
+  </section>`;
 }
 function render() {
   document.querySelectorAll('#ea-abas .aba').forEach(b => { const on = b.dataset.aba === aba; b.classList.toggle('ativa', on); b.setAttribute('aria-selected', on); });
@@ -658,6 +688,17 @@ async function mudanca(e) {
 }
 
 function ligarEventos() {
+  $('ea-avisos-ead').addEventListener('click', async (e) => {
+    if (e.target.closest('[data-ea-avisos-abrir]')) { avisosAbertos = !avisosAbertos; return renderAvisosEad(); }
+    const b = e.target.closest('[data-ea-avisos-visto]');
+    if (!b) return;
+    b.disabled = true;
+    try {
+      await apiFetch(`/${MODULO}/alteracoes/visto`, { method: 'POST', body: JSON.stringify({ ids: avisosEad.itens.filter(i => !i.visto).map(i => i.id) }) });
+      avisosEad.itens.forEach(i => { i.visto = true; }); avisosAbertos = false; renderAvisosEad(); toast('Marcado como visto.');
+      try { localStorage.removeItem('orbita_ead_alt_cache'); } catch (err) {}
+    } catch (err) { toast(err.message, 'erro'); b.disabled = false; }
+  });
   $('ea-semestre').addEventListener('change', carregar);
   $('ea-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (!b) return; aba = b.dataset.aba; render(); });
   tela().addEventListener('click', acao);
