@@ -1,0 +1,5 @@
+#!/bin/sh
+# Trava contra segredo/chave externa hardcoded (ver AGENTS.md).
+# Ativar uma vez por clone: git config core.hooksPath .githooks
+RAIZ="$(git rev-parse --show-toplevel)"
+git diff --cached -U0 --diff-filter=ACM | node "$RAIZ/.githooks/checar-segredos.js"
