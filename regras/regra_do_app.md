@@ -99,6 +99,18 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Segurança: dependências com CVE atualizadas (npm audit fix)
+- Autor: Claude Code (a pedido do usuário, item 14 do relatório de revisão de segurança de 17/11/2026, revisitado após o GitHub reportar 11 alertas do Dependabot no push do item 4)
+- Branch: fix/dependencias-cve
+- Arquivos alterados: `package-lock.json` (só o lockfile — `package.json` não mudou, as versões já cabiam nos intervalos semver existentes).
+- Tipo: Correção de segurança (dependências)
+- Motivo: `npm audit` apontava 15 vulnerabilidades, incluindo uma crítica (`proxy-addr`, spoofing de IP via IPv6 mapeado) e várias altas (`body-parser`, `compression`, `@fastify/busboy` — DoS).
+- Impacto: `npm audit fix` resolveu 13 das 15 (via `express@5.2.1` que já permitia `body-parser@2.4.0`/`proxy-addr@2.0.8`/`qs@6.17.1` mais novos; `compression@1.8.2`; `@fastify/busboy@3.2.6` e `fast-xml-parser@5.12.1` por baixo do `firebase-admin`). Testado: `express`/`compression` montam sem erro e `firebase-admin` inicializa normalmente (só não completou por faltar `serviceAccountKey.json` no worktree de teste, esperado). Ficaram **2 pendentes, de propósito**:
+  - **`uuid`** (moderado): só corrige subindo `firebase-admin` pra `14.5.1` (major, mudança de risco maior — não entrou aqui, fica pra uma tarefa própria com mais teste).
+  - **`xlsx`** (alto, Prototype Pollution + ReDoS): **sem correção disponível no npm** — o mantenedor (SheetJS) só publica a versão corrigida no próprio CDN (`cdn.sheetjs.com`), não no registro do npm. Decisão pendente: trocar por `exceljs` (mais trabalho) ou instalar a versão corrigida pelo CDN deles. Usado em: scripts de licitação/compras e na planilha mestra de alunos — risco real é abrir um `.xlsx` malicioso de fonte não confiável.
+- Como testar: `npm audit` deve mostrar só 8 vulnerabilidades (`uuid` + `xlsx`, contadas várias vezes pela árvore de dependência).
+- Como reverter: reverter o commit e rodar `npm install` de novo.
+
 ### [2026-11-23] Segurança: repositório tornado privado + trava contra segredo hardcoded no código
 - Autor: Claude Code (a pedido do usuário, seguindo os itens 1 a 4 "Hoje" do relatório de revisão de segurança do repositório público de 17/11/2026)
 - Branch: chore/trava-segredos-e-changelog (itens 1-4 feitos direto em produção/console, fora do git — ver abaixo)
