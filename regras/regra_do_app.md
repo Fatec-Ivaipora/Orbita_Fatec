@@ -99,6 +99,16 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-23] Segurança: correção do fix anterior do Vercel — regras/*.md continuava 200
+- Autor: Claude Code (a pedido do usuário, corrigindo a entrada anterior "Vercel para de servir regras/, scripts/ e arquivos de configuração")
+- Branch: fix/vercel-routes-404-de-verdade
+- Arquivos alterados: `vercel.json` (trocado `rewrites` por `routes`).
+- Tipo: Correção de segurança
+- Motivo: testado ao vivo depois do deploy anterior — `/scripts/*` ficou 404 (o arquivo tinha sido apagado do repositório), mas `/regras/regra_do_app.md` continuou 200. Causa: `rewrites` no Vercel só entra em ação quando o caminho pedido **não bate com um arquivo real** no build; como `regras/regra_do_app.md` existe de verdade, o Vercel servia ele direto, sem nunca checar a regra.
+- Impacto: trocado para `routes` (array ordenado, cada entrada checada antes do sistema de arquivos) com `{"status": 404}` explícito para `/regras/*`, `/scripts/*`, qualquer `*.md` (em qualquer pasta, não só na raiz), `package.json`, `package-lock.json`, `firestore.rules`, `firestore.indexes.json`, `firebase.json`; a rota da API continua igual; `{"handle": "filesystem"}` no final preserva o comportamento normal pra tudo mais (os 100+ módulos do site). Testado ao vivo depois do deploy: `/regras/regra_do_app.md` → 404, `/scripts/*` → 404, `/` e um módulo qualquer → 200 normal, `/api/usuarios/me` → resposta normal da API (não 404).
+- Como testar: depois do deploy, `curl -o /dev/null -w "%{http_code}" https://orbita-fatec-ti.vercel.app/regras/regra_do_app.md` → 404; a home e os módulos continuam abrindo normal.
+- Como reverter: reverter o commit (volta pro `rewrites` anterior, que tinha a falha descrita acima).
+
 ### [2026-11-23] Segurança: dependências com CVE atualizadas (npm audit fix)
 - Autor: Claude Code (a pedido do usuário, item 14 do relatório de revisão de segurança de 17/11/2026, revisitado após o GitHub reportar 11 alertas do Dependabot no push do item 4)
 - Branch: fix/dependencias-cve
