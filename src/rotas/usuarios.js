@@ -11,6 +11,15 @@ const requireAdmL1 = (req, res, next) => {
     next();
 };
 
+// Conta já é (ou vai virar) ADM N1 — esse cargo só pode ser concedido,
+// alterado, desativado ou excluído por quem já é ADM N1. Sem essa trava, um
+// ADM N2 se promovia pela própria tela/API (achado do relatório de
+// segurança de 17/11).
+const alvoEhAdmL1 = async (uid) => {
+    const snap = await db.collection('users').doc(uid).get();
+    return snap.exists && snap.data().role === 'adm_l1';
+};
+
 // ==========================================
 // USUÁRIOS (users)
 // ==========================================
@@ -40,6 +49,17 @@ router.put('/me/senha', verifyToken, async (req, res) => {
 
         if (!novaSenha || novaSenha.trim().length < 6) {
             return res.status(400).json({ error: 'A senha deve conter pelo menos 6 caracteres.' });
+        }
+
+        // Fora do primeiro acesso, exige login recente (reautenticação) —
+        // senão basta um token roubado/de sessão aberta pra trocar a senha
+        // de outra pessoa (achado do relatório de segurança de 17/11). No
+        // primeiro acesso o login acabou de acontecer, então não bloqueia.
+        if (!req.user.primeiroAcesso) {
+            const authTime = (req.user.auth_time || 0) * 1000;
+            if (!authTime || (Date.now() - authTime) > 10 * 60 * 1000) {
+                return res.status(401).json({ error: 'Faça login novamente antes de trocar a senha.', loginRecente: true });
+            }
         }
 
         // Atualiza a senha no Firebase Auth utilizando o Admin SDK
@@ -72,6 +92,10 @@ router.get('/', verifyToken, verifyToken.requireModulePermission('usuarios'), as
 router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
         const { nome, email, senha, role, cursos } = req.body;
+
+        if (role === 'adm_l1' && req.user.role !== 'adm_l1') {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode criar uma conta com esse cargo.' });
+        }
 
         // 1. Cria usuário no Firebase Authentication via Admin SDK
         const userRecord = await auth.createUser({
@@ -108,6 +132,17 @@ router.post('/', verifyToken, verifyToken.requireModulePermission('usuarios'), a
 router.put('/:uid/role', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
         const { role, cursos } = req.body;
+
+        if (req.params.uid === req.user.uid) {
+            return res.status(403).json({ error: 'Você não pode alterar o próprio cargo.' });
+        }
+        if (role === 'adm_l1' && req.user.role !== 'adm_l1') {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode conceder esse cargo.' });
+        }
+        if (req.user.role !== 'adm_l1' && await alvoEhAdmL1(req.params.uid)) {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode alterar uma conta ADM N1.' });
+        }
+
         // Cursos vinculados só fazem sentido pro Coordenador — limpa o campo
         // ao trocar pra qualquer outro cargo, senão um vínculo antigo
         // poderia vazar caso a pessoa volte a ser Coordenador depois.
@@ -116,8 +151,13 @@ router.put('/:uid/role', verifyToken, verifyToken.requireModulePermission('usuar
             cursos: role === 'coordenador' && Array.isArray(cursos) ? cursos.filter(Boolean) : [],
             // Campo antigo (uma era só 1 curso por coordenador) — remove pra
             // não deixar um valor desatualizado competindo com `cursos`.
-            curso: admin.firestore.FieldValue.delete()
+            curso: admin.firestore.FieldValue.delete(),
+            // Registro de quem trocou o cargo e quando (achado do relatório
+            // de segurança de 17/11 — a troca não deixava rastro nenhum).
+            roleAlteradoPor: req.user.uid,
+            roleAlteradoEm: new Date().toISOString()
         });
+        if (verifyToken.limparCacheUsuario) verifyToken.limparCacheUsuario(req.params.uid);
         res.json({ message: 'Nível atualizado com sucesso!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -166,7 +206,23 @@ router.put('/:uid/permissoes', verifyToken, requireAdmL1, async (req, res) => {
 router.put('/:uid/status', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
         const { ativo } = req.body;
+
+        if (req.user.role !== 'adm_l1' && await alvoEhAdmL1(req.params.uid)) {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode alterar uma conta ADM N1.' });
+        }
+
         await db.collection('users').doc(req.params.uid).update({ ativo });
+
+        // Desativar cortava só a tela — a conta continuava entrando pelo
+        // Firebase Auth e lendo o que não exige nível 3 (achado do relatório
+        // de segurança de 17/11). Agora desliga o login de verdade e invalida
+        // qualquer sessão/token já aberto.
+        await auth.updateUser(req.params.uid, { disabled: ativo === false }).catch(() => {});
+        if (ativo === false) {
+            await auth.revokeRefreshTokens(req.params.uid).catch(() => {});
+        }
+        if (verifyToken.limparCacheUsuario) verifyToken.limparCacheUsuario(req.params.uid);
+
         res.json({ message: `Status atualizado com sucesso!` });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -176,10 +232,18 @@ router.put('/:uid/status', verifyToken, verifyToken.requireModulePermission('usu
 // DELETE /api/usuarios/:uid
 router.delete('/:uid', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
-        // Deleta do Firestore
+        if (req.user.role !== 'adm_l1' && await alvoEhAdmL1(req.params.uid)) {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode excluir uma conta ADM N1.' });
+        }
+
+        // Exclusão de verdade: tira a conta do Firebase Auth (barra login e
+        // invalida qualquer sessão aberta), não só o documento do Firestore
+        // — achado do relatório de segurança de 17/11 (quem era "excluído"
+        // continuava entrando como visitante).
+        await auth.deleteUser(req.params.uid).catch(() => {});
         await db.collection('users').doc(req.params.uid).delete();
-        // Opcional: Pode deletar do Auth também se quiser
-        // await auth.deleteUser(req.params.uid);
+        if (verifyToken.limparCacheUsuario) verifyToken.limparCacheUsuario(req.params.uid);
+
         res.json({ message: 'Usuário removido do sistema.' });
     } catch (err) {
         res.status(500).json({ error: err.message });

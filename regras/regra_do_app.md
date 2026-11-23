@@ -140,6 +140,17 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar:
 - Como reverter:
 
+### [2026-11-18] Segurança: correções dos achados ALTO/MÉDIO do relatório de revisão do repositório público
+- Autor: Claude Code (a pedido do usuário, em cima de um relatório de segurança feito por um colega externo sobre o GitHub público `Fatec-Ivaipora/Orbita_Fatec`)
+- Branch: fix/seguranca-relatorio-17nov
+- Arquivos alterados: `auth/login.js`, `src/middlewares/auth.js`, `src/rotas/usuarios.js`, `core/security.js`; removido `scripts/criar-contas-professores-med.js`.
+- Tipo: Correção de segurança
+- Motivo: Revisão externa apontou risco ALTO: `?redirect=` do login aceitava `javascript:`/outro domínio (open redirect/XSS); conta sem cadastro ou desativada/excluída continuava entrando (virava "visitante" ou seguia com token válido); quem tem nível 3 em Usuários conseguia se promover a ADM N1; a função central de escape não tratava aspas; e o script que criou as 15 contas de Medicina em 16/11 deixava no repositório os nomes reais e a fórmula da senha inicial (primeiro nome + sufixo igual pra todos).
+- Impacto: `auth/login.js` só aceita redirecionamento para caminho relativo da própria origem. `verifyIdToken` agora roda com `checkRevoked=true`; conta sem documento no Firestore ou com `ativo: false` é barrada com 403 em vez de virar "visitante". Em `usuarios.js`: só ADM N1 cria, promove, altera ou exclui uma conta ADM N1; ninguém troca o próprio cargo; troca de cargo grava quem mudou e quando; desativar ou excluir um usuário agora desliga a conta de verdade no Firebase Auth (`disabled`/`deleteUser`) e revoga tokens (`revokeRefreshTokens`); `PUT /me/senha` fora do primeiro acesso exige login feito nos últimos 10 min (mesmo padrão do `auth_time` já usado no Plano de Ação). `escapeHTML` (`core/security.js`) passa a escapar `"` e `'`, não só `& < >` — ainda há cópias locais dessa função em ~10 módulos que não foram tocadas nesta rodada. Removido o script dos professores de Medicina (seu trabalho já tinha sido feito em 16/11).
+- Pendente, já resolvido depois (ver entradas de 23/11/2026 "repositório tornado privado" e "Vercel para de servir regras/, scripts/..."): senhas das 15 contas de Medicina + 2 Secretaria + 2 demo, Apps Script arquivado, autocadastro desligado, repositório privado.
+- Como testar: tentar `?redirect=javascript:alert(1)` no login (deve cair no Meu Espaço); um ADM N2 tentar criar/promover usuário para `adm_l1` pela API (403); desativar um usuário e ele tentar continuar usando o token antigo (403); trocar senha pela tela fora do primeiro acesso depois de guardar o token por mais de 10 min (401 pedindo novo login); cadastrar um nome com aspas e ver que não quebra mais o HTML onde usa `escapeHTML`.
+- Como reverter: reverter o commit.
+
 ### [2026-11-23] Módulo novo: Levantamento EaD (Docência) — disciplinas EAD do semestre editadas pelo EAD, na mesma lista da Aulas EAD
 - Autor: Claude Code (pedido do Suporte AVA)
 - Branch: feat/levantamento-ead
