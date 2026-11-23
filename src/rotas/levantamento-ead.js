@@ -161,14 +161,22 @@ const nomeProprio = (s) => String(s || '').toLowerCase().split(/\s+/).filter(Boo
 // períodos de uma disciplina EAD ("6", "3 e 4", "1º e 2º"); sem número = todos ("TODOS")
 const periodosDe = (p) => (String(p || '').match(/\d+/g) || []).map(Number);
 
+// grafia "solta": Z→S, Y→I, PH→F, TH→T, letra dobrada → uma (só se o nome exato não achar)
+const solto = (s) => mz.normNome(s).replace(/PH/g, 'F').replace(/TH/g, 'T').replace(/Z/g, 'S').replace(/Y/g, 'I').replace(/([A-Z])\1+/g, '$1');
 async function professoresEdubox(semestre) {
     const lista = await mz.titulacoesEdubox(semestre); // [] se o Edubox não responder
-    return lista.map(t => ({ ...t, toks: mz.normNome(t.nome).split(' ') }));
+    return lista.map(t => ({ ...t, toks: mz.normNome(t.nome).split(' '), toksSoltos: solto(t.nome).split(' ') }));
 }
 // nome digitado → { nome } (do Edubox, com maiúscula só no começo) | { status: 'nao-achou' | 'ambiguo' } | null (a contratar / vazio)
 function nomeNoEdubox(lista, nome) {
     if (!lista.length || mz.ehContratar(nome)) return null;
-    const a = mz.acharProfessor(lista, String(nome).replace(/\(.*?\)/g, ' '));
+    const limpo = String(nome).replace(/\(.*?\)/g, ' ');
+    let a = mz.acharProfessor(lista, limpo);
+    if (!a) {
+        const b = mz.acharProfessor(lista.map(t => ({ ...t, toks: t.toksSoltos })), solto(limpo));
+        if (b && !b.ambiguo) a = lista.find(t => t.nome === b.nome) || b;
+        else if (b) a = b;
+    }
     if (!a) return { status: 'nao-achou' };
     if (a.ambiguo) return { status: 'ambiguo' };
     return { nome: nomeProprio(a.nome) };
@@ -232,8 +240,9 @@ router.post('/professores/renomear', verifyToken, checkPermission, async (req, r
         const [discSnap, semSnap] = await Promise.all([db.collection(COL_DISC).where('semestre', '==', semestre).get(), db.collection(COL_SEM).doc(semestre).get()]);
         const salas = { ...((semSnap.exists && semSnap.data().salaDoProfessor) || {}) };
         let mudouSala = false, n = 0;
-        const itens = [];
+        const itens = [], avisosSala = [];
         const batch = db.batch();
+        const qtd = (nome) => discSnap.docs.filter(d => d.data().professor === nome).length;
         trocas.forEach(t => {
             discSnap.docs.filter(d => d.data().professor === t.de).forEach(d => {
                 const x = d.data();
@@ -241,14 +250,26 @@ router.post('/professores/renomear', verifyToken, checkPermission, async (req, r
                 itens.push({ discId: d.id, curso: x.cursoNome, periodo: x.periodo, disciplina: x.nome, acao: 'alterada', mudancas: [{ campo: 'professor', de: t.de, para: t.para }] });
                 n++;
             });
-            const kDe = chaveProf(t.de), kPara = chaveProf(t.para);
-            if (salas[kDe] && !salas[kPara]) { salas[kPara] = { ...salas[kDe], professor: t.para }; mudouSala = true; }
+        });
+        const paras = [...new Set(trocas.map(t => t.para))];
+        paras.forEach(para => {
+            const kPara = chaveProf(para);
+            const des = trocas.filter(t => t.para === para && chaveProf(t.de) !== kPara).map(t => t.de);
+            const comSala = des.filter(de => salas[chaveProf(de)]).sort((a, b) => qtd(b) - qtd(a));
+            const fica = salas[kPara] || (comSala[0] ? salas[chaveProf(comSala[0])] : null);
+            if (fica) {
+                const outras = [...new Set(comSala.map(de => salas[chaveProf(de)].salaId).filter(id => id !== fica.salaId))];
+                if (outras.length) avisosSala.push(para);
+                salas[kPara] = { ...fica, professor: para };
+            }
+            des.forEach(de => { if (salas[chaveProf(de)]) { delete salas[chaveProf(de)]; mudouSala = true; } });
+            if (fica) mudouSala = true;
         });
         if (!n) return res.status(400).json({ error: 'Nenhuma disciplina com esses nomes.' });
-        if (mudouSala) batch.set(db.collection(COL_SEM).doc(semestre), { salaDoProfessor: salas }, { merge: true });
+        if (mudouSala) batch.update(db.collection(COL_SEM).doc(semestre), { salaDoProfessor: salas }); // update troca o mapa inteiro (tira os nomes antigos)
         await batch.commit();
         await registrar(req, { semestre, acao: 'importacao', disciplina: `Nome de professor corrigido pelo Edubox em ${n} disciplina(s)`, itens: itens.slice(0, 200) }).catch(e => console.error('levantamento-ead: registro falhou', e));
-        res.json({ alteradas: n, message: `Nome corrigido em ${n} disciplina(s).` });
+        res.json({ alteradas: n, avisosSala, message: `Nome corrigido em ${n} disciplina(s).${avisosSala.length ? ` ${avisosSala.join(', ')} tinha(m) mais de uma sala Zoom: ficou uma só (a mesma em todos os dias). Avise o T.I.` : ''}` });
     } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 

@@ -646,10 +646,11 @@ async function acao(e) {
         if ([...sel.options].some(o => o.value === x.horario)) { sel.value = x.horario; $('le-f-hor').classList.add('hidden'); }
         else { sel.value = '__outro'; $('le-f-hor').value = x.horario; $('le-f-hor').classList.remove('hidden'); }
       }
-      if (x.professor) $('le-f-prof').value = x.professor;
+      const mesmaPessoa = x.professor && nomeEdubox(d.professor) && nomeEdubox(d.professor).nome === x.professor;
+      if (x.professor && !mesmaPessoa) $('le-f-prof').value = x.professor;
       ['le-f-dia', 'le-f-hor-sel', 'le-f-prof'].forEach(i => { $(i).classList.add('le-preenchido'); });
       $('le-f-dia').scrollIntoView({ block: 'center', behavior: 'smooth' });
-      return toast('Preenchido com o que a coordenação definiu. Confira e clique em Salvar.');
+      return toast(mesmaPessoa ? 'Dia e horário preenchidos. O nome do professor é corrigido em "Corrigir nomes pelo Edubox" (leva a sala Zoom junto). Confira e clique em Salvar.' : 'Preenchido com o que a coordenação definiu. Confira e clique em Salvar.');
     }
     if (t.dataset.leRenomear) {
       const de = t.dataset.leRenomear, para = t.dataset.lePara;
