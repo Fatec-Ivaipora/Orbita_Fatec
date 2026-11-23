@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfólio Reflexivo · Órbita - FatecIVP</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/core/layout.css">
+  <link rel="stylesheet" href="/core/orbita.css?v=3">
+  <link rel="stylesheet" href="/medicina/portfolio/portfolio.css?v=1">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" defer></script>
+  <script src="/medicina/portfolio/matriz.js?v=1"></script>
+</head>
+<body class="orb-v2">
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <div class="layout-main">
+      <div class="layout-content">
+        <main class="pf-main">
+          <header class="pf-cab">
+            <div class="pf-cab-txt">
+              <img src="/img/medfatec-logo.png" alt="MED FATEC" class="pf-logo">
+              <div>
+                <h1>Portfólio Reflexivo</h1>
+                <p>Saúde, Comunidade e Integralidade do Cuidado · mesma matriz para todos os professores</p>
+              </div>
+            </div>
+            <div class="pf-cab-ctrl">
+              <label class="pf-sem"><span>Semestre</span><select id="pf-semestre"></select></label>
+            </div>
+          </header>
+
+          <nav class="pf-trilha" id="pf-trilha" aria-label="Onde você está"></nav>
+          <section id="pf-conteudo" class="pf-conteudo"><div class="pf-vazio">Carregando…</div></section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="pf-dialogo" class="pf-dialogo"></dialog>
+  <div id="pf-impressao" class="pf-impressao" aria-hidden="true"></div>
+  <input type="file" id="pf-zip" accept=".zip,application/zip" hidden>
+  <input type="file" id="pf-planilha" accept=".csv,text/csv" hidden>
+
+  <script type="module" src="/medicina/portfolio/app.js?v=1"></script>
+</body>
+</html>

@@ -261,6 +261,7 @@ const requireModulePermission = (moduleName) => {
                 'banco-med-fatec': 3,
                 'relatorio-desempenho': 3,
                 'aplicacao-provas-med': 3,
+                'portfolio-med': 3,
                 'banco-provas': 3,
                 'confirmacao-evento': 3,
                 contratos: 3,
@@ -445,6 +446,7 @@ const requireModulePermission = (moduleName) => {
                 'banco-med-fatec': 3,
                 'relatorio-desempenho': 3,
                 'aplicacao-provas-med': 3,
+                'portfolio-med': 3, // Portfólio SCIC (23/11/2026): configura as turmas e vê todas
                 'banco-provas': 1,
                 'confirmacao-evento': 1,
                 contratos: 1,
@@ -470,6 +472,7 @@ const requireModulePermission = (moduleName) => {
                 cobranca: 1,
                 'banco-med-fatec': 3,
                 'relatorio-desempenho': 1,
+                'portfolio-med': 3, // Portfólio SCIC (23/11/2026): corrige só as turmas em que é corretor (rota filtra)
                 'aplicacao-provas-med': 1, // 16/11/2026: no menu Medicina o professor vê só o Banco (as datas das provas aparecem lá dentro)
                 'banco-provas': 1,
                 'confirmacao-evento': 1,
