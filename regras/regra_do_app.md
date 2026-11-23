@@ -111,6 +111,17 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: `npm audit` deve mostrar só 8 vulnerabilidades (`uuid` + `xlsx`, contadas várias vezes pela árvore de dependência).
 - Como reverter: reverter o commit e rodar `npm install` de novo.
 
+### [2026-11-23] Segurança: Vercel para de servir regras/, scripts/ e arquivos de configuração
+- Autor: Claude Code (apontado por um colaborador externo, confirmando o achado 15 do relatório de segurança de 17/11)
+- Branch: fix/vercel-bloquear-docs-e-scripts
+- Arquivos alterados: `vercel.json` (rewrites novos pra "/404").
+- Tipo: Correção de segurança
+- Motivo: mesmo com o GitHub privado, o Vercel continuava servindo a raiz do repositório como site — confirmado ao vivo: `orbita-fatec-ti.vercel.app/regras/regra_do_app.md` e `.../scripts/criar-contas-professores-med.js` (nomes reais dos 15 professores de Medicina + a fórmula da senha previsível) respondiam 200, acessíveis por qualquer um que soubesse/adivinhasse o caminho.
+- Impacto: `/regras/*`, `/scripts/*`, qualquer `*.md` (README, AGENTS.md, DESIGN.md, PRODUCT.md, CLAUDE.md...), `package.json`, `package-lock.json`, `firestore.rules`, `firestore.indexes.json` e `firebase.json` agora respondem 404 no site. Nada do front-end do Órbita referencia esses caminhos no navegador (conferido antes de aplicar), então não quebra nenhum módulo. `src/` e `api/` continuam servidos (necessário pra função serverless da API funcionar) — isso é uma exposição menor e separada, já que o navegador nunca fala com o Firestore direto e as rotas exigem token.
+- Como testar: depois do deploy, `curl -o /dev/null -w "%{http_code}" https://orbita-fatec-ti.vercel.app/regras/regra_do_app.md` deve dar 404 (hoje dá 200); o site e a API continuam funcionando normal.
+- Como reverter: reverter o commit.
+- **Atenção**: esse fix só entra no ar quando o próximo deploy do Vercel funcionar — hoje os deploys estão falhando ("Cannot deploy from a private GitHub organization repository on the Hobby plan", acompanhar separadamente).
+
 ### [2026-11-23] Segurança: repositório tornado privado + trava contra segredo hardcoded no código
 - Autor: Claude Code (a pedido do usuário, seguindo os itens 1 a 4 "Hoje" do relatório de revisão de segurança do repositório público de 17/11/2026)
 - Branch: chore/trava-segredos-e-changelog (itens 1-4 feitos direto em produção/console, fora do git — ver abaixo)

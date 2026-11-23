@@ -4,6 +4,14 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
-    }
+    },
+    { "source": "/regras/(.*)", "destination": "/404" },
+    { "source": "/scripts/(.*)", "destination": "/404" },
+    { "source": "/(.*).md", "destination": "/404" },
+    { "source": "/package.json", "destination": "/404" },
+    { "source": "/package-lock.json", "destination": "/404" },
+    { "source": "/firestore.rules", "destination": "/404" },
+    { "source": "/firestore.indexes.json", "destination": "/404" },
+    { "source": "/firebase.json", "destination": "/404" }
   ]
 }
