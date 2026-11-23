@@ -5,6 +5,8 @@
 //
 // NADA que muda o que aparece na tela é aplicado sozinho (pedido do usuário): cada diferença vira uma
 // PENDÊNCIA (coleção matriculas_edubox_pendencias) que o pessoal das Matrículas aplica ou ignora.
+// Exceções (aplicadas sozinhas, ficam em "Resolvidas" por "Edubox (automático)"): matrícula nova de calouro
+// (12/11/2026) e veterano que só trocou entre "Rematrícula Assinada" e "Não Assinou" (23/11/2026).
 // Automático só o que não aparece/não conflita: ligar o cadastro ao código da matrícula do Edubox
 // (eduboxCodmat) e preencher telefone/cidade quando estão VAZIOS no Órbita.
 //
@@ -241,6 +243,11 @@ async function comparar({ modulo, semestre }) {
     return { propostas, automaticos, ligadas, soNoOrbita, duplicadas, totalEdubox: doEdubox.length, totalOrbita: docs.length };
 }
 
+// O que o Órbita aplica sem perguntar: matrícula nova de calouro e a troca só de status da rematrícula.
+const REMATRICULA = ['Rematrícula Assinada', 'Não Assinou'];
+const aplicaSozinha = (p) => (p.tipo === 'criar' && CALOUROS.includes(p.para))
+    || (p.tipo === 'situacao' && REMATRICULA.includes(p.de) && REMATRICULA.includes(p.para));
+
 const idPend = (modulo, semestre, chave) => `${modulo}_${semestre.replace('.', '_')}_${chave}`;
 const assinatura = (p) => `${p.tipo}|${p.de || ''}|${p.para || ''}|${p.descricao || ''}`;
 
@@ -269,21 +276,31 @@ async function sincronizar({ modulo, semestre }) {
     for (const [id, d] of antes) if (!agoraIds.has(id) && d.data().status === 'pendente') await d.ref.delete();
     // Matrícula NOVA sem conflito entra sozinha (12/11/2026, pedido do usuário): pendência "criar" de calouro
     // (Matrícula Nova / Retorno / Transferência) é aplicada na hora — cria o cadastro e o contrato do Comercial.
-    // Conflito (nome repetido, troca de curso, situação diferente) continua pendente pra Lisa decidir.
-    let novasAutomaticas = 0;
+    // Rematrícula também entra sozinha (23/11/2026, pedido do usuário): veterano que só trocou entre
+    // "Rematrícula Assinada" e "Não Assinou" (nos dois sentidos) é só o status do Edubox, não tem o que conferir.
+    // Vale até pra que alguém tinha IGNORADO (o usuário pediu, 23/11/2026): o Órbita segue o Edubox no status
+    // da rematrícula. Matrícula nova ignorada continua ignorada.
+    // Conflito (nome repetido, troca de curso, saída, período, formando…) continua pendente pra Lisa decidir.
+    let novasAutomaticas = 0, rematriculasAutomaticas = 0;
     const { normalizarPeriodo, normalizarDesistente } = require('../rotas/matriculas')._normalizar || {};
     if (normalizarPeriodo && normalizarDesistente) {
-        for (const p of c.propostas.filter(x => x.tipo === 'criar' && CALOUROS.includes(x.para))) {
+        for (const p of c.propostas.filter(aplicaSozinha)) {
             const id = idPend(modulo, semestre, p.chave);
             const doc = await db.collection(COL_PEND).doc(id).get();
-            if (!doc.exists || doc.data().status !== 'pendente') continue;
-            try { await resolverPendencia({ id, acao: 'aplicar', quem: QUEM, normalizarPeriodo, normalizarDesistente }); novasAutomaticas++; }
-            catch (err) { console.error('[matriculas-edubox] matrícula nova automática:', p.nome, err.message); }
+            if (!doc.exists) continue;
+            // rematrícula que alguém tinha ignorado também é aplicada (23/11/2026, pedido do usuário: "Aplicar também")
+            if (doc.data().status === 'ignorada' && p.tipo === 'situacao') {
+                await doc.ref.update({ status: 'pendente', reabertaEm: new Date().toISOString(), ignoradaAntesPor: doc.data().resolvidaPor || '' });
+            } else if (doc.data().status !== 'pendente') continue;
+            try {
+                await resolverPendencia({ id, acao: 'aplicar', quem: QUEM, normalizarPeriodo, normalizarDesistente });
+                if (p.tipo === 'criar') novasAutomaticas++; else rematriculasAutomaticas++;
+            } catch (err) { console.error('[matriculas-edubox] aplicação automática:', p.tipo, p.nome, err.message); }
         }
     }
     return {
-        novasAutomaticas,
-        pendentes: c.propostas.filter(p => !(p.tipo === 'criar' && CALOUROS.includes(p.para))).filter(p => { const a = antes.get(idPend(modulo, semestre, p.chave)); return !a || a.data().assinatura !== assinatura(p) || a.data().status === 'pendente'; }).length,
+        novasAutomaticas, rematriculasAutomaticas,
+        pendentes: c.propostas.filter(p => !aplicaSozinha(p)).filter(p => { const a = antes.get(idPend(modulo, semestre, p.chave)); return !a || a.data().assinatura !== assinatura(p) || a.data().status === 'pendente'; }).length,
         ligadas: c.ligadas, automaticos: c.automaticos.length, soNoOrbita: c.soNoOrbita.length, duplicadas: c.duplicadas, listaSoNoOrbita: c.soNoOrbita.slice(0, 300),
         totalEdubox: c.totalEdubox, totalOrbita: c.totalOrbita
     };
