@@ -472,7 +472,7 @@ const requireModulePermission = (moduleName) => {
                 cobranca: 1,
                 'banco-med-fatec': 3,
                 'relatorio-desempenho': 1,
-                'portfolio-med': 3, // Portfólio SCIC (23/11/2026): corrige só as turmas em que é corretor (rota filtra)
+                'portfolio-med': 1, // Portfólio SCIC (23/11/2026): por enquanto só a coordenação (rota barra o professor)
                 'aplicacao-provas-med': 1, // 16/11/2026: no menu Medicina o professor vê só o Banco (as datas das provas aparecem lá dentro)
                 'banco-provas': 1,
                 'confirmacao-evento': 1,
