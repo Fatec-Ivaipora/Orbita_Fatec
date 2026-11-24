@@ -230,7 +230,7 @@ router.post('/atividades/:id/entregas', async (req, res) => {
         const { atividade } = await lerAtividade(req, req.params.id);
         const b = req.body || {};
         const participante = txt(b.participante, 20);
-        if (!/^\d+$/.test(participante)) throw falha(400, 'Arquivo sem o número do participante do AVA — use o ZIP de "Baixar todas as submissões".');
+        if (!/^u?\d+$/.test(participante)) throw falha(400, 'Arquivo sem o número do participante do AVA — use o ZIP de "Baixar todas as submissões".');
         const id = `${atividade.id}__${participante}`;
         const texto = txtLongo(b.texto, MAX_TEXTO);
         const ref = db.collection(COL_ENT).doc(id);
@@ -245,6 +245,13 @@ router.post('/atividades/:id/entregas', async (req, res) => {
             naoPdf: lista(b.naoPdf, 255, 20),
             importadoEm: agora(), importadoPor: quem(req)
         };
+        // veio do AVA pela integração (participante "u<id do aluno no AVA>"): guarda o aluno e os arquivos (o PDF abre pelo proxy)
+        if (participante.startsWith('u')) {
+            meta.avaUserId = parseInt(participante.slice(1), 10);
+            meta.avaArquivos = (Array.isArray(b.avaArquivos) ? b.avaArquivos : []).slice(0, 20)
+                .map(a => ({ nome: txt(a && a.nome, 255), caminho: String((a && a.caminho) || '').slice(0, 500) }))
+                .filter(a => a.nome && /^\/webservice\/pluginfile\.php\//.test(a.caminho));
+        }
         if (atual.exists) {
             const a = atual.data();
             meta.reimportado = true;
@@ -343,6 +350,140 @@ router.get('/atividades/:id/similaridade', async (req, res) => {
         const nomes = new Map(ents.docs.map(d => [d.id, d.data().nome]));
         const docs = txts.docs.filter(d => nomes.has(d.id)).map(d => ({ id: d.id, nome: nomes.get(d.id), texto: d.data().texto || '' }));
         res.json({ total: ents.size, ...analisar(docs) });
+    } catch (e) { erro(res, e); }
+});
+
+// ---------- integração com o AVA por web service (24/11/2026) ----------
+// No lugar do ZIP e da planilha offline: a atividade é ligada à Tarefa do AVA (curso + tarefa); "Buscar entregas"
+// traz os envios (o navegador lê o PDF pelo proxy abaixo e manda o texto pela rota de entregas, como no ZIP);
+// "Lançar notas" grava a nota (nota 0–10 × nota máxima da Tarefa / 10 — ex.: 7,5 → 75 numa Tarefa de 100) e o
+// feedback de cada correção FINALIZADA. Só a coordenação (podeEditar). O token fica no servidor (src/utils/ava-ws.js).
+const ava = require('../utils/ava-ws');
+const exigeEditor = (req) => { if (!podeEditar(req.user)) throw falha(403, 'Só a coordenação usa a integração com o AVA.'); };
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// mesmo texto do feedback da planilha (medicina/portfolio/app.js › feedbackHtml)
+function feedbackHtml(e) {
+    const r = e.resultado, av = e.avaliacao, f = Matriz.fmt;
+    const nl = Matriz.CRITERIOS.map(c => `${c.nome}: ${Matriz.NOME_NIVEL[r.criterios[c.id].nivel]} (${f(r.criterios[c.id].pts)}/${f(c.max)})`);
+    const partes = [`<b>Portfólio — ${f(r.nota)} / 10,0</b>`, ...nl.map(escHtml)];
+    if (r.penalidade !== 'nenhuma') partes.push(escHtml(`${Matriz.PENALIDADES[r.penalidade].rotulo} (soma ${f(r.soma)})`));
+    partes.push(`<b>Pontos fortes:</b> ${escHtml(av.feedback.fortes)}`, `<b>Pontos a desenvolver:</b> ${escHtml(av.feedback.desenvolver)}`, `<b>Recomendação:</b> ${escHtml(av.feedback.recomendacao)}`);
+    return `<p>${partes.join('<br>')}</p>`;
+}
+const notaNoAva = (nota, max) => Math.round(Number(nota) * (Number(max) || 10) / 10 * 100) / 100;
+
+// GET /ava/tarefas?curso=3632 — Tarefas do curso (para ligar a atividade)
+router.get('/ava/tarefas', async (req, res) => {
+    try {
+        exigeEditor(req);
+        const curso = parseInt(req.query.curso, 10);
+        if (!curso) throw falha(400, 'Informe o número do curso no AVA (o "id=" do link da disciplina).');
+        const j = await ava.ws('mod_assign_get_assignments', { courseids: [curso], includenotenrolledcourses: 1 });
+        const c = (j.courses || [])[0];
+        if (!c) throw falha(404, `O AVA não deixou ver o curso ${curso}. Confira o número (o curso precisa estar na categoria MED).`);
+        res.json({ curso: { id: c.id, nome: c.fullname, sigla: c.shortname }, tarefas: (c.assignments || []).map(a => ({ id: a.id, nome: a.name, prazo: a.duedate || 0, notaMax: a.grade, anonimo: !!a.blindmarking })) });
+    } catch (e) { erro(res, e); }
+});
+
+// PUT /atividades/:id/ava { cursoId, tarefaId } — liga a atividade à Tarefa do AVA
+router.put('/atividades/:id/ava', async (req, res) => {
+    try {
+        exigeEditor(req);
+        const { atividade } = await lerAtividade(req, req.params.id);
+        const cursoId = parseInt((req.body || {}).cursoId, 10), tarefaId = parseInt((req.body || {}).tarefaId, 10);
+        if (!cursoId || !tarefaId) throw falha(400, 'Escolha o curso e a Tarefa do AVA.');
+        const j = await ava.ws('mod_assign_get_assignments', { courseids: [cursoId], includenotenrolledcourses: 1 });
+        const c = (j.courses || [])[0], t = c && (c.assignments || []).find(a => a.id === tarefaId);
+        if (!t) throw falha(404, 'Essa Tarefa não está nesse curso do AVA.');
+        if (t.blindmarking) throw falha(400, 'Essa Tarefa usa envio anônimo: a integração precisa dos nomes. Desative o envio anônimo na Tarefa ou use o ZIP.');
+        if (!(t.grade > 0)) throw falha(400, 'Essa Tarefa não tem nota numérica no AVA (nota máxima). Configure a nota da Tarefa antes.');
+        const ligacao = { cursoId, cursoNome: c.fullname, tarefaId, tarefaNome: t.name, notaMax: t.grade, ligadoEm: agora(), ligadoPor: quem(req) };
+        await db.collection(COL_ATIV).doc(atividade.id).update({ ava: ligacao });
+        res.json({ ava: ligacao });
+    } catch (e) { erro(res, e); }
+});
+
+// GET /atividades/:id/ava/entregas — envios da Tarefa (quem enviou e os arquivos; sem baixar nada ainda)
+router.get('/atividades/:id/ava/entregas', async (req, res) => {
+    try {
+        exigeEditor(req);
+        const { atividade } = await lerAtividade(req, req.params.id);
+        if (!atividade.ava) throw falha(400, 'Ligue a atividade à Tarefa do AVA primeiro.');
+        const [part, subs] = await Promise.all([
+            ava.ws('mod_assign_list_participants', { assignid: atividade.ava.tarefaId, groupid: 0, filter: '', onlyids: 1 }),
+            ava.ws('mod_assign_get_submissions', { assignmentids: [atividade.ava.tarefaId] })
+        ]);
+        const nomes = new Map((Array.isArray(part) ? part : []).map(p => [p.id, p.fullname]));
+        const envios = ((((subs.assignments || [])[0]) || {}).submissions || []).filter(s => s.status === 'submitted');
+        const itens = envios.map(s => {
+            const arquivos = [];
+            (s.plugins || []).forEach(p => (p.fileareas || []).forEach(fa => (fa.files || []).forEach(f => {
+                const caminho = ava.caminhoDoArquivo(f.fileurl);
+                if (caminho) arquivos.push({ nome: f.filename, caminho, tipo: f.mimetype || '', tamanho: f.filesize || 0 });
+            })));
+            const textoOnline = (s.plugins || []).filter(p => p.type === 'onlinetext').flatMap(p => (p.editorfields || []).map(x => x.text || '')).join('\n').trim();
+            return { userid: s.userid, nome: nomes.get(s.userid) || `Aluno ${s.userid}`, enviadoEm: s.timemodified || 0, arquivos, textoOnline };
+        }).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        res.json({ tarefa: atividade.ava, participantes: nomes.size, itens });
+    } catch (e) { erro(res, e); }
+});
+
+// GET /atividades/:id/ava/arquivo?c=/webservice/pluginfile.php/... — o PDF do aluno passa pelo Órbita (o token não sai do servidor)
+router.get('/atividades/:id/ava/arquivo', async (req, res) => {
+    try {
+        exigeEditor(req);
+        await lerAtividade(req, req.params.id);
+        const { tipo, bytes } = await ava.baixarArquivo(String(req.query.c || ''));
+        res.set('Content-Type', tipo);
+        res.set('Cache-Control', 'private, no-store');
+        res.send(bytes);
+    } catch (e) { erro(res, e); }
+});
+
+// GET /atividades/:id/ava/notas — prévia do que vai para o AVA; POST — lança (só finalizadas, com o aluno do AVA)
+async function notasParaLancar(atividade) {
+    const snap = await db.collection(COL_ENT).where('atividadeId', '==', atividade.id).get();
+    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const prontas = todas.filter(e => e.status === 'finalizada' && e.resultado && e.avaUserId);
+    const semAluno = todas.filter(e => e.status === 'finalizada' && !e.avaUserId).length;
+    return { todas, prontas, semAluno };
+}
+router.get('/atividades/:id/ava/notas', async (req, res) => {
+    try {
+        exigeEditor(req);
+        const { atividade } = await lerAtividade(req, req.params.id);
+        if (!atividade.ava) throw falha(400, 'Ligue a atividade à Tarefa do AVA primeiro.');
+        const { todas, prontas, semAluno } = await notasParaLancar(atividade);
+        res.json({
+            tarefa: atividade.ava, total: todas.length, semAluno,
+            itens: prontas.map(e => ({ id: e.id, nome: e.nome, nota: e.resultado.nota, notaAva: notaNoAva(e.resultado.nota, atividade.ava.notaMax),
+                jaLancada: !!(e.avaLancado && e.avaLancado.nota === e.resultado.nota), lancadaEm: e.avaLancado ? e.avaLancado.em : '' }))
+        });
+    } catch (e) { erro(res, e); }
+});
+router.post('/atividades/:id/ava/notas', async (req, res) => {
+    try {
+        exigeEditor(req);
+        const { atividade } = await lerAtividade(req, req.params.id);
+        if (!atividade.ava) throw falha(400, 'Ligue a atividade à Tarefa do AVA primeiro.');
+        if ((req.body || {}).confirmar !== true) throw falha(400, 'Confirme o lançamento.');
+        const ids = new Set(Array.isArray(req.body.ids) ? req.body.ids.map(String) : []);
+        const { prontas } = await notasParaLancar(atividade);
+        const alvo = prontas.filter(e => !ids.size || ids.has(e.id));
+        const ok = [], erros = [];
+        for (const e of alvo) {
+            const notaAva = notaNoAva(e.resultado.nota, atividade.ava.notaMax);
+            try {
+                await ava.ws('mod_assign_save_grade', {
+                    assignmentid: atividade.ava.tarefaId, userid: e.avaUserId, grade: notaAva.toFixed(2),
+                    attemptnumber: -1, addattempt: 0, workflowstate: '', applytoall: 0,
+                    plugindata: { assignfeedbackcomments_editor: { text: feedbackHtml(e), format: 1 } }
+                });
+                await db.collection(COL_ENT).doc(e.id).update({ avaLancado: { em: agora(), por: quem(req), nota: e.resultado.nota, notaAva } });
+                ok.push(e.nome);
+            } catch (err) { erros.push(`${e.nome}: ${err.message}`); }
+        }
+        res.json({ lancadas: ok.length, erros, message: `${ok.length} nota(s) lançada(s) no AVA.${erros.length ? ` ${erros.length} com erro.` : ''}` });
     } catch (e) { erro(res, e); }
 });
 

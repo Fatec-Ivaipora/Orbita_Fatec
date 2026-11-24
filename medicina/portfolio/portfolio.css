@@ -238,3 +238,12 @@
 .pf-tut summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; }
 .pf-tut details p { margin-top: 0.45rem; color: var(--orb-tinta2); }
 .pf-tut-fim { max-width: 860px; margin-top: 1rem; }
+
+/* integração com o AVA (24/11/2026) */
+.pf-link { background: none; border: 0; padding: 0; color: var(--orb-azul, #1f6fb2); text-decoration: underline; cursor: pointer; font: inherit; }
+.pf-ava-lista { border: 1px solid var(--orb-linha, #dde3ea); border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.pf-ava-op { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; cursor: pointer; }
+.pf-ava-op small { color: var(--orb-mudo, #667); }
+.pf-form .pf-ava-op { flex-direction: row; align-items: center; font-weight: 600; }
+.pf-form .pf-ava-op input { width: 18px; height: 18px; min-height: 0; margin: 0; flex: none; }
+.pf-form .pf-ava-op small { flex-basis: 100%; padding-left: 1.6rem; font-weight: 400; }
