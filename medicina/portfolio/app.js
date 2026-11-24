@@ -495,7 +495,11 @@ async function buscarEntregasAva() {
         urls.push({ nome: a.nome, url: URL.createObjectURL(blob), naoPdf: !ehPdf });
         if (ehPdf) { const t = await textoDoPdf(new Uint8Array(await blob.arrayBuffer())); textos.push(t.texto); paginas += t.paginas; }
         else naoPdf.push(a.nome);
-      } catch (e) { erros.push(`${it.nome}: ${a.nome} — ${e.message}`); }
+      } catch (e) {
+        // pdf.js: "Invalid PDF structure" = arquivo cortado/corrompido já no AVA (ex.: envio interrompido)
+        const m = /invalid pdf|missing pdf|unexpected end/i.test(e.message) ? 'o PDF está incompleto ou corrompido no próprio AVA (o envio pode ter sido interrompido). Peça ao aluno para enviar de novo.' : e.message;
+        erros.push(`${it.nome}: ${a.nome} — ${m}`);
+      }
     }
     const texto = textos.join('\n\n');
     try {

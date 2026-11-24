@@ -102,7 +102,8 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)
 - **Por quê:** na correção, o leitor de PDF do navegador abria com a coluna de miniaturas ocupando metade do quadro e a página ficava pequena demais para ler.
 - **`medicina/portfolio/app.js`:** o PDF do leitor abre sem as miniaturas e com a página na largura do quadro (`#pagemode=none&navpanes=0&view=FitH`). Botão novo **Ler em tela cheia** (`modoLeitura()`, com pdf.js): uma página por vez na tela inteira; setas, PageUp/PageDown, espaço ou clique na página mudam a página; **Ampliar** encaixa a página na largura (rola); **Esc** sai. Se o navegador não liberar a tela cheia, vira uma sobreposição do tamanho da janela.
-- **`medicina/portfolio/portfolio.css`:** estilos `.pf-slide*`. **`index.html`:** `app.js?v=4`, `portfolio.css?v=6`.
+- **`medicina/portfolio/portfolio.css`:** estilos `.pf-slide*`.
+- **Buscar entregas do AVA:** quando o PDF do aluno vem cortado/corrompido do próprio AVA (pdf.js "Invalid PDF structure"; caso real: envio parado em exatos 3 MB), a mensagem explica isso e pede para o aluno reenviar. **`index.html`:** `app.js?v=5`, `portfolio.css?v=6`.
 
 ### [2026-11-24] Medicina › Portfólio Reflexivo: integração com o AVA por web service (buscar entregas e lançar notas)
 - Autor: Claude Code (pedido do Suporte AVA)
