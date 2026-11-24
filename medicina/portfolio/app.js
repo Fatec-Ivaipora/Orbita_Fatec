@@ -495,7 +495,11 @@ async function buscarEntregasAva() {
         urls.push({ nome: a.nome, url: URL.createObjectURL(blob), naoPdf: !ehPdf });
         if (ehPdf) { const t = await textoDoPdf(new Uint8Array(await blob.arrayBuffer())); textos.push(t.texto); paginas += t.paginas; }
         else naoPdf.push(a.nome);
-      } catch (e) { erros.push(`${it.nome}: ${a.nome} — ${e.message}`); }
+      } catch (e) {
+        // pdf.js: "Invalid PDF structure" = arquivo cortado/corrompido já no AVA (ex.: envio interrompido)
+        const m = /invalid pdf|missing pdf|unexpected end/i.test(e.message) ? 'o PDF está incompleto ou corrompido no próprio AVA (o envio pode ter sido interrompido). Peça ao aluno para enviar de novo.' : e.message;
+        erros.push(`${it.nome}: ${a.nome} — ${m}`);
+      }
     }
     const texto = textos.join('\n\n');
     try {
@@ -681,6 +685,83 @@ function renderCorrecao() {
   avisoSimilaridade();
 }
 
+// Modo leitura (24/11/2026): o PDF na tela inteira, uma página por vez, como apresentação.
+// Setas / PageUp / PageDown / espaço / clique na página mudam a página; "Ampliar" encaixa na largura (rola); Esc sai.
+async function modoLeitura(url) {
+  if (!window.pdfjsLib) { toast('A biblioteca de leitura de PDF ainda está carregando. Tente de novo em alguns segundos.', 'erro'); return; }
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  let doc;
+  try { doc = await window.pdfjsLib.getDocument(url).promise; } catch (e) { toast(`Não consegui abrir o PDF: ${e.message}`, 'erro'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'pf-slide';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-label', 'Leitura do portfólio em tela cheia');
+  ov.tabIndex = -1;
+  ov.innerHTML = `<div class="pf-slide-palco"><canvas title="Clique para a próxima página"></canvas></div>
+    <div class="pf-slide-barra">
+      <button type="button" data-s="ant" aria-label="Página anterior">‹ Anterior</button>
+      <span data-s="num"></span>
+      <button type="button" data-s="prox" aria-label="Próxima página">Próxima ›</button>
+      <button type="button" data-s="zoom">Ampliar</button>
+      <button type="button" data-s="sair">Sair (Esc)</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const palco = ov.querySelector('.pf-slide-palco'), canvas = ov.querySelector('canvas'), ctx = canvas.getContext('2d');
+  let n = 1, largura = false, tarefa = null, fechado = false;
+  const desenha = async () => {
+    const pag = await doc.getPage(n);
+    const v1 = pag.getViewport({ scale: 1 });
+    const w = palco.clientWidth - 24, h = palco.clientHeight - 24;
+    const escala = largura ? w / v1.width : Math.min(w / v1.width, h / v1.height);
+    const dpr = window.devicePixelRatio || 1;
+    const vp = pag.getViewport({ scale: escala * dpr });
+    if (tarefa) tarefa.cancel();
+    canvas.width = vp.width; canvas.height = vp.height;
+    canvas.style.width = `${Math.floor(vp.width / dpr)}px`; canvas.style.height = `${Math.floor(vp.height / dpr)}px`;
+    tarefa = pag.render({ canvasContext: ctx, viewport: vp });
+    try { await tarefa.promise; } catch (e) { /* trocou de página no meio */ }
+    ov.querySelector('[data-s=num]').textContent = `Página ${n} de ${doc.numPages}`;
+    ov.querySelector('[data-s=ant]').disabled = n <= 1;
+    ov.querySelector('[data-s=prox]').disabled = n >= doc.numPages;
+    ov.querySelector('[data-s=zoom]').textContent = largura ? 'Página inteira' : 'Ampliar';
+    palco.scrollTop = 0;
+  };
+  const vai = (d) => { const m = Math.min(doc.numPages, Math.max(1, n + d)); if (m !== n) { n = m; desenha(); } };
+  const fecha = () => {
+    if (fechado) return;
+    fechado = true;
+    document.removeEventListener('keydown', tecla, true);
+    document.removeEventListener('fullscreenchange', saiuTela);
+    window.removeEventListener('resize', desenha);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    ov.remove();
+    doc.destroy();
+  };
+  const tecla = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); fecha(); }
+    else if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key) && !(largura && e.key === 'ArrowDown')) { e.preventDefault(); vai(1); }
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key) && !(largura && e.key === 'ArrowUp')) { e.preventDefault(); vai(-1); }
+    else return;
+    e.stopPropagation();
+  };
+  const saiuTela = () => { if (!document.fullscreenElement) fecha(); };
+  document.addEventListener('keydown', tecla, true);
+  window.addEventListener('resize', desenha);
+  canvas.addEventListener('click', () => vai(1));
+  ov.querySelector('.pf-slide-barra').addEventListener('click', (e) => {
+    const s = (e.target.closest('[data-s]') || {}).dataset;
+    if (!s) return;
+    if (s.s === 'ant') vai(-1);
+    else if (s.s === 'prox') vai(1);
+    else if (s.s === 'zoom') { largura = !largura; desenha(); }
+    else if (s.s === 'sair') fecha();
+  });
+  ov.focus();
+  desenha();
+  // tela cheia do navegador quando der; se não der, fica a sobreposição do tamanho da janela
+  if (ov.requestFullscreen) ov.requestFullscreen().then(() => { if (!fechado) document.addEventListener('fullscreenchange', saiuTela); }).catch(() => {});
+}
+
 function renderLeitor() {
   const box = el('pf-leitor');
   if (!box || !corr) return;
@@ -692,12 +773,14 @@ function renderLeitor() {
       <button type="button" class="pf-aba ${modo === 'pdf' ? 'ativa' : ''}" data-leitor="pdf" ${arqs.length ? '' : 'disabled title="Abra o PDF do AVA ou importe o ZIP para ver o PDF"'}>PDF</button>
       <button type="button" class="pf-aba ${modo === 'texto' ? 'ativa' : ''}" data-leitor="texto">Texto extraído</button>
     </div>
+    ${modo === 'pdf' && arqs.some(a => !a.naoPdf) ? '<button type="button" class="pf-btn pf-btn-pri pf-btn-peq" data-acao="leitura" title="Uma página por vez na tela inteira. Setas mudam a página, Esc sai.">Ler em tela cheia</button>' : ''}
     ${!arqs.length ? ((corr.entrega.avaArquivos || []).length ? '<button type="button" class="pf-btn pf-btn-peq" data-acao="ava-pdf">Abrir o PDF do AVA</button>' : '<button type="button" class="pf-btn pf-btn-peq" data-acao="importar">Carregar ZIP para ver o PDF</button>') : ''}
   </div>`;
   if (modo === 'pdf' && arqs.length) {
     box.innerHTML = alterna + arqs.map(a => a.naoPdf
       ? `<p class="pf-aviso">Arquivo não PDF: <a href="${a.url}" download="${esc(a.nome)}">${esc(a.nome)}</a> (baixe para abrir).</p>`
-      : `<iframe class="pf-pdf" src="${a.url}" title="${esc(a.nome)}"></iframe>`).join('');
+      // sem a barra de miniaturas do leitor do navegador e com a página na largura do quadro (24/11/2026)
+      : `<iframe class="pf-pdf" src="${a.url}#pagemode=none&navpanes=0&view=FitH" title="${esc(a.nome)}"></iframe>`).join('');
     return;
   }
   if (corr.texto == null) { box.innerHTML = alterna + '<div class="pf-vazio">Carregando o texto…</div>'; return; }
@@ -988,6 +1071,7 @@ function ligarEventos() {
     else if (a === 'ava-ligar') dlgLigarAva();
     else if (a === 'ava-buscar') { b.disabled = true; try { await buscarEntregasAva(); } finally { b.disabled = false; } }
     else if (a === 'ava-notas') dlgLancarNotasAva();
+    else if (a === 'leitura') { const pdf = (pdfs.get(chavePdf(corr.entrega)) || []).find(x => !x.naoPdf); if (pdf) modoLeitura(pdf.url); }
     else if (a === 'ava-pdf') {
       b.disabled = true; b.textContent = 'Abrindo…';
       try { await carregarPdfsAva(corr.entrega); el('pf-leitor').dataset.modo = 'pdf'; renderLeitor(); }
