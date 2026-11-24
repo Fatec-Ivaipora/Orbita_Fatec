@@ -313,7 +313,10 @@ router.put('/impressao/salas/:semestre', exigeImpressao, async (req, res) => {
             const lab = (v) => (SALAS_LAB[v] ? v : '');
             const modo = s.modo === 'dividida' ? 'dividida' : 'unica';
             const primeira = lab(s.primeira) || 'LAB12';
-            salas[id] = { modo, primeira, ate: modo === 'dividida' ? txt(s.ate, 160).toUpperCase() : '', segunda: modo === 'dividida' ? (lab(s.segunda) || (primeira === 'LAB12' ? 'LAB20' : 'LAB12')) : '' };
+            // inicio: em que computador a numeração começa em cada laboratório (a Joyce escolhe; padrão 1)
+            const inicio = {};
+            Object.keys(SALAS_LAB).forEach(k => { const v = parseInt((s.inicio || {})[k], 10); inicio[k] = Number.isInteger(v) ? Math.max(1, Math.min(SALAS_LAB[k], v)) : 1; });
+            salas[id] = { modo, primeira, ate: modo === 'dividida' ? txt(s.ate, 160).toUpperCase() : '', segunda: modo === 'dividida' ? (lab(s.segunda) || (primeira === 'LAB12' ? 'LAB20' : 'LAB12')) : '', inicio };
             if (salas[id].modo === 'dividida' && !salas[id].ate) throw Object.assign(new Error(`Na ${id}, escolha até qual aluno vai para o ${primeira}.`), { status: 400 });
         });
         await db.collection(COL_CONF).doc(semestre).set({ semestre, salas, salasEm: agora(), salasPor: quem(req) }, { merge: true });

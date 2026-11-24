@@ -61,8 +61,11 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       }
     } else partes = [[s.primeira || 'LAB12', resto]];
     const salas = partes.filter(([, l]) => l.length).map(([id, l]) => {
-      if (l.length > CAPACIDADE[id]) avisos.push(`${ROTULO_SALA[id]}: ${l.length} alunos para ${CAPACIDADE[id]} computadores.`);
-      return { id, rotulo: ROTULO_SALA[id], alunos: l.map((a, i) => ({ ...a, pc: i + 1 })) };
+      // a numeração começa no computador que a Joyce escolheu (padrão 1)
+      const ini = Math.max(1, parseInt(((s.inicio || {})[id]), 10) || 1);
+      const ult = ini + l.length - 1;
+      if (ult > CAPACIDADE[id]) avisos.push(`${ROTULO_SALA[id]}: começando no computador ${ini}, os ${l.length} alunos vão até o ${ult}, mas o laboratório tem ${CAPACIDADE[id]}.`);
+      return { id, rotulo: ROTULO_SALA[id], inicio: ini, alunos: l.map((a, i) => ({ ...a, pc: ini + i })) };
     });
     if (info.semCpf) avisos.push(`${info.semCpf} aluno(s) sem CPF no Edubox: a folha sai sem senha (procure a secretaria).`);
     const salaTxt = String((prova.napa && prova.napa.sala) || (d.config.napa && d.config.napa.sala) || '33').trim();
@@ -117,7 +120,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
           <label class="ap-campo"><span>${s.modo === 'dividida' ? 'Da letra A vai para o' : 'Sala'}</span><select id="ap-imp-primeira">${Object.keys(ROTULO_SALA).map(k => `<option value="${k}" ${(s.primeira || 'LAB12') === k ? 'selected' : ''}>${ROTULO_SALA[k]}</option>`).join('')}</select></label>
           ${s.modo === 'dividida' ? `<label class="ap-campo"><span>até o(a) aluno(a)</span><select id="ap-imp-ate">${info.alunos.map(a => `<option value="${esc(a.nome)}" ${casa(s.ate, a.nome) ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></label>
             <p class="ap-nota">O resto da turma vai para o ${esc(ROTULO_SALA[(s.primeira || 'LAB12') === 'LAB12' ? 'LAB20' : 'LAB12'])}.</p>` : ''}
-          <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão</button>        </div>
+          <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão e numeração</button>        </div>
       </section>
       ${dist.napaProblemas.length ? `<section class="ap-imp-avisos" role="alert"><b>NAPA da ${esc(info.turma)}: confirme quem é cada aluno</b>
         <p class="ap-nota" style="margin:.2rem 0 .5rem">O NAPA está cadastrado só com o primeiro nome. Escolha o aluno certo: o nome completo fica salvo e ele sai da lista do laboratório. Enquanto não escolher, não imprima.</p>
@@ -127,14 +130,15 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       ${dist.avisos.length ? `<div class="ap-imp-avisos" role="alert"><b>Confira antes de imprimir:</b><ul>${dist.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}
       <div class="ap-imp-salas">${todas.map(sl => `<article class="ap-imp-sala">
         <h4>${esc(sl.rotulo)}${sl.napa ? ' <small>(NAPA)</small>' : ''}</h4>
-        <p><b>${sl.alunos.length}</b> aluno(s)${CAPACIDADE[sl.id] ? ` · computadores 1 a ${sl.alunos.length} (de ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
+        <p><b>${sl.alunos.length}</b> aluno(s)${CAPACIDADE[sl.id] ? ` · computadores ${sl.inicio} a ${sl.inicio + sl.alunos.length - 1} (o laboratório tem ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
+        ${CAPACIDADE[sl.id] ? `<label class="ap-campo ap-imp-inicio"><span>Começar no computador nº</span><input type="number" min="1" max="${CAPACIDADE[sl.id]}" value="${sl.inicio}" data-inicio-sala="${sl.id}"></label>` : ''}
         <div class="ap-imp-botoes">
           <button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:${sl.id}">Baixar tudo desta sala (PDF)</button>
           ${sl.napa ? '' : `<button type="button" class="ap-btn" data-imp="porta:${sl.id}">Lista da porta (PDF)</button>`}
           <button type="button" class="ap-btn" data-imp="logins:${sl.id}">Folhas de login (${sl.alunos.length}) (PDF)</button>
           <button type="button" class="ap-btn" data-imp="ata:${sl.id}">Ata (PDF)</button>
         </div>
-        ${sl.napa ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
+        ${sl.napa ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista" start="${sl.inicio || 1}">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
       </article>`).join('')}</div>
       <div class="ap-imp-geral"><button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:*">Baixar tudo da prova em PDF (todas as salas)</button>
         <span class="ap-nota">Sai na ordem: para cada sala, a lista da porta, a ata e as folhas de login na ordem dos computadores.</span></div>
@@ -331,7 +335,10 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const ateSel = document.getElementById('ap-imp-ate');
     const info = await alunosDa(prova.turma);
     const ate = modo === 'dividida' ? (ateSel ? ateSel.value : (info.alunos[Math.floor(info.alunos.length / 2)] || {}).nome || '') : '';
-    const r = await api(`${BASE}/impressao/salas/${encodeURIComponent(d.semestre)}`, { method: 'PUT', body: JSON.stringify({ salas: { [prova.turma]: { modo, primeira, ate } } }) });
+    // número inicial de cada laboratório: o que está na tela (ou o que já estava salvo); cada laboratório tem a sua numeração
+    const inicio = { ...((info.salas || {}).inicio || {}) };
+    document.querySelectorAll('[data-inicio-sala]').forEach(i => { inicio[i.dataset.inicioSala] = Math.max(1, parseInt(i.value, 10) || 1); });
+    const r = await api(`${BASE}/impressao/salas/${encodeURIComponent(d.semestre)}`, { method: 'PUT', body: JSON.stringify({ salas: { [prova.turma]: { modo, primeira, ate, inicio } } }) });
     info.salas = r.salas[prova.turma];
     toast(r.message);
     renderCorpo(prova, info);
@@ -340,6 +347,17 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   function ligar(alvo) {
     alvo.addEventListener('change', (e) => {
       if (e.target.id === 'ap-imp-prova') { provaId = e.target.value; render(alvo); return; }
+      if (e.target.dataset.inicioSala) {
+        // mostra a nova numeração na hora; fica salva em "Salvar divisão"
+        const pr = provasVisiveis().find(p => p.id === provaId);
+        const inf = pr && cache.get(`${dadosAtuais().semestre}|${pr.turma}`);
+        if (inf) {
+          inf.salas = { ...(inf.salas || {}), inicio: { ...((inf.salas || {}).inicio || {}), [e.target.dataset.inicioSala]: Math.max(1, parseInt(e.target.value, 10) || 1) } };
+          renderCorpo(pr, inf);
+          toast('Numeração atualizada. Clique em "Salvar divisão e numeração" para guardar.');
+        }
+        return;
+      }
       if (e.target.name === 'ap-imp-modo') {
         // mostra/esconde o "até" sem salvar ainda
         const prova = provasVisiveis().find(p => p.id === provaId);
