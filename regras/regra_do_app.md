@@ -108,6 +108,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Arquivos: src/rotas/aplicacao-provas-med.js (rotas /impressao/*, podeImprimir), medicina/aplicacao-provas/impressao.js (novo), app.js, index.html, aplicacao-provas.css.
 - Aluno trancado e aluno da turma de dependência ("DP - MEDICINA") não entram: o aluno de DP não faz a prova com a turma regular.
 - Nome do NAPA: quando o nome cadastrado não aponta para um aluno só (por exemplo, só o primeiro nome), a aba pede para escolher o aluno certo e salva o nome completo pela rota PUT /impressao/napa/:semestre, que não reabre o calendário validado. Em 2026.2 os nomes do NAPA da T1 e da T2 foram completados, confirmados no chat.
+- Saída: os botões BAIXAM um PDF A4 retrato gerado no navegador com o jsPDF 2.5.1 (cdn.jsdelivr), com texto e linhas, sem imagem da página. A pessoa abre o arquivo e imprime por ele. O arquivo sai com nome, por exemplo "Prova T1 - disciplina - Laboratorio 12 - 25-11-2026.pdf". Tem as cores da MED FATEC (logo colorida e azul #0052B8 nos títulos e cabeçalhos das tabelas), escuras o bastante para a impressora preto e branco. Nome longo diminui a fonte e, se ainda não couber, é cortado com "...".
 - Testado com o relay instalado, em 2026.2: T1 com 57 alunos (LAB12 54 e NAPA 3); T2 com 67 (LAB20 20 de A até Emily Silva, LAB12 45 e NAPA 2); T3 com 63 (LAB12 46 até Maria Eduarda Silva e LAB20 17). RA e F + CPF conferidos com o PDF de logins da T1.
 
 ### [2026-11-24] Aulas EAD segue o Levantamento EaD: o EAD define, o T.I acompanha

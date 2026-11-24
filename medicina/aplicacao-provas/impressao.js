@@ -129,84 +129,158 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         <h4>${esc(sl.rotulo)}${sl.napa ? ' <small>(NAPA)</small>' : ''}</h4>
         <p><b>${sl.alunos.length}</b> aluno(s)${CAPACIDADE[sl.id] ? ` · computadores 1 a ${sl.alunos.length} (de ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
         <div class="ap-imp-botoes">
-          <button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:${sl.id}">Imprimir tudo desta sala</button>
-          ${sl.napa ? '' : `<button type="button" class="ap-btn" data-imp="porta:${sl.id}">Lista da porta</button>`}
-          <button type="button" class="ap-btn" data-imp="logins:${sl.id}">Folhas de login (${sl.alunos.length})</button>
-          <button type="button" class="ap-btn" data-imp="ata:${sl.id}">Ata</button>
+          <button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:${sl.id}">Baixar tudo desta sala (PDF)</button>
+          ${sl.napa ? '' : `<button type="button" class="ap-btn" data-imp="porta:${sl.id}">Lista da porta (PDF)</button>`}
+          <button type="button" class="ap-btn" data-imp="logins:${sl.id}">Folhas de login (${sl.alunos.length}) (PDF)</button>
+          <button type="button" class="ap-btn" data-imp="ata:${sl.id}">Ata (PDF)</button>
         </div>
         ${sl.napa ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
       </article>`).join('')}</div>
-      <div class="ap-imp-geral"><button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:*">Imprimir tudo da prova (todas as salas)</button>
-        <span class="ap-nota">Sai na ordem: para cada sala, a lista da porta, a ata e as folhas de login na ordem dos computadores.</span></div>`;
+      <div class="ap-imp-geral"><button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:*">Baixar tudo da prova em PDF (todas as salas)</button>
+        <span class="ap-nota">Sai na ordem: para cada sala, a lista da porta, a ata e as folhas de login na ordem dos computadores.</span></div>
+      <p class="ap-nota"><b>O PDF baixa no computador em folhas A4:</b> abra o arquivo e imprima por ele. Atenção: o PDF das folhas de login tem as senhas dos alunos; guarde só onde a secretaria tem acesso e apague depois da prova.</p>`;
   }
 
-  // ------------------------------------------------------------------ páginas impressas (A4 retrato, preto e branco)
-  function cab() {
-    return `<header class="ap-ip-cab"><img src="/img/medfatec-logo.png" alt="MED FATEC"><div><b>FATEC Ivaiporã</b><span>Bacharelado em Medicina</span></div></header>`;
+  // ------------------------------------------------------------------ PDF (A4 retrato, preto e branco) — 24/11/2026
+  // O botão BAIXA o PDF; quem abre o arquivo imprime por ele. Desenhado com o jsPDF (texto e linhas, não imagem):
+  // fica leve e nítido. Tem as cores da MED FATEC (azul royal), escuras o bastante para sair legível na impressora preto e branco.
+  let jspdfPromessa = null;
+  function carregarJsPDF() {
+    if (window.jspdf) return Promise.resolve(window.jspdf);
+    jspdfPromessa = jspdfPromessa || new Promise((ok, falha) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+      s.onload = () => ok(window.jspdf);
+      s.onerror = () => { jspdfPromessa = null; falha(new Error('Não consegui carregar o gerador de PDF. Confira a internet e tente de novo.')); };
+      document.head.appendChild(s);
+    });
+    return jspdfPromessa;
   }
-  function linhaProva(prova, info) {
-    return `${esc(prova.disciplina)}${prova.etapa ? ` — ${esc(CHAMADA[prova.etapa] || '')}` : ''} · Turma ${esc(info.turma)} (${info.periodo}º período) · ${dataBR(prova.data)}${prova.horario ? ` · ${esc(prova.horario.replace(':', 'h'))}` : ''}`;
-  }
-  function paginaPorta(sl, prova, info) {
-    const longa = sl.alunos.length > 30;
-    return `<section class="ap-ip-pg">${cab()}
-      <h1 class="ap-ip-sala">${esc(sl.rotulo.toUpperCase())}</h1>
-      <p class="ap-ip-sub">${linhaProva(prova, info)}</p>
-      <table class="ap-ip-porta ${longa ? 'ap-ip-duas' : ''}"><thead><tr><th>PC</th><th>Aluno(a)</th>${longa ? '<th>PC</th><th>Aluno(a)</th>' : ''}</tr></thead><tbody>
-      ${(() => {
-        if (!longa) return sl.alunos.map(a => `<tr><td class="ap-ip-pc">${dois(a.pc)}</td><td>${esc(a.nome)}</td></tr>`).join('');
-        const meio = Math.ceil(sl.alunos.length / 2), linhas = [];
-        for (let i = 0; i < meio; i++) {
-          const a = sl.alunos[i], b = sl.alunos[i + meio];
-          linhas.push(`<tr><td class="ap-ip-pc">${dois(a.pc)}</td><td>${esc(a.nome)}</td>${b ? `<td class="ap-ip-pc">${dois(b.pc)}</td><td>${esc(b.nome)}</td>` : '<td></td><td></td>'}</tr>`);
-        }
-        return linhas.join('');
-      })()}</tbody></table>
-      <p class="ap-ip-total">${sl.alunos.length} aluno(s) neste laboratório</p></section>`;
-  }
-  function paginaAta(sl, prova, info) {
-    const linhas = (n) => Array.from({ length: n }, () => '<div class="ap-ip-linha"></div>').join('');
-    return `<section class="ap-ip-pg ap-ip-ata">${cab()}
-      <h1>ATA DE APLICAÇÃO DE PROVA</h1>
-      <div class="ap-ip-campos">
-        <p><b>Instituição:</b> FACULDADE TECNOLÓGICA DO VALE DO IVAÍ</p>
-        <p><b>Curso:</b> BACHARELADO EM MEDICINA</p>
-        <p><b>Disciplina:</b> ${esc(prova.disciplina.toUpperCase())}${prova.etapa ? ` — ${esc((CHAMADA[prova.etapa] || '').toUpperCase())}` : ''}</p>
-        <p><b>Turma:</b> ${esc(info.turma)} (${info.periodo}º período) &nbsp; <b>Sala:</b> ${esc(sl.rotulo.toUpperCase())} &nbsp; <b>Alunos previstos:</b> ${sl.alunos.length}</p>
-        <p><b>Data:</b> ${dataBR(prova.data)} &nbsp; <b>Horário de início:</b> ________ &nbsp; <b>Horário de término:</b> ________</p>
-      </div>
-      <h2>Ocorrências durante a aplicação</h2>
-      <p>(&nbsp;&nbsp;) Nenhuma ocorrência registrada.</p>
-      <p>(&nbsp;&nbsp;) Ocorreram as seguintes situações:</p>
-      ${linhas(4)}
-      <p class="ap-ip-texto">Nada mais havendo a relatar, lavra-se a presente ata, que vai assinada pelo(a) professor(a) responsável e, se necessário, por fiscais presentes.</p>
-      <h2>Aplicadores</h2>
-      <table class="ap-ip-tab"><thead><tr><th style="width:8%">Nº</th><th>Nome</th><th style="width:40%">Assinatura</th></tr></thead>
-        <tbody>${[1, 2, 3, 4].map(n => `<tr><td>${n}</td><td></td><td></td></tr>`).join('')}</tbody></table>
-      <h2>Registro dos dois últimos alunos a deixar a sala</h2>
-      <table class="ap-ip-tab"><thead><tr><th style="width:8%">Nº</th><th>Nome do(a) aluno(a)</th><th style="width:18%">Horário de saída</th><th style="width:30%">Assinatura</th></tr></thead>
-        <tbody>${[1, 2].map(n => `<tr><td>${n}</td><td></td><td></td><td></td></tr>`).join('')}</tbody></table>
-    </section>`;
-  }
-  function paginaLogin(a, sl, prova, info) {
-    return `<section class="ap-ip-pg ap-ip-login">${cab()}
-      <div class="ap-ip-lugar">${sl.napa ? esc(sl.rotulo.toUpperCase()) : `${esc(sl.rotulo.toUpperCase())} · COMPUTADOR ${dois(a.pc)}`}</div>
-      <p class="ap-ip-sub">${linhaProva(prova, info)}</p>
-      <p class="ap-ip-nome">${esc(a.nome)}</p>
-      <p class="ap-ip-cred"><span>Login:</span> <b>${esc(a.ra)}</b></p>
-      <p class="ap-ip-cred"><span>Senha:</span> <b>${esc(a.senha || '— procure a secretaria —')}</b></p>
-      <div class="ap-ip-notas"><span>Anotações</span></div>
-    </section>`;
-  }
-  function paginasDaSala(sl, prova, info, o) {
-    const out = [];
-    if ((o === 'tudo' || o === 'porta') && !sl.napa) out.push(paginaPorta(sl, prova, info));
-    if (o === 'tudo' || o === 'ata') out.push(paginaAta(sl, prova, info));
-    if (o === 'tudo' || o === 'logins') sl.alunos.forEach(a => out.push(paginaLogin(a, sl, prova, info)));
-    return out;
+  let logoPromessa = null;
+  function logoMed() {
+    logoPromessa = logoPromessa || new Promise((ok) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0);
+        ok({ data: c.toDataURL('image/png'), prop: img.naturalWidth / img.naturalHeight });
+      };
+      img.onerror = () => ok(null);
+      img.src = '/img/medfatec-logo.png';
+    });
+    return logoPromessa;
   }
 
-  async function imprimir(acao) {
+  const M = 15, LARG = 210 - 2 * M; // margens de 15 mm
+  const AZUL = [0, 82, 184], AZUL_CLARO = [230, 240, 251], PRETO = [0, 0, 0], BRANCO = [255, 255, 255];
+  const cor = (doc, c) => doc.setTextColor(...c);
+  // cabeçalho de tabela: fundo azul, letra branca
+  const celTitulo = (doc, x, y, w, h) => { doc.setFillColor(...AZUL); doc.setDrawColor(...PRETO); doc.rect(x, y, w, h, 'FD'); };
+  // texto que cabe na largura: diminui a fonte até caber (nomes longos)
+  function caber(doc, txt, larg, tam, min = 7) {
+    let t = tam;
+    doc.setFontSize(t);
+    while (t > min && doc.getTextWidth(txt) > larg) { t -= 0.5; doc.setFontSize(t); }
+    return t;
+  }
+  // como caber(), e se nem na fonte mínima couber, corta o fim com "..." (devolve o texto que vai para a folha)
+  function caberTxt(doc, txt, larg, tam, min = 7) {
+    caber(doc, txt, larg, tam, min);
+    let t = txt;
+    while (t.length > 4 && doc.getTextWidth(t) > larg) t = `${t.slice(0, -4).trimEnd()}...`;
+    return t;
+  }
+  function cabecalho(doc, logo) {
+    let x = M;
+    if (logo) { const h = 11; doc.addImage(logo.data, 'PNG', M, 11, h * logo.prop, h); x = M + h * logo.prop + 5; }
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text('FATEC Ivaiporã', x, 15.5);
+    cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Bacharelado em Medicina', x, 20);
+    doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
+  }
+  function linhaProvaTxt(prova, info) {
+    return `${prova.disciplina}${prova.etapa ? ` - ${CHAMADA[prova.etapa] || ''}` : ''} · Turma ${info.turma} (${info.periodo}º período) · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
+  }
+  function pdfPorta(doc, logo, sl, prova, info) {
+    cabecalho(doc, logo);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(26); doc.text(sl.rotulo.toUpperCase(), 105, 40, { align: 'center' });
+    cor(doc, PRETO); doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 10); doc.text(linhaProvaTxt(prova, info), 105, 47, { align: 'center' });
+    const duas = sl.alunos.length > 30;
+    const linhas = duas ? Math.ceil(sl.alunos.length / 2) : sl.alunos.length;
+    const alt = duas ? 7 : Math.min(7.5, 215 / Math.max(linhas, 1));
+    const colLarg = duas ? LARG / 2 : LARG, pcLarg = 11;
+    let y = 53;
+    doc.setLineWidth(0.3);
+    const cel = (x, yy, aluno) => {
+      doc.rect(x, yy, pcLarg, alt); doc.rect(x + pcLarg, yy, colLarg - pcLarg, alt);
+      if (!aluno) return;
+      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(duas ? 10 : 11); doc.text(dois(aluno.pc), x + pcLarg / 2, yy + alt - 2.1, { align: 'center' });
+      cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.text(caberTxt(doc, aluno.nome, colLarg - pcLarg - 3, duas ? 9.5 : 11), x + pcLarg + 1.5, yy + alt - 2.1);
+    };
+    // cabeçalho da tabela
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    cor(doc, BRANCO);
+    [0, ...(duas ? [colLarg] : [])].forEach(dx => { celTitulo(doc, M + dx, y, pcLarg, alt); celTitulo(doc, M + dx + pcLarg, y, colLarg - pcLarg, alt); doc.text('PC', M + dx + pcLarg / 2, y + alt - 2.1, { align: 'center' }); doc.text('Aluno(a)', M + dx + pcLarg + 1.5, y + alt - 2.1); });
+    cor(doc, PRETO);
+    y += alt;
+    for (let i = 0; i < linhas; i++) {
+      cel(M, y, sl.alunos[i]);
+      if (duas) cel(M + colLarg, y, sl.alunos[i + linhas]);
+      y += alt;
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`${sl.alunos.length} aluno(s) neste laboratório`, M, y + 5);
+  }
+  function pdfAta(doc, logo, sl, prova, info) {
+    cabecalho(doc, logo);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('ATA DE APLICAÇÃO DE PROVA', 105, 36, { align: 'center' }); cor(doc, PRETO);
+    let y = 46;
+    const campo = (rot, val) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(rot, M, y); const w = doc.getTextWidth(rot) + 1.5; doc.setFont('helvetica', 'normal'); caber(doc, val, LARG - w, 10.5); doc.text(val, M + w, y); y += 6.5; };
+    campo('Instituição:', 'FACULDADE TECNOLÓGICA DO VALE DO IVAÍ');
+    campo('Curso:', 'BACHARELADO EM MEDICINA');
+    campo('Disciplina:', `${prova.disciplina.toUpperCase()}${prova.etapa ? ` - ${(CHAMADA[prova.etapa] || '').toUpperCase()}` : ''}`);
+    campo('Turma:', `${info.turma} (${info.periodo}º período)    Sala: ${sl.rotulo.toUpperCase()}    Alunos previstos: ${sl.alunos.length}`);
+    campo('Data:', `${dataBR(prova.data)}    Horário de início: ________    Horário de término: ________`);
+    y += 3;
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text('Ocorrências durante a aplicação', M, y); y += 7; cor(doc, PRETO);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+    doc.text('(    ) Nenhuma ocorrência registrada.', M, y); y += 6;
+    doc.text('(    ) Ocorreram as seguintes situações:', M, y); y += 4;
+    doc.setLineWidth(0.3);
+    for (let i = 0; i < 4; i++) { y += 7.5; doc.line(M, y, 210 - M, y); }
+    y += 8;
+    doc.text(doc.splitTextToSize('Nada mais havendo a relatar, lavra-se a presente ata, que vai assinada pelo(a) professor(a) responsável e, se necessário, por fiscais presentes.', LARG), M, y);
+    y += 14;
+    const tabela = (titulo, cols, n) => {
+      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text(titulo, M, y); y += 3;
+      const alt = 8.5;
+      let x = M;
+      doc.setFontSize(10); cor(doc, BRANCO);
+      cols.forEach(([rot, w]) => { celTitulo(doc, x, y, w, alt); doc.text(rot, x + 1.5, y + alt - 2.8); x += w; });
+      cor(doc, PRETO);
+      y += alt;
+      doc.setFont('helvetica', 'normal');
+      for (let i = 1; i <= n; i++) { x = M; cols.forEach(([, w], j) => { doc.rect(x, y, w, alt); if (j === 0) doc.text(String(i), x + 1.5, y + alt - 2.8); x += w; }); y += alt; }
+      y += 8;
+    };
+    tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], 4);
+    tabela('Registro dos dois últimos alunos a deixar a sala', [['Nº', 12], ['Nome do(a) aluno(a)', LARG - 12 - 32 - 52], ['Horário de saída', 32], ['Assinatura', 52]], 2);
+  }
+  function pdfLogin(doc, logo, a, sl, prova, info) {
+    cabecalho(doc, logo);
+    const lugar = sl.napa ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
+    doc.setLineWidth(1); doc.setDrawColor(...AZUL); doc.setFillColor(...AZUL_CLARO); doc.rect(M, 31, LARG, 15, 'FD'); doc.setDrawColor(...PRETO);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); caber(doc, lugar, LARG - 6, 20); doc.text(lugar, 105, 41.5, { align: 'center' }); cor(doc, PRETO);
+    doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 9.5); doc.text(linhaProvaTxt(prova, info), 105, 52, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.text(caberTxt(doc, a.nome, LARG, 15, 9), M, 64);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Login:', M, 74); doc.text('Senha:', M, 83); cor(doc, PRETO);
+    doc.setFont('courier', 'bold'); doc.setFontSize(17); doc.text(a.ra, M + 22, 74); doc.text(a.senha || '(procure a secretaria)', M + 22, 83);
+    doc.setLineDashPattern([1.2, 1.2], 0); doc.setLineWidth(0.3); doc.line(M, 92, 210 - M, 92); doc.setLineDashPattern([], 0);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anotações', M, 97);
+  }
+
+  async function baixar(acao) {
     const [o, salaId] = acao.split(':');
     const prova = provasVisiveis().find(p => p.id === provaId);
     if (!prova) return;
@@ -214,17 +288,23 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const dist = distribuir(info, prova);
     const todas = [...dist.salas, ...(dist.napa ? [dist.napa] : [])];
     const alvo = salaId === '*' ? todas : todas.filter(s => s.id === salaId);
-    const pags = alvo.flatMap(sl => paginasDaSala(sl, prova, info, o));
-    if (!pags.length) { toast('Nada para imprimir nesta sala.', 'erro'); return; }
-    const saida = document.getElementById('ap-saida');
-    saida.innerHTML = `<div class="ap-ip">${pags.join('')}</div>`;
-    await Promise.all([...saida.querySelectorAll('img')].map(i => (i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))));
-    document.body.classList.add('ap-imprimindo', 'ap-imprimindo-ret');
-    setTimeout(() => {
-      window.print();
-      document.body.classList.remove('ap-imprimindo', 'ap-imprimindo-ret');
-      saida.innerHTML = ''; // a folha tem a senha: não fica na página depois de imprimir
-    }, 150);
+    if (!alvo.length) { toast('Nada para baixar nesta sala.', 'erro'); return; }
+    toast('Gerando o PDF…');
+    const [{ jsPDF }, logo] = await Promise.all([carregarJsPDF(), logoMed()]);
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    let primeira = true;
+    const nova = () => { if (!primeira) doc.addPage('a4', 'portrait'); primeira = false; };
+    alvo.forEach(sl => {
+      if ((o === 'tudo' || o === 'porta') && !sl.napa) { nova(); pdfPorta(doc, logo, sl, prova, info); }
+      if (o === 'tudo' || o === 'ata') { nova(); pdfAta(doc, logo, sl, prova, info); }
+      if (o === 'tudo' || o === 'logins') sl.alunos.forEach(a => { nova(); pdfLogin(doc, logo, a, sl, prova, info); });
+    });
+    if (primeira) { toast('Nada para baixar nesta sala.', 'erro'); return; }
+    const OQUE = { tudo: 'Prova', porta: 'Lista da porta', logins: 'Logins', ata: 'Ata' };
+    const ondeTxt = salaId === '*' ? 'todas as salas' : alvo.map(s => s.rotulo).join(' ');
+    const nomeArq = `${OQUE[o] || 'Prova'} ${info.turma} - ${prova.disciplina} - ${ondeTxt} - ${dataBR(prova.data).replace(/\//g, '-')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 150);
+    doc.save(`${nomeArq}.pdf`);
+    toast(`PDF baixado (${doc.getNumberOfPages()} folha(s) A4). Abra o arquivo e imprima.`);
   }
 
   // troca o primeiro nome do NAPA pelo nome completo escolhido (sem reabrir o calendário validado)
@@ -270,7 +350,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     alvo.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-imp]');
       try {
-        if (b) { await imprimir(b.dataset.imp); return; }
+        if (b) { b.disabled = true; try { await baixar(b.dataset.imp); } finally { b.disabled = false; } return; }
         if (e.target.closest('#ap-imp-salvar-div')) await salvarDivisao();
         if (e.target.closest('#ap-imp-salvar-napa')) await salvarNapa();
       } catch (err) { toast(err.message, 'erro'); }

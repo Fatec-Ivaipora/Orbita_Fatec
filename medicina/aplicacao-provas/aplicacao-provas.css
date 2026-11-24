@@ -253,38 +253,3 @@
 .ap-imp-botoes { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
 .ap-imp-lista { columns: 2; font-size: 0.8rem; margin: 0.4rem 0 0; padding-left: 1.6rem; }
 .ap-imp-geral { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
-
-/* folhas: só aparecem na impressão */
-.ap-ip { font-family: "Source Sans 3", Arial, sans-serif; color: #000; background: #fff; }
-.ap-ip-pg { width: 186mm; min-height: 270mm; padding: 0; box-sizing: border-box; }
-.ap-ip-cab { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
-.ap-ip-cab img { height: 46px; filter: grayscale(1); }
-.ap-ip-cab div { display: flex; flex-direction: column; font-size: 11pt; line-height: 1.2; }
-.ap-ip-sala { font-size: 30pt; margin: 6px 0 2px; letter-spacing: 0.02em; text-align: center; }
-.ap-ip-sub { text-align: center; font-size: 11pt; margin: 0 0 10px; }
-.ap-ip-porta { width: 100%; border-collapse: collapse; font-size: 12pt; }
-.ap-ip-porta.ap-ip-duas { font-size: 10pt; }
-.ap-ip-porta th, .ap-ip-porta td { border: 1px solid #000; padding: 3px 6px; text-align: left; }
-.ap-ip-porta th { background: #fff; font-weight: 800; }
-.ap-ip-pc { width: 34px; text-align: center !important; font-weight: 800; }
-.ap-ip-total { margin-top: 8px; font-size: 10pt; }
-.ap-ip-ata h1 { text-align: center; font-size: 16pt; margin: 8px 0 12px; }
-.ap-ip-ata h2 { font-size: 12pt; margin: 14px 0 6px; }
-.ap-ip-ata p { margin: 4px 0; font-size: 11pt; }
-.ap-ip-campos p { margin: 3px 0; }
-.ap-ip-linha { border-bottom: 1px solid #000; height: 22px; }
-.ap-ip-texto { margin-top: 10px !important; }
-.ap-ip-tab { width: 100%; border-collapse: collapse; font-size: 11pt; }
-.ap-ip-tab th, .ap-ip-tab td { border: 1px solid #000; padding: 4px 6px; height: 26px; text-align: left; }
-.ap-ip-lugar { border: 3px solid #000; text-align: center; font-size: 22pt; font-weight: 800; padding: 8px; margin: 10px 0 6px; }
-.ap-ip-nome { font-size: 15pt; font-weight: 800; margin: 14px 0 8px; }
-.ap-ip-cred { font-size: 15pt; margin: 4px 0; }
-.ap-ip-cred span { display: inline-block; width: 70px; }
-.ap-ip-cred b { font-family: "Courier New", monospace; font-size: 17pt; letter-spacing: 0.04em; }
-.ap-ip-notas { border-top: 1px dashed #000; margin-top: 18px; padding-top: 4px; font-size: 10pt; }
-@page folhaRetrato { size: A4 portrait; margin: 12mm; }
-@media print {
-  body.ap-imprimindo-ret .ap-ip-pg { page: folhaRetrato; break-after: page; }
-  body.ap-imprimindo-ret .ap-ip-pg:last-child { break-after: auto; }
-  body.ap-imprimindo-ret .ap-ip, body.ap-imprimindo-ret .ap-ip * { -webkit-print-color-adjust: economy; print-color-adjust: economy; }
-}
