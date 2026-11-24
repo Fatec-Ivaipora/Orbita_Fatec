@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/fi
 import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from '../core/layout.js';
 import { getEffectiveLevel } from '../core/permissions.js';
-import { montarPdfProfessor, disciplinasPorProfessor } from './pdf-professor.js?v=1';
+import { montarPdfProfessor, disciplinasPorProfessor } from './pdf-professor.js?v=2';
 import { montarRelatorioDirecao } from './relatorio-direcao.js?v=1';
 
 // ==========================================================================

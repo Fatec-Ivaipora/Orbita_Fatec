@@ -99,6 +99,18 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-24] Relatório CPA: disciplina com mais de um professor separada por professor
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/cpa-comentario-por-professor
+- Arquivos alterados:
+  - `src/rotas/cpa.js`: em `montarRelatorioAluno`, a linha da disciplina passa a ser por disciplina + professor (`codpro` de cada resposta). Nota geral, total de avaliações e comentários ficam só do professor avaliado. A junção é pelo NOME do professor, porque a mesma pessoa pode ter mais de um `codpro` no Edubox (o Rodrigo S. C. Oliveira tem 4). `montarPerguntasPorDisciplina` já aceita `codpro` na linha do relay: quando vier, o resultado por pergunta também sai por professor. Enquanto não vier, a linha recebe `perguntasDaDisciplinaToda: true` se a disciplina tiver mais de um professor.
+  - `cpa/pdf-professor.js`: nessas disciplinas, o PDF do professor avisa que o resultado por pergunta e a satisfação ainda somam todos os professores da disciplina.
+  - `cpa/app.js` (`pdf-professor.js?v=2`) e `cpa/index.html` (`app.js?v=8`).
+- Tipo: Correção
+- Motivo: na Medicina o aluno escolhe, no Edubox, qual professor da disciplina está avaliando. O Órbita juntava as respostas de todos os professores na mesma disciplina, e o PDF de cada professor saía com os comentários dos colegas. Em 2026-2 são 20 disciplinas da Medicina com mais de um professor. Caso que motivou: o PDF do Rodrigo S. C. Oliveira tinha 202 comentários em Habilidades Clínicas IV (6 professores) e 81 comentários falando de "professora"; agora tem só os dele (34) e nenhum de professora. Conferido com os dados reais: 81 linhas disciplina x professor, 2.025 comentários (os mesmos 2.025 do Edubox), 36 PDFs e nenhum comentário em dois PDFs.
+- Pendente (relay, colado pelo usuário): mandar `codpro` nas linhas de distribuição por pergunta das dimensões tipo D, para o gráfico e a satisfação também saírem por professor.
+- Como testar: Relatório CPA → Alunos → campanha da Medicina → curso Medicina; na tabela "Por disciplina", uma disciplina com dois professores aparece em duas linhas, cada uma com os seus comentários. Gerar os PDFs por professor e conferir que cada um só tem os próprios comentários.
+- Como reverter: reverter o commit.
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)
 - **Por quê:** na correção, o leitor de PDF do navegador abria com a coluna de miniaturas ocupando metade do quadro e a página ficava pequena demais para ler.
 - **`medicina/portfolio/app.js`:** o PDF do leitor abre sem as miniaturas e com a página na largura do quadro (`#pagemode=none&navpanes=0&view=FitH`). Botão novo **Ler em tela cheia** (`modoLeitura()`, com pdf.js): uma página por vez na tela inteira; setas, PageUp/PageDown, espaço ou clique na página mudam a página; **Ampliar** encaixa a página na largura (rola); **Esc** sai. Se o navegador não liberar a tela cheia, vira uma sobreposição do tamanho da janela.
