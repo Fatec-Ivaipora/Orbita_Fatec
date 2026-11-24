@@ -120,7 +120,7 @@ router.get('/', async (req, res) => {
             p.minha = (p.aplicadores || []).some(a => ehMinha(a, nome));
             return p;
         }).sort((a, b) => a.data.localeCompare(b.data) || (a.horario || '').localeCompare(b.horario || '') || a.turma.localeCompare(b.turma));
-        res.json({ semestre, editor, meuNome: nome, config: configPara(conf, editor), provas });
+        res.json({ semestre, editor, podeImprimir: podeImprimir(req.user), meuNome: nome, config: configPara(conf, editor), provas });
     } catch (e) { erro(res, e); }
 });
 
@@ -228,6 +228,80 @@ router.post('/config/:semestre/reabrir', exigeEditor, async (req, res) => {
         if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
         await db.collection(COL_CONF).doc(semestre).set({ status: 'montagem', reabertoEm: agora(), reabertoPor: quem(req), motivoReabertura: 'reaberto' }, { merge: true });
         res.json({ message: 'Calendário reaberto para alteração.' });
+    } catch (e) { erro(res, e); }
+});
+
+// ---------- IMPRESSÃO DA PROVA (24/11/2026) ----------
+// A secretaria acadêmica (Joyce) imprime, para cada prova e por sala: a lista da porta (aluno e nº do computador),
+// a folha de login de cada aluno (login = RA, senha = "F" + CPF — padrão da Fatec) e a ata de aplicação.
+// Salas: LAB12 (computadores 1–60), LAB20 (1–30) e a sala do NAPA (notebooks, sem número). Os alunos do NAPA não
+// entram nas listas dos laboratórios. A divisão de cada turma entre os laboratórios fica na configuração (salas).
+// Alunos, RA e CPF vêm do Edubox (relay /med-provas/alunos) na hora; NADA disso é gravado no Órbita.
+// Só a coordenação de Medicina (inclui a secretaria acadêmica) e o ADM: a senha sai do CPF (dado pessoal).
+const { relay } = require('../utils/edubox-relay');
+const SALAS_LAB = { LAB12: 60, LAB20: 30 };
+const SAIU_MATRICULA = /^(cancel|tranc|desist|transf|evad|abandon)/i;
+const SALAS_PADRAO = {
+    T1: { modo: 'unica', primeira: 'LAB12', ate: '', segunda: '' },
+    T2: { modo: 'dividida', primeira: 'LAB20', ate: 'EMILY SILVA', segunda: 'LAB12' },
+    T3: { modo: 'dividida', primeira: 'LAB12', ate: 'MARIA EDUARDA SILVA', segunda: 'LAB20' }
+};
+const podeImprimir = (user) => ['adm_l1', 'adm_l2', 'coord_medicina'].includes(user.role);
+function exigeImpressao(req, res, next) {
+    if (!podeImprimir(req.user)) return res.status(403).json({ error: 'A impressão das provas (logins dos alunos) é só da coordenação e da secretaria acadêmica de Medicina.' });
+    next();
+}
+function salasDaConfig(conf) {
+    const out = {};
+    (conf.turmas || []).forEach(t => { out[t.id] = { ...(SALAS_PADRAO[t.id] || { modo: 'unica', primeira: 'LAB12', ate: '', segunda: '' }), ...((conf.salas || {})[t.id] || {}) }; });
+    return out;
+}
+
+// GET /impressao/alunos?semestre=2026.2&turma=T1 → { turma, periodo, alunos: [{ nome, ra, senha }], semCpf, salas }
+router.get('/impressao/alunos', exigeImpressao, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const semestre = req.query.semestre;
+        if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Semestre inválido.' });
+        const conf = await lerConfig(semestre);
+        const turma = (conf.turmas || []).find(t => t.id === String(req.query.turma || '').toUpperCase());
+        if (!turma) return res.status(400).json({ error: 'Turma não encontrada na configuração.' });
+        let r;
+        try { r = await relay(`/med-provas/alunos?semestre=${encodeURIComponent(semestre.replace('.', '-'))}`, { timeoutMs: 30000 }); }
+        catch (e) {
+            // 401/404: a rota /med-provas ainda não foi instalada no relay (regras/relay/instalar-med-provas.sh)
+            if (e.status === 401 || e.status === 404) return res.status(503).json({ error: 'A busca dos alunos no Edubox para a impressão ainda não foi instalada no servidor do relay. Avise o Suporte AVA.' });
+            return res.status(502).json({ error: `O Edubox não respondeu (${e.message}). Tente de novo em instantes.` });
+        }
+        if (!r || !r.ok) return res.status(502).json({ error: `O Edubox não respondeu (${(r && r.erro) || 'relay'}). Tente de novo em instantes.` });
+        const vistos = new Set();
+        const alunos = (r.alunos || [])
+            .filter(a => Number(a.periodo) === Number(turma.periodo) && !SAIU_MATRICULA.test(a.situacao || '') && a.ra)
+            .filter(a => { if (vistos.has(a.ra)) return false; vistos.add(a.ra); return true; })
+            .map(a => ({ nome: txt(a.nome, 160).toUpperCase(), ra: txt(a.ra, 20), senha: /^\d{11}$/.test(a.cpf || '') ? `F${a.cpf}` : '' }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        res.json({ turma: turma.id, periodo: turma.periodo, alunos, semCpf: alunos.filter(a => !a.senha).length, salas: salasDaConfig(conf)[turma.id], capacidade: SALAS_LAB });
+    } catch (e) { erro(res, e); }
+});
+
+// PUT /impressao/salas/:semestre { salas: { T1: { modo, primeira, ate, segunda } } } — como cada turma se divide nos laboratórios
+router.put('/impressao/salas/:semestre', exigeImpressao, async (req, res) => {
+    try {
+        const semestre = req.params.semestre;
+        if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
+        const conf = await lerConfig(semestre);
+        const salas = { ...(conf.salas || {}) };
+        Object.entries((req.body || {}).salas || {}).forEach(([t, s]) => {
+            const id = txt(t, 10).toUpperCase();
+            if (!(conf.turmas || []).some(x => x.id === id) || !s) return;
+            const lab = (v) => (SALAS_LAB[v] ? v : '');
+            const modo = s.modo === 'dividida' ? 'dividida' : 'unica';
+            const primeira = lab(s.primeira) || 'LAB12';
+            salas[id] = { modo, primeira, ate: modo === 'dividida' ? txt(s.ate, 160).toUpperCase() : '', segunda: modo === 'dividida' ? (lab(s.segunda) || (primeira === 'LAB12' ? 'LAB20' : 'LAB12')) : '' };
+            if (salas[id].modo === 'dividida' && !salas[id].ate) throw Object.assign(new Error(`Na ${id}, escolha até qual aluno vai para o ${primeira}.`), { status: 400 });
+        });
+        await db.collection(COL_CONF).doc(semestre).set({ semestre, salas, salasEm: agora(), salasPor: quem(req) }, { merge: true });
+        res.json({ message: 'Divisão das salas salva.', salas });
     } catch (e) { erro(res, e); }
 });
 

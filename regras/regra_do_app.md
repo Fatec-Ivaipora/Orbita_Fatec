@@ -99,6 +99,14 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-24] Medicina › Aplicação de Provas: impressão da prova por sala (lista da porta, folhas de login e ata)
+- Autor: Claude Code (pedido do Suporte AVA, para a secretaria acadêmica imprimir)
+- Nova aba **Impressão**, visível só para coord_medicina, ADM N1 e ADM N2, porque a senha sai do CPF. Para cada prova, por sala, saem: a lista da porta (aluno e nº do computador; LAB12 de 1 a 60, LAB20 de 1 a 30), a ata de aplicação (no modelo da secretaria, uma por sala e por disciplina) e a folha de login de cada aluno (login = RA, senha = F + CPF, com a sala e o computador no alto e espaço para anotações). Tudo em A4 retrato, preto e branco, com a logo MED FATEC.
+- NAPA: os alunos do NAPA (Configurar › alunos do NAPA da turma) saem das listas dos laboratórios e ganham folha de login e ata na sala do NAPA (a sala da prova ou a da configuração; padrão Sala 33). Não há lista de porta para o NAPA, porque é dado de saúde.
+- Divisão da turma entre os laboratórios, salva por semestre em med_aplicacao_config.salas: uma sala só, ou dividida ("da letra A até o aluno X vai para o LAB20/LAB12, o resto para o outro"). Padrão: T1 toda no LAB12; T2 de A até Emily Silva no LAB20 e o resto no LAB12; T3 de A até Maria Eduarda Silva no LAB12 e o resto no LAB20. A tela avisa quando um nome do NAPA não é encontrado, quando o corte é ambíguo, quando uma sala passa da capacidade e quando falta CPF.
+- Dados: rota nova no relay, GET /med-provas/alunos?semestre=2026-2 (regras/relay/orbita-med-provas.js e instalar-med-provas.sh), só leitura e só da Medicina, devolvendo nome, RA (tac_matricula.alumat), CPF (tfi_cliente.cpfcli, só dígitos), período e situação. O Órbita chama essa rota em GET /api/aplicacao-provas-med/impressao/alunos (no-store) e não grava RA, CPF nem senha. Depois da impressão, a folha é apagada da página.
+- Arquivos: src/rotas/aplicacao-provas-med.js (rotas /impressao/*, podeImprimir), medicina/aplicacao-provas/impressao.js (novo), app.js, index.html, aplicacao-provas.css.
+
 ### [2026-11-24] Aulas EAD segue o Levantamento EaD: o EAD define, o T.I acompanha
 - Autor: Claude Code (pedido do Suporte AVA)
 - Regra: disciplina (dia, horário, professor, unidades), calendário das UAs e data de cada UA são definidos só pelo EAD (Carlos) no Levantamento EaD. Na Aulas EAD do T.I tudo isso fica só para leitura: saíram Importar, Nova disciplina, Salvar/Excluir disciplina, o campo de data da UA e o Salvar calendário. O T.I continua marcando as gravações (etapas, não gravou, observação, tipo da revisão) e cuidando das salas Zoom.
