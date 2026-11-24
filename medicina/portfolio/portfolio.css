@@ -247,3 +247,14 @@
 .pf-form .pf-ava-op { flex-direction: row; align-items: center; font-weight: 600; }
 .pf-form .pf-ava-op input { width: 18px; height: 18px; min-height: 0; margin: 0; flex: none; }
 .pf-form .pf-ava-op small { flex-basis: 100%; padding-left: 1.6rem; font-weight: 400; }
+
+/* modo leitura em tela cheia (24/11/2026) */
+.pf-slide { position: fixed; inset: 0; z-index: 9999; background: #111a20; display: flex; flex-direction: column; outline: none; }
+.pf-slide-palco { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 12px; }
+.pf-slide-palco canvas { background: #fff; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); cursor: pointer; margin: auto; }
+.pf-slide-barra { display: flex; justify-content: center; align-items: center; gap: 0.6rem; padding: 0.55rem; background: #1B3A4B; color: #fff; font-size: 0.95rem; flex-wrap: wrap; }
+.pf-slide-barra button { background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px; padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; }
+.pf-slide-barra button:hover:not(:disabled) { background: #34B3A0; border-color: #34B3A0; }
+.pf-slide-barra button:disabled { opacity: 0.35; cursor: default; }
+.pf-slide-barra [data-s=num] { min-width: 9rem; text-align: center; }
+.pf-slide-barra [data-s=sair] { margin-left: 1rem; }
