@@ -8,6 +8,7 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
+import { criarImpressao } from "./impressao.js?v=11";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -206,7 +207,8 @@ function render() {
   $('[data-aba="minhas"]').hidden = !nMinhas;
   el('ap-n-minhas').textContent = nMinhas ? `(${nMinhas})` : '';
   $('[data-aba="napa"]').hidden = !dados.editor;
-  if ((aba === 'minhas' && !nMinhas) || (aba === 'napa' && !dados.editor)) aba = 'turmas';
+  $('[data-aba="impressao"]').hidden = !dados.podeImprimir;
+  if ((aba === 'minhas' && !nMinhas) || (aba === 'napa' && !dados.editor) || (aba === 'impressao' && !dados.podeImprimir)) aba = 'turmas';
   document.querySelectorAll('.ap-aba').forEach(b => { const on = b.dataset.aba === aba; b.classList.toggle('ativa', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
   el('ap-menu-exportar').innerHTML = `<fieldset class="ap-sai"><legend>O que sai na arte da turma</legend>${Object.entries(SAI_ROTULO).map(([k, l]) => `<label><input type="checkbox" data-sai="${k}" ${SAI[k] ? 'checked' : ''}> ${l}</label>`).join('')}</fieldset>`
     + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="img-turma:${esc(t.id)}">Imagem da ${esc(t.id)} (alunos)</button>`).join('')
@@ -218,6 +220,7 @@ function render() {
     + (dados.editor ? '<button type="button" role="menuitem" data-exp="pdf-napa">Imprimir / PDF: NAPA (sala, notebooks)</button>' : '');
   document.querySelectorAll('.ap-so-editor').forEach(b => { b.hidden = !dados.editor; });
   renderConflitos();
+  if (aba === 'impressao') { impressao.render(el('ap-conteudo')); return; }
   el('ap-conteudo').innerHTML = aba === 'turmas' ? renderTurmas(provas)
     : aba === 'aplicadores' ? renderAplicadores(provas, false)
     : aba === 'minhas' ? renderAplicadores(provas, true)
@@ -486,6 +489,9 @@ async function exportar(tipo) {
 // ==========================================================================================
 // DADOS E EVENTOS
 // ==========================================================================================
+// 24/11/2026: impressão da prova por sala (lista da porta, logins, ata) — só coordenação/secretaria
+const impressao = criarImpressao({ api, toast, BASE, dadosAtuais: () => dados, provasVisiveis });
+
 async function carregar() {
   const sem = el('ap-semestre').value;
   try {
@@ -494,7 +500,8 @@ async function carregar() {
   } catch (e) { el('ap-conteudo').innerHTML = `<div class="ap-vazio">${esc(e.message)}</div>`; }
 }
 function ligarEventos() {
-  el('ap-semestre').addEventListener('change', () => { edubox = null; carregar(); });
+  el('ap-semestre').addEventListener('change', () => { edubox = null; impressao.limpar(); carregar(); });
+  impressao.ligar(el('ap-conteudo'));
   el('ap-etapa').addEventListener('change', render);
   document.querySelector('.ap-abas').addEventListener('click', (e) => { const b = e.target.closest('.ap-aba'); if (b) { aba = b.dataset.aba; render(); } });
   el('ap-conteudo').addEventListener('click', (e) => { const t = e.target.closest('[data-prova]'); if (t) abrirProva(t.dataset.prova); });
