@@ -120,12 +120,18 @@ export function montarPdfProfessor(JsPDF, { professor, nomeCurso, campanha, disc
     const wc = (W - 8) / 3;
     caixa(M, wc, 'NOTA GERAL (0–10)', d.mediaGeral === null ? '—' : d.mediaGeral.toFixed(1));
     caixa(M + wc + 4, wc, 'AVALIAÇÕES', String(d.totalAvaliacoes));
-    caixa(M + 2 * (wc + 4), wc, 'SATISFAÇÃO', d.satisfacao === null ? '—' : pct(d.satisfacao));
+    caixa(M + 2 * (wc + 4), wc, d.perguntasDaDisciplinaToda ? 'SATISFAÇÃO (DISCIPLINA)' : 'SATISFAÇÃO', d.satisfacao === null ? '—' : pct(d.satisfacao));
     y += 23;
 
     // perguntas
     if (d.perguntas && d.perguntas.length) {
-      fonte(11, 'bold', COR.marca); doc.text('Resultado por pergunta', M, y); y += 5;
+      fonte(11, 'bold', COR.marca); doc.text(d.perguntasDaDisciplinaToda ? 'Resultado por pergunta (disciplina inteira)' : 'Resultado por pergunta', M, y); y += 5;
+      // disciplina com mais de um professor: nota, avaliações e comentários acima são só deste professor; o
+      // Edubox ainda não manda a distribuição por pergunta separada por professor (24/11/2026)
+      if (d.perguntasDaDisciplinaToda) {
+        const aviso = quebra('Esta disciplina tem mais de um professor. A nota geral, as avaliações e os comentários são só seus; o resultado por pergunta e a satisfação ainda somam as respostas de todos os professores da disciplina.', 8, W);
+        fonte(8, 'italic', COR.mudo); doc.text(aviso, M, y); y += aviso.length * alt(8) + 2;
+      }
       let x = M;
       fonte(8, 'normal', COR.tinta2);
       ROT.slice(0, 4).forEach((r, i) => { doc.setFillColor(...CORES_DIST[i]); doc.rect(x, y - 2.6, 3, 3, 'F'); doc.text(r, x + 4.5, y); x += doc.getTextWidth(r) + 10; });

@@ -99,21 +99,24 @@ function montarPerguntasPorGrupo(perguntas) {
 
 // Distribuição de resposta por pergunta de UMA disciplina específica (pro
 // relatório/PDF por disciplina) — só existe pra dimensões tipo D.
+// Se o relay mandar `codpro` na linha (disciplina com vários professores), a distribuição sai por professor:
+// chave `${codgru}|${disciplina}|${codpro}`. Sem `codpro`, fica a da disciplina inteira (`${codgru}|${disciplina}|`).
 function montarPerguntasPorDisciplina(perguntasD) {
-    const porPerguntaDisc = new Map(); // `${codgru}|${codque}|${disciplina}` -> acumulador
+    const porPerguntaDisc = new Map(); // `${codgru}|${codque}|${disciplina}|${codpro}` -> acumulador
     for (const p of perguntasD) {
         if (!p.disciplina) continue;
-        const chave = `${p.codgru}|${p.codque}|${p.disciplina}`;
+        const codpro = p.codpro === undefined || p.codpro === null ? '' : String(p.codpro);
+        const chave = `${p.codgru}|${p.codque}|${p.disciplina}|${codpro}`;
         if (!porPerguntaDisc.has(chave)) {
-            porPerguntaDisc.set(chave, { codgru: p.codgru, disciplina: p.disciplina, codque: p.codque, pergunta: p.pergunta, opcoes: parseOpcoes(p), dist: [0, 0, 0, 0, 0] });
+            porPerguntaDisc.set(chave, { codgru: p.codgru, disciplina: p.disciplina, codpro, codque: p.codque, pergunta: p.pergunta, opcoes: parseOpcoes(p), dist: [0, 0, 0, 0, 0] });
         }
         const acc = porPerguntaDisc.get(chave);
         const op = Number(p.op), n = Number(p.n) || 0;
         if (op >= 1 && op <= 5) acc.dist[op - 1] += n;
     }
-    const mapa = new Map(); // `${codgru}|${disciplina}` -> array de perguntas
+    const mapa = new Map(); // `${codgru}|${disciplina}|${codpro}` -> array de perguntas
     for (const acc of porPerguntaDisc.values()) {
-        const chaveDisc = `${acc.codgru}|${acc.disciplina}`;
+        const chaveDisc = `${acc.codgru}|${acc.disciplina}|${acc.codpro}`;
         if (!mapa.has(chaveDisc)) mapa.set(chaveDisc, []);
         mapa.get(chaveDisc).push({
             codque: acc.codque, pergunta: acc.pergunta, opcoes: acc.opcoes,
@@ -144,30 +147,59 @@ function montarRelatorioAluno({ avaliacao, curso, grupos, perguntas, notas, prof
             : null;
         if (comentario) info.comentarios.push(comentario);
 
+        // Disciplina com vários professores (24/11/2026, Medicina): no Edubox o aluno escolhe qual professor da
+        // disciplina está avaliando, e cada resposta vem com o `codpro`. Antes tudo caía numa linha só da
+        // disciplina, com os nomes de todos os professores, e o PDF de cada professor levava os comentários
+        // dos colegas. Agora é uma linha por disciplina + professor: nota, total e comentários só dele.
+        // A mesma pessoa pode ter mais de um codpro no Edubox (Rodrigo S. C. Oliveira tem 4): junta pelo NOME.
         if (row.disciplina) {
-            const chave = `${row.codgru}|${row.disciplina}`;
+            const codpro = row.codpro === undefined || row.codpro === null ? '' : String(row.codpro);
+            const nome = codpro ? nomePorCodpro.get(row.codpro) || nomePorCodpro.get(Number(codpro)) || '' : '';
+            const chave = `${row.codgru}|${row.disciplina}|${nome || codpro}`;
             if (!disciplinaInfo.has(chave)) {
-                disciplinaInfo.set(chave, { codgru: row.codgru, disciplina: row.disciplina, somaNotas: 0, countNotas: 0, totalAvaliacoes: 0, comentarios: [], professores: new Set() });
+                disciplinaInfo.set(chave, { codgru: row.codgru, disciplina: row.disciplina, codpro, nome, codpros: new Set(), somaNotas: 0, countNotas: 0, totalAvaliacoes: 0, comentarios: [] });
             }
+            disciplinaInfo.get(chave).codpros.add(codpro);
             const dInfo = disciplinaInfo.get(chave);
             dInfo.totalAvaliacoes += 1;
             if (nota !== null) { dInfo.somaNotas += nota; dInfo.countNotas += 1; }
             if (comentario) dInfo.comentarios.push(comentario);
-            const nomeProf = nomePorCodpro.get(row.codpro);
-            if (nomeProf) dInfo.professores.add(nomeProf);
         }
     }
 
+    // quantos professores cada disciplina tem nas respostas (pra avisar quando o gráfico é da disciplina toda)
+    const profsPorDisciplina = new Map();
+    for (const d of disciplinaInfo.values()) {
+        const k = `${d.codgru}|${d.disciplina}`;
+        profsPorDisciplina.set(k, (profsPorDisciplina.get(k) || 0) + 1);
+    }
     const disciplinasPorGrupo = new Map();
     for (const d of disciplinaInfo.values()) {
         if (!disciplinasPorGrupo.has(d.codgru)) disciplinasPorGrupo.set(d.codgru, []);
+        const nomeProf = d.nome || null;
+        // distribuição por professor (quando o relay mandar codpro): soma os codpro da mesma pessoa
+        let doProfessor = null;
+        for (const cp of d.codpros) {
+            const lista = cp ? perguntasPorDisciplina.get(`${d.codgru}|${d.disciplina}|${cp}`) : null;
+            if (!lista) continue;
+            if (!doProfessor) { doProfessor = lista.map(p => ({ ...p, dist: [...p.dist] })); continue; }
+            for (const p of lista) {
+                const alvo = doProfessor.find(x => x.codque === p.codque);
+                if (alvo) p.dist.forEach((n, i) => { alvo.dist[i] += n; });
+                else doProfessor.push({ ...p, dist: [...p.dist] });
+            }
+        }
+        if (doProfessor) doProfessor.forEach(p => { p.respostas = validasDist(p.dist) + p.dist[4]; p.satisfacao = satisfacaoDe(p.dist); });
+        const variosProfessores = (profsPorDisciplina.get(`${d.codgru}|${d.disciplina}`) || 0) > 1;
         disciplinasPorGrupo.get(d.codgru).push({
             disciplina: d.disciplina,
-            professores: [...d.professores].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+            professores: nomeProf ? [nomeProf] : [],
             mediaGeral: d.countNotas > 0 ? Math.round((d.somaNotas / d.countNotas) * 100) / 100 : null,
             totalAvaliacoes: d.totalAvaliacoes,
             comentarios: d.comentarios,
-            perguntas: perguntasPorDisciplina.get(`${d.codgru}|${d.disciplina}`) || [],
+            perguntas: doProfessor || perguntasPorDisciplina.get(`${d.codgru}|${d.disciplina}|`) || [],
+            // gráfico ainda é da disciplina inteira (todos os professores) até o relay mandar o codpro nas perguntas
+            perguntasDaDisciplinaToda: !doProfessor && variosProfessores,
         });
     }
     for (const lista of disciplinasPorGrupo.values()) lista.sort((a, b) => b.totalAvaliacoes - a.totalAvaliacoes);
