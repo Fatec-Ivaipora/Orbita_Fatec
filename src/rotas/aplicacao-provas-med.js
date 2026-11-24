@@ -276,11 +276,27 @@ router.get('/impressao/alunos', exigeImpressao, async (req, res) => {
         if (!r || !r.ok) return res.status(502).json({ error: `O Edubox não respondeu (${(r && r.erro) || 'relay'}). Tente de novo em instantes.` });
         const vistos = new Set();
         const alunos = (r.alunos || [])
-            .filter(a => Number(a.periodo) === Number(turma.periodo) && !SAIU_MATRICULA.test(a.situacao || '') && a.ra)
+            // aluno da turma de dependência ("DP - MEDICINA") não faz a prova junto com a turma regular: fica de fora
+            .filter(a => Number(a.periodo) === Number(turma.periodo) && !SAIU_MATRICULA.test(a.situacao || '') && a.ra && !/^\s*DP\b/i.test(a.turma || ''))
             .filter(a => { if (vistos.has(a.ra)) return false; vistos.add(a.ra); return true; })
             .map(a => ({ nome: txt(a.nome, 160).toUpperCase(), ra: txt(a.ra, 20), senha: /^\d{11}$/.test(a.cpf || '') ? `F${a.cpf}` : '' }))
             .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
         res.json({ turma: turma.id, periodo: turma.periodo, alunos, semCpf: alunos.filter(a => !a.senha).length, salas: salasDaConfig(conf)[turma.id], capacidade: SALAS_LAB });
+    } catch (e) { erro(res, e); }
+});
+
+// PUT /impressao/napa/:semestre { turma, nomes: [...] } — nomes completos dos alunos do NAPA da turma (a tela da
+// impressão troca o primeiro nome cadastrado pelo nome do Edubox). Não reabre o calendário validado: é só cadastro.
+router.put('/impressao/napa/:semestre', exigeImpressao, async (req, res) => {
+    try {
+        const semestre = req.params.semestre;
+        if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Semestre inválido.' });
+        const conf = await lerConfig(semestre);
+        const turma = txt((req.body || {}).turma, 10).toUpperCase();
+        if (!(conf.turmas || []).some(t => t.id === turma && t.napa)) return res.status(400).json({ error: 'Essa turma não tem NAPA na configuração.' });
+        const nomes = lista((req.body || {}).nomes, 120, 60);
+        await db.collection(COL_CONF).doc(semestre).set({ semestre, napaAlunos: { ...(conf.napaAlunos || {}), [turma]: nomes }, napaEm: agora(), napaPor: quem(req) }, { merge: true });
+        res.json({ message: `Alunos do NAPA da ${turma} salvos.`, nomes });
     } catch (e) { erro(res, e); }
 });
 

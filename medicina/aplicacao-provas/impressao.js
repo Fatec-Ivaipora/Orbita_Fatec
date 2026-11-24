@@ -23,7 +23,6 @@ const dois = (n) => String(n).padStart(2, '0');
 export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }) {
   const cache = new Map(); // `${semestre}|${turma}` → resposta do servidor (só na memória desta aba)
   let provaId = '';
-  let carregando = false;
 
   async function alunosDa(turma) {
     const d = dadosAtuais();
@@ -38,10 +37,14 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const avisos = [];
     const napaNomes = ((d.config.napaAlunos || {})[info.turma]) || [];
     const napaRa = new Set();
-    napaNomes.forEach(n => {
+    const napaProblemas = []; // nome do NAPA que não achou um aluno só → a tela pede para escolher
+    napaNomes.forEach((n, i) => {
       const ach = info.alunos.filter(a => casa(n, a.nome));
-      if (ach.length === 1) napaRa.add(ach[0].ra);
-      else avisos.push(ach.length ? `NAPA: "${n}" bate com mais de um aluno. Escreva o nome completo em Configurar.` : `NAPA: "${n}" não foi encontrado na turma no Edubox. Confira o nome em Configurar.`);
+      if (ach.length === 1) { napaRa.add(ach[0].ra); return; }
+      // parecidos: mesmo começo do primeiro nome (ISABELLI ~ ISABELLE / ISABELLY)
+      const ini = (toks(n)[0] || '').slice(0, 4);
+      const parecidos = ach.length ? ach : info.alunos.filter(a => ini && (toks(a.nome)[0] || '').startsWith(ini));
+      napaProblemas.push({ i, nome: n, candidatos: parecidos.map(a => a.nome), ambiguo: ach.length > 1 });
     });
     const napaAlunos = info.alunos.filter(a => napaRa.has(a.ra));
     const resto = info.alunos.filter(a => !napaRa.has(a.ra));
@@ -62,9 +65,10 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       return { id, rotulo: ROTULO_SALA[id], alunos: l.map((a, i) => ({ ...a, pc: i + 1 })) };
     });
     if (info.semCpf) avisos.push(`${info.semCpf} aluno(s) sem CPF no Edubox: a folha sai sem senha (procure a secretaria).`);
-    const napaSala = (prova.napa && prova.napa.sala) || (d.config.napa && d.config.napa.sala) || 'Sala 33';
+    const salaTxt = String((prova.napa && prova.napa.sala) || (d.config.napa && d.config.napa.sala) || '33').trim();
+    const napaSala = /^\d+$/.test(salaTxt) ? `Sala ${salaTxt}` : salaTxt; // "33" → "Sala 33"
     const napa = napaAlunos.length ? { id: 'NAPA', rotulo: napaSala, alunos: napaAlunos, napa: true } : null;
-    return { salas, napa, avisos };
+    return { salas, napa, avisos, napaProblemas };
   }
 
   // ------------------------------------------------------------------ tela
@@ -88,16 +92,14 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       <div id="ap-imp-corpo"><div class="ap-vazio">Buscando os alunos da ${esc(prova.turma)} no Edubox…</div></div>
       <p class="ap-nota">Login = RA do aluno; senha = F + CPF (padrão da Fatec). Os dados vêm do Edubox na hora e não ficam gravados no Órbita. Só a coordenação e a secretaria de Medicina veem esta aba.</p>
     </div>`;
-    if (carregando) return;
-    carregando = true;
     try {
       const info = await alunosDa(prova.turma);
-      if (provaId !== prova.id) return;
+      if (provaId !== prova.id) return; // trocou de prova enquanto buscava: a outra chamada desenha
       renderCorpo(prova, info);
     } catch (e) {
       const c = document.getElementById('ap-imp-corpo');
-      if (c) c.innerHTML = `<div class="ap-vazio">${esc(e.message)}</div>`;
-    } finally { carregando = false; }
+      if (c && provaId === prova.id) c.innerHTML = `<div class="ap-vazio">${esc(e.message)}</div>`;
+    }
   }
 
   function renderCorpo(prova, info) {
@@ -115,9 +117,13 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
           <label class="ap-campo"><span>${s.modo === 'dividida' ? 'Da letra A vai para o' : 'Sala'}</span><select id="ap-imp-primeira">${Object.keys(ROTULO_SALA).map(k => `<option value="${k}" ${(s.primeira || 'LAB12') === k ? 'selected' : ''}>${ROTULO_SALA[k]}</option>`).join('')}</select></label>
           ${s.modo === 'dividida' ? `<label class="ap-campo"><span>até o(a) aluno(a)</span><select id="ap-imp-ate">${info.alunos.map(a => `<option value="${esc(a.nome)}" ${casa(s.ate, a.nome) ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></label>
             <p class="ap-nota">O resto da turma vai para o ${esc(ROTULO_SALA[(s.primeira || 'LAB12') === 'LAB12' ? 'LAB20' : 'LAB12'])}.</p>` : ''}
-          <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão</button>
-        </div>
+          <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão</button>        </div>
       </section>
+      ${dist.napaProblemas.length ? `<section class="ap-imp-avisos" role="alert"><b>NAPA da ${esc(info.turma)}: confirme quem é cada aluno</b>
+        <p class="ap-nota" style="margin:.2rem 0 .5rem">O NAPA está cadastrado só com o primeiro nome. Escolha o aluno certo: o nome completo fica salvo e ele sai da lista do laboratório. Enquanto não escolher, não imprima.</p>
+        ${dist.napaProblemas.map(p => `<label class="ap-campo"><span>"${esc(p.nome)}"${p.ambiguo ? ' (mais de um aluno com esse nome)' : ' (não achei com essa grafia)'}</span>
+          <select data-napa-i="${p.i}"><option value="">— escolha —</option>${(p.candidatos.length ? p.candidatos : info.alunos.map(a => a.nome)).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></label>`).join('')}
+        <button type="button" class="ap-btn ap-btn-pri" id="ap-imp-salvar-napa">Salvar nomes do NAPA</button></section>` : ''}
       ${dist.avisos.length ? `<div class="ap-imp-avisos" role="alert"><b>Confira antes de imprimir:</b><ul>${dist.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}
       <div class="ap-imp-salas">${todas.map(sl => `<article class="ap-imp-sala">
         <h4>${esc(sl.rotulo)}${sl.napa ? ' <small>(NAPA)</small>' : ''}</h4>
@@ -221,6 +227,21 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     }, 150);
   }
 
+  // troca o primeiro nome do NAPA pelo nome completo escolhido (sem reabrir o calendário validado)
+  async function salvarNapa() {
+    const d = dadosAtuais();
+    const prova = provasVisiveis().find(p => p.id === provaId);
+    if (!prova) return;
+    const nomes = [...(((d.config.napaAlunos || {})[prova.turma]) || [])];
+    let mudou = 0;
+    document.querySelectorAll('[data-napa-i]').forEach(s => { if (s.value) { nomes[Number(s.dataset.napaI)] = s.value; mudou++; } });
+    if (!mudou) { toast('Escolha o aluno em pelo menos um nome.', 'erro'); return; }
+    const r = await api(`${BASE}/impressao/napa/${encodeURIComponent(d.semestre)}`, { method: 'PUT', body: JSON.stringify({ turma: prova.turma, nomes }) });
+    d.config.napaAlunos = { ...(d.config.napaAlunos || {}), [prova.turma]: r.nomes };
+    toast(r.message);
+    renderCorpo(prova, await alunosDa(prova.turma));
+  }
+
   async function salvarDivisao() {
     const d = dadosAtuais();
     const prova = provasVisiveis().find(p => p.id === provaId);
@@ -251,6 +272,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       try {
         if (b) { await imprimir(b.dataset.imp); return; }
         if (e.target.closest('#ap-imp-salvar-div')) await salvarDivisao();
+        if (e.target.closest('#ap-imp-salvar-napa')) await salvarNapa();
       } catch (err) { toast(err.message, 'erro'); }
     });
   }
