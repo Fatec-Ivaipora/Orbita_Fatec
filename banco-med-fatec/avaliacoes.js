@@ -56,8 +56,8 @@ const ICONE = {
   cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   livro: '<path d="M4 4h10a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 20a4 4 0 0 1 0-8h10"/>'
 };
-const ic = (n, cls = '') => `<svg class="bmf-icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONE[n]}</svg>`;
-function toast(msg, tipo = 'ok') {
+export const ic = (n, cls = '') => `<svg class="bmf-icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONE[n]}</svg>`;
+export function toast(msg, tipo = 'ok') {
   let t = $('#av-toast');
   if (!t) { t = document.createElement('div'); t.id = 'av-toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
   t.className = `av-toast av-toast-${tipo}`; t.textContent = msg; t.hidden = false;
@@ -175,7 +175,6 @@ async function abrirAvaliacao(id) {
   } catch (e) { ed.innerHTML = `<div class="av-vazio">${esc(e.message)} <button type="button" class="av-link" data-voltar>Voltar</button></div>`; }
 }
 async function recarregarAtual() {
-  resumoXmlCache.clear(); // as contagens dos botões de baixar podem ter mudado
   atual = await api(`${BASE}/${encodeURIComponent(atual.avaliacao.id)}`);
   renderEditor();
 }
@@ -189,6 +188,23 @@ function voltarGrade() {
 function rotuloUnidade(n) {
   const u = (atual.plano.unidades || []).find(x => x.numero === Number(n));
   return u ? `Unidade ${u.numero}` : (n ? `Unidade ${n}` : 'Sem unidade');
+}
+
+// Banco do AVA (25/11/2026): o professor termina no Órbita; o agente automático leva para o banco de questões do
+// questionário no AVA a parte de cada professor que cumpriu a cota (ou a prova finalizada) e grava em avaliacao.avaBanco.
+// A secretaria acompanha na aba "Envio ao AVA" (envio-ava.js).
+function avaBancoTexto(av) {
+  const b = av.avaBanco || {};
+  const total = ((atual && atual.questoes) || []).length;
+  // no AVA = registradas pelo envio + as de quem marcou "Subi no banco do AVA" no fluxo antigo (igual à aba Envio ao AVA)
+  const enviadas = new Set(b.enviadas || []);
+  const chaveEnvio = (n) => String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80);
+  const subiu = (q) => { const e = (av.envios || {})[chaveEnvio(q.professorNome || q.elaboradoPor || 'Sem professor')]; return !!(e && e.bancoAva && e.bancoAva.feito); };
+  const noAva = ((atual && atual.questoes) || []).filter(q => enviadas.has(q.id) || subiu(q)).length;
+  const onde = b.quiz ? ` (${esc(b.curso || '')} › ${esc(b.quiz)})` : '';
+  if (total && noAva >= total) return `<b>Já está no banco de questões do AVA</b>${onde}: ${noAva} questões.`;
+  if (['conferir', 'erro'].includes(b.status)) return `<b>A secretaria está conferindo o envio ao AVA</b>${noAva ? ` (${noAva} de ${total} já estão lá)` : ''}.`;
+  return `Ela vai sozinha para o banco de questões do AVA${noAva ? ` (${noAva} de ${total} já estão lá)` : ''}; a secretaria acompanha.`;
 }
 
 function renderEditor() {
@@ -208,7 +224,7 @@ function renderEditor() {
       <div class="av-ed-acoes">
         ${souEditor() ? `<button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>` : ''}
         <button type="button" class="btn btn-secondary av-btn" data-relatorio-cadam ${questoes.length ? '' : 'disabled'} title="${souEditor() ? 'Parecer da prova e devolutiva de cada professor' : 'Devolutiva das questões: o que está bom e como melhorar'}">Relatório CADAM</button>
-        ${fin ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>
+        ${fin ? `${souEditor() ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>` : ''}
                  ${souTitular(av.chave) ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
               : souTitular(av.chave) ? `${souEditor() ? `<button type="button" class="btn btn-secondary av-btn" data-xml-como-esta ${questoes.length ? '' : 'disabled'} title="Baixa as questões como estão, sem finalizar nem padronizar">${ic('baixar')}Baixar para o AVA (como está)</button>` : ''}<button type="button" class="btn btn-primary av-btn" data-finalizar ${questoes.length ? '' : 'disabled'}>${ic('ok')}Finalizar avaliação</button>
                  <button type="button" class="av-icone-btn av-perigo" data-excluir-av title="Excluir avaliação" aria-label="Excluir avaliação">${ic('lixo')}</button>` : ''}
@@ -217,7 +233,7 @@ function renderEditor() {
 
     <div class="av-ed-corpo">
       <section class="av-ed-questoes" aria-label="Questões da avaliação">
-        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${atual.totalNaProva || questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${rotuloAvaliacao(av).replace(' · ', ' / ')}. Baixe o arquivo e importe no banco de questões do AVA.</div></div>` : `
+        ${fin ? `<div class="av-faixa av-faixa-fin">${ic('cadeado')}<div><b>Avaliação finalizada.</b> As ${atual.totalNaProva || questoes.length} questões estão no banco de ${esc(av.disciplina)}, na pasta ${esc(av.semestre)} / ${rotuloAvaliacao(av).replace(' · ', ' / ')}. ${avaBancoTexto(av)}</div></div>` : `
         <div class="bmf-toolbar av-toolbar">
           <div class="av-toolbar-acoes">
             <button type="button" class="btn av-btn-branco" data-nova>${ic('mais')}Escrever questão</button>
@@ -253,18 +269,20 @@ function renderEditor() {
     </div>`;
 }
 
-// Professor sobe as próprias questões no AVA sem esperar a finalização (16/11/2026): o arquivo só sai quando as
-// questões dele estão sem nada "a corrigir" na Conferência CADAM.
+// O professor termina no Órbita (25/11/2026): não baixa arquivo nem marca etapa no AVA. Quando a parte dele está
+// completa (cota da disciplina) e no padrão, o envio automático leva para o banco do AVA; a secretaria acompanha.
 function envioNaProvaHtml(av, questoes) {
   const minhas = questoes.filter(q => atual.papel === 'adjunto' || P.norm(q.professorNome || '') === P.norm(atual.eu || ''));
   const aCorrigir = minhas.filter(q => !q.padrao.ok).length;
-  const env = atual.meuEnvio || {};
-  const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(av.id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR')}</small>` : ''}</label>`; };
-  return `<section class="av-envio av-envio-prova" aria-label="Enviar ao AVA">
-    <h3>Enviar as suas questões ao AVA</h3>
-    <p class="av-nota">${!minhas.length ? 'Você ainda não tem questões nesta prova.' : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja o Relatório CADAM). O arquivo do AVA só sai com todas no padrão.` : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Baixe o arquivo de cada prova (cada botão traz só as suas questões daquela prova), importe no banco de questões do AVA e marque cada etapa.`}</p>
-    <div class="av-envio-acoes">${botoesXmlHtml(av.id, 'btn btn-primary av-btn', !minhas.length || !!aCorrigir)}
-      <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></div>
+  const enviadas = new Set((av.avaBanco && av.avaBanco.enviadas) || []);
+  const noAva = minhas.filter(q => enviadas.has(q.id)).length;
+  const texto = !minhas.length ? 'Você ainda não tem questões nesta prova.'
+    : noAva === minhas.length ? `Suas <b>${minhas.length}</b> questão(ões) já estão no banco de questões do AVA. Você não precisa fazer mais nada.`
+    : aCorrigir ? `<b>${aCorrigir} de ${minhas.length}</b> questão(ões) suas ainda têm item a corrigir (veja o Relatório CADAM). Quando todas estiverem no padrão e a sua parte estiver completa, elas vão sozinhas para o AVA.`
+    : `Suas <b>${minhas.length}</b> questão(ões) estão no padrão. Quando a sua parte estiver completa (a quantidade combinada para você nesta disciplina), elas vão sozinhas para o banco de questões do AVA. Você não precisa baixar nem importar nada.`;
+  return `<section class="av-envio av-envio-prova" aria-label="Envio ao AVA">
+    <h3>Suas questões no AVA</h3>
+    <p class="av-nota">${texto}</p>
   </section>`;
 }
 
@@ -405,7 +423,7 @@ function blobParaBase64(blob) {
 }
 const nomeSeguro = (n) => String(n || 'imagem').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'imagem';
 // prepara as questões para o XML: baixa imagens do enunciado e do feedback (Storage) e monta o HTML com @@PLUGINFILE@@
-async function prepararParaXml(lista, prefixo = 'q') {
+export async function prepararParaXml(lista, prefixo = 'q') {
   const out = [];
   for (const [i, q] of lista.entries()) {
     const arquivos = [];
@@ -427,13 +445,6 @@ async function prepararParaXml(lista, prefixo = 'q') {
     out.push({ ...q, enunciadoHtml, arquivos, justificativa, arquivosFeedback, provaRotulo: USO_PROVA[q.usoProva] || '' });
   }
   return out;
-}
-function baixarTexto(texto, nome) {
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([texto], { type: 'application/xml;charset=utf-8' }));
-  link.download = nome;
-  document.body.appendChild(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 async function baixarXml(comoEsta) {
   const btn = document.querySelector(comoEsta ? '[data-xml-como-esta]' : '[data-xml]');
@@ -1391,8 +1402,6 @@ function modalConf() {
       if (ed2 && confEditar) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); confEditar(ed2.dataset.confEditar); return; }
       const dv = e.target.closest('[data-devolutiva-av]');
       if (dv) { abrirDevolutivaDaProva(dv.dataset.devolutivaAv); return; }
-      const px = e.target.closest('[data-prof-xml]');
-      if (px) { baixarXmlProfessor(px.dataset.profXml, px); return; }
       const ptq = e.target.closest('[data-pt-tudo-q], [data-pt-tudo-prova]');
       if (ptq) { corrigirPtTudo(ptq); return; }
       const pta = e.target.closest('[data-pt-aplicar]');
@@ -1401,13 +1410,6 @@ function modalConf() {
       const av = e.target.closest('[data-conf-av]');
       if (av) abrirConferenciaDaProva(av.dataset.confAv);
       if (e.target.closest('[data-conf-lista]')) abrirConferenciaProfessor();
-    });
-    m.addEventListener('change', async (e) => {
-      const c = e.target.closest('[data-envio]');
-      if (!c) return;
-      c.disabled = true;
-      try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await abrirConferenciaDaProva(c.dataset.av); }
-      catch (err) { c.checked = !c.checked; c.disabled = false; toast(err.message, 'erro'); }
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !m.hidden) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
   }
@@ -1438,10 +1440,6 @@ function segundaHtml(s, rotulo = '2ª chamada') {
   if (!s.meta) return `<span class="av-parte av-parte-sem"><span class="av-uso-rot av-uso-${usoR}">${rotulo}</span> ${s.feitas ? `${s.feitas} questão(ões) pronta(s)` : 'nenhuma questão pronta'}${quando}</span>`;
   const falta = s.meta - s.feitas;
   return `<span class="av-parte ${falta > 0 ? 'av-parte-falta' : 'av-parte-ok'}"><span class="av-uso-rot av-uso-${usoR}">${rotulo}</span> <b>${s.feitas} de ${s.meta}</b>${falta > 0 ? ` · <b>falta preparar ${falta}</b>` : ' · pronta'}${quando}</span>`;
-}
-function envioResumo(e) {
-  const b = e && e.bancoAva && e.bancoAva.feito, q = e && e.questionario && e.questionario.feito;
-  return `<span class="av-envio-resumo">${b ? '✓ No banco do AVA' : '• Falta subir no AVA'} · ${q ? '✓ No questionário' : '• Falta o questionário'}</span>`;
 }
 async function abrirProgresso(chave, rota) {
   modalConf();
@@ -1648,7 +1646,7 @@ export async function abrirConferenciaProfessor() {
     const r = await api('/banco-med-fatec/conferencia');
     $('#av-conf-corpo').innerHTML = r.avaliacoes.length
       ? `<p class="av-conf-sub">${esc(r.professor)} · provas das suas disciplinas. Você confere só as questões que elaborou.</p>
-         <ul class="av-conf-provas">${r.avaliacoes.map(a => `<li><button type="button" data-conf-av="${esc(a.id)}"><b>${esc(a.disciplina)}</b><span>${rotuloAvaliacao(a)} · ${esc(a.semestre)}</span><span class="av-status ${a.status === 'finalizada' ? 'av-status-fin' : 'av-status-rasc'}">${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</span>${a.data ? `<span class="av-data-prova">Prova em ${ddmmIso(a.data)}</span>` : ''}${parteHtml(a)}${a.segunda ? segundaHtml(a.segunda) : ''}${a.exame ? segundaHtml(a.exame, 'Exame semestral') : ''}${envioResumo(a.envio)}</button></li>`).join('')}</ul>`
+         <ul class="av-conf-provas">${r.avaliacoes.map(a => `<li><button type="button" data-conf-av="${esc(a.id)}"><b>${esc(a.disciplina)}</b><span>${rotuloAvaliacao(a)} · ${esc(a.semestre)}</span><span class="av-status ${a.status === 'finalizada' ? 'av-status-fin' : 'av-status-rasc'}">${a.status === 'finalizada' ? 'Finalizada' : 'Em montagem'}</span>${a.data ? `<span class="av-data-prova">Prova em ${ddmmIso(a.data)}</span>` : ''}${parteHtml(a)}${a.segunda ? segundaHtml(a.segunda) : ''}${a.exame ? segundaHtml(a.exame, 'Exame semestral') : ''}</button></li>`).join('')}</ul>`
       : `<p class="av-vazio">Ainda não há prova montada nas suas disciplinas de ${esc(r.semestre)}.</p>`;
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
@@ -1662,11 +1660,8 @@ async function abrirConferenciaDaProva(id) {
     pdfDados = { modo: 'devolutiva', questoes: r.questoes, av: a, professor: r.professor || '', analise: null };
     confRecarregar = () => abrirConferenciaDaProva(id);
     confEditar = (qid) => abrirEditorBanco({ questaoId: qid, categorias: [{ id: a.categoriaId, nome: a.disciplina, periodo: 0 }], aposSalvar: async () => { modalConf(); await abrirConferenciaDaProva(id); } });
-    const env = r.envio || {};
-    const marca = (etapa, rotulo) => { const e = env[etapa] || {}; return `<label class="av-envio-item ${e.feito ? 'av-envio-ok' : ''}"><input type="checkbox" data-envio="${etapa}" data-av="${esc(id)}" ${e.feito ? 'checked' : ''}> ${rotulo}${e.feito && e.em ? `<small>${new Date(e.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</label>`; };
-    const envioHtml = `<section class="av-envio"><h3>Enviar ao AVA</h3><p class="av-nota">Cada botão baixa o arquivo de uma prova só (1ª chamada, 2ª chamada, exame…), com as suas questões daquela prova. Importe no banco de questões do AVA e depois marque cada etapa.</p>
-      ${botoesXmlHtml(id, 'av-pt-btn', false)}
-      <div class="av-envio-itens">${marca('bancoAva', 'Subi no banco de questões do AVA')}${marca('questionario', 'Coloquei no questionário')}</div></section>`;
+    // 25/11/2026: o professor termina no Órbita; o envio ao AVA é automático e a secretaria acompanha
+    const envioHtml = '<section class="av-envio"><h3>Suas questões no AVA</h3><p class="av-nota">Você não precisa baixar arquivo nem importar no AVA. Quando a sua parte desta prova estiver completa e no padrão, as questões vão sozinhas para o banco de questões do AVA.</p></section>';
     $('#av-conf-corpo').innerHTML = `<button type="button" class="av-voltar" data-conf-lista>${ic('voltar')}Minhas provas</button>${envioHtml}<p class="av-conf-cota">${parteHtml({ meta: r.meta, feitas: r.questoes.length })}${r.qtdProva ? ` <span class="av-conf-cota-prova">A prova tem ${r.qtdProva} questões no total, divididas entre os professores da disciplina.</span>` : ''}</p>` + (r.questoes.length ? botaoPdf('devolutiva') + devolutivaHtml(r.questoes, subProva(a), a.status !== 'finalizada') : '<p class="av-vazio">Nenhuma questão sua nesta prova ainda.</p>'); // 17/11/2026: professor vê o Relatório (devolutiva); a Conferência CADAM é só da coordenação
   } catch (e) { $('#av-conf-corpo').innerHTML = `<p class="av-vazio">${esc(e.message)}</p>`; }
 }
@@ -1738,45 +1733,6 @@ async function aplicarPtMarcadas(btn) {
     toast(r.message);
     if (confRecarregar) await confRecarregar();
   } catch (e) { toast(e.message, 'erro'); btn.disabled = false; btn.textContent = 'Aplicar nas marcadas'; }
-}
-// Botões "Baixar 2º bim – 1ª chamada", "Baixar 2º bim – 2ª chamada", "Baixar exame"... (17/11/2026): antes era um
-// botão só, e o arquivo da 1ª chamada levava junto as questões de 2ª chamada/exame. Cada botão traz só um grupo;
-// só aparece botão de grupo em que o professor tem questão. O container é preenchido depois do render.
-const resumoXmlCache = new Map();
-function botoesXmlHtml(id, classe, travarDaProva) {
-  setTimeout(preencherBotoesXml);
-  return `<div class="av-xml-botoes" data-xml-botoes="${esc(id)}" data-classe="${esc(classe)}" data-travar="${travarDaProva ? 1 : 0}"><span class="av-nota">Carregando os arquivos…</span></div>`;
-}
-function rotuloUsoXml(g, bim) {
-  if (g.uso === 'exame') return 'Exame';
-  if (g.uso === 'c1' || g.uso === 'c2') return `${bim ? `${bim}º bim – ` : ''}${g.rotulo}`;
-  return g.rotulo;
-}
-async function preencherBotoesXml() {
-  for (const box of document.querySelectorAll('[data-xml-botoes]:not([data-pronto])')) {
-    box.dataset.pronto = '1';
-    const id = box.dataset.xmlBotoes;
-    try {
-      if (!resumoXmlCache.has(id)) resumoXmlCache.set(id, api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml?resumo=1`));
-      const r = await resumoXmlCache.get(id);
-      box.innerHTML = r.grupos.length
-        ? r.grupos.map(g => `<button type="button" class="${esc(box.dataset.classe)}" data-prof-xml="${esc(id)}" data-uso="${esc(g.uso)}" ${g.daProva && box.dataset.travar === '1' ? 'disabled' : ''}>${ic('baixar')}Baixar ${esc(rotuloUsoXml(g, r.bimestre))} (${g.qtd})</button>`).join('')
-        : '<span class="av-nota">Você ainda não tem questões para baixar.</span>';
-    } catch (e) { resumoXmlCache.delete(id); box.innerHTML = `<span class="av-nota">${esc(e.message)}</span>`; }
-  }
-}
-async function baixarXmlProfessor(id, btn) {
-  const t = btn.innerHTML; btn.disabled = true; btn.textContent = 'Montando o arquivo…';
-  try {
-    const d = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(id)}/xml${btn.dataset.uso ? `?uso=${encodeURIComponent(btn.dataset.uso)}` : ''}`);
-    if (!d.grupos.length) { toast('Você ainda não tem questões nesta prova.', 'aviso'); return; }
-    const grupos = [];
-    for (const [gi, g] of d.grupos.entries()) grupos.push({ ...g, questoes: await prepararParaXml(g.questoes, `p${gi + 1}q`) });
-    baixarTexto(window.MoodleXml.gerarMoodleXmlGrupos(grupos), d.nomeArquivo);
-    toast(`Arquivo baixado (${d.grupos.map(g => `${g.questoes.length} de ${g.rotulo}`).join(', ')}).${d.publicadas ? ` ${d.publicadas} questão(ões) suas entraram no banco da disciplina.` : ''} No AVA: Banco de questões → Importar → Moodle XML.`);
-    if (d.publicadas && atual && atual.avaliacao && atual.avaliacao.id === id) recarregarAtual();
-  } catch (e) { toast(e.message, 'erro'); }
-  finally { btn.disabled = false; btn.innerHTML = t; }
 }
 async function abrirDivisao(chaveAberta) {
   modalConf();
@@ -1875,7 +1831,6 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.id === 'av-ver-fechados') { verFechados = !verFechados; t.setAttribute('aria-pressed', String(verFechados)); t.textContent = verFechados ? 'Esconder 1º bimestre' : 'Mostrar 1º bimestre'; return renderGrade(); }
     if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
     if (t.dataset.divisao) return abrirDivisao(t.dataset.divisao);
-    if (t.dataset.profXml) return baixarXmlProfessor(t.dataset.profXml, t);
     if (t.dataset.ptTudoQ || t.dataset.ptTudoProva) {
       modalConf();
       confRecarregar = async () => { await recarregarAtual(); const m = $('#av-conf'); if (m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } };
@@ -1906,14 +1861,10 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.dataset.criterios) return abrirCriterios(t.dataset.criterios, carregarGrade);
     if (t.hasAttribute('data-criterios-av')) return abrirCriterios(atual.avaliacao.chave, recarregarAtual);
   });
-  // marcações "subi no AVA" / "coloquei no questionário" dentro da prova
-  view.addEventListener('change', async (e) => {
+  // caixinhas de seleção das questões (apagar várias)
+  view.addEventListener('change', (e) => {
     const s = e.target.closest('[data-sel-q]');
     if (s) { if (s.checked) selecionadas.add(s.dataset.selQ); else selecionadas.delete(s.dataset.selQ); confirmandoApagar = false; return atualizarSelecao(); }
-    const c = e.target.closest('[data-envio]'); if (!c) return;
-    c.disabled = true;
-    try { const r = await api(`/banco-med-fatec/conferencia/${encodeURIComponent(c.dataset.av)}/envio`, { method: 'PUT', body: JSON.stringify({ etapa: c.dataset.envio, feito: c.checked }) }); toast(r.message); await recarregarAtual(); }
-    catch (err) { c.checked = !c.checked; c.disabled = false; toast(err.message, 'erro'); }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;

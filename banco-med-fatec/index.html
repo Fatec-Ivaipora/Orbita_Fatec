@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
   <link rel="stylesheet" href="/banco-med-fatec/banco-med-fatec.css?v=16">
-  <link rel="stylesheet" href="/banco-med-fatec/avaliacoes.css?v=31">
+  <link rel="stylesheet" href="/banco-med-fatec/avaliacoes.css?v=32">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Outfit:wght@800&display=swap" rel="stylesheet">
@@ -43,6 +43,7 @@
             </div>
             <nav class="bmf-tabs np-abas" aria-label="Seções do banco">
               <button class="bmf-tab-btn" data-tab="avaliacoes" id="bmf-tab-avaliacoes" hidden>Avaliações</button>
+              <button class="bmf-tab-btn" data-tab="envio-ava" id="bmf-tab-envio-ava" hidden>Envio ao AVA</button>
               <button class="bmf-tab-btn active" data-tab="banco">Banco de Questões</button>
               <button class="bmf-tab-btn" data-tab="colinha">Simulado ENAMED</button>
               <button class="bmf-tab-btn" data-tab="revisao">Importações <span id="bmf-revisao-badge" class="bmf-tab-badge hidden">0</span></button>
@@ -196,6 +197,7 @@
 
           <!-- ============ VIEW: AVALIAÇÕES (responsável pelas avaliações / coordenação) ============ -->
           <section id="bmf-view-avaliacoes" class="bmf-view hidden" aria-label="Avaliações"></section>
+          <section id="bmf-view-envio-ava" class="bmf-view hidden" aria-label="Envio ao AVA"></section>
 
           <footer class="np-rodape">
             <img src="/img/naped/medfatec-negativo.png" alt="MED FATEC" width="1090" height="183">
@@ -510,7 +512,7 @@
   <script src="/banco-med-fatec/vendor/jszip-3.10.2.min.js"></script>
   <script src="/banco-med-fatec/vendor/mammoth-1.12.3.browser.min.js"></script>
   <script src="/banco-med-fatec/ler-word.js?v=7"></script>
-  <script type="module" src="/banco-med-fatec/app.js?v=78"></script>
+  <script type="module" src="/banco-med-fatec/app.js?v=80"></script>
 </body>
 
 </html>

@@ -9,7 +9,8 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=46";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=48";
+import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=2";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -1738,6 +1739,8 @@ function bindEventos() {
       if (tab === 'colinha') carregarContagemAreaEnamed();
       document.getElementById('bmf-view-avaliacoes').classList.toggle('hidden', tab !== 'avaliacoes');
       if (tab === 'avaliacoes') abrirAbaAvaliacoes();
+      document.getElementById('bmf-view-envio-ava').classList.toggle('hidden', tab !== 'envio-ava');
+      if (tab === 'envio-ava') abrirEnvioAva();
     });
   });
 
@@ -1928,6 +1931,8 @@ async function initApp(user, role) {
   const temAvaliacoes = await iniciarAvaliacoes({ apiFetch, apiDownload, esc });
   // quem monta as avaliações (Bia / coordenação) começa nelas (13/11/2026)
   if (temAvaliacoes) document.getElementById('bmf-tab-avaliacoes').click();
+  // Envio ao AVA (25/11/2026): só os editores (secretaria / coordenação / responsável); professor termina no Órbita
+  if (temAvaliacoes && temAvaliacoes.editor) iniciarEnvioAva({ apiFetch, esc });
   // só os EDITORES (Ana / coordenação) ganham a autoria no Banco; professor na aba Avaliações não (16/11/2026)
   if (temAvaliacoes && temAvaliacoes.editor && !podeVerAutoria()) {
     responsavelAvaliacoes = true;

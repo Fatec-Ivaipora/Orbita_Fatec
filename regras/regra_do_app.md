@@ -99,18 +99,56 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
-### [2026-11-24] Relatório CPA: disciplina com mais de um professor separada por professor
-- Autor: Claude Code (a pedido do usuário)
-- Branch: fix/cpa-comentario-por-professor
-- Arquivos alterados:
-  - `src/rotas/cpa.js`: em `montarRelatorioAluno`, a linha da disciplina passa a ser por disciplina + professor (`codpro` de cada resposta). Nota geral, total de avaliações e comentários ficam só do professor avaliado. A junção é pelo NOME do professor, porque a mesma pessoa pode ter mais de um `codpro` no Edubox (o Rodrigo S. C. Oliveira tem 4). `montarPerguntasPorDisciplina` já aceita `codpro` na linha do relay: quando vier, o resultado por pergunta também sai por professor. Enquanto não vier, a linha recebe `perguntasDaDisciplinaToda: true` se a disciplina tiver mais de um professor.
-  - `cpa/pdf-professor.js`: nessas disciplinas, o PDF do professor avisa que o resultado por pergunta e a satisfação ainda somam todos os professores da disciplina.
-  - `cpa/app.js` (`pdf-professor.js?v=2`) e `cpa/index.html` (`app.js?v=8`).
-- Tipo: Correção
-- Motivo: na Medicina o aluno escolhe, no Edubox, qual professor da disciplina está avaliando. O Órbita juntava as respostas de todos os professores na mesma disciplina, e o PDF de cada professor saía com os comentários dos colegas. Em 2026-2 são 20 disciplinas da Medicina com mais de um professor. Caso que motivou: o PDF do Rodrigo S. C. Oliveira tinha 202 comentários em Habilidades Clínicas IV (6 professores) e 81 comentários falando de "professora"; agora tem só os dele (34) e nenhum de professora. Conferido com os dados reais: 81 linhas disciplina x professor, 2.025 comentários (os mesmos 2.025 do Edubox), 36 PDFs e nenhum comentário em dois PDFs.
-- Pendente (relay, colado pelo usuário): mandar `codpro` nas linhas de distribuição por pergunta das dimensões tipo D, para o gráfico e a satisfação também saírem por professor.
-- Como testar: Relatório CPA → Alunos → campanha da Medicina → curso Medicina; na tabela "Por disciplina", uma disciplina com dois professores aparece em duas linhas, cada uma com os seus comentários. Gerar os PDFs por professor e conferir que cada um só tem os próprios comentários.
-- Como reverter: reverter o commit.
+### [2026-11-25] Banco MED › Envio ao AVA: o professor termina no Órbita e um agente leva as questões para o banco do AVA; a secretaria acompanha
+- Autor: Claude Code (pedido do Suporte AVA)
+- **Novo processo.** Antes o professor baixava o XML das questões dele, importava no AVA e marcava "Subi no banco do AVA". Os professores estavam se confundindo. Agora:
+  - o professor só coloca as questões no Órbita;
+  - um agente automático leva para o banco de questões do questionário no AVA, na pasta disciplina / semestre / bimestre / chamada;
+  - a secretaria (coordenação de Medicina) acompanha na aba nova **Envio ao AVA**.
+- **Quando a questão está pronta para o AVA** (src/utils/banco-med-ava-fila.js, a regra é por questão):
+  - a prova foi finalizada: vai tudo o que ainda não foi; ou
+  - o professor dela cumpriu a parte dele, mesmo com a prova em montagem: tem pelo menos a cota definida nos critérios da disciplina (porProfessor) e todas as questões dele estão no padrão. Professor sem cota espera a prova ser finalizada.
+  - **Já no AVA** = avaliacao.avaBanco.enviadas, mais as questões de quem marcou "Subi no banco do AVA" no fluxo antigo (envios[prof].bancoAva). Essas não voltam para a fila.
+  - Questões de reserva (2ª chamada, exame ou DP no banco, fora de uma avaliação) não entram.
+- **Por que não é por web service, como no Portfólio:** o AVA (Moodle 5.1.7 / Open LMS) não tem função de web service que crie ou importe questão no banco. Foram conferidas as 1.050 funções do site. Por isso o agente entra no AVA com o usuário de integração e usa a tela "Banco de questões → Importar (Moodle XML)", só com HTTP, sem navegador.
+- src/utils/ava-sessao.js (novo): login no AVA e leitura das páginas.
+  - Usa AVA_URL, AVA_LOGIN_USUARIO e AVA_LOGIN_SENHA do .env, com o usuário orbita.integracao. Nunca usar login de pessoa: a autoria fica errada e o alcance seria de administrador.
+  - Lê as páginas com expressões regulares, sem biblioteca de HTML (instalar uma foi bloqueado pela permissão automática). Cada leitura foi conferida no AVA real: busca de cursos, lista de questionários, formulário de importação (pastas com quantidade, campos escondidos, seletor de arquivo), questões do questionário (li id="slot-N", sem o modelo "QUESTAO PARA APAGAR") e resultado da importação.
+- src/utils/ava-banco-importar.js (novo):
+  - Acha o curso "SEMESTRE - T.n - nº PER - DISCIPLINA" e o questionário "Prova · Nº Bimestre", "… — 2ª Chamada" ou "Exame Final".
+  - Decide sem duplicar, porque o AVA não substitui questão importada, só cria outra. Se a pasta ou o questionário já tem tudo, registra "ja_estava". Se a pasta tem exatamente o que o Órbita já registrou, importa só as novas. Em qualquer outra conta, marca "conferir".
+  - Sobe o XML, importa com "categoria do arquivo" e reconta a pasta.
+- src/utils/banco-med-xml-ava.js (novo): monta no servidor o mesmo XML do botão "Baixar para o AVA" (imagens do Storage, nome "[2ºB 1ªCH 14] Prof. …"), só com as questões pedidas. O número é a posição na prova, então partes enviadas em dias diferentes não repetem número.
+- scripts/ava-banco-med-agente.js (novo): agente para o droplet, serviço orbita-ava-banco-agente (seção 8).
+  - Roda a cada 15 min e quando alguém clica em "Enviar agora" (config/ava_banco_sync.pedidoEm). Grava agenteVivoEm a cada 5 min e o resultado em avaliacao.avaBanco { enviadas, status ok | conferir | erro, msg, curso, quiz, cmid, historico }.
+  - "Conferir" e "erro" só são tentados de novo quando a parte pronta muda ou alguém pede.
+  - Questão que vai para o AVA entra no banco da disciplina (rascunho → publicada, publicarNoBanco). Antes isso acontecia quando o professor baixava o arquivo.
+  - Uso manual: `--uma-vez`, `--simular` (não importa nem grava), `--so=<id>` e `--teste-cmid=<cmid>` (importa no questionário indicado e não grava no Órbita).
+- src/rotas/banco-med-avaliacoes.js:
+  - GET /envio-ava (situação do semestre + estado do agente), POST /envio-ava/agora, GET /envio-ava/:id/exportar (dados do XML só do que está pronto, montado no navegador) e POST /envio-ava/:id/marcar ("Já está no AVA", que também publica no banco da disciplina).
+  - Só quem não é professor (adm_l1, coord_medicina, avaliacoesMed).
+  - A mensagem de "Finalizar" avisa que a prova vai sozinha para o AVA.
+- banco-med-fatec/envio-ava.js (novo), index.html, app.js e avaliacoes.css: aba **Envio ao AVA**.
+  - Mostra o aviso de envio automático ligado ou fora do ar, os botões "Enviar agora" e "Atualizar" e os filtros (Precisa de atenção, Prontas, Aguardando professor, No AVA, Todas).
+  - Cada prova mostra quantas questões estão no AVA, quantas estão prontas, onde ficaram e a situação de cada professor ("13 de 20 questões", "2 a corrigir", "sem cota").
+  - Botões "Baixar arquivo (N)" (importar à mão) e "Já está no AVA" (com confirmação).
+- banco-med-fatec/avaliacoes.js (tela do professor):
+  - Saíram os botões de baixar o XML dele e as marcações "Subi no banco do AVA" / "Coloquei no questionário", na prova, em "Minhas provas" e no relatório. No lugar, um aviso de que as questões vão sozinhas quando a parte dele estiver completa e no padrão.
+  - "Baixar para o AVA" da prova finalizada ficou só para quem não é professor.
+  - A faixa da prova finalizada diz se já está no AVA.
+  - Removidas as funções que só serviam a isso (botoesXmlHtml, preencherBotoesXml, baixarXmlProfessor, envioResumo, baixarTexto).
+  - As rotas antigas do professor (GET /conferencia/:id/xml e PUT /conferencia/:id/envio) continuam no servidor, sem uso pela tela.
+- Testes em 25/11:
+  - Importação pelo mesmo passo a passo, pela sessão do navegador, no questionário "📝 Prova · 2º Bimestre" (cmid 56364) da II Semana Acadêmica de Medicina: 13 questões de Patologia Clínica I (2ª ch.) em 5 s, com as 2 imagens abrindo.
+  - Simulação nas 11 provas finalizadas: o curso e o questionário certos foram achados em 9 (Hab. Clínicas I e Sist. Morfo I não têm curso 2026.2 no AVA). 7 já estavam no AVA.
+  - Aba Envio ao AVA no Órbita local com os dados reais, também em 375 px: o "Baixar arquivo" saiu idêntico ao XML do agente (680.095 bytes).
+  - **Não testado:** o login do agente e a importação por ele (falta a senha do orbita.integracao) e a tela do professor no navegador.
+- **Para ligar:**
+  1. No AVA, a secretaria (administradora) define a senha do orbita.integracao e dá ao papel "Integração Órbita (Medicina)", na categoria MED, moodle/question:add e moodle/question:managecategory.
+  2. AVA_LOGIN_USUARIO e AVA_LOGIN_SENHA no .env do droplet.
+  3. Instalar o serviço (seção 8).
+- Tipo: Funcionalidade (fluxo novo) · Como reverter: `git revert` deste commit e `systemctl disable --now orbita-ava-banco-agente` no droplet.
+
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)
 - **Por quê:** na correção, o leitor de PDF do navegador abria com a coluna de miniaturas ocupando metade do quadro e a página ficava pequena demais para ler.
 - **`medicina/portfolio/app.js`:** o PDF do leitor abre sem as miniaturas e com a página na largura do quadro (`#pagemode=none&navpanes=0&view=FitH`). Botão novo **Ler em tela cheia** (`modoLeitura()`, com pdf.js): uma página por vez na tela inteira; setas, PageUp/PageDown, espaço ou clique na página mudam a página; **Ampliar** encaixa a página na largura (rola); **Esc** sai. Se o navegador não liberar a tela cheia, vira uma sobreposição do tamanho da janela.
@@ -2449,6 +2487,37 @@ CADD e Cobrança fazem consultas pesadas com horário fixo de atualização, ent
 - **Atualizar o código dos agentes** depois de um merge no `main`: `cd /opt/orbita-sync && sudo -u orbita git pull && sudo -u orbita npm ci --omit=dev && systemctl restart orbita-cad-agente orbita-cobranca-agente`.
 - **Ver o que estão fazendo**: `journalctl -u orbita-cad-agente -n 50` (ou `orbita-cobranca-agente`); também gravam em `/opt/orbita-sync/scripts/logs/`. A tela de cada módulo mostra "Atualização automática fora do ar" se o agente ficar mais de 15 min sem sinal (`config/cad_sync.agenteVivoEm` / `config/cobranca_sync.agenteVivoEm`).
 - **Nunca** rode esses agentes em outro lugar ao mesmo tempo (PC, notebook): dois agentes gravando juntos duplicam o histórico da Cobrança. Os atalhos do PC da Fatec foram removidos em 2026-10-15.
+
+### Agente do banco do AVA (Banco MED → banco de questões do AVA) — 25/11/2026
+Leva para o banco de questões do questionário no AVA as questões que o professor deixou prontas no Órbita (ver o changelog de 25/11/2026). Ele **não usa o Edubox nem o relay**: fala só com o AVA e com o Firestore. Fica no droplet para rodar sozinho, no mesmo molde dos agentes do CADD e da Cobrança. Ele não mexe no relay nem no SIGMA.
+- **Código**: `scripts/ava-banco-med-agente.js`, na mesma pasta `/opt/orbita-sync`, como usuário `orbita`.
+- **.env do droplet** (`/opt/orbita-sync/.env`): acrescentar `AVA_URL`, `AVA_LOGIN_USUARIO` (`orbita.integracao`) e `AVA_LOGIN_SENHA`. A senha é do usuário de integração, nunca de pessoa, e fica só nesse arquivo: não vai para o Vercel nem para o Git.
+- **No AVA**: o papel "Integração Órbita (Medicina)", atribuído na categoria MED, precisa de `moodle/question:add` e `moodle/question:managecategory`, além do que já tinha para o Portfólio.
+- **Testar antes de ligar**:
+  - `cd /opt/orbita-sync && sudo -u orbita node scripts/ava-banco-med-agente.js --uma-vez --simular` entra no AVA e mostra o que faria, sem importar nem gravar;
+  - `--uma-vez --teste-cmid=56364` importa no questionário da II Semana Acadêmica de Medicina, sem gravar no Órbita.
+- **Serviço systemd** `orbita-ava-banco-agente`, em `/etc/systemd/system/orbita-ava-banco-agente.service`:
+  ```
+  [Unit]
+  Description=Orbita - agente do banco do AVA (Banco MED)
+  After=network-online.target
+  [Service]
+  User=orbita
+  WorkingDirectory=/opt/orbita-sync
+  Environment=TZ=America/Sao_Paulo
+  ExecStart=/usr/bin/node scripts/ava-banco-med-agente.js
+  Restart=always
+  RestartSec=30
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Ligar: `systemctl daemon-reload && systemctl enable --now orbita-ava-banco-agente`.
+- **Como funciona**:
+  - confere a fila a cada 15 min e na hora em que alguém clica em "Enviar agora" na aba Envio ao AVA (`config/ava_banco_sync.pedidoEm`);
+  - grava `agenteVivoEm` a cada 5 min; a aba mostra "Envio automático fora do ar" se passar de 15 min sem sinal;
+  - log em `journalctl -u orbita-ava-banco-agente -n 50` e em `/opt/orbita-sync/scripts/logs/ava-banco-med-agente.log`.
+- **Atualizar** depois de um merge: o mesmo `git pull` + `npm ci` da pasta e `systemctl restart orbita-ava-banco-agente`.
+- **Se o AVA mudar o login** (SSO, verificação em duas etapas, captcha) ou o desenho das telas, o agente para e avisa na aba. A secretaria usa "Baixar arquivo" e importa à mão, e o ajuste é em `src/utils/ava-sessao.js`.
 
 ### ⚠️ Pendências conhecidas do relay (levantadas em 2026-10-15, ainda não feitas)
 1. **HTTPS no relay (prioridade).** Hoje `EDUBOX_RELAY_URL` é `http://162.243.68.10:8443`: o token e os dados que o relay devolve (inclusive nomes de alunos e professores) trafegam **sem criptografia** entre o Vercel e o servidor. O SIGMA usa o mesmo endereço. Plano:
