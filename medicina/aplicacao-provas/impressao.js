@@ -221,13 +221,8 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     while (t.length > 4 && doc.getTextWidth(t) > larg) t = `${t.slice(0, -4).trimEnd()}...`;
     return t;
   }
-  function cabecalho(doc, logo) {
-    let x = M;
-    if (logo) { const h = 11; doc.addImage(logo.data, 'PNG', M, 11, h * logo.prop, h); x = M + h * logo.prop + 5; }
-    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text('FATEC Ivaiporã', x, 15.5);
-    cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Bacharelado em Medicina', x, 20);
-    doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
-  }
+  // 25/11/2026: todas as folhas (porta, ata e login) com o mesmo cabeçalho — Órbita FATEC à esquerda, MED FATEC à direita
+  function cabecalho(doc, logo) { cabecalhoLogin(doc, logo); }
   function linhaProvaTxt(prova, info) {
     return `${prova.disciplina} · ${turmaTxt(info)} · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
   }
