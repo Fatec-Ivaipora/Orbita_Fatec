@@ -415,7 +415,7 @@ function cabecalhoSaida(titulo) {
       <div class="ap-s-cab-txt"><h1>${titulo}</h1><p>Medicina · ${esc(dados.semestre)}${et ? ` · ${ETAPA[et]}` : ''}</p></div>
       <img src="/img/naped/fatecivp-negativo.png" alt="FATEC Ivaiporã" class="ap-s-logo-fatec">
     </header>
-    <p class="ap-s-val ${val ? '' : 'ap-s-rasc'}">${val ? `Validado por ${esc(c.validadoPor || '')} em ${new Date(c.validadoEm).toLocaleDateString('pt-BR')}` : 'RASCUNHO — calendário ainda não validado'}</p>`;
+    ${val ? '' : '<p class="ap-s-val ap-s-rasc">RASCUNHO — calendário ainda não validado</p>'}`; // quem validou não sai na arte (25/11/2026)
 }
 function saidaTurmas() {
   const provas = provasVisiveis();
@@ -436,17 +436,18 @@ function saidaTurma(tid) {
   const escolhidos = Object.keys(SAI).filter(k => SAI[k]);
   return `<div class="ap-s ap-s-turma ap-${corTurma(tid)}">${cabecalhoSaida(`${escolhidos.length === 1 ? SAI_ROTULO[escolhidos[0]] : 'Calendário de Provas'} · ${esc(tid)}`)}
     <p class="ap-s-turma-per">${esc(tid)} · ${t.periodo}º período</p>
-    ${blocos.map(b => `<section class="ap-s-bloco"><h2>${ETAPA_BLOCO[b.et]}</h2>
-      <table><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Horário</th><th>Local</th></tr></thead>
-      <tbody>${b.ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}</td><td>${hora(p.horario) ? `<b>${hora(p.horario)}</b>` : TURNO[p.turno]}</td><td>${esc(p.laboratorios || '')}</td></tr>`).join('')}</tbody></table></section>`).join('') || '<p>Nenhuma prova.</p>'}
+    ${blocos.map(b => { const comQ = ps.some(p => p.questoes); return `<section class="ap-s-bloco ${comQ ? 'ap-s-bloco-q' : ''}"><h2>${ETAPA_BLOCO[b.et]}</h2>
+      <table><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th>${comQ ? '<th>Questões</th>' : ''}<th>Horário</th><th>Local</th></tr></thead>
+      <tbody>${b.ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}</td>${comQ ? `<td>${p.questoes ? `<b>${p.questoes}</b> questões` : '—'}</td>` : ''}<td>${hora(p.horario) ? `<b>${hora(p.horario)}</b>` : TURNO[p.turno]}</td><td>${esc(p.laboratorios || '')}</td></tr>`).join('')}</tbody></table></section>`; }).join('') || '<p>Nenhuma prova.</p>'}
     <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
 }
 // arte "Provas das Adaptações" (ADP e DP) — mesmo modelo da lista validada em 17/11/2026
 function saidaAdaptacoes() {
   const ps = provasVisiveis().filter(p => ESPECIAIS[p.turma]);
-  const icone = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M8 4h8v3H8zM6 5.5H4.8V21h14.4V5.5H18M8 11h8M8 15h8M8 19h5"/></svg>';
-  const iconeQ = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 3h9l4 4v14H6zM9 11h7M9 15h7M9 7h3"/></svg>';
-  const iconeH = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M12 7v5l3 2"/></svg>';
+  // ícones como símbolo de texto: o gerador de imagem (html2canvas) não desenha <svg> nem imagem SVG
+  const icone = '<span class="ap-s-ico" aria-hidden="true">📋</span>';
+  const iconeQ = '<span class="ap-s-ico" aria-hidden="true">📄</span>';
+  const iconeH = '<span class="ap-s-ico" aria-hidden="true">🕐</span>';
   return `<div class="ap-s ap-s-turma ap-s-adp">${cabecalhoSaida('Provas das Adaptações')}
     <h2 class="ap-s-adp-tit">${icone} Provas das Adaptações</h2>
     <table class="ap-s-adp-tab"><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Tipo</th><th>Questões</th><th>Horário</th></tr></thead>

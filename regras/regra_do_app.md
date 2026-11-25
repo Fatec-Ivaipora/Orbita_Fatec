@@ -141,6 +141,14 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Responsivo: computador, tablet (768 px) e celular (375 px) sem rolagem lateral; no celular o cabeçalho fica compacto e, ao escolher o aluno (ou salvar), a tela pula direto para os itens.
 - Testado no Órbita local com dados reais (só leitura do Edubox): importação do Word original do Bougie (4 itens, cenário, tarefas, materiais), objetivos de Clínica Cirúrgica I (6), OSCE de teste com a T1 (57 alunos), marcação 1 / 0,5 / 1 / 0 → 25 de 40. Estação e OSCE de teste apagadas; nenhuma nota gravada. Folha impressa não conferida no papel.
 
+### [2026-11-25] Medicina › Aplicação de Provas: arte das adaptações com os ícones no PNG; coluna Questões na arte da turma; sem "Validado por"
+- Autor: Claude Code (pedido do Suporte AVA: "tá saindo errado", "não tem quantidade de questões")
+- Arte "Provas das Adaptações": os ícones eram `<svg>` embutido e não saíam no PNG (o html2canvas não desenha SVG, nem em `<img>`, e ignorava o 1º item das etiquetas em `inline-flex`). Agora são símbolos de texto (📋 📄 🕐) em etiquetas `inline-block` — conferido no PNG gerado.
+- Artes (todas): saiu a linha "Validado por … em …" ("as pessoas não precisam saber quem validou"). Enquanto o calendário não está validado, continua a marca "RASCUNHO — calendário ainda não validado".
+- Arte da turma (Imagem/PDF da T1, T2, T3): coluna **Questões** entre Disciplina e Horário, quando alguma prova da turma tem a quantidade cadastrada (sem quantidade sai "—"; se nenhuma tem, a coluna não aparece).
+- Dado: "Saúde da Criança e do Adolescente" (T1, 02/12) está cadastrada como 1º bimestre e sai num bloco "1ª chamada · 1º bimestre" separado — corrigir em Editar prova → Tipo de prova.
+- Arquivos: medicina/aplicacao-provas/{app.js, aplicacao-provas.css, index.html}.
+
 ### [2026-11-25] Medicina › Aplicação de Provas: provas de Adaptação (ADP) e Dependência (DP) na impressão; tipo da prova em destaque
 - Autor: Claude Code (pedido do Suporte AVA: "não aparece a prova ADP/DP, só o nome da disciplina e a turma" e "tem que ser mais claro que tipo de prova é: 1ª chamada, 2ª chamada, exame")
 - Cadastro: no "+ Prova", a turma ganha **ADP · Adaptação** e **DP · Dependência** (fora da configuração das turmas; sem NAPA; lista de disciplinas = todas da Medicina). Em "Por turma" elas viram colunas só quando têm prova.
