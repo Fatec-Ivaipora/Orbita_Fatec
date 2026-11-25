@@ -296,3 +296,34 @@
 .ap-s-bloco-q th:nth-child(4) { width: 104px; } .ap-s-bloco-q th:nth-child(5) { width: 80px; } .ap-s-bloco-q th:nth-child(6) { width: 180px; }
 .ap-s-ico { display: inline-block; font-size: 0.95em; line-height: 1; margin-right: 6px; }
 .ap-s-cab + .ap-s-adp-tit, .ap-s-cab + .ap-s-turma-per { margin-top: 16px; }
+
+/* ---------- aba Resultados do AVA (25/11/2026) ---------- */
+.ar { display: grid; gap: 0.8rem; }
+.ar-topo { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.ar-topo p { margin: 0; max-width: 70ch; color: var(--orb-mudo); font-size: 0.9rem; line-height: 1.45; }
+.ar-btn { border: 0; border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 700; font-size: 0.85rem; cursor: pointer; background: var(--orb-marca); color: #fff; white-space: nowrap; }
+.ar-btn-sec { background: #fff; color: var(--orb-marca); border: 1px solid var(--orb-linha); }
+.ar-btn:disabled { opacity: 0.6; cursor: default; }
+.ar-btn:focus-visible, .ar-voltar:focus-visible { outline: 2px solid var(--orb-marca); outline-offset: 2px; }
+.ar-tabela-caixa { overflow-x: auto; border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); background: #fff; }
+.ar-tabela { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.ar-tabela th { text-align: left; padding: 0.55rem 0.7rem; background: var(--orb-sup); color: var(--orb-mudo); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.ar-tabela td { padding: 0.55rem 0.7rem; border-top: 1px solid var(--orb-linha); vertical-align: top; }
+.ar-tabela td small { display: block; color: var(--orb-mudo); font-size: 0.78rem; }
+.ar-s { display: inline-block; }
+.ar-s-ok { color: var(--orb-tinta); }
+.ar-s-espera { color: var(--orb-mudo); }
+.ar-s-alerta { color: var(--orb-alerta); font-weight: 600; }
+.ar-media { display: block; color: var(--orb-mudo); font-size: 0.8rem; }
+.ar-aviso { color: var(--orb-alerta) !important; font-weight: 600; }
+.ar-voltar { justify-self: start; background: none; border: 0; color: var(--orb-marca); font-weight: 700; cursor: pointer; padding: 0; }
+.ar-tit { margin: 0; font-size: 1.15rem; }
+.ar-sub { margin: 0; color: var(--orb-mudo); font-size: 0.85rem; }
+.ar-numeros { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.95rem; }
+.ar h3 { margin: 0.6rem 0 0; font-size: 1rem; }
+@media (max-width: 640px) {
+  .ar-tabela thead { display: none; }
+  .ar-tabela tr { display: block; border-top: 1px solid var(--orb-linha); padding: 0.4rem 0; }
+  .ar-tabela td { display: block; border: 0; padding: 0.2rem 0.7rem; }
+  .ar-tabela td[data-r]:not([data-r=""])::before { content: attr(data-r) ": "; color: var(--orb-mudo); font-size: 0.78rem; }
+}

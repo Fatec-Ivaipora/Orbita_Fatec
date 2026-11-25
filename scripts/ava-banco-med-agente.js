@@ -27,6 +27,7 @@ const { db, admin } = require(path.join(__dirname, '..', 'src', 'firebase'));
 const { situacaoDoSemestre, semestreAtual, publicarNoBanco, COL_AV } = require(path.join(__dirname, '..', 'src', 'utils', 'banco-med-ava-fila'));
 const { SessaoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-sessao'));
 const { ImportadorBancoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-banco-importar'));
+const { questionarioDaAplicacao, lerResultados, fechou: fechouQuiz } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-resultados'));
 
 const INTERVALO_MS = 15 * 60 * 1000;
 const QUADRO_MS = 60 * 60 * 1000; // números do questionário (questões, notas) de cada prova: no máximo 1 leitura por hora
@@ -74,6 +75,39 @@ async function gravarResultado(sit, r) {
     }
 }
 
+// ---------- resultados das provas (25/11/2026) — tela "Resultados do AVA" da Aplicação de Provas ----------
+// Lê de cada prova do calendário que já aconteceu: na rodada automática, nos 3 dias depois da prova, no máximo de
+// 3 em 3 horas (e de novo se deu erro); com "Enviar agora"/--uma-vez, todas. Só depois que o questionário fecha.
+const COL_RES = 'med_resultados_ava';
+const RES_INTERVALO_MS = 3 * 60 * 60 * 1000;
+async function resultadosAFazer(origem) {
+    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    const snap = await db.collection('med_aplicacao_provas').where('semestre', '==', args.semestre || semestreAtual()).get();
+    const provas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.tipo === 'prova' && p.data && p.data <= hoje);
+    const out = [];
+    for (const p of provas) {
+        if (origem !== 'automatica') { out.push(p); continue; }
+        const r = (await db.collection(COL_RES).doc(p.id).get()).data();
+        const dias = (Date.parse(hoje) - Date.parse(p.data)) / 86400000;
+        const velho = !r || !r.lidoEm || Date.now() - new Date(r.lidoEm).getTime() > RES_INTERVALO_MS;
+        if (!r || (velho && (dias <= 3 || r.status !== 'ok'))) out.push(p);
+    }
+    return out;
+}
+async function lerResultadoDaProva(imp, p) {
+    const base = { provaId: p.id, semestre: p.semestre, turma: p.turma, etapa: p.etapa, data: p.data, disciplina: p.disciplina, lidoEm: new Date().toISOString() };
+    const q = await questionarioDaAplicacao(imp, p);
+    if (q.erro) return { ...base, status: q.especial ? 'sem_curso' : 'erro', erro: q.erro, curso: q.curso || '' };
+    const ligado = { curso: q.curso, cursoId: q.cursoId, cmid: q.cmid, quiz: q.quiz, aviso: q.aviso || '', abertura: q.resumo.abertura || '' };
+    if (!fechouQuiz(q.resumo.abertura)) return { ...base, ...ligado, status: 'aberta', erro: '' };
+    try {
+        const r = await lerResultados(imp, q.cmid);
+        const fizeram = r.alunos.filter(a => a.situacao === 'finalizada').length;
+        return { ...base, ...ligado, status: 'ok', erro: '', notaMax: r.notaMax, media: r.media, alunos: r.alunos,
+            contagem: { inscritos: r.alunos.length, fizeram, naoFizeram: r.alunos.filter(a => a.situacao === 'nao_fez').length, outros: r.alunos.length - fizeram - r.alunos.filter(a => a.situacao === 'nao_fez').length } };
+    } catch (e) { return { ...base, ...ligado, status: e.semNota ? 'sem_nota' : 'erro', erro: e.message }; }
+}
+
 async function rodada(origem) {
     const inicio = Date.now();
     const simular = !!args.simular, teste = args['teste-cmid'] || null;
@@ -87,8 +121,10 @@ async function rodada(origem) {
     const todas = (await situacaoDoSemestre(args.semestre || semestreAtual())).filter(s => s.total && (!args.so || s.id === args.so));
     const velho = (s) => { const q = s.ava && s.ava.quadro; return !q || !q.lidoEm || Date.now() - new Date(q.lidoEm).getTime() > QUADRO_MS; };
     const quadros = todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
-    if (!fila.length && !quadros.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
-    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas, ${quadros.length} para atualizar os números${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
+    const resultados = args.so ? [] : await resultadosAFazer(origem);
+    resumo.resultados = 0;
+    if (!fila.length && !quadros.length && !resultados.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
+    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas, ${quadros.length} para atualizar os números, ${resultados.length} resultado(s) para ler${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
 
     const sessao = new SessaoAva();
     await sessao.entrar();
@@ -117,6 +153,16 @@ async function rodada(origem) {
             resumo.quadros++;
             if (simular || args['uma-vez']) log(`  quadro    ${sit.disciplina} · ${sit.prova} — ${r.erro || `${r.resumo.noQuestionario} questões no questionário, nota máx. ${r.resumo.notaMaxima}, soma ${r.resumo.somaNotas}`}`);
         } catch (e) { log(`  quadro    ${sit.disciplina} · ${sit.prova} — erro: ${e.message}`); }
+    }
+    // resultados das provas que já fecharam (Aplicação de Provas): quem fez, a nota e quem não fez
+    for (const p of resultados) {
+        if (teste) break;
+        try {
+            const r = await lerResultadoDaProva(imp, p);
+            if (!simular) await db.collection(COL_RES).doc(p.id).set(r);
+            resumo.resultados++;
+            if (simular || args['uma-vez']) log(`  resultado ${p.data} ${p.turma} ${p.disciplina} — ${r.status === 'ok' ? `${r.contagem.fizeram} fizeram, ${r.contagem.naoFizeram} não fizeram (nota sobre ${r.notaMax})` : r.erro || r.status}`);
+        } catch (e) { log(`  resultado ${p.data} ${p.turma} ${p.disciplina} — erro: ${e.message}`); }
     }
     const segundos = Math.round((Date.now() - inicio) / 1000);
     log(`Fim da rodada em ${segundos}s: ${JSON.stringify(resumo)}`);

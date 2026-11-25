@@ -423,4 +423,54 @@ router.put('/impressao/salas/:semestre', exigeImpressao, async (req, res) => {
 });
 
 router._interno = { ehMinha, podeEditar, norm };
+// ---------- Resultados do AVA (25/11/2026) ----------
+// O agente do droplet (scripts/ava-banco-med-agente.js) lê o relatório de cada questionário que já fechou e grava
+// em med_resultados_ava/<id da prova>: quem fez (com a nota), quem não fez (lista da 2ª chamada) e a média.
+// Notas de aluno: só coordenação de Medicina e ADM (os mesmos da Impressão). O RA vem do Edubox, casando pelo nome.
+const COL_RES = 'med_resultados_ava';
+const normNomeAluno = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+router.get('/resultados', exigeImpressao, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : semestreAtual();
+        const [snap, cfg] = await Promise.all([db.collection(COL_RES).where('semestre', '==', semestre).get(), db.collection('config').doc('ava_banco_sync').get()]);
+        const resultados = snap.docs.map(d => { const { alunos, ...r } = d.data(); return { id: d.id, ...r }; });
+        const c = cfg.exists ? cfg.data() : {};
+        res.json({ semestre, resultados, agente: { vivoEm: c.agenteVivoEm || null, pedidoEm: c.pedidoEm || null, ultimaRodada: c.ultimaRodada || null } });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.get('/resultados/:id', exigeImpressao, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const snap = await db.collection(COL_RES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Ainda não há resultado do AVA para esta prova.' });
+        const r = { id: snap.id, ...snap.data() };
+        // RA pelo nome (Edubox via relay). Sem o Edubox, a lista sai só com o nome.
+        let semRa = null;
+        try {
+            const doEdubox = await cpfsDoRelay(r.semestre);
+            const porNome = new Map();
+            doEdubox.forEach(a => { const k = normNomeAluno(a.nome); if (k && a.ra) porNome.set(k, porNome.has(k) && porNome.get(k) !== a.ra ? 'duplicado' : String(a.ra)); });
+            r.alunos = (r.alunos || []).map(a => { const ra = porNome.get(normNomeAluno(a.nome)); return { ...a, ra: ra && ra !== 'duplicado' ? ra : '' }; });
+        } catch (e) { semRa = `Não consegui buscar o RA no Edubox (${e.message}).`; }
+        res.json({ ...r, semRa });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.post('/resultados/agora', exigeImpressao, async (req, res) => {
+    try {
+        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: new Date().toISOString(), pedidoPorNome: req.user.name || req.user.email || 'Coordenação' }, { merge: true });
+        res.json({ message: 'Pedido enviado: o agente lê os resultados no AVA em instantes.' });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+// liga a prova a um questionário do AVA à mão (DP/adaptação, ou quando a busca automática não acha): cmid do questionário
+router.put('/provas/:id/ava', exigeImpressao, async (req, res) => {
+    try {
+        const cmid = String(req.body.cmid || '').match(/(?:id=)?(\d{3,})\s*$/);
+        const ref = db.collection('med_aplicacao_provas').doc(req.params.id);
+        if (!(await ref.get()).exists) return res.status(404).json({ error: 'Prova não encontrada.' });
+        await ref.update({ avaCmid: cmid ? Number(cmid[1]) : null, atualizadoEm: new Date().toISOString(), atualizadoPor: req.user.name || req.user.email || '' });
+        res.json({ message: cmid ? `Prova ligada ao questionário ${cmid[1]} do AVA.` : 'Ligação com o AVA removida: volta a procurar sozinho.' });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
 module.exports = router;

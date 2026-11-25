@@ -152,6 +152,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - **Quadro do questionário para a Joyce** (25/11, depois do teste): o agente lê no AVA, só leitura (/mod/quiz/edit.php), quantas questões o questionário de cada prova tem, a nota máxima, a soma das notas e o texto de abertura e fechamento, e grava em avaliacao.avaBanco.quadro. Lê no máximo 1 vez por hora por prova, ou na hora com "Enviar agora". A aba Envio ao AVA mostra o quadro e avisa quando a quantidade não bate com a prova do Órbita ou a soma das notas não fecha a nota máxima. Exemplo real: SCIC IV com 20 questões, nota máxima 30 e soma 19. O agente não coloca questões no questionário: isso continua com a Joyce no AVA.
 - Tipo: Funcionalidade (fluxo novo) · Como reverter: `git revert` deste commit e `systemctl disable --now orbita-ava-banco-agente` no droplet.
 
+### [2026-11-25] Medicina › Aplicação de Provas: aba "Resultados do AVA" (quem fez, nota e quem não fez)
+- Autor: Claude Code (pedido do Suporte AVA, para a Joyce)
+- **O que faz:** para cada prova do calendário que já aconteceu, mostra quem fez (com a nota), quem não fez (a lista da 2ª chamada, com o botão "Copiar a lista") e a média.
+- **De onde vêm os dados:** o agente do droplet (scripts/ava-banco-med-agente.js) lê o relatório "Notas" do questionário no AVA (report.php, CSV com todos os alunos inscritos), só leitura e só depois que o questionário fecha. Grava em med_resultados_ava/<id da prova>.
+  - Na rodada automática, lê cada prova nos 3 dias depois dela, de 3 em 3 horas, e de novo se der erro.
+  - Com "Ler agora no AVA", lê todas na hora.
+- src/utils/ava-resultados.js (novo): liga a prova ao questionário e lê o relatório.
+  - A prova é ligada pela turma (T1/T2/T3 no nome do curso), pelo nome parecido da disciplina e pela data em que o questionário abre. A comparação de nome ignora acento, pontuação, "de/da/do", plural e o que está entre parênteses, mas o número romano tem que bater: "…Integralidade II" não casa com o IV, e "Optativa" casa com "OPTATIVA I" da turma.
+  - A 2ª chamada é escolhida pela data. DP e adaptação não têm curso próprio: a Joyce liga à mão pelo link do questionário (avaCmid na prova).
+  - Lê o CSV: com mais de uma tentativa, fica a melhor finalizada. Calcula a média quando o AVA não manda a linha de média.
+- src/rotas/aplicacao-provas-med.js:
+  - GET /resultados (resumo, sem alunos), GET /resultados/:id (alunos, com o RA do Edubox casado pelo nome), POST /resultados/agora e PUT /provas/:id/ava.
+  - Só coordenação de Medicina e ADM (exigeImpressao): nota de aluno é dado pessoal. Professor não vê.
+- medicina/aplicacao-provas/resultados.js (novo), app.js, index.html e aplicacao-provas.css: aba "Resultados do AVA", visível para quem vê a Impressão.
+- **No AVA:**
+  - O papel de integração precisa de mod/quiz:viewreports (liberado em 25/11) e moodle/grade:viewhidden. Sem esta última, nas provas com a nota oculta no Livro de Notas o relatório vem sem a coluna Nota.
+  - O relatório do usuário de integração não traz e-mail nem RA, por isso o RA vem do Edubox pelo nome.
+- **Teste em 25/11 (simulação, sem gravar):** questionário achado nas 6 provas regulares que já aconteceram. Saúde Mental: 56 fizeram e 2 não fizeram, nota sobre 80. As outras 5 esperam moodle/grade:viewhidden. A tela ainda não foi vista no navegador.
+- Tipo: Funcionalidade · Como reverter:  deste commit (a coleção med_resultados_ava pode ser apagada).
+
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)
 - **Por quê:** na correção, o leitor de PDF do navegador abria com a coluna de miniaturas ocupando metade do quadro e a página ficava pequena demais para ler.
 - **`medicina/portfolio/app.js`:** o PDF do leitor abre sem as miniaturas e com a página na largura do quadro (`#pagemode=none&navpanes=0&view=FitH`). Botão novo **Ler em tela cheia** (`modoLeitura()`, com pdf.js): uma página por vez na tela inteira; setas, PageUp/PageDown, espaço ou clique na página mudam a página; **Ampliar** encaixa a página na largura (rola); **Esc** sai. Se o navegador não liberar a tela cheia, vira uma sobreposição do tamanho da janela.

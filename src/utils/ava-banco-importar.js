@@ -29,8 +29,8 @@ class ImportadorBancoAva {
         if (!this.cursos[semestre]) {
             const { texto } = await this.s.req(`/course/search.php?search=${encodeURIComponent(semestre + ' PER')}&perpage=all`);
             this.cursos[semestre] = lerCursos(texto).map(c => {
-                const m = c.nome.match(/^(\d{4}\.\d)\s*-\s*T\.\s*\d+\s*-\s*\d+\s*\S*\s*PER\s*-\s*(.+)$/i);
-                return m && m[1] === semestre ? { ...c, disc: norm(m[2]) } : null;
+                const m = c.nome.match(/^(\d{4}\.\d)\s*-\s*T\.\s*(\d+)\s*-\s*\d+\s*\S*\s*PER\s*-\s*(.+)$/i);
+                return m && m[1] === semestre ? { ...c, turma: `T${m[2]}`, nomeDisc: m[3], disc: norm(m[3]) } : null;
             }).filter(Boolean);
         }
         return this.cursos[semestre];
