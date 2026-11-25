@@ -8,7 +8,7 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
-import { criarImpressao } from "./impressao.js?v=11";
+import { criarImpressao } from "./impressao.js?v=17";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -48,7 +48,13 @@ function toast(msg, tipo = 'ok') {
 // ---------- formatos ----------
 const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const TURNO = { manha: 'Manhã', tarde: 'Tarde', noite: 'Noite', '': 'A definir' };
-const ETAPA = { b1: '1º bimestre', b2: '2º bimestre', sub: '2ª chamada', exame: 'Exame' };
+// tipo da prova sempre por extenso (25/11/2026: "tem que ser mais claro que tipo de prova é")
+const ETAPA = { b1: '1ª chamada · 1º bimestre', b2: '1ª chamada · 2º bimestre', sub: '2ª chamada', exame: 'Exame' };
+const ETAPA_CURTA = { b1: '1ª chamada', b2: '1ª chamada', sub: '2ª chamada', exame: 'Exame' };
+const chipEtapa = (et) => `<em class="ap-et ap-et-${grupoDe(et)}">${ETAPA_CURTA[et] || ''}</em>`;
+// provas de adaptação e dependência: "turmas" fora da configuração (quem faz é quem cursa a disciplina fora da turma dela)
+const ESPECIAIS = { ADP: 'Adaptação', DP: 'Dependência' };
+const turmaTxt = (id, turmas) => ESPECIAIS[id] ? `${id} · ${ESPECIAIS[id]}` : `${id} · ${(turmas.find(t => t.id === id) || {}).periodo || ''}º período`;
 // título de cada bloco na arte da turma (16/11/2026)
 const ETAPA_BLOCO = { b1: '1ª chamada · 1º bimestre', b2: '1ª chamada · 2º bimestre', sub: '2ª chamada', exame: 'Exames' };
 // o que sai na arte da turma: quem gera escolhe (só 1ª chamada, só 2ª, só exames, ou juntos)
@@ -125,18 +131,19 @@ function linhaTurma(p) {
   return `<li class="ap-tp ${p.minha ? 'ap-minha' : ''} ${p.tipo === 'osce' ? 'ap-osce' : ''}">
     <button type="button" class="ap-tp-btn" data-prova="${esc(p.id)}" ${dados.editor ? '' : 'data-ler="1"'} aria-label="${esc(`${ddmm(p.data)}, ${p.disciplina}, ${TURNO[p.turno]}`)}">
       <span class="ap-tp-data"><b>${ddmm(p.data)}</b><small>${diaSemana(p.data)}</small></span>
-      <span class="ap-tp-disc">${esc(p.disciplina)}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}${p.minha ? ' <em class="ap-eu">você aplica</em>' : ''}</span>
+      <span class="ap-tp-disc">${chipEtapa(p.etapa)} ${esc(p.disciplina)}${p.questoes ? ` <small class="ap-tp-q">${p.questoes} questões</small>` : ''}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}${p.minha ? ' <em class="ap-eu">você aplica</em>' : ''}</span>
       <span class="ap-turno ap-turno-${p.turno}">${TURNO[p.turno]}</span>
     </button>
   </li>`;
 }
 function renderTurmas(provas) {
-  const turmas = dados.config.turmas || [];
+  // ADP e DP aparecem como colunas só quando têm prova cadastrada
+  const turmas = [...(dados.config.turmas || []), ...Object.keys(ESPECIAIS).filter(id => dados.provas.some(p => p.turma === id)).map(id => ({ id, especial: true }))];
   if (!turmas.length) return '<div class="ap-vazio">Nenhuma turma configurada.</div>';
   return `<div class="ap-turmas" style="--n:${turmas.length}">${turmas.map(t => {
     const ps = provas.filter(p => p.turma === t.id);
     return `<section class="ap-turma ap-${corTurma(t.id)}" aria-label="Turma ${esc(t.id)}">
-      <header><h2>${esc(t.id)}</h2><span>${t.periodo}º período · ${ps.length} ${ps.length === 1 ? 'prova' : 'provas'}</span></header>
+      <header><h2>${esc(t.id)}</h2><span>${t.especial ? ESPECIAIS[t.id] : `${t.periodo}º período`} · ${ps.length} ${ps.length === 1 ? 'prova' : 'provas'}</span></header>
       ${ps.length ? `<ol class="ap-tp-lista">${ps.map(linhaTurma).join('')}</ol>` : `<p class="ap-turma-vazia">${dados.editor ? 'Nenhuma prova ainda. Use “+ Prova”.' : 'Nenhuma prova cadastrada.'}</p>`}
     </section>`;
   }).join('')}</div>`;
@@ -156,7 +163,7 @@ function renderAplicadores(provas, soMinhas) {
     <tbody>${ps.map(p => `<tr class="${p.minha ? 'ap-minha' : ''} ${ids.has(p.id) ? 'ap-choque' : ''}" data-prova="${esc(p.id)}" tabindex="0">
       <td data-r="Data"><b>${ddmm(p.data)}</b> <small>${diaSemana(p.data)}</small></td>
       <td data-r="Turma"><span class="ap-chip ap-${corTurma(p.turma)}">${esc(p.turma)}</span></td>
-      <td data-r="Disciplina" class="ap-td-disc">${esc(p.disciplina)}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}</td>
+      <td data-r="Disciplina" class="ap-td-disc">${chipEtapa(p.etapa)} ${esc(p.disciplina)}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}</td>
       <td data-r="Aplicadores">${(p.aplicadores || []).map(a => `<span title="${esc(a)}">${esc(curto(a))}</span>`).join(', ') || '<span class="ap-falta">a definir</span>'}</td>
       <td data-r="Horário"><b>${hora(p.horario) || TURNO[p.turno]}</b></td>
       <td data-r="Laboratório(s)">${esc(p.laboratorios) || '<span class="ap-falta">a definir</span>'}</td>
@@ -213,6 +220,7 @@ function render() {
   el('ap-menu-exportar').innerHTML = `<fieldset class="ap-sai"><legend>O que sai na arte da turma</legend>${Object.entries(SAI_ROTULO).map(([k, l]) => `<label><input type="checkbox" data-sai="${k}" ${SAI[k] ? 'checked' : ''}> ${l}</label>`).join('')}</fieldset>`
     + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="img-turma:${esc(t.id)}">Imagem da ${esc(t.id)} (alunos)</button>`).join('')
     + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="pdf-turma:${esc(t.id)}">Imprimir / PDF da ${esc(t.id)} (alunos)</button>`).join('')
+    + (dados.provas.some(p => ESPECIAIS[p.turma]) ? '<hr><button type="button" role="menuitem" data-exp="img-adaptacoes">Imagem: Provas das Adaptações (ADP e DP)</button><button type="button" role="menuitem" data-exp="pdf-adaptacoes">Imprimir / PDF: Provas das Adaptações</button>' : '')
     + '<hr><button type="button" role="menuitem" data-exp="img-turmas">Imagem: todas as turmas lado a lado</button>'
     + '<button type="button" role="menuitem" data-exp="img-aplicadores">Imagem: professores aplicadores</button>'
     + '<button type="button" role="menuitem" data-exp="pdf-turmas">Imprimir / PDF: todas as turmas</button>'
@@ -257,11 +265,12 @@ function lerProva(p) {
   const napaDe = (t) => (turmas.find(x => x.id === t) || {}).napa;
   const corpo = `
     <div class="ap-grid3">
-      <label class="ap-campo"><span>Turma</span><input value="${esc(p.turma)} · ${(turmas.find(t => t.id === p.turma) || {}).periodo || ''}º período" disabled></label>
+      <label class="ap-campo"><span>Turma</span><input value="${esc(turmaTxt(p.turma, turmas))}" disabled></label>
       <label class="ap-campo"><span>Data</span><input value="${ddmm(p.data)} (${diaSemana(p.data)})" disabled></label>
+      <label class="ap-campo"><span>Tipo de prova</span><input value="${esc(ETAPA[p.etapa] || '')}" disabled></label>
       <label class="ap-campo"><span>Horário</span><input value="${hora(p.horario) || ''} ${TURNO[p.turno]}" disabled></label>
     </div>
-    <label class="ap-campo"><span>Disciplina</span><input value="${esc(p.disciplina)}" disabled></label>
+    <label class="ap-campo"><span>Disciplina</span><input value="${esc(p.disciplina)}${p.questoes ? ` · ${p.questoes} questões` : ''}" disabled></label>
     <label class="ap-campo"><span>Professores aplicadores</span><input value="${esc((p.aplicadores || []).join(', '))}" disabled></label>
     <label class="ap-campo"><span>Laboratório(s)</span><input value="${esc(p.laboratorios)}" disabled></label>
     ${napaDe(p.turma) && napaTxt(p) ? `<label class="ap-campo"><span>NAPA</span><input value="${esc(napaTxt(p))}" disabled></label>` : ''}
@@ -276,20 +285,24 @@ async function abrirProva(id) {
   const turmas = c.turmas || [];
   const ed = await carregarEdubox();
   const v = p || { turma: turmas[0] ? turmas[0].id : '', data: '', turno: 'manha', horario: '08:30', disciplina: '', tipo: 'prova', etapa: el('ap-etapa').value || 'b2', aplicadores: [], laboratorios: '', observacao: '', napa: null };
-  const discDaTurma = (t) => { const per = (turmas.find(x => x.id === t) || {}).periodo; return ed.disciplinas.filter(d => d.periodo === per).map(d => d.nome); };
+  // ADP/DP: qualquer disciplina da Medicina (o aluno cursa fora da turma dele)
+  const discDaTurma = (t) => { if (ESPECIAIS[t]) return [...new Set(ed.disciplinas.map(d => d.nome))].sort((a, b) => a.localeCompare(b, 'pt-BR')); const per = (turmas.find(x => x.id === t) || {}).periodo; return ed.disciplinas.filter(d => d.periodo === per).map(d => d.nome); };
   const corpo = `
     <form id="ap-f-prova" class="ap-form" novalidate>
       <div class="ap-grid3">
-        <label class="ap-campo"><span>Turma</span><select name="turma" required>${turmas.map(t => `<option value="${esc(t.id)}" ${t.id === v.turma ? 'selected' : ''}>${esc(t.id)} · ${t.periodo}º período</option>`).join('')}</select></label>
+        <label class="ap-campo"><span>Turma</span><select name="turma" required>${turmas.map(t => `<option value="${esc(t.id)}" ${t.id === v.turma ? 'selected' : ''}>${esc(t.id)} · ${t.periodo}º período</option>`).join('')}${Object.entries(ESPECIAIS).map(([id, n]) => `<option value="${id}" ${id === v.turma ? 'selected' : ''}>${id} · ${n}</option>`).join('')}</select></label>
         <label class="ap-campo"><span>Data</span><input type="date" name="data" value="${esc(v.data)}" required></label>
-        <label class="ap-campo"><span>Etapa</span><select name="etapa">${Object.entries(ETAPA).map(([k, l]) => `<option value="${k}" ${k === v.etapa ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="ap-campo"><span>Tipo de prova</span><select name="etapa">${Object.entries(ETAPA).map(([k, l]) => `<option value="${k}" ${k === v.etapa ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <div class="ap-grid3">
         <label class="ap-campo"><span>Turno</span><select name="turno">${Object.entries(TURNO).map(([k, l]) => `<option value="${k}" ${k === v.turno ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="ap-campo"><span>Horário</span><input type="time" name="horario" value="${esc(v.horario)}"></label>
         <label class="ap-campo"><span>Tipo</span><select name="tipo">${Object.entries(TIPO).map(([k, l]) => `<option value="${k}" ${k === v.tipo ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
-      <label class="ap-campo"><span>Disciplina</span><input name="disciplina" list="ap-dl-disc" value="${esc(v.disciplina)}" required placeholder="Escolha da lista ou escreva (ex.: OSCE – Teórico e Prático)" autocomplete="off"></label>
+      <div class="ap-grid-disc">
+        <label class="ap-campo"><span>Disciplina</span><input name="disciplina" list="ap-dl-disc" value="${esc(v.disciplina)}" required placeholder="Escolha da lista ou escreva (ex.: OSCE – Teórico e Prático)" autocomplete="off"></label>
+        <label class="ap-campo"><span>Questões</span><input type="number" name="questoes" min="0" max="300" value="${v.questoes ? esc(String(v.questoes)) : ''}" placeholder="Ex.: 40"></label>
+      </div>
       <datalist id="ap-dl-disc"></datalist>
       <div class="ap-campo"><span>Professores aplicadores</span>
         <div class="ap-chips" id="ap-chips">${(v.aplicadores || []).map(a => `<span class="ap-chip-ed">${esc(a)}<button type="button" data-tirar aria-label="Tirar ${esc(a)}">✕</button></span>`).join('')}</div>
@@ -336,7 +349,7 @@ async function abrirProva(id) {
     const pendente = el('ap-add-prof').value.trim(); if (pendente) addProf();
     const corpoReq = {
       semestre: dados.semestre, turma: f.turma.value, data: f.data.value, etapa: f.etapa.value, turno: f.turno.value, horario: f.horario.value,
-      tipo: f.tipo.value, disciplina: f.disciplina.value.trim(), laboratorios: f.laboratorios.value.trim(), observacao: f.observacao.value.trim(),
+      tipo: f.tipo.value, disciplina: f.disciplina.value.trim(), questoes: f.questoes.value, laboratorios: f.laboratorios.value.trim(), observacao: f.observacao.value.trim(),
       aplicadores: [...el('ap-chips').querySelectorAll('.ap-chip-ed')].map(x => x.firstChild.textContent.trim()),
       napa: el('ap-napa-f').hidden ? null : { sala: f.napaSala.value.trim(), responsavel: f.napaResp.value.trim(), notebooks: f.napaNb.value }
     };
@@ -428,6 +441,23 @@ function saidaTurma(tid) {
       <tbody>${b.ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}</td><td>${hora(p.horario) ? `<b>${hora(p.horario)}</b>` : TURNO[p.turno]}</td><td>${esc(p.laboratorios || '')}</td></tr>`).join('')}</tbody></table></section>`).join('') || '<p>Nenhuma prova.</p>'}
     <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
 }
+// arte "Provas das Adaptações" (ADP e DP) — mesmo modelo da lista validada em 17/11/2026
+function saidaAdaptacoes() {
+  const ps = provasVisiveis().filter(p => ESPECIAIS[p.turma]);
+  const icone = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M8 4h8v3H8zM6 5.5H4.8V21h14.4V5.5H18M8 11h8M8 15h8M8 19h5"/></svg>';
+  const iconeQ = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 3h9l4 4v14H6zM9 11h7M9 15h7M9 7h3"/></svg>';
+  const iconeH = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M12 7v5l3 2"/></svg>';
+  return `<div class="ap-s ap-s-turma ap-s-adp">${cabecalhoSaida('Provas das Adaptações')}
+    <h2 class="ap-s-adp-tit">${icone} Provas das Adaptações</h2>
+    <table class="ap-s-adp-tab"><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Tipo</th><th>Questões</th><th>Horário</th></tr></thead>
+    <tbody>${ps.map(p => `<tr>
+      <td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}${p.etapa !== 'b1' && p.etapa !== 'b2' ? ` <small>(${ETAPA_CURTA[p.etapa]})</small>` : ''}</td>
+      <td><span class="ap-s-adp-tipo ap-s-adp-${p.turma.toLowerCase()}">${p.turma === 'DP' ? 'DP' : 'Adaptação'}</span></td>
+      <td>${p.questoes ? `<span class="ap-s-adp-pill">${iconeQ} ${p.questoes} questões</span>` : ''}</td>
+      <td><span class="ap-s-adp-pill">${iconeH} ${hora(p.horario) || TURNO[p.turno]}</span></td>
+    </tr>`).join('')}</tbody></table>
+    <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
+}
 function saidaAplicadores() {
   const provas = provasVisiveis();
   const c = dados.config;
@@ -459,9 +489,10 @@ async function exportar(tipo) {
   const turmaSo = (tipo.match(/-turma:(.+)$/) || [])[1];
   if (turmaSo && !Object.values(SAI).some(Boolean)) { toast('Marque o que vai sair na arte: 1ª chamada, 2ª chamada ou exames.', 'erro'); return; }
   if (turmaSo && !provasVisiveis().some(p => p.turma === turmaSo && SAI[grupoDe(p.etapa)])) { toast(`A ${turmaSo} não tem provas no que foi marcado.`, 'erro'); return; }
+  if (tipo.endsWith('adaptacoes') && !provasVisiveis().some(p => ESPECIAIS[p.turma])) { toast('Não há provas de adaptação ou DP nessa etapa.', 'erro'); return; }
   if (!provasVisiveis().filter(p => !turmaSo || p.turma === turmaSo).length) { toast(turmaSo ? `A ${turmaSo} não tem provas nessa etapa.` : 'Não há provas nessa etapa.', 'erro'); return; }
   const saida = el('ap-saida');
-  saida.innerHTML = turmaSo ? saidaTurma(turmaSo) : tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
+  saida.innerHTML = turmaSo ? saidaTurma(turmaSo) : tipo.endsWith('adaptacoes') ? saidaAdaptacoes() : tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
   saida.firstElementChild.insertAdjacentHTML('beforeend', `<footer class="ap-s-pe">
       <span class="ap-s-orbita"><span class="ap-s-orb"><span>F</span><i></i></span><span class="ap-s-orb-nome"><b>ÓRBITA</b> FATEC</span></span>
       <span>Gerado pelo Órbita em ${new Date().toLocaleDateString('pt-BR')}</span>
@@ -479,7 +510,7 @@ async function exportar(tipo) {
     const canvas = await html2canvas(saida.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     const a = document.createElement('a');
     const sufixo = turmaSo ? '-' + Object.keys(SAI).filter(k => SAI[k]).map(k => ({ c1: '1chamada', sub: '2chamada', exame: 'exames' }[k])).join('-') : '';
-    a.download = `${turmaSo ? `calendario-provas-${turmaSo}${sufixo}` : tipo === 'img-turmas' ? 'calendario-provas' : tipo === 'img-napa' ? 'napa-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
+    a.download = `${turmaSo ? `calendario-provas-${turmaSo}${sufixo}` : tipo === 'img-turmas' ? 'calendario-provas' : tipo === 'img-adaptacoes' ? 'provas-adaptacoes' : tipo === 'img-napa' ? 'napa-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
     a.href = canvas.toDataURL('image/png'); a.click();
     toast('Imagem baixada. É só mandar no WhatsApp.');
   } catch (e) { toast(e.message, 'erro'); }
