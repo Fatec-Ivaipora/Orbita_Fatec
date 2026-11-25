@@ -604,3 +604,53 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
   .av-rel-tab tr.av-rel-obr { box-shadow: inset 4px 0 0 var(--av-erro); } .av-rel-tab tr.av-rel-aj { box-shadow: inset 4px 0 0 #D97706; }
   .av-rel-tab tr td:first-child { box-shadow: none !important; }
 }
+
+/* ---------- aba Envio ao AVA (25/11/2026): secretaria acompanha o que vai para o banco do AVA ---------- */
+.ea { padding: 0.4rem 0 1.5rem; }
+.ea-topo { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.ea-topo h2 { margin: 0; font-size: 1.15rem; color: var(--av-tinta); }
+.ea-topo .av-nota { max-width: 68ch; }
+.ea-topo-acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ea-agente { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.7rem 0.9rem; border-radius: 12px; font-size: 0.86rem; line-height: 1.45; margin: 0.8rem 0; }
+.ea-ponto { width: 10px; height: 10px; border-radius: 50%; margin-top: 0.3rem; flex-shrink: 0; background: currentColor; }
+.ea-agente-ok { background: var(--av-ok-bg); color: #065F46; border: 1px solid #A7F3D0; }
+.ea-agente-fora { background: var(--av-aviso-bg); color: #92400E; border: 1px solid #FCD34D; }
+.ea-filtros { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.4rem 0 0.8rem; }
+.ea-filtro { border: 1px solid var(--av-linha); background: #fff; color: var(--av-tinta-2); border-radius: 999px; padding: 0.35rem 0.8rem; font-weight: 700; font-size: 0.82rem; cursor: pointer; }
+.ea-filtro span { display: inline-block; min-width: 1.4em; margin-left: 0.25rem; padding: 0 0.35rem; border-radius: 999px; background: #F1F5F9; text-align: center; }
+.ea-filtro.ativo { border-color: var(--med-azul-escuro); color: var(--med-azul-escuro); background: #EFF6FF; }
+.ea-filtro:focus-visible { outline: 2px solid var(--med-azul-claro); outline-offset: 2px; }
+.ea-lista { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--av-linha); }
+.ea-prova { padding: 0.9rem 0.2rem; border-bottom: 1px solid var(--av-linha); }
+.ea-cab { display: flex; justify-content: space-between; gap: 0.8rem; align-items: flex-start; }
+.ea-cab h3 { margin: 0; font-size: 0.98rem; color: var(--av-tinta); }
+.ea-cab p { margin: 0.1rem 0 0; color: var(--av-tinta-2); font-size: 0.84rem; }
+.ea-sit { flex-shrink: 0; padding: 0.15rem 0.65rem; border-radius: 999px; font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
+.ea-s-ok { background: var(--av-ok-bg); color: var(--av-ok); }
+.ea-s-pronta { background: #EFF6FF; color: #1D4ED8; }
+.ea-s-conferir { background: var(--av-erro-bg); color: var(--av-erro); }
+.ea-s-espera { background: #F1F5F9; color: var(--av-tinta-2); }
+.ea-numeros { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin: 0.45rem 0; font-size: 0.85rem; color: var(--av-tinta-2); }
+.ea-num-pronta { color: #1D4ED8; }
+.ea-onde { color: var(--av-tinta-2); }
+.ea-msg { display: flex; gap: 0.45rem; align-items: flex-start; margin: 0.4rem 0; padding: 0.55rem 0.7rem; border-radius: 10px; background: var(--av-erro-bg); color: #7F1D1D; font-size: 0.84rem; }
+.ea-msg .bmf-icon { width: 16px; height: 16px; flex-shrink: 0; margin-top: 0.1rem; }
+.ea-profs { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.2rem; }
+.ea-prof { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; font-size: 0.83rem; padding-left: 0.7rem; border-left: 3px solid var(--av-linha); }
+.ea-prof b { color: var(--av-tinta); font-weight: 700; }
+.ea-prof span { color: var(--av-tinta-2); }
+.ea-p-ok { border-left-color: var(--av-ok); }
+.ea-p-pronta { border-left-color: #1D4ED8; }
+.ea-p-espera { border-left-color: #CBD5E1; }
+.ea-acoes, .ea-confirma { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
+.ea-confirma { padding: 0.6rem 0.7rem; border-radius: 10px; background: var(--av-aviso-bg); font-size: 0.85rem; color: #78350F; }
+.ea-confirma > span { flex: 1 1 260px; }
+@media (max-width: 640px) { .ea-cab { flex-direction: column; } .ea-topo-acoes { width: 100%; } }
+/* quadro do questionário no AVA (25/11/2026) */
+.ea-quadro { margin: 0.45rem 0; padding: 0.55rem 0.75rem; border-radius: 10px; font-size: 0.84rem; line-height: 1.45; }
+.ea-quadro p { margin: 0.1rem 0; }
+.ea-quadro-ok { background: var(--av-ok-bg); color: #065F46; }
+.ea-quadro-alerta { background: var(--av-aviso-bg); color: #78350F; display: block; }
+.ea-quadro-abre, .ea-quadro-lido { color: var(--av-tinta-2); font-size: 0.8rem; }
+.ea-quadro-aviso { display: flex; gap: 0.4rem; align-items: flex-start; font-weight: 600; }
+.ea-quadro .bmf-icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 0.15rem; }

@@ -527,6 +527,69 @@ router.post('/', async (req, res) => {
     } catch (e) { erro(res, e); }
 });
 
+// ---------- Envio ao AVA (25/11/2026) — tela da secretaria / coordenação ----------
+// O professor termina no Órbita; o agente do droplet (scripts/ava-banco-med-agente.js) importa no banco do AVA o
+// que a fila marca como pronto (src/utils/banco-med-ava-fila.js). Aqui a secretaria acompanha, pede "Enviar agora",
+// baixa o arquivo do que está pronto (se precisar importar à mão) e registra "já está no AVA".
+const FilaAva = require('../utils/banco-med-ava-fila');
+const cfgAva = () => db.collection('config').doc('ava_banco_sync');
+router.get('/envio-ava', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'acompanham o envio ao AVA');
+        const sem = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : FilaAva.semestreAtual();
+        const [provas, cfg] = await Promise.all([FilaAva.situacaoDoSemestre(sem), cfgAva().get()]);
+        const c = cfg.exists ? cfg.data() : {};
+        res.json({ semestre: sem, agente: { vivoEm: c.agenteVivoEm || null, intervaloMin: c.intervaloMin || 15, ultimaRodada: c.ultimaRodada || null, pedidoEm: c.pedidoEm || null, pedidoPorNome: c.pedidoPorNome || '' }, provas });
+    } catch (e) { erro(res, e); }
+});
+router.post('/envio-ava/agora', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'pedem o envio ao AVA');
+        await cfgAva().set({ pedidoEm: agora(), pedidoPorNome: quem(req) }, { merge: true });
+        res.json({ message: 'Pedido enviado: o envio automático começa em instantes.' });
+    } catch (e) { erro(res, e); }
+});
+// dados para montar no navegador o XML só do que está pronto (igual ao /exportar; GIF grande não passa pelo servidor)
+router.get('/envio-ava/:id/exportar', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'baixam o arquivo do AVA');
+        const av = await lerAvaliacao(req.params.id);
+        const sit = await FilaAva.situacaoDaAvaliacao(av);
+        if (!sit.prontas.length) return res.status(409).json({ error: 'Esta prova não tem questões prontas para o AVA agora.' });
+        const pos = new Map((av.questoesIds || []).map((id, i) => [id, i]));
+        const questoes = (await lerQuestoes(sit.prontas)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+        const pasta = [av.disciplina, av.semestre, ...pastaProva(av)].map(x => String(x).replace(/\//g, '-')).join('/');
+        const lista = await Promise.all(questoes.map(async q => ({
+            id: q.id, numero: pos.get(q.id) + 1, titulo: q.titulo, tipoMoodle: q.tipoMoodle, casoClinico: q.casoClinico || '', pergunta: q.pergunta || '',
+            enunciadoHtml: q.enunciadoHtml || '', alternativas: q.alternativas || [], justificativa: q.justificativa || '', fonte: q.fonte || '',
+            dificuldade: q.dificuldade, elaboradoPor: q.elaboradoPor || q.professorNome || '',
+            temImagemAntiga: !!(q.imagem && q.imagem.dataUrl) && !(q.imagens || []).length, imagemAntiga: (q.imagem && q.imagem.dataUrl && !(q.imagens || []).length) ? { nome: q.imagem.nome || 'imagem', dataUrl: q.imagem.dataUrl } : null,
+            imagens: await comLinks(q.imagens, 30), imagensFeedback: await comLinks(q.imagensFeedback, 30), usoProva: q.usoProva || 'c1'
+        })));
+        const nome = `${av.sigla || av.disciplina} ${av.semestre} ${av.tipo === 'exame' ? 'exame' : `${av.bimestre}o bim ${av.chamada}a chamada`} - ${lista.length} questoes`.replace(/[^a-zA-Z0-9._ -]/g, '_');
+        res.json({ pasta, nomeArquivo: `${nome}.xml`, prefixo: av.tipo === 'exame' ? 'EXAME' : `${av.bimestre}ºB ${av.chamada === 2 ? '2ª' : '1ª'}CH`, ids: sit.prontas, questoes: lista });
+    } catch (e) { erro(res, e); }
+});
+// a secretaria registra que as questões prontas já estão no AVA (importou à mão, ou o "conferir" era isso mesmo)
+router.post('/envio-ava/:id/marcar', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'registram o envio ao AVA');
+        const av = await lerAvaliacao(req.params.id);
+        const sit = await FilaAva.situacaoDaAvaliacao(av);
+        const pedidos = new Set(Array.isArray(req.body.ids) ? req.body.ids.map(String) : []);
+        const ids = sit.prontas.filter(id => pedidos.has(id));
+        if (!ids.length) return res.status(400).json({ error: 'Nada para marcar: as questões prontas mudaram. Recarregue a tela.' });
+        const em = agora();
+        await db.collection(COL_AV).doc(av.id).update({
+            'avaBanco.enviadas': admin.firestore.FieldValue.arrayUnion(...ids), 'avaBanco.status': 'ok', 'avaBanco.em': em, 'avaBanco.por': quem(req), 'avaBanco.tentativa': null,
+            'avaBanco.msg': `${ids.length} questão(ões) registrada(s) como já no AVA por ${quem(req)}`,
+            'avaBanco.historico': admin.firestore.FieldValue.arrayUnion({ em, status: 'manual', qtd: ids.length, msg: 'registrado na tela Envio ao AVA', por: quem(req) })
+        });
+        await FilaAva.publicarNoBanco(ids, quem(req));
+        res.json({ message: `${ids.length} questão(ões) registrada(s) como já no AVA.` });
+    } catch (e) { erro(res, e); }
+});
+
 router.get('/:id', async (req, res) => {
     try {
         const av = await lerAvaliacao(req.params.id);
@@ -1022,7 +1085,8 @@ router.post('/:id/finalizar', async (req, res) => {
         });
         batch.update(db.collection(COL_AV).doc(av.id), { status: 'finalizada', finalizadaEm: agora(), finalizadaPor: quem(req), updatedAt: agora() });
         await batch.commit();
-        res.json({ message: `Avaliação finalizada: ${questoes.length} questões no banco de ${av.disciplina}. Agora baixe o arquivo para o AVA.` });
+        // 25/11/2026: a prova finalizada entra na fila de importação do banco do AVA (scripts/banco-med-ava-fila.js)
+        res.json({ message: `Avaliação finalizada: ${questoes.length} questões no banco de ${av.disciplina}. Ela vai para o banco de questões do AVA na próxima importação do Suporte AVA.` });
     } catch (e) { erro(res, e); }
 });
 
