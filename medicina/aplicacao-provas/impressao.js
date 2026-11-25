@@ -58,6 +58,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       const parecidos = ach.length ? ach : info.alunos.filter(a => ini && (toks(a.nome)[0] || '').startsWith(ini));
       napaProblemas.push({ i, nome: n, candidatos: parecidos.map(a => a.nome), ambiguo: ach.length > 1 });
     });
+    if (info.especial) return distribuirEspecial(info, prova, avisos);
     const napaAlunos = info.alunos.filter(a => napaRa.has(a.ra));
     const resto = info.alunos.filter(a => !napaRa.has(a.ra));
     const s = info.especial ? { ...(info.salas || {}), modo: 'unica' } : (info.salas || { modo: 'unica', primeira: 'LAB12' });
@@ -86,6 +87,58 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     return { salas, napa, avisos, napaProblemas };
   }
 
+  // ADP/DP (25/11/2026): uma sala só — LAB12, LAB20 ou outra (nome livre) — e o computador de CADA aluno, escolhido
+  // pela Joyce (às vezes fazem junto com outra turma no mesmo laboratório, nos computadores que sobram). O que não foi
+  // escolhido recebe o próximo número livre (fora dos ocupados pela outra turma).
+  function salaEsp(prova) {
+    const sa = prova.salaAdp || {};
+    const id = ['LAB12', 'LAB20', 'OUTRA'].includes(sa.sala) ? sa.sala : 'LAB12';
+    return { id, nome: String(sa.salaNome || '').trim(), pcs: sa.pcs || {} };
+  }
+  function distribuirEspecial(info, prova, avisos) {
+    const sp = { ...salaEsp(prova), ...(info.salaEdit || {}) };
+    const ocup = ((info.ocupados || {})[sp.id]) || [];
+    const ocupados = new Map(ocup.map(o => [o.pc, o.quem]));
+    const usados = new Set();
+    const comNum = info.alunos.map(a => ({ ...a, pc: parseInt(sp.pcs[a.nome], 10) || null }));
+    comNum.forEach(a => { if (a.pc) usados.add(a.pc); });
+    let prox = 1;
+    const livre = () => { while (usados.has(prox) || ocupados.has(prox)) prox++; usados.add(prox); return prox; };
+    comNum.forEach(a => { if (!a.pc && sp.id !== 'OUTRA') { a.pc = livre(); a.sugerido = true; } });
+    const vistos = new Map();
+    comNum.forEach(a => {
+      if (!a.pc) return;
+      if (vistos.has(a.pc)) avisos.push(`Computador ${dois(a.pc)} repetido: ${vistos.get(a.pc)} e ${a.nome}.`);
+      vistos.set(a.pc, a.nome);
+      if (ocupados.has(a.pc)) avisos.push(`Computador ${dois(a.pc)} (${a.nome}) já é de ${ocupados.get(a.pc)} no mesmo horário.`);
+      if (CAPACIDADE[sp.id] && a.pc > CAPACIDADE[sp.id]) avisos.push(`${ROTULO_SALA[sp.id]} tem ${CAPACIDADE[sp.id]} computadores; ${a.nome} está no ${a.pc}.`);
+    });
+    if (comNum.some(a => a.sugerido)) avisos.push('Há computador sugerido pelo Órbita (o próximo livre). Confira e clique em "Salvar sala e computadores".');
+    if (info.semCpf) avisos.push(`${info.semCpf} aluno(s) sem CPF no Edubox: a folha sai sem senha (procure a secretaria).`);
+    const rotulo = sp.id === 'OUTRA' ? (sp.nome ? (/^\d+$/.test(sp.nome) ? `Sala ${sp.nome}` : sp.nome) : 'Sala da prova') : ROTULO_SALA[sp.id];
+    const alunos = comNum.slice().sort((a, b) => (a.pc || 999) - (b.pc || 999) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return { salas: [{ id: sp.id, rotulo, alunos, especial: true }], napa: null, avisos, napaProblemas: [], sp, ocup };
+  }
+  // computadores já usados por outras provas (turmas regulares) na mesma data e turno, por laboratório
+  async function ocupadosNoHorario(prova) {
+    const out = {};
+    // turno pelo horário quando tem (uma prova às 13:30 é da tarde, mesmo se o turno ficou "manhã" no cadastro)
+    const turnoDe = (p) => { const h = parseInt(String(p.horario || '').slice(0, 2), 10); return Number.isInteger(h) ? (h < 12 ? 'manha' : h < 18 ? 'tarde' : 'noite') : p.turno; };
+    const outras = dadosAtuais().provas.filter(p => p.id !== prova.id && p.data === prova.data && turnoDe(p) === turnoDe(prova) && !ESPECIAIS[p.turma]);
+    for (const p of outras) {
+      try {
+        const inf = await alunosDa(p);
+        distribuir(inf, p).salas.forEach(sl => sl.alunos.forEach(a => { (out[sl.id] = out[sl.id] || []).push({ pc: a.pc, quem: `${p.turma} (${p.disciplina})` }); }));
+      } catch (e) { /* sem acesso aos alunos da outra turma: só não avisa */ }
+    }
+    return out;
+  }
+  const faixas = (nums) => {
+    const v = [...new Set(nums)].sort((a, b) => a - b); const out = [];
+    for (let i = 0; i < v.length; i++) { let j = i; while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++; out.push(i === j ? dois(v[i]) : `${dois(v[i])} a ${dois(v[j])}`); i = j; }
+    return out.join(', ');
+  };
+
   // ------------------------------------------------------------------ tela
   function opcoesProva() {
     const ps = provasVisiveis().slice().sort((a, b) => a.data.localeCompare(b.data) || a.turma.localeCompare(b.turma));
@@ -110,6 +163,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     </div>`;
     try {
       const info = await alunosDa(prova);
+      if (info.especial && info.alunos.length && !info.ocupados) info.ocupados = await ocupadosNoHorario(prova);
       if (provaId !== prova.id) return; // trocou de prova enquanto buscava: a outra chamada desenha
       renderCorpo(prova, info);
     } catch (e) {
@@ -135,8 +189,24 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         ${info.alunos.length ? `<ol class="ap-imp-esp-lista">${info.alunos.map(a => `<li>${esc(a.nome)} <small>(${esc(a.turmaAluno || '')})</small></li>`).join('')}</ol>` : ''}
       </section>` : '';
     if (info.especial && !info.alunos.length) { c.innerHTML = blocoEspecial; return; }
-    c.innerHTML = `${blocoEspecial}
-      <section class="ap-imp-div">
+    const blocoSalaEsp = info.especial ? (() => {
+      const sp = dist.sp;
+      const porQuem = {};
+      (dist.ocup || []).forEach(o => { (porQuem[o.quem] = porQuem[o.quem] || []).push(o.pc); });
+      return `<section class="ap-imp-div">
+        <h3>Sala e computador de cada aluno (${info.alunos.length})</h3>
+        <div class="ap-imp-div-campos">
+          <label class="ap-campo"><span>Sala</span><select id="ap-esp-sala">${[['LAB12', 'Laboratório 12'], ['LAB20', 'Laboratório 20'], ['OUTRA', 'Outra sala']].map(([k, l]) => `<option value="${k}" ${sp.id === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${sp.id === 'OUTRA' ? `<label class="ap-campo"><span>Nome da sala</span><input id="ap-esp-salanome" value="${esc(sp.nome)}" placeholder="Ex.: Sala 33" maxlength="60"></label>` : ''}
+        </div>
+        ${Object.keys(porQuem).length ? `<p class="ap-nota"><b>No mesmo horário, neste laboratório:</b> ${Object.entries(porQuem).map(([q, n]) => `${esc(q)} usa os computadores ${faixas(n)}`).join('; ')}. Escolha números fora desses.</p>` : `<p class="ap-nota">${sp.id === 'OUTRA' ? 'Em outra sala o número é opcional (deixe em branco se forem notebooks sem número).' : 'Nenhuma outra turma cadastrada neste laboratório no mesmo horário.'}</p>`}
+        <table class="ap-esp-pcs"><thead><tr><th>Aluno(a)</th><th>Turma de origem</th><th>Computador</th></tr></thead>
+          <tbody>${dist.salas[0].alunos.map(a => `<tr><td>${esc(a.nome)}</td><td>${esc(a.turmaAluno || '')}</td><td><input type="number" min="1" max="${CAPACIDADE[sp.id] || 999}" value="${a.pc || ''}" data-esp-pc="${esc(a.nome)}" aria-label="Computador de ${esc(a.nome)}">${a.sugerido ? ' <small>sugerido</small>' : ''}</td></tr>`).join('')}</tbody></table>
+        <button type="button" class="ap-btn ap-btn-pri" id="ap-esp-salvar">Salvar sala e computadores</button>
+      </section>`;
+    })() : '';
+    c.innerHTML = `${blocoEspecial}${blocoSalaEsp}
+      ${info.especial ? '' : `<section class="ap-imp-div">
         <h3>${info.especial ? `Sala da prova (${info.alunos.length} aluno${info.alunos.length === 1 ? '' : 's'})` : `Como a ${esc(info.turma)} (${info.periodo}º período · ${info.alunos.length} alunos no Edubox) fica nas salas`}</h3>
         <div class="ap-imp-div-campos">
           ${info.especial ? '' : `<label class="ap-check"><input type="radio" name="ap-imp-modo" value="unica" ${s.modo !== 'dividida' ? 'checked' : ''}> Uma sala só</label>
@@ -145,7 +215,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
           ${s.modo === 'dividida' ? `<label class="ap-campo"><span>até o(a) aluno(a)</span><select id="ap-imp-ate">${info.alunos.map(a => `<option value="${esc(a.nome)}" ${casa(s.ate, a.nome) ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></label>
             <p class="ap-nota">O resto da turma vai para o ${esc(ROTULO_SALA[(s.primeira || 'LAB12') === 'LAB12' ? 'LAB20' : 'LAB12'])}.</p>` : ''}
           <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão e numeração</button>        </div>
-      </section>
+      </section>`}
       ${dist.napaProblemas.length ? `<section class="ap-imp-avisos" role="alert"><b>NAPA da ${esc(info.turma)}: confirme quem é cada aluno</b>
         <p class="ap-nota" style="margin:.2rem 0 .5rem">O NAPA está cadastrado só com o primeiro nome. Escolha o aluno certo: o nome completo fica salvo e ele sai da lista do laboratório. Enquanto não escolher, não imprima.</p>
         ${dist.napaProblemas.map(p => `<label class="ap-campo"><span>"${esc(p.nome)}"${p.ambiguo ? ' (mais de um aluno com esse nome)' : ' (não achei com essa grafia)'}</span>
@@ -154,15 +224,15 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       ${dist.avisos.length ? `<div class="ap-imp-avisos" role="alert"><b>Confira antes de imprimir:</b><ul>${dist.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}
       <div class="ap-imp-salas">${todas.map(sl => `<article class="ap-imp-sala">
         <h4>${esc(sl.rotulo)}${sl.napa ? ' <small>(NAPA)</small>' : ''}</h4>
-        <p><b>${sl.alunos.length}</b> aluno(s)${CAPACIDADE[sl.id] ? ` · computadores ${sl.inicio} a ${sl.inicio + sl.alunos.length - 1} (o laboratório tem ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
-        ${CAPACIDADE[sl.id] ? `<label class="ap-campo ap-imp-inicio"><span>Começar no computador nº</span><input type="number" min="1" max="${CAPACIDADE[sl.id]}" value="${sl.inicio}" data-inicio-sala="${sl.id}"></label>` : ''}
+        <p><b>${sl.alunos.length}</b> aluno(s)${sl.especial ? (sl.alunos.some(a => a.pc) ? ` · computadores ${faixas(sl.alunos.filter(a => a.pc).map(a => a.pc))}` : ' · sem número') : CAPACIDADE[sl.id] ? ` · computadores ${sl.inicio} a ${sl.inicio + sl.alunos.length - 1} (o laboratório tem ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
+        ${CAPACIDADE[sl.id] && !sl.especial ? `<label class="ap-campo ap-imp-inicio"><span>Começar no computador nº</span><input type="number" min="1" max="${CAPACIDADE[sl.id]}" value="${sl.inicio}" data-inicio-sala="${sl.id}"></label>` : ''}
         <div class="ap-imp-botoes">
           <button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:${sl.id}">Baixar tudo desta sala (PDF)</button>
           ${sl.napa ? '' : `<button type="button" class="ap-btn" data-imp="porta:${sl.id}">Lista da porta (PDF)</button>`}
           <button type="button" class="ap-btn" data-imp="logins:${sl.id}">Folhas de login (${sl.alunos.length}) (PDF)</button>
           <button type="button" class="ap-btn" data-imp="ata:${sl.id}">Ata (PDF)</button>
         </div>
-        ${sl.napa ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista" start="${sl.inicio || 1}">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
+        ${sl.napa || sl.especial ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista" start="${sl.inicio || 1}">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
       </article>`).join('')}</div>
       <div class="ap-imp-geral"><button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:*">Baixar tudo da prova em PDF (todas as salas)</button>
         <span class="ap-nota">Sai na ordem: para cada sala, a lista da porta, a ata e as folhas de login na ordem dos computadores.</span></div>
@@ -269,7 +339,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const cel = (x, yy, aluno) => {
       doc.rect(x, yy, pcLarg, alt); doc.rect(x + pcLarg, yy, colLarg - pcLarg, alt);
       if (!aluno) return;
-      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(duas ? 10 : 11); doc.text(dois(aluno.pc), x + pcLarg / 2, yy + alt - 2.1, { align: 'center' });
+      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(duas ? 10 : 11); doc.text(aluno.pc ? dois(aluno.pc) : '—', x + pcLarg / 2, yy + alt - 2.1, { align: 'center' });
       cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.text(caberTxt(doc, aluno.nome, colLarg - pcLarg - 3, duas ? 9.5 : 11), x + pcLarg + 1.5, yy + alt - 2.1);
     };
     // cabeçalho da tabela
@@ -307,7 +377,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     y += 8;
     doc.text(doc.splitTextToSize('Nada mais havendo a relatar, lavra-se a presente ata, que vai assinada pelo(a) professor(a) responsável e, se necessário, por fiscais presentes.', LARG), M, y);
     y += 14;
-    const tabela = (titulo, cols, n) => {
+    const tabela = (titulo, cols, n, nomes = []) => {
       cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text(titulo, M, y); y += 3;
       const alt = 8.5;
       let x = M;
@@ -316,10 +386,10 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       cor(doc, PRETO);
       y += alt;
       doc.setFont('helvetica', 'normal');
-      for (let i = 1; i <= n; i++) { x = M; cols.forEach(([, w], j) => { doc.rect(x, y, w, alt); if (j === 0) doc.text(String(i), x + 1.5, y + alt - 2.8); x += w; }); y += alt; }
+      for (let i = 1; i <= n; i++) { x = M; cols.forEach(([, w], j) => { doc.rect(x, y, w, alt); if (j === 0) doc.text(String(i), x + 1.5, y + alt - 2.8); if (j === 1 && nomes[i - 1]) doc.text(caberTxt(doc, nomes[i - 1], w - 3, 10), x + 1.5, y + alt - 2.8); x += w; }); y += alt; }
       y += 8;
     };
-    tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], 4);
+    tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], Math.max(4, (prova.aplicadores || []).length), prova.aplicadores || []);
     tabela('Registro dos dois últimos alunos a deixar a sala', [['Nº', 12], ['Nome do(a) aluno(a)', LARG - 12 - 32 - 52], ['Horário de saída', 32], ['Assinatura', 52]], 2);
   }
   // cabeçalho da folha de login (25/11/2026, pedido do Suporte AVA): logo do Órbita FATEC à esquerda e MED FATEC
@@ -342,7 +412,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   }
   function pdfLogin(doc, logo, a, sl, prova, info) {
     cabecalhoLogin(doc, logo);
-    const lugar = sl.napa ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
+    const lugar = sl.napa || !a.pc ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
     doc.setLineWidth(1); doc.setDrawColor(...AZUL); doc.setFillColor(...AZUL_CLARO); doc.rect(M, 31, LARG, 15, 'FD'); doc.setDrawColor(...PRETO);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); caber(doc, lugar, LARG - 6, 20); doc.text(lugar, 105, 41.5, { align: 'center' }); cor(doc, PRETO);
     doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 9.5); doc.text(linhaProvaTxt(prova, info), 105, 52, { align: 'center' });
@@ -397,6 +467,24 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     renderCorpo(prova, await alunosDa(prova));
   }
 
+  function lerSalaEsp(prova) {
+    const atual = salaEsp(prova);
+    const sala = (document.getElementById('ap-esp-sala') || {}).value || atual.id;
+    const nomeEl = document.getElementById('ap-esp-salanome');
+    const pcs = {};
+    document.querySelectorAll('[data-esp-pc]').forEach(i => { const v = parseInt(i.value, 10); if (v > 0) pcs[i.dataset.espPc] = v; });
+    return { id: sala, nome: nomeEl ? nomeEl.value : atual.nome, pcs };
+  }
+  async function salvarSalaEsp() {
+    const prova = provasVisiveis().find(p => p.id === provaId);
+    if (!prova) return;
+    const sp = lerSalaEsp(prova);
+    const r = await api(`${BASE}/impressao/prova/${encodeURIComponent(prova.id)}/sala`, { method: 'PUT', body: JSON.stringify({ sala: sp.id, salaNome: sp.nome, pcs: sp.pcs }) });
+    prova.salaAdp = r.salaAdp;
+    const inf = cache.get(chave(prova));
+    if (inf) { delete inf.salaEdit; renderCorpo(prova, inf); }
+    toast(r.message);
+  }
   async function salvarDivisao() {
     const d = dadosAtuais();
     const prova = provasVisiveis().find(p => p.id === provaId);
@@ -419,6 +507,13 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     alvo.addEventListener('change', (e) => {
       if (e.target.id === 'ap-imp-prova') { provaId = e.target.value; render(alvo); return; }
       if (e.target.id === 'ap-imp-edubox') { eduboxEscolhida.set(provaId, e.target.value); render(alvo); return; }
+      if (e.target.id === 'ap-esp-sala' || e.target.id === 'ap-esp-salanome' || e.target.dataset.espPc !== undefined) {
+        // mostra na hora (sem salvar): sala e números digitados
+        const pr = provasVisiveis().find(p => p.id === provaId);
+        const inf = pr && cache.get(chave(pr));
+        if (inf) { inf.salaEdit = lerSalaEsp(pr); renderCorpo(pr, inf); }
+        return;
+      }
       if (e.target.dataset.inicioSala) {
         // mostra a nova numeração na hora; fica salva em "Salvar divisão"
         const pr = provasVisiveis().find(p => p.id === provaId);
@@ -443,6 +538,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         if (b) { b.disabled = true; try { await baixar(b.dataset.imp); } finally { b.disabled = false; } return; }
         if (e.target.closest('#ap-imp-salvar-div')) await salvarDivisao();
         if (e.target.closest('#ap-imp-salvar-napa')) await salvarNapa();
+        if (e.target.closest('#ap-esp-salvar')) await salvarSalaEsp();
       } catch (err) { toast(err.message, 'erro'); }
     });
   }

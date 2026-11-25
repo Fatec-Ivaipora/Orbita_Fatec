@@ -285,3 +285,9 @@
 .ap-s-adp-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 8px; background: #ece3f8; color: #0d1b33; font-weight: 800; white-space: nowrap; }
 .ap-s-adp-pill svg { color: #0d1b33; }
 @media (max-width: 560px) { .ap-grid-disc { grid-template-columns: 1fr; } }
+/* ADP/DP: computador de cada aluno (25/11/2026) */
+.ap-esp-pcs { width: 100%; max-width: 720px; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.9rem; }
+.ap-esp-pcs th { text-align: left; font-size: 0.78rem; color: var(--orb-texto-suave, #5b6a80); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--orb-linha); }
+.ap-esp-pcs td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--orb-linha); }
+.ap-esp-pcs input { width: 5.5rem; min-height: 40px; }
+.ap-esp-pcs small { color: #a8650b; font-weight: 700; }

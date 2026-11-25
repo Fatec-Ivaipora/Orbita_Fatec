@@ -119,6 +119,7 @@ router.get('/', async (req, res) => {
         ]);
         const provas = snap.docs.map(d => {
             const p = { id: d.id, ...d.data() };
+            if (!podeImprimir(req.user)) delete p.salaAdp; // nome do aluno de ADP/DP: só quem imprime
             p.minha = (p.aplicadores || []).some(a => ehMinha(a, nome));
             return p;
         }).sort((a, b) => a.data.localeCompare(b.data) || (a.horario || '').localeCompare(b.horario || '') || a.turma.localeCompare(b.turma));
@@ -357,6 +358,30 @@ async function alunosEspeciais(semestre, conf, turmaId, q) {
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     return { ...base, alunos, semCpf: alunos.filter(a => !a.senha).length };
 }
+
+// PUT /impressao/prova/:id/sala { sala: 'LAB12'|'LAB20'|'OUTRA', salaNome, pcs: { 'NOME DO ALUNO': 7 } }
+// ADP/DP (25/11/2026): a Joyce escolhe a sala e o computador de cada aluno — às vezes fazem junto com outra turma no
+// mesmo laboratório, nos computadores que sobram. Fica na própria prova (salaAdp); não reabre o calendário validado.
+// Chave = nome do aluno (como o NAPA), nunca RA/CPF.
+router.put('/impressao/prova/:id/sala', exigeImpressao, async (req, res) => {
+    try {
+        const ref = db.collection(COL_PROVAS).doc(req.params.id);
+        const s = await ref.get();
+        if (!s.exists) return res.status(404).json({ error: 'Prova não encontrada.' });
+        if (!TURMAS_ESPECIAIS[s.data().turma]) return res.status(400).json({ error: 'Sala por aluno é só para as provas de adaptação e DP.' });
+        const b = req.body || {};
+        const sala = ['LAB12', 'LAB20', 'OUTRA'].includes(b.sala) ? b.sala : 'LAB12';
+        const max = SALAS_LAB[sala] || 999;
+        const pcs = {};
+        Object.entries(b.pcs || {}).slice(0, 80).forEach(([nome, n]) => {
+            const v = parseInt(n, 10);
+            if (Number.isInteger(v) && v >= 1 && v <= max) pcs[txt(nome, 160).toUpperCase()] = v;
+        });
+        const salaAdp = { sala, salaNome: sala === 'OUTRA' ? txt(b.salaNome, 60) : '', pcs, em: agora(), por: quem(req) };
+        await ref.update({ salaAdp });
+        res.json({ message: 'Sala e computadores salvos.', salaAdp });
+    } catch (e) { erro(res, e); }
+});
 
 // PUT /impressao/napa/:semestre { turma, nomes: [...] } — nomes completos dos alunos do NAPA da turma (a tela da
 // impressão troca o primeiro nome cadastrado pelo nome do Edubox). Não reabre o calendário validado: é só cadastro.
