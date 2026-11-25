@@ -269,7 +269,7 @@
 /* campo de questões no cadastro e arte "Provas das Adaptações" (25/11/2026) — modelo da lista de 17/11 */
 .ap-grid-disc { display: grid; grid-template-columns: 1fr 110px; gap: 0 0.8rem; }
 .ap-tp-q { font-size: 0.72rem; color: var(--orb-texto-suave, #5b6a80); white-space: nowrap; }
-.ap-s-adp-tit { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 9px 18px; border-radius: 10px; background: #5b2a9e; color: #fff; font-family: var(--orb-display); font-size: 20px; }
+.ap-s-adp-tit { display: inline-block; margin: 0 0 14px; padding: 9px 18px; border-radius: 10px; background: #5b2a9e; color: #fff; font-family: var(--orb-display); font-size: 20px; }
 .ap-s-adp-tab { width: 100%; border-collapse: separate; border-spacing: 0; border: 2px solid #d9cdf0; border-radius: 12px; overflow: hidden; font-size: 15px; }
 .ap-s-adp-tab { table-layout: fixed; }
 .ap-s-adp-tab th:nth-child(1) { width: 66px; } .ap-s-adp-tab th:nth-child(2) { width: 50px; } .ap-s-adp-tab th:nth-child(4) { width: 128px; } .ap-s-adp-tab th:nth-child(5) { width: 158px; } .ap-s-adp-tab th:nth-child(6) { width: 118px; }
@@ -282,7 +282,7 @@
 .ap-s-adp-tipo { display: inline-block; min-width: 92px; text-align: center; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 13px; }
 .ap-s-adp-adp { background: #ece3f8; color: #5b2a9e; }
 .ap-s-adp-dp { background: #dceeff; color: #0052b8; }
-.ap-s-adp-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 8px; background: #ece3f8; color: #0d1b33; font-weight: 800; white-space: nowrap; }
+.ap-s-adp-pill { display: inline-block; padding: 4px 12px; border-radius: 8px; background: #ece3f8; color: #0d1b33; font-weight: 800; white-space: nowrap; }
 .ap-s-adp-pill svg { color: #0d1b33; }
 @media (max-width: 560px) { .ap-grid-disc { grid-template-columns: 1fr; } }
 /* ADP/DP: computador de cada aluno (25/11/2026) */
@@ -294,4 +294,5 @@
 
 /* arte da turma com a coluna Questões (25/11/2026) */
 .ap-s-bloco-q th:nth-child(4) { width: 104px; } .ap-s-bloco-q th:nth-child(5) { width: 80px; } .ap-s-bloco-q th:nth-child(6) { width: 180px; }
-.ap-s-adp-tit img, .ap-s-adp-pill img { display: block; }
+.ap-s-ico { display: inline-block; font-size: 0.95em; line-height: 1; margin-right: 6px; }
+.ap-s-cab + .ap-s-adp-tit, .ap-s-cab + .ap-s-turma-per { margin-top: 16px; }

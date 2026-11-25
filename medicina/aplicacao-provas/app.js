@@ -415,7 +415,7 @@ function cabecalhoSaida(titulo) {
       <div class="ap-s-cab-txt"><h1>${titulo}</h1><p>Medicina · ${esc(dados.semestre)}${et ? ` · ${ETAPA[et]}` : ''}</p></div>
       <img src="/img/naped/fatecivp-negativo.png" alt="FATEC Ivaiporã" class="ap-s-logo-fatec">
     </header>
-    <p class="ap-s-val ${val ? '' : 'ap-s-rasc'}">${val ? `Validado por ${esc(c.validadoPor || '')} em ${new Date(c.validadoEm).toLocaleDateString('pt-BR')}` : 'RASCUNHO — calendário ainda não validado'}</p>`;
+    ${val ? '' : '<p class="ap-s-val ap-s-rasc">RASCUNHO — calendário ainda não validado</p>'}`; // quem validou não sai na arte (25/11/2026)
 }
 function saidaTurmas() {
   const provas = provasVisiveis();
@@ -444,11 +444,10 @@ function saidaTurma(tid) {
 // arte "Provas das Adaptações" (ADP e DP) — mesmo modelo da lista validada em 17/11/2026
 function saidaAdaptacoes() {
   const ps = provasVisiveis().filter(p => ESPECIAIS[p.turma]);
-  // ícones como <img> com SVG em data URI: o gerador de imagem (html2canvas) não desenha <svg> embutido
-  const ico = (tam, cor, corpo) => `<img alt="" width="${tam}" height="${tam}" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${tam}" height="${tam}">${corpo.replace(/currentColor/g, cor)}</svg>`)}">`;
-  const icone = ico(22, '#ffffff', '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M8 4h8v3H8zM6 5.5H4.8V21h14.4V5.5H18M8 11h8M8 15h8M8 19h5"/>');
-  const iconeQ = ico(15, '#0d1b33', '<path fill="none" stroke="currentColor" stroke-width="2" d="M6 3h9l4 4v14H6zM9 11h7M9 15h7M9 7h3"/>');
-  const iconeH = ico(15, '#0d1b33', '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M12 7v5l3 2"/>');
+  // ícones como símbolo de texto: o gerador de imagem (html2canvas) não desenha <svg> nem imagem SVG
+  const icone = '<span class="ap-s-ico" aria-hidden="true">📋</span>';
+  const iconeQ = '<span class="ap-s-ico" aria-hidden="true">📄</span>';
+  const iconeH = '<span class="ap-s-ico" aria-hidden="true">🕐</span>';
   return `<div class="ap-s ap-s-turma ap-s-adp">${cabecalhoSaida('Provas das Adaptações')}
     <h2 class="ap-s-adp-tit">${icone} Provas das Adaptações</h2>
     <table class="ap-s-adp-tab"><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Tipo</th><th>Questões</th><th>Horário</th></tr></thead>
