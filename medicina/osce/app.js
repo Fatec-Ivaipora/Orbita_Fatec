@@ -129,7 +129,9 @@ async function renderEstacao() {
         <label class="oc-campo">Tempo (min)<input name="tempoMin" type="number" min="1" max="60" value="${esc(String(e.tempoMin || ''))}" ${dis}></label>
       </div>
       <label class="oc-campo">Objetivo do plano de ensino <small>${e.disciplina ? (objs.length ? 'escolha o que esta estação avalia' : 'o plano de ensino desta disciplina não tem objetivos no Edubox — escreva o objetivo') : 'escolha a disciplina primeiro'}</small>
-        ${objs.length ? `<select name="objetivo" ${dis}><option value="">— escolha —</option>${objs.map(o => `<option ${o === e.objetivo ? 'selected' : ''}>${esc(o)}</option>`).join('')}${e.objetivo && !objs.includes(e.objetivo) ? `<option selected>${esc(e.objetivo)}</option>` : ''}</select>` : `<input name="objetivo" value="${esc(e.objetivo)}" ${dis}>`}</label>
+        ${!e.disciplina ? '<select name="objetivo" disabled><option value="">— escolha a disciplina acima —</option></select>'
+          : objs.length ? `<select name="objetivo" ${dis}><option value="">— escolha —</option>${objs.map(o => `<option ${o === e.objetivo ? 'selected' : ''}>${esc(o)}</option>`).join('')}${e.objetivo && !objs.includes(e.objetivo) ? `<option selected>${esc(e.objetivo)}</option>` : ''}</select>`
+          : `<input name="objetivo" value="${esc(e.objetivo)}" placeholder="Escreva o objetivo que esta estação avalia" ${dis}>`}</label>
       <label class="oc-campo">Cenário (o aluno lê na porta)<textarea name="cenario" rows="4" ${dis}>${esc(e.cenario)}</textarea></label>
       <label class="oc-campo">Tarefas do aluno <small>uma por linha</small><textarea name="tarefas" rows="4" ${dis}>${esc((e.tarefas || []).join('\n'))}</textarea></label>
       <div class="oc-campo">Checklist do avaliador <small>um passo que dá para ver por item · diga quando vale “parcial” · peso 1 = normal</small>
@@ -172,14 +174,79 @@ function lerForm() {
 }
 function renderConf() {
   const c = C.conferir(tela.e, window.RevisaoPt);
+  tela.conf = c;
   const box = el('oc-conf');
   if (!box) return;
+  const pode = podeMexer(tela.e);
+  const botoes = (s, i, tipo) => `<div class="oc-acoes oc-sug-acoes">${s.alvo ? `<button type="button" class="oc-btn oc-btn-mini" data-a="ir" data-${tipo}="${i}">Ir até lá</button>` : ''}${pode && (s.acao || (tipo === 'pt' && s.para)) ? `<button type="button" class="oc-btn oc-btn-mini oc-btn-aplicar" data-a="aplicar" data-${tipo}="${i}">${tipo === 'pt' ? `Trocar por “${esc(s.para)}”` : esc(s.acao.rotulo)}</button>` : ''}</div>`;
   box.innerHTML = `<h2>Conferência da estação</h2>
     <div class="oc-conf-resumo">${c.importantes ? `${c.importantes} ponto(s) importante(s) para a correção ficar igual entre avaliadores` : c.sugestoes.length ? 'Nada que atrapalhe a correção. Há sugestões para melhorar.' : 'Estação completa pelos critérios do Órbita.'}</div>
     ${c.fortes.length ? `<h3>O que já está bom</h3><ul>${c.fortes.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-    ${c.sugestoes.length ? `<h3>O que pode melhorar</h3>${c.sugestoes.map(s => `<div class="oc-sug ${s.nivel === 'importante' ? 'oc-imp' : ''}"><b>${esc(s.campo)} · ${esc(s.oque)}</b><p class="oc-porque"><b style="display:inline">Por quê:</b> ${esc(s.porque)}</p><p class="oc-como"><b style="display:inline">Sugestão:</b> ${esc(s.como)}</p></div>`).join('')}` : ''}
-    ${c.portugues.length ? `<h3>Português</h3><ul>${c.portugues.map(p => `<li class="oc-pt"><b>${esc(p.campo)}:</b> ${p.de ? `<s>${esc(p.de)}</s> → <ins>${esc(p.para || '')}</ins> ` : ''}<span>${esc(p.motivo || '')}</span></li>`).join('')}</ul>` : ''}
+    ${c.sugestoes.length ? `<h3>O que pode melhorar</h3>${c.sugestoes.map((s, i) => `<div class="oc-sug ${s.nivel === 'importante' ? 'oc-imp' : ''}"><b>${esc(s.campo)} · ${esc(s.oque)}</b><p class="oc-porque"><b style="display:inline">Por quê:</b> ${esc(s.porque)}</p><p class="oc-como"><b style="display:inline">Sugestão:</b> ${esc(s.como)}</p>${botoes(s, i, 'sug')}</div>`).join('')}` : ''}
+    ${c.portugues.length ? `<h3>Português</h3>${pode && c.portugues.some(p => p.para) ? '<button type="button" class="oc-btn oc-btn-mini oc-btn-aplicar" data-a="aplicar-pt-tudo">Corrigir todo o português</button>' : ''}<ul>${c.portugues.map((p, i) => `<li class="oc-pt"><b>${esc(p.campo)}:</b> ${p.de ? `<s>${esc(p.de)}</s> → <ins>${esc(p.para || '')}</ins> ` : ''}<span>${esc(p.motivo || '')}</span>${botoes(p, i, 'pt')}</li>`).join('')}</ul>` : ''}
     <p class="oc-nota">A conferência segue os guias internacionais de OSCE (AMEE 81 e 49). São sugestões: a decisão é do professor e a validação, da coordenação do curso.</p>`;
+}
+// ---------- "Ir até lá" e "Aplicar" da conferência ----------
+function campoDo(alvo) {
+  if (!alvo) return null;
+  const f = el('oc-f-est');
+  if (alvo.k === 'item') return document.querySelector(`#oc-itens .oc-item[data-i="${alvo.i}"] [data-k="${alvo.sub || 'texto'}"]`);
+  if (alvo.k === 'itens') return el('oc-itens');
+  if (alvo.k === 'objetivo' && !tela.e.disciplina) return f && f.querySelector('[name="disciplina"]'); // sem disciplina não há objetivos
+  return f && f.querySelector(`[name="${alvo.k}"]`);
+}
+function irAte(alvo) {
+  const c = campoDo(alvo);
+  if (!c) return;
+  const caixa = c.closest('.oc-item, .oc-campo, .oc-chk') || c;
+  caixa.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  caixa.classList.remove('oc-destaque'); void caixa.offsetWidth; caixa.classList.add('oc-destaque');
+  setTimeout(() => caixa.classList.remove('oc-destaque'), 2600);
+  if (c.focus && !c.disabled) {
+    c.focus({ preventScroll: true });
+    // tarefa / erro crítico: seleciona a linha certa dentro da caixa de texto
+    if (alvo.i !== undefined && c.tagName === 'TEXTAREA') {
+      const ls = c.value.split('\n'); let ini = 0, n = -1;
+      for (let k = 0; k < ls.length; k++) { if (ls[k].trim()) n++; if (n === alvo.i) { c.setSelectionRange(ini, ini + ls[k].length); break; } ini += ls[k].length + 1; }
+    }
+  }
+}
+// troca um trecho num campo da estação (português)
+function trocarTexto(e, alvo, troca) {
+  if (alvo.k === 'item') { const it = e.itens[alvo.i]; if (it) it[alvo.sub] = troca(it[alvo.sub] || ''); return; }
+  if (['tarefas', 'criticos'].includes(alvo.k)) { if (e[alvo.k][alvo.i] !== undefined) e[alvo.k][alvo.i] = troca(e[alvo.k][alvo.i]); return; }
+  e[alvo.k] = troca(e[alvo.k] || '');
+}
+async function aplicar(b) {
+  lerForm();
+  const e = tela.e, c = tela.conf;
+  let alvo = null, msg = 'Aplicado. Confira e salve.';
+  if (b.dataset.pt !== undefined) {
+    const p = c.portugues[Number(b.dataset.pt)];
+    alvo = p.alvo;
+    trocarTexto(e, alvo, (t) => window.RevisaoPt.aplicar(t, p));
+    msg = `Trocado por “${p.para}”. Confira e salve.`;
+  } else if (b.dataset.sug !== undefined) {
+    const s = c.sugestoes[Number(b.dataset.sug)], a = s.acao;
+    alvo = s.alvo;
+    if (a.tipo === 'sem-parcial') { e.itens[a.i].semParcial = true; e.itens[a.i].parcial = ''; }
+    else if (a.tipo === 'peso') e.itens[a.i].peso = a.valor;
+    else if (a.tipo === 'ligar-global') e.escalaGlobal = true;
+    else if (a.tipo === 'texto') e[a.k] = a.texto;
+    else if (a.tipo === 'add-item') { e.itens = e.itens.filter(it => String(it.texto || '').trim()); e.itens.push({ texto: a.texto, parcial: '', peso: 1 }); alvo = { k: 'item', i: e.itens.length - 1, sub: 'parcial' }; msg = 'Item criado no fim do checklist. Diga quando vale parcial e salve.'; }
+  }
+  await renderEstacao();
+  irAte(alvo);
+  toast(msg);
+}
+function aplicarPortuguesTudo() {
+  lerForm();
+  const e = tela.e;
+  const corr = (t) => window.RevisaoPt.corrigirTudo(t);
+  ['tema', 'cenario', 'papelAvaliador', 'gabarito'].forEach(k => { e[k] = corr(e[k] || ''); });
+  e.tarefas = e.tarefas.map(corr); e.criticos = e.criticos.map(corr);
+  e.itens.forEach(it => { it.texto = corr(it.texto || ''); it.parcial = corr(it.parcial || ''); });
+  renderEstacao().then(() => toast('Português corrigido. Confira e salve.'));
 }
 async function salvarEstacao() {
   lerForm();
@@ -447,7 +514,8 @@ function ligarEventos() {
       const ds = disciplinas.filter(x => e.disciplinaWord && k(x.nome).includes(k(e.disciplinaWord)));
       if (ds.length === 1) e.disciplina = ds[0].nome;
       await abrirEstacao(null, e);
-      toast(`Importei ${e.itens.length} itens, o cenário e as tarefas. Confira, escolha a disciplina e o objetivo e salve.`);
+      if (!e.disciplina) irAte({ k: 'disciplina' });
+      toast(e.disciplina ? `Importei ${e.itens.length} itens, o cenário e as tarefas. Escolha o objetivo, confira e salve.` : `Importei ${e.itens.length} itens, o cenário e as tarefas. Escolha a DISCIPLINA para aparecerem os objetivos do plano de ensino.`);
     } catch (err) { toast(err.message, 'erro'); }
   });
   const conteudo = el('oc-conteudo');
@@ -464,6 +532,9 @@ function ligarEventos() {
       if (a === 'importar') return el('oc-word').click();
       if (a === 'add-item') { lerForm(); tela.e.itens.push({ texto: '', parcial: '', peso: 1 }); el('oc-itens').insertAdjacentHTML('beforeend', linhaItem(tela.e.itens[tela.e.itens.length - 1], tela.e.itens.length - 1)); renderConf(); return; }
       if (a === 'tirar-item') { lerForm(); tela.e.itens.splice(Number(b.dataset.i), 1); el('oc-itens').innerHTML = tela.e.itens.map((it, i) => linhaItem(it, i)).join(''); renderConf(); return; }
+      if (a === 'ir') { const c = tela.conf; const s = b.dataset.pt !== undefined ? c.portugues[Number(b.dataset.pt)] : c.sugestoes[Number(b.dataset.sug)]; return irAte(s && s.alvo); }
+      if (a === 'aplicar') return aplicar(b);
+      if (a === 'aplicar-pt-tudo') return aplicarPortuguesTudo();
       if (a === 'salvar-estacao') { b.disabled = true; try { await salvarEstacao(); } finally { b.disabled = false; } return; }
       if (a === 'apagar-estacao') { if (!confirm('Apagar esta estação? Não dá para desfazer.')) return; const r = await api(`${BASE}/estacoes/${encodeURIComponent(tela.id)}`, { method: 'DELETE' }); toast(r.message); tela = { v: 'inicio' }; return carregar(); }
       if (a === 'imprimir-estacao') { lerForm(); return imprimir(folhaAvaliador(tela.e, null, null) + folhaAluno(tela.e)); }

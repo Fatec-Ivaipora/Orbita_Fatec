@@ -16,6 +16,7 @@ const IDENTIFICACAO = /\b(nome|numero|apresent\w*|identific\w*)\b/;
 const PARADA = new Set(['para', 'como', 'com', 'sem', 'que', 'uma', 'umas', 'uns', 'dos', 'das', 'nos', 'nas', 'pelo', 'pela', 'seu', 'sua', 'seus', 'suas', 'este', 'esta', 'isso', 'aluno', 'aluna', 'examinador', 'avaliador', 'forma', 'correta', 'correto', 'voce', 'deve', 'devera', 'sobre', 'entre', 'mostre', 'execute', 'faca', 'realize', 'informe', 'diga']);
 const palavrasChave = (s) => semAcento(s).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 3 && !PARADA.has(w)).map(w => w.replace(/s$/, ''));
 
+const PAPEL_PADRAO = 'Faça igual com todos os alunos. Não dê dicas nem confirme se está certo; se o aluno perguntar, diga: "Faça como você faria no paciente". Avise quando faltar 1 minuto. Marque durante a execução e, no fim, a impressão geral.';
 const pesoDe = (it) => (Number(it && it.peso) > 0 ? Number(it.peso) : 1);
 const temParcial = (it) => it && it.semParcial !== true;
 
@@ -40,7 +41,8 @@ function calcular(estacao, marcas, valor) {
 // nivel: 'importante' (falta algo que atrapalha a correção) | 'sugestao' (melhora a qualidade)
 function conferir(e, RevisaoPt) {
     const fortes = [], sug = [];
-    const add = (campo, nivel, oque, porque, como) => sug.push({ campo, nivel, oque, porque, como });
+    // alvo: onde arrumar ({ k: campo, i: posição, sub: 'texto' | 'parcial' | 'peso' }); acao: o que o botão "Aplicar" faz (quando dá)
+    const add = (campo, nivel, oque, porque, como, alvo, acao) => sug.push({ campo, nivel, oque, porque, como, alvo: alvo || null, acao: acao || null });
     const itens = (e.itens || []).filter(it => String(it.texto || '').trim());
     const tarefas = (e.tarefas || []).map(t => String(t || '').trim()).filter(Boolean);
     const criticos = (e.criticos || []).map(t => String(t || '').trim()).filter(Boolean);
@@ -51,95 +53,102 @@ function conferir(e, RevisaoPt) {
     if (e.objetivo) fortes.push('Está ligada a um objetivo do plano de ensino da disciplina.');
     else add('Objetivo', 'importante', 'A estação não está ligada a um objetivo do plano de ensino.',
         'Assim a coordenação vê se as estações da OSCE cobrem o que foi ensinado, sem repetir nem deixar algo de fora.',
-        'Escolha na lista o objetivo do plano de ensino que esta estação avalia.');
+        'Escolha na lista o objetivo do plano de ensino que esta estação avalia.', { k: 'objetivo' });
     if (!(Number(e.tempoMin) > 0)) add('Tempo', 'importante', 'O tempo da estação não está informado.',
         'Todas as estações precisam do mesmo ritmo; o avaliador avisa quando falta 1 minuto e o aluno troca de sala no mesmo momento.',
-        'Informe o tempo em minutos (em geral, de 5 a 10).');
+        'Informe o tempo em minutos (em geral, de 5 a 10).', { k: 'tempoMin' });
 
     // cenário e tarefas (o que o aluno lê na porta)
     if (!cenario) add('Cenário', 'importante', 'A estação não tem cenário para o aluno.',
         'Sem o contexto, o aluno não sabe o que se espera dele e perde tempo perguntando.',
-        'Escreva em 2 ou 3 frases: onde ele está, quem é o paciente e o que precisa fazer.');
+        'Escreva em 2 ou 3 frases: onde ele está, quem é o paciente e o que precisa fazer.', { k: 'cenario' });
     else if (cenario.length < 90) add('Cenário', 'sugestao', 'O cenário está curto.',
         'O aluno precisa saber onde está, quem é o paciente e por que vai fazer o procedimento — isso muda a conduta.',
-        'Acrescente o dado que justifica a tarefa. Ex.: "Na laringoscopia você vê só a epiglote (via aérea difícil)".');
+        'Acrescente o dado que justifica a tarefa. Ex.: "Na laringoscopia você vê só a epiglote (via aérea difícil)".', { k: 'cenario' });
     if (!tarefas.length) add('Tarefas', 'importante', 'Não há tarefas para o aluno.',
         'É pela lista de tarefas que o aluno sabe o que vai ser avaliado.',
-        'Liste as tarefas, uma por linha, na ordem em que ele deve fazer.');
+        'Liste as tarefas, uma por linha, na ordem em que ele deve fazer.', { k: 'tarefas' });
     if (cenario && tarefas.length) fortes.push('Cenário e tarefas do aluno estão separados do gabarito.');
 
     // checklist
     if (!itens.length) add('Checklist', 'importante', 'A estação não tem itens no checklist.',
         'Sem itens, cada avaliador corrige do seu jeito.',
-        'Escreva os passos que o avaliador deve ver, um por item.');
+        'Escreva os passos que o avaliador deve ver, um por item.', { k: 'itens' });
     else if (itens.length < 5) add('Checklist', 'sugestao', `O checklist tem ${itens.length} itens: cada um vale cerca de ${Math.round(100 / itens.length)}% da estação.`,
         'Com poucos itens, um único deslize muda muito a nota, e itens grandes viram "tudo ou nada".',
-        'Divida os passos maiores em passos menores que dá para ver (de 8 a 15 itens costuma funcionar bem).');
+        'Divida os passos maiores em passos menores que dá para ver (de 8 a 15 itens costuma funcionar bem).', { k: 'itens' });
     else if (itens.length > 20) add('Checklist', 'sugestao', `O checklist tem ${itens.length} itens.`,
         'Com muitos itens o avaliador não consegue marcar tudo no tempo da estação e passa a marcar "de memória".',
-        'Junte os passos muito pequenos ou tire o que não é essencial para a habilidade.');
+        'Junte os passos muito pequenos ou tire o que não é essencial para a habilidade.', { k: 'itens' });
     else fortes.push(`Quantidade de itens boa para marcar no tempo (${itens.length}).`);
 
-    itens.forEach((it, i) => {
+    // i = posição na estação (a mesma numeração da tela, mesmo com item em branco no meio)
+    (e.itens || []).forEach((it, i) => {
+        if (!String(it.texto || '').trim()) return;
         const n = i + 1, t = String(it.texto).trim(), ts = semAcento(t);
         if (VAGO.test(ts)) add(`Item ${n}`, 'importante', `"${t}" não diz o que o avaliador deve ver.`,
             'Cada avaliador entende "de forma correta" de um jeito; aí a nota passa a depender de quem avalia, e não do que o aluno fez.',
-            'Troque por passos que dá para ver: o que o aluno faz, com o quê e em que ordem. Se for preciso, divida em mais itens.');
+            'Troque por passos que dá para ver: o que o aluno faz, com o quê e em que ordem. Se for preciso, divida em mais itens.', { k: 'item', i, sub: 'texto' });
         else if (t.length > 120 && ((t.match(/,| e /g) || []).length >= 2)) add(`Item ${n}`, 'sugestao', 'O item parece juntar mais de uma ação.',
             'Se o aluno faz só uma parte, o avaliador fica em dúvida entre "fez" e "parcial".',
-            'Separe em itens, uma ação por item.');
+            'Separe em itens, uma ação por item.', { k: 'item', i, sub: 'texto' });
         if (temParcial(it) && !String(it.parcial || '').trim()) add(`Item ${n}`, 'sugestao', 'O "parcial" não diz quando vale.',
             'Sem critério, um avaliador dá 0,5 e outro dá 1,0 para a mesma execução.',
-            'Escreva quando é parcial (ex.: "esquece 1 material") ou marque que este item não tem parcial.');
+            'Escreva quando é parcial (ex.: "esquece 1 material") ou marque que este item não tem parcial.', { k: 'item', i, sub: 'parcial' },
+            { tipo: 'sem-parcial', i, rotulo: 'Este item não tem parcial' });
         if (IDENTIFICACAO.test(ts) && pesoDe(it) / totalPeso >= 0.15) add(`Item ${n}`, 'sugestao', `Apresentar-se/identificar-se vale ${Math.round(100 * pesoDe(it) / totalPeso)}% da estação.`,
             'Dizer o nome não mostra a habilidade que a estação avalia; pesa igual a um passo técnico.',
-            'Dê peso menor a este item ou junte com "fala o que está fazendo" (comunicação).');
+            'Dê peso menor a este item ou junte com "fala o que está fazendo" (comunicação).', { k: 'item', i, sub: 'peso' },
+            { tipo: 'peso', i, valor: 0.5, rotulo: 'Deixar com peso 0,5' });
     });
     if (itens.length && itens.every(it => !temParcial(it) || String(it.parcial || '').trim())) fortes.push('Todos os itens dizem quando vale "parcial".');
 
     // tarefas x itens: o que o aluno lê tem que estar no checklist
-    tarefas.forEach((tf) => {
+    tarefas.forEach((tf, ti) => {
         const ch = palavrasChave(tf);
         if (!ch.length) return;
         const coberta = itens.some(it => { const ci = new Set(palavrasChave(it.texto)); return ch.filter(w => ci.has(w)).length >= Math.min(2, ch.length); });
         if (!coberta) add('Tarefas', 'sugestao', `A tarefa "${tf}" não aparece no checklist.`,
             'O aluno faz a tarefa e não ganha ponto por ela — ou o avaliador cobra algo que o aluno não sabia que seria avaliado.',
-            'Inclua um item para esta tarefa ou ajuste o texto da tarefa.');
+            'Inclua um item para esta tarefa ou ajuste o texto da tarefa.', { k: 'tarefas', i: ti },
+            { tipo: 'add-item', texto: tf.replace(/[.;]+$/, ''), rotulo: 'Criar um item com esta tarefa' });
     });
 
     // segurança, impressão geral e papel do avaliador
     if (criticos.length) fortes.push(`Tem ${criticos.length} erro(s) crítico(s) definido(s).`);
     else add('Erros críticos', 'sugestao', 'A estação não tem erro crítico.',
         'Sem ele, o aluno pode fazer algo perigoso para o paciente e ainda tirar nota alta somando os outros itens.',
-        'Liste o que não pode acontecer (ex.: "apoiou a lâmina nos dentes", "não confirmou a posição do tubo").');
+        'Liste o que não pode acontecer (ex.: "apoiou a lâmina nos dentes", "não confirmou a posição do tubo").', { k: 'criticos' });
     if (e.escalaGlobal === false) add('Impressão geral', 'sugestao', 'A estação está sem a impressão geral do avaliador.',
         'O checklist mostra se o aluno fez os passos; a impressão geral pega segurança e organização. Ela também ajuda a coordenação a achar a nota de corte (método do aluno limítrofe).',
-        'Deixe ligada a impressão geral (insuficiente → excelente).');
+        'Deixe ligada a impressão geral (insuficiente → excelente).', { k: 'escalaGlobal' }, { tipo: 'ligar-global', rotulo: 'Ligar a impressão geral' });
     else fortes.push('Tem a impressão geral do avaliador (insuficiente → excelente).');
     if (!String(e.papelAvaliador || '').trim()) add('Avaliador', 'sugestao', 'O papel do avaliador na estação não está escrito.',
         'Se um avaliador ajuda o aluno e outro não, a prova fica desigual.',
-        'Escreva o que o avaliador faz e o que não faz (ex.: "entrega o tubo quando o aluno pedir; não dá dicas").');
+        'Escreva o que o avaliador faz e o que não faz (ex.: "entrega o tubo quando o aluno pedir; não dá dicas").', { k: 'papelAvaliador' },
+        { tipo: 'texto', k: 'papelAvaliador', texto: PAPEL_PADRAO, rotulo: 'Usar o texto padrão (depois ajuste)' });
     if (!String(e.gabarito || '').trim()) add('Gabarito', 'sugestao', 'A estação não tem gabarito da técnica.',
         'O gabarito ajuda o avaliador a decidir entre "fez" e "parcial" do mesmo jeito que os outros.',
-        'Descreva como é o procedimento certo, passo a passo.');
+        'Descreva como é o procedimento certo, passo a passo.', { k: 'gabarito' });
     if (!(e.materiais || []).filter(Boolean).length) add('Materiais', 'sugestao', 'A lista de materiais da sala não está preenchida.',
         'Quem monta a sala precisa saber o que deixar, e todas as salas ficam iguais.',
-        'Liste os materiais (um por linha).');
+        'Liste os materiais (um por linha).', { k: 'materiais' });
 
     // português (mesmo revisor do Banco MED)
     const portugues = [];
     if (RevisaoPt && RevisaoPt.achar) {
-        const campo = (nome, t) => { if (String(t || '').trim()) RevisaoPt.achar(String(t)).forEach(a => portugues.push({ campo: nome, ...a })); };
-        campo('Tema', e.tema); campo('Cenário', cenario);
-        tarefas.forEach((t, i) => campo(`Tarefa ${i + 1}`, t));
-        itens.forEach((it, i) => { campo(`Item ${i + 1}`, it.texto); campo(`Item ${i + 1} (parcial)`, it.parcial); });
-        criticos.forEach((t, i) => campo(`Erro crítico ${i + 1}`, t));
-        campo('Papel do avaliador', e.papelAvaliador); campo('Gabarito', e.gabarito);
+        // alvo aponta para o texto ORIGINAL da estação (posição em e.itens / e.tarefas / e.criticos), para o "Aplicar" trocar no lugar certo
+        const campo = (nome, t, alvo) => { if (String(t || '').trim()) RevisaoPt.achar(String(t)).forEach(a => portugues.push({ campo: nome, ...a, alvo })); };
+        campo('Tema', e.tema, { k: 'tema' }); campo('Cenário', e.cenario, { k: 'cenario' });
+        (e.tarefas || []).forEach((t, i) => campo(`Tarefa ${i + 1}`, t, { k: 'tarefas', i }));
+        (e.itens || []).forEach((it, i) => { if (!String(it.texto || '').trim()) return; campo(`Item ${i + 1}`, it.texto, { k: 'item', i, sub: 'texto' }); campo(`Item ${i + 1} (parcial)`, it.parcial, { k: 'item', i, sub: 'parcial' }); });
+        (e.criticos || []).forEach((t, i) => campo(`Erro crítico ${i + 1}`, t, { k: 'criticos', i }));
+        campo('Papel do avaliador', e.papelAvaliador, { k: 'papelAvaliador' }); campo('Gabarito', e.gabarito, { k: 'gabarito' });
     }
     const ordem = { importante: 0, sugestao: 1 };
     sug.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]);
     return { fortes, sugestoes: sug, portugues, importantes: sug.filter(s => s.nivel === 'importante').length };
 }
 
-return { calcular, conferir, pesoDe, temParcial, fmt, r2 };
+return { calcular, conferir, pesoDe, temParcial, fmt, r2, PAPEL_PADRAO };
 }));
