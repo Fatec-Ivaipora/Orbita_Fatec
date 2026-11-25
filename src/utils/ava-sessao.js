@@ -80,7 +80,8 @@ function lerQuestionarios(html) {
     const out = [];
     const re = /<a[^>]*href="[^"]*\/mod\/quiz\/view\.php\?id=(\d+)"[^>]*>([\s\S]*?)<\/a>/g;
     let m;
-    while ((m = re.exec(html))) { const nome = semTags(m[2]); if (nome && !out.some(q => q.cmid === Number(m[1]))) out.push({ cmid: Number(m[1]), nome }); }
+    // tira o texto escondido do leitor de tela ("… Questionário") que vem junto no link
+    while ((m = re.exec(html))) { const nome = semTags(m[2].replace(/<span[^>]*class="[^"]*(?:accesshide|instancename-type|sr-only)[^"]*"[^>]*>[\s\S]*?<\/span>/g, '')).replace(/\s+Question[aá]rio$/i, ''); if (nome && !out.some(q => q.cmid === Number(m[1]))) out.push({ cmid: Number(m[1]), nome }); }
     return out;
 }
 // formulário de importação: campos escondidos do form, categorias em árvore e dados do seletor de arquivo
@@ -104,7 +105,8 @@ function lerFormImportacao(html) {
         pilha.length = nivel; pilha[nivel] = q ? q[1] : txt;
         categorias.push({ valor: m[1], caminho: pilha.slice(0, nivel + 1), qtd: q ? Number(q[2]) : 0 });
     }
-    const fp = html.match(/"itemid":(\d+),"maxbytes":-?\d+,"context":\{"id":(\d+)/);
+    // maxbytes vem número (-1, administrador) ou texto ("20971520", usuário de integração: limite de 20 MB por arquivo)
+    const fp = html.match(/"itemid":(\d+),"maxbytes":"?-?\d+"?,"context":\{"id":(\d+)/);
     return {
         escondidos, categorias,
         itemid: (escondidos.find(([n]) => n === 'newfile') || [])[1] || (fp && fp[1]) || null,

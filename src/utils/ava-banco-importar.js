@@ -36,14 +36,29 @@ class ImportadorBancoAva {
         return this.cursos[semestre];
     }
 
+    // Questionários do curso (25/11/2026). Para o usuário de integração, /mod/quiz/index.php vira a "visão geral de
+    // atividades" do Moodle 5.1, que carrega a lista depois (sem link no HTML). E as provas ficam em subseções
+    // ("📁 AVALIAÇÕES · 2º BIMESTRE"), que têm página própria. Então lê a página do curso e a de cada subseção.
+    async questionariosDoCurso(cursoId) {
+        if (!this.quizzes) this.quizzes = {};
+        if (this.quizzes[cursoId]) return this.quizzes[cursoId];
+        const { texto } = await this.s.req(`/course/view.php?id=${cursoId}`);
+        const achados = lerQuestionarios(texto);
+        const secoes = [...new Set((texto.match(/\/course\/section\.php\?id=\d+/g) || []))];
+        for (const u of secoes) {
+            for (const q of lerQuestionarios((await this.s.req(u)).texto)) if (!achados.some(x => x.cmid === q.cmid)) achados.push(q);
+        }
+        this.quizzes[cursoId] = achados;
+        return achados;
+    }
+
     // acha curso e questionário. cmidTeste: manda para um questionário escolhido (teste), sem procurar
     async destino(sit, cmidTeste) {
         if (cmidTeste) return { cmid: Number(cmidTeste), quiz: 'questionário de teste', curso: '', cursoId: null, teste: true };
         const cursos = (await this.cursosDo(sit.semestre)).filter(c => c.disc === norm(sit.disciplina));
         if (cursos.length !== 1) return { erro: cursos.length ? `mais de um curso no AVA com esse nome (${cursos.map(c => c.id).join(', ')})` : `não há curso "${sit.semestre} - T.n - … - ${sit.disciplina}" no AVA` };
         const curso = cursos[0];
-        const { texto } = await this.s.req(`/mod/quiz/index.php?id=${curso.id}`);
-        const qs = lerQuestionarios(texto).filter(q => questionarioDaProva(sit, q.nome));
+        const qs = (await this.questionariosDoCurso(curso.id)).filter(q => questionarioDaProva(sit, q.nome));
         if (qs.length !== 1) return { curso: curso.nome, cursoId: curso.id, erro: qs.length ? `mais de um questionário possível (${qs.map(q => q.nome).join(' / ')})` : `o curso não tem o questionário da prova (${sit.prova})` };
         return { curso: curso.nome, cursoId: curso.id, cmid: qs[0].cmid, quiz: qs[0].nome };
     }

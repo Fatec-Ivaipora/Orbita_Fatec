@@ -142,9 +142,11 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - Importação pelo mesmo passo a passo, pela sessão do navegador, no questionário "📝 Prova · 2º Bimestre" (cmid 56364) da II Semana Acadêmica de Medicina: 13 questões de Patologia Clínica I (2ª ch.) em 5 s, com as 2 imagens abrindo.
   - Simulação nas 11 provas finalizadas: o curso e o questionário certos foram achados em 9 (Hab. Clínicas I e Sist. Morfo I não têm curso 2026.2 no AVA). 7 já estavam no AVA.
   - Aba Envio ao AVA no Órbita local com os dados reais, também em 375 px: o "Baixar arquivo" saiu idêntico ao XML do agente (680.095 bytes).
-  - **Não testado:** o login do agente e a importação por ele (falta a senha do orbita.integracao) e a tela do professor no navegador.
+  - Agente com o login real (25/11, à noite): a simulação achou curso, questionário e pasta em 14 das 16 provas com questões prontas (7 já estavam no AVA, 4 importaria, 5 para conferir). Também importou sozinho, sem navegador, 17 questões de Clínica Cirúrgica I no questionário de teste da II Semana Acadêmica em 15 s.
+  - Ajustes desse teste: para o usuário de integração, a lista de questionários do curso é a "visão geral" do Moodle 5.1, que carrega depois, então o agente procura as provas na página do curso e nas subseções. O nome do questionário vinha com " Questionário" (texto do leitor de tela). E o `maxbytes` vem entre aspas.
+  - **Não testado:** a tela do professor no navegador.
 - **Para ligar:**
-  1. No AVA, a secretaria (administradora) define a senha do orbita.integracao e dá ao papel "Integração Órbita (Medicina)", na categoria MED, moodle/question:add e moodle/question:managecategory.
+  1. No AVA (feito em 25/11/2026): senha do orbita.integracao e, no papel "Integração Órbita (Medicina)", `moodle/question:add`, `moodle/question:managecategory`, `moodle/course:viewhiddenactivities`, `moodle/course:viewhiddensections`, `moodle/course:ignoreavailabilityrestrictions`, `mod/quiz:view` e `mod/quiz:manage` (além de `moodle/course:view`). As provas ficam ocultas, em subseções com restrição de acesso; sem qualquer uma delas o AVA responde "atividade oculta" para o usuário de integração.
   2. AVA_LOGIN_USUARIO e AVA_LOGIN_SENHA no .env do droplet.
   3. Instalar o serviço (seção 8).
 - Tipo: Funcionalidade (fluxo novo) · Como reverter: `git revert` deste commit e `systemctl disable --now orbita-ava-banco-agente` no droplet.
@@ -2529,7 +2531,7 @@ CADD e Cobrança fazem consultas pesadas com horário fixo de atualização, ent
 Leva para o banco de questões do questionário no AVA as questões que o professor deixou prontas no Órbita (ver o changelog de 25/11/2026). Ele **não usa o Edubox nem o relay**: fala só com o AVA e com o Firestore. Fica no droplet para rodar sozinho, no mesmo molde dos agentes do CADD e da Cobrança. Ele não mexe no relay nem no SIGMA.
 - **Código**: `scripts/ava-banco-med-agente.js`, na mesma pasta `/opt/orbita-sync`, como usuário `orbita`.
 - **.env do droplet** (`/opt/orbita-sync/.env`): acrescentar `AVA_URL`, `AVA_LOGIN_USUARIO` (`orbita.integracao`) e `AVA_LOGIN_SENHA`. A senha é do usuário de integração, nunca de pessoa, e fica só nesse arquivo: não vai para o Vercel nem para o Git.
-- **No AVA**: o papel "Integração Órbita (Medicina)", atribuído na categoria MED, precisa de `moodle/question:add` e `moodle/question:managecategory`, além do que já tinha para o Portfólio.
+- **No AVA** (feito em 25/11/2026): senha definida para o `orbita.integracao` (Contas manuais; a troca de senha não derrubou o token do Portfólio). O papel "Integração Órbita (Medicina)", na categoria MED, tem `moodle/question:add`, `moodle/question:managecategory`, `moodle/course:viewhiddenactivities`, `moodle/course:viewhiddensections`, `moodle/course:ignoreavailabilityrestrictions`, `mod/quiz:view` e `mod/quiz:manage` (além de `moodle/course:view`). As provas ficam ocultas, em subseções com restrição de acesso; sem qualquer uma delas o AVA responde "atividade oculta" para o usuário de integração. O upload do usuário tem limite de 20 MB por arquivo.
 - **Testar antes de ligar**:
   - `cd /opt/orbita-sync && sudo -u orbita node scripts/ava-banco-med-agente.js --uma-vez --simular` entra no AVA e mostra o que faria, sem importar nem gravar;
   - `--uma-vez --teste-cmid=56364` importa no questionário da II Semana Acadêmica de Medicina, sem gravar no Órbita.
