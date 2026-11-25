@@ -10,6 +10,12 @@ import { escapeHTML as esc } from '../../core/security.js';
 const ROTULO_SALA = { LAB12: 'Laboratório 12', LAB20: 'Laboratório 20' };
 const CAPACIDADE = { LAB12: 60, LAB20: 30 };
 const CHAMADA = { b1: '1ª chamada · 1º bimestre', b2: '1ª chamada · 2º bimestre', sub: '2ª chamada', exame: 'Exame' };
+// provas de adaptação e dependência (25/11/2026): os alunos são os que cursam a disciplina fora da turma dela
+const ESPECIAIS = { ADP: 'Adaptação', DP: 'Dependência' };
+const grupoEt = (et) => (et === 'b1' || et === 'b2' ? 'c1' : et);
+// "1ª CHAMADA · 2º BIMESTRE", "2ª CHAMADA", "EXAME" — com "ADAPTAÇÃO" / "DEPENDÊNCIA" na frente quando for o caso
+const tipoProva = (prova) => [ESPECIAIS[prova.turma], CHAMADA[prova.etapa]].filter(Boolean).join(' · ').toUpperCase();
+const turmaTxt = (info) => (info.especial ? `${info.rotuloTurma} (${info.turma})` : `Turma ${info.turma} (${info.periodo}º período)`);
 const PARTICULAS = new Set(['de', 'da', 'do', 'dos', 'das', 'e']);
 const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]+/g, ' ').split(/\s+/).filter(w => w && !PARTICULAS.has(w));
 // "Emily Silva" ⊂ "EMILY SILVA SANTOS": mesmo primeiro nome e os outros nomes digitados aparecem no nome completo
@@ -21,13 +27,19 @@ const dataBR = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.sli
 const dois = (n) => String(n).padStart(2, '0');
 
 export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }) {
-  const cache = new Map(); // `${semestre}|${turma}` → resposta do servidor (só na memória desta aba)
+  const cache = new Map(); // chave da prova → resposta do servidor (só na memória desta aba)
+  const eduboxEscolhida = new Map(); // ADP/DP: disciplina do Edubox que a pessoa trocou na tela (por prova)
   let provaId = '';
 
-  async function alunosDa(turma) {
+  // turma regular: a turma toda; ADP/DP: quem cursa a disciplina da prova fora da turma dela
+  const chave = (prova) => `${dadosAtuais().semestre}|${prova.turma}${ESPECIAIS[prova.turma] ? `|${prova.disciplina}|${eduboxEscolhida.get(prova.id) || ''}` : ''}`;
+  async function alunosDa(prova) {
     const d = dadosAtuais();
-    const k = `${d.semestre}|${turma}`;
-    if (!cache.has(k)) cache.set(k, await api(`${BASE}/impressao/alunos?semestre=${encodeURIComponent(d.semestre)}&turma=${encodeURIComponent(turma)}`));
+    const k = chave(prova);
+    if (!cache.has(k)) {
+      const extra = ESPECIAIS[prova.turma] ? `&disciplina=${encodeURIComponent(prova.disciplina)}&edubox=${encodeURIComponent(eduboxEscolhida.get(prova.id) || '')}` : '';
+      cache.set(k, await api(`${BASE}/impressao/alunos?semestre=${encodeURIComponent(d.semestre)}&turma=${encodeURIComponent(prova.turma)}${extra}`));
+    }
     return cache.get(k);
   }
 
@@ -48,7 +60,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     });
     const napaAlunos = info.alunos.filter(a => napaRa.has(a.ra));
     const resto = info.alunos.filter(a => !napaRa.has(a.ra));
-    const s = info.salas || { modo: 'unica', primeira: 'LAB12' };
+    const s = info.especial ? { ...(info.salas || {}), modo: 'unica' } : (info.salas || { modo: 'unica', primeira: 'LAB12' });
     let partes;
     if (s.modo === 'dividida') {
       const alvos = info.alunos.filter(a => casa(s.ate, a.nome));
@@ -90,13 +102,14 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const prova = ps.find(p => p.id === provaId);
     alvo.innerHTML = `<div class="ap-imp">
       <div class="ap-imp-topo">
-        <label class="ap-campo"><span>Prova</span><select id="ap-imp-prova">${ps.map(p => `<option value="${esc(p.id)}" ${p.id === provaId ? 'selected' : ''}>${dataBR(p.data)} · ${esc(p.turma)} · ${esc(p.disciplina)}${p.etapa ? ` (${esc(CHAMADA[p.etapa] || '')})` : ''}</option>`).join('')}</select></label>
+        <label class="ap-campo"><span>Prova</span><select id="ap-imp-prova">${ps.map(p => `<option value="${esc(p.id)}" ${p.id === provaId ? 'selected' : ''}>${dataBR(p.data)} · ${esc(p.turma)} · ${esc(p.disciplina)} · ${esc(tipoProva(p))}</option>`).join('')}</select></label>
       </div>
-      <div id="ap-imp-corpo"><div class="ap-vazio">Buscando os alunos da ${esc(prova.turma)} no Edubox…</div></div>
+      <div class="ap-imp-tipo ap-et-${grupoEt(prova.etapa)}" role="note"><span>Tipo de prova:</span> <b>${esc(tipoProva(prova))}</b> <span>${esc(prova.disciplina)} · ${dataBR(prova.data)}</span></div>
+      <div id="ap-imp-corpo"><div class="ap-vazio">Buscando ${ESPECIAIS[prova.turma] ? `os alunos em ${esc(ESPECIAIS[prova.turma].toLowerCase())} de ${esc(prova.disciplina)}` : `os alunos da ${esc(prova.turma)}`} no Edubox…</div></div>
       <p class="ap-nota">Login = RA do aluno; senha = F + CPF (padrão da Fatec). Os dados vêm do Edubox na hora e não ficam gravados no Órbita. Só a coordenação e a secretaria de Medicina veem esta aba.</p>
     </div>`;
     try {
-      const info = await alunosDa(prova.turma);
+      const info = await alunosDa(prova);
       if (provaId !== prova.id) return; // trocou de prova enquanto buscava: a outra chamada desenha
       renderCorpo(prova, info);
     } catch (e) {
@@ -109,14 +122,25 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const c = document.getElementById('ap-imp-corpo');
     if (!c) return;
     const dist = distribuir(info, prova);
-    const s = info.salas || {};
+    const s = info.especial ? { ...(info.salas || {}), modo: 'unica' } : (info.salas || {});
     const todas = [...dist.salas, ...(dist.napa ? [dist.napa] : [])];
-    c.innerHTML = `
+    const atualiz = info.atualizadoEm ? new Date(info.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const blocoEspecial = info.especial ? `
       <section class="ap-imp-div">
-        <h3>Como a ${esc(info.turma)} (${info.periodo}º período · ${info.alunos.length} alunos no Edubox) fica nas salas</h3>
+        <h3>${esc(info.rotuloTurma)}: quem cursa a disciplina fora da turma dela (Edubox)</h3>
         <div class="ap-imp-div-campos">
-          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="unica" ${s.modo !== 'dividida' ? 'checked' : ''}> Uma sala só</label>
-          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="dividida" ${s.modo === 'dividida' ? 'checked' : ''}> Dividida em dois laboratórios</label>
+          <label class="ap-campo"><span>Disciplina no Edubox</span><select id="ap-imp-edubox"><option value="">— escolha —</option>${(info.opcoes || []).map(o => `<option value="${esc(o.nome)}" ${o.nome === info.disciplinaEdubox ? 'selected' : ''}>${esc(o.nome)} (${o.n} aluno${o.n === 1 ? '' : 's'})</option>`).join('')}</select></label>
+          <p class="ap-nota">${info.disciplinaEdubox ? `A prova "${esc(prova.disciplina)}" foi ligada a esta disciplina do Edubox. Se não for a certa, troque aqui.` : `Não achei no Edubox ninguém em ${esc(info.rotuloTurma.toLowerCase())} de "${esc(prova.disciplina)}". Escolha a disciplina na lista (só aparecem as que têm aluno fora da turma).`}${atualiz ? ` Dados do Edubox de ${atualiz}.` : ''}</p>
+        </div>
+        ${info.alunos.length ? `<ol class="ap-imp-esp-lista">${info.alunos.map(a => `<li>${esc(a.nome)} <small>(${esc(a.turmaAluno || '')})</small></li>`).join('')}</ol>` : ''}
+      </section>` : '';
+    if (info.especial && !info.alunos.length) { c.innerHTML = blocoEspecial; return; }
+    c.innerHTML = `${blocoEspecial}
+      <section class="ap-imp-div">
+        <h3>${info.especial ? `Sala da prova (${info.alunos.length} aluno${info.alunos.length === 1 ? '' : 's'})` : `Como a ${esc(info.turma)} (${info.periodo}º período · ${info.alunos.length} alunos no Edubox) fica nas salas`}</h3>
+        <div class="ap-imp-div-campos">
+          ${info.especial ? '' : `<label class="ap-check"><input type="radio" name="ap-imp-modo" value="unica" ${s.modo !== 'dividida' ? 'checked' : ''}> Uma sala só</label>
+          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="dividida" ${s.modo === 'dividida' ? 'checked' : ''}> Dividida em dois laboratórios</label>`}
           <label class="ap-campo"><span>${s.modo === 'dividida' ? 'Da letra A vai para o' : 'Sala'}</span><select id="ap-imp-primeira">${Object.keys(ROTULO_SALA).map(k => `<option value="${k}" ${(s.primeira || 'LAB12') === k ? 'selected' : ''}>${ROTULO_SALA[k]}</option>`).join('')}</select></label>
           ${s.modo === 'dividida' ? `<label class="ap-campo"><span>até o(a) aluno(a)</span><select id="ap-imp-ate">${info.alunos.map(a => `<option value="${esc(a.nome)}" ${casa(s.ate, a.nome) ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></label>
             <p class="ap-nota">O resto da turma vai para o ${esc(ROTULO_SALA[(s.primeira || 'LAB12') === 'LAB12' ? 'LAB20' : 'LAB12'])}.</p>` : ''}
@@ -205,17 +229,25 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
   }
   function linhaProvaTxt(prova, info) {
-    return `${prova.disciplina}${prova.etapa ? ` - ${CHAMADA[prova.etapa] || ''}` : ''} · Turma ${info.turma} (${info.periodo}º período) · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
+    return `${prova.disciplina} · ${turmaTxt(info)} · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
+  }
+  // faixa com o tipo da prova (1ª chamada / 2ª chamada / exame) — em todas as folhas, bem visível
+  function faixaTipo(doc, prova, y) {
+    const t = tipoProva(prova);
+    const exame = prova.etapa === 'exame';
+    doc.setLineWidth(0.6); doc.setDrawColor(...AZUL); doc.setFillColor(...(exame ? AZUL : AZUL_CLARO)); doc.rect(M, y, LARG, 9, 'FD'); doc.setDrawColor(...PRETO);
+    cor(doc, exame ? BRANCO : AZUL); doc.setFont('helvetica', 'bold'); caber(doc, t, LARG - 6, 14); doc.text(t, 105, y + 6.4, { align: 'center' }); cor(doc, PRETO);
   }
   function pdfPorta(doc, logo, sl, prova, info) {
     cabecalho(doc, logo);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(26); doc.text(sl.rotulo.toUpperCase(), 105, 40, { align: 'center' });
     cor(doc, PRETO); doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 10); doc.text(linhaProvaTxt(prova, info), 105, 47, { align: 'center' });
+    faixaTipo(doc, prova, 50);
     const duas = sl.alunos.length > 30;
     const linhas = duas ? Math.ceil(sl.alunos.length / 2) : sl.alunos.length;
-    const alt = duas ? 7 : Math.min(7.5, 215 / Math.max(linhas, 1));
+    const alt = duas ? 7 : Math.min(7.5, 205 / Math.max(linhas, 1));
     const colLarg = duas ? LARG / 2 : LARG, pcLarg = 11;
-    let y = 53;
+    let y = 62;
     doc.setLineWidth(0.3);
     const cel = (x, yy, aluno) => {
       doc.rect(x, yy, pcLarg, alt); doc.rect(x + pcLarg, yy, colLarg - pcLarg, alt);
@@ -239,12 +271,14 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   function pdfAta(doc, logo, sl, prova, info) {
     cabecalho(doc, logo);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('ATA DE APLICAÇÃO DE PROVA', 105, 36, { align: 'center' }); cor(doc, PRETO);
-    let y = 46;
+    faixaTipo(doc, prova, 39);
+    let y = 55;
     const campo = (rot, val) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(rot, M, y); const w = doc.getTextWidth(rot) + 1.5; doc.setFont('helvetica', 'normal'); caber(doc, val, LARG - w, 10.5); doc.text(val, M + w, y); y += 6.5; };
     campo('Instituição:', 'FACULDADE TECNOLÓGICA DO VALE DO IVAÍ');
     campo('Curso:', 'BACHARELADO EM MEDICINA');
-    campo('Disciplina:', `${prova.disciplina.toUpperCase()}${prova.etapa ? ` - ${(CHAMADA[prova.etapa] || '').toUpperCase()}` : ''}`);
-    campo('Turma:', `${info.turma} (${info.periodo}º período)    Sala: ${sl.rotulo.toUpperCase()}    Alunos previstos: ${sl.alunos.length}`);
+    campo('Disciplina:', prova.disciplina.toUpperCase());
+    campo('Tipo de prova:', tipoProva(prova));
+    campo('Turma:', `${info.especial ? `${info.rotuloTurma.toUpperCase()} (${info.turma})` : `${info.turma} (${info.periodo}º período)`}    Sala: ${sl.rotulo.toUpperCase()}    Alunos previstos: ${sl.alunos.length}`);
     campo('Data:', `${dataBR(prova.data)}    Horário de início: ________    Horário de término: ________`);
     y += 3;
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text('Ocorrências durante a aplicação', M, y); y += 7; cor(doc, PRETO);
@@ -252,7 +286,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     doc.text('(    ) Nenhuma ocorrência registrada.', M, y); y += 6;
     doc.text('(    ) Ocorreram as seguintes situações:', M, y); y += 4;
     doc.setLineWidth(0.3);
-    for (let i = 0; i < 4; i++) { y += 7.5; doc.line(M, y, 210 - M, y); }
+    for (let i = 0; i < 3; i++) { y += 7.5; doc.line(M, y, 210 - M, y); }
     y += 8;
     doc.text(doc.splitTextToSize('Nada mais havendo a relatar, lavra-se a presente ata, que vai assinada pelo(a) professor(a) responsável e, se necessário, por fiscais presentes.', LARG), M, y);
     y += 14;
@@ -277,18 +311,19 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     doc.setLineWidth(1); doc.setDrawColor(...AZUL); doc.setFillColor(...AZUL_CLARO); doc.rect(M, 31, LARG, 15, 'FD'); doc.setDrawColor(...PRETO);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); caber(doc, lugar, LARG - 6, 20); doc.text(lugar, 105, 41.5, { align: 'center' }); cor(doc, PRETO);
     doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 9.5); doc.text(linhaProvaTxt(prova, info), 105, 52, { align: 'center' });
-    doc.setFont('helvetica', 'bold'); doc.text(caberTxt(doc, a.nome, LARG, 15, 9), M, 64);
-    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Login:', M, 74); doc.text('Senha:', M, 83); cor(doc, PRETO);
-    doc.setFont('courier', 'bold'); doc.setFontSize(17); doc.text(a.ra, M + 22, 74); doc.text(a.senha || '(procure a secretaria)', M + 22, 83);
-    doc.setLineDashPattern([1.2, 1.2], 0); doc.setLineWidth(0.3); doc.line(M, 92, 210 - M, 92); doc.setLineDashPattern([], 0);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anotações', M, 97);
+    faixaTipo(doc, prova, 55);
+    doc.setFont('helvetica', 'bold'); doc.text(caberTxt(doc, a.nome, LARG, 15, 9), M, 75);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Login:', M, 85); doc.text('Senha:', M, 94); cor(doc, PRETO);
+    doc.setFont('courier', 'bold'); doc.setFontSize(17); doc.text(a.ra, M + 22, 85); doc.text(a.senha || '(procure a secretaria)', M + 22, 94);
+    doc.setLineDashPattern([1.2, 1.2], 0); doc.setLineWidth(0.3); doc.line(M, 103, 210 - M, 103); doc.setLineDashPattern([], 0);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anotações', M, 108);
   }
 
   async function baixar(acao) {
     const [o, salaId] = acao.split(':');
     const prova = provasVisiveis().find(p => p.id === provaId);
     if (!prova) return;
-    const info = await alunosDa(prova.turma);
+    const info = await alunosDa(prova);
     const dist = distribuir(info, prova);
     const todas = [...dist.salas, ...(dist.napa ? [dist.napa] : [])];
     const alvo = salaId === '*' ? todas : todas.filter(s => s.id === salaId);
@@ -306,7 +341,8 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     if (primeira) { toast('Nada para baixar nesta sala.', 'erro'); return; }
     const OQUE = { tudo: 'Prova', porta: 'Lista da porta', logins: 'Logins', ata: 'Ata' };
     const ondeTxt = salaId === '*' ? 'todas as salas' : alvo.map(s => s.rotulo).join(' ');
-    const nomeArq = `${OQUE[o] || 'Prova'} ${info.turma} - ${prova.disciplina} - ${ondeTxt} - ${dataBR(prova.data).replace(/\//g, '-')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 150);
+    const tipoArq = { b1: '1a chamada', b2: '1a chamada', sub: '2a chamada', exame: 'Exame' }[prova.etapa] || '';
+    const nomeArq = `${OQUE[o] || 'Prova'} ${info.turma} - ${prova.disciplina} - ${tipoArq} - ${ondeTxt} - ${dataBR(prova.data).replace(/\//g, '-')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 150);
     doc.save(`${nomeArq}.pdf`);
     toast(`PDF baixado (${doc.getNumberOfPages()} folha(s) A4). Abra o arquivo e imprima.`);
   }
@@ -323,17 +359,17 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const r = await api(`${BASE}/impressao/napa/${encodeURIComponent(d.semestre)}`, { method: 'PUT', body: JSON.stringify({ turma: prova.turma, nomes }) });
     d.config.napaAlunos = { ...(d.config.napaAlunos || {}), [prova.turma]: r.nomes };
     toast(r.message);
-    renderCorpo(prova, await alunosDa(prova.turma));
+    renderCorpo(prova, await alunosDa(prova));
   }
 
   async function salvarDivisao() {
     const d = dadosAtuais();
     const prova = provasVisiveis().find(p => p.id === provaId);
     if (!prova) return;
-    const modo = (document.querySelector('[name="ap-imp-modo"]:checked') || {}).value || 'unica';
+    const modo = ESPECIAIS[prova.turma] ? 'unica' : ((document.querySelector('[name="ap-imp-modo"]:checked') || {}).value || 'unica');
     const primeira = document.getElementById('ap-imp-primeira').value;
     const ateSel = document.getElementById('ap-imp-ate');
-    const info = await alunosDa(prova.turma);
+    const info = await alunosDa(prova);
     const ate = modo === 'dividida' ? (ateSel ? ateSel.value : (info.alunos[Math.floor(info.alunos.length / 2)] || {}).nome || '') : '';
     // número inicial de cada laboratório: o que está na tela (ou o que já estava salvo); cada laboratório tem a sua numeração
     const inicio = { ...((info.salas || {}).inicio || {}) };
@@ -347,10 +383,11 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   function ligar(alvo) {
     alvo.addEventListener('change', (e) => {
       if (e.target.id === 'ap-imp-prova') { provaId = e.target.value; render(alvo); return; }
+      if (e.target.id === 'ap-imp-edubox') { eduboxEscolhida.set(provaId, e.target.value); render(alvo); return; }
       if (e.target.dataset.inicioSala) {
         // mostra a nova numeração na hora; fica salva em "Salvar divisão"
         const pr = provasVisiveis().find(p => p.id === provaId);
-        const inf = pr && cache.get(`${dadosAtuais().semestre}|${pr.turma}`);
+        const inf = pr && cache.get(chave(pr));
         if (inf) {
           inf.salas = { ...(inf.salas || {}), inicio: { ...((inf.salas || {}).inicio || {}), [e.target.dataset.inicioSala]: Math.max(1, parseInt(e.target.value, 10) || 1) } };
           renderCorpo(pr, inf);
@@ -361,7 +398,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       if (e.target.name === 'ap-imp-modo') {
         // mostra/esconde o "até" sem salvar ainda
         const prova = provasVisiveis().find(p => p.id === provaId);
-        const info = cache.get(`${dadosAtuais().semestre}|${prova.turma}`);
+        const info = cache.get(chave(prova));
         if (info) { info.salas = { ...(info.salas || {}), modo: e.target.value, ate: info.salas && info.salas.ate ? info.salas.ate : (info.alunos[Math.floor(info.alunos.length / 2)] || {}).nome || '' }; renderCorpo(prova, info); }
       }
     });

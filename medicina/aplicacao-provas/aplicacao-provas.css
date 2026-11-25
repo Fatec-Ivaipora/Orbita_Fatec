@@ -78,6 +78,10 @@
 .ap-tp-disc { font-size: 0.9rem; font-weight: 600; line-height: 1.3; }
 .ap-turno { font-size: 0.74rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: var(--orb-raio-pilula); background: var(--cs); color: var(--c); white-space: nowrap; }
 .ap-tipo { font-style: normal; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em; padding: 0.05rem 0.4rem; border-radius: 4px; background: var(--orb-marca-suave); color: var(--orb-marca); vertical-align: 1px; }
+.ap-et { font-style: normal; font-size: 0.68rem; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 4px; vertical-align: 1px; white-space: nowrap; border: 1px solid currentColor; }
+.ap-et-c1 { color: #0052b8; background: #e6f0fb; }
+.ap-et-sub { color: #00628c; background: #e0f6ff; }
+.ap-et-exame { color: #fff; background: #0a2463; border-color: #0a2463; }
 .ap-eu { font-style: normal; font-size: 0.68rem; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 4px; background: #fff3d6; color: #7a4b00; vertical-align: 1px; }
 .ap-minha .ap-tp-btn { box-shadow: inset 4px 0 0 var(--orb-laranja); }
 .ap-turma-vazia { margin: 0; padding: 1.2rem 1rem; color: var(--orb-mudo); font-size: 0.86rem; }
@@ -253,3 +257,11 @@
 .ap-imp-botoes { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
 .ap-imp-lista { columns: 2; font-size: 0.8rem; margin: 0.4rem 0 0; padding-left: 1.6rem; }
 .ap-imp-geral { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
+
+/* tipo da prova em destaque na Impressão (25/11/2026) e alunos de ADP/DP */
+.ap-imp-tipo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.7rem 1rem; border-radius: 10px; border: 2px solid #0052b8; background: #e6f0fb; color: #0a2463; }
+.ap-imp-tipo b { font-size: 1.25rem; letter-spacing: 0.02em; }
+.ap-imp-tipo.ap-et-exame { background: #0a2463; color: #fff; border-color: #0a2463; }
+.ap-imp-tipo.ap-et-sub { background: #e0f6ff; border-color: #00628c; color: #00405c; }
+.ap-imp-esp-lista { margin: 0.4rem 0 0; padding-left: 1.4rem; font-size: 0.9rem; }
+.ap-imp-esp-lista small { color: var(--orb-texto-suave, #555); }

@@ -246,6 +246,42 @@ const SALAS_PADRAO = {
     T2: { modo: 'dividida', primeira: 'LAB20', ate: 'EMILY SILVA', segunda: 'LAB12' },
     T3: { modo: 'dividida', primeira: 'LAB12', ate: 'MARIA EDUARDA SILVA', segunda: 'LAB20' }
 };
+// Provas de ADAPTAÇÃO (ADP) e DEPENDÊNCIA (DP) — 25/11/2026: não são uma turma do calendário (T1/T2/T3). Quem faz
+// é quem está matriculado na disciplina fora da turma dela (no Edubox, aluno x disciplina de outra turma). Os alunos
+// vêm do CADD (cad_turmas, sincronizado do Edubox) pela disciplina da prova; RA e CPF, do relay, como nas turmas.
+const TURMAS_ESPECIAIS = { ADP: 'Adaptação', DP: 'Dependência' };
+const PARTIC = new Set(['de', 'da', 'do', 'dos', 'das', 'e', 'em', 'teorica', 'pratica']);
+// "Medicina Baseada em Evidências II" ~ "MEDICINA BASEADAS EM EVIDÊNCIAS II": sem acento, sem partícula, sem plural
+const toksDisc = (s) => norm(s).split(' ').filter(w => w && !PARTIC.has(w)).map(w => (w.length > 3 ? w.replace(/s$/, '') : w));
+function parecidaDisc(a, b) {
+    const x = new Set(toksDisc(a)), y = new Set(toksDisc(b));
+    if (!x.size || !y.size) return 0;
+    const comum = [...x].filter(w => y.has(w)).length;
+    // número romano / ordinal diferente (I x II) não é a mesma disciplina
+    const rom = (s) => [...s].filter(w => /^(i{1,3}|iv|v|vi{0,3}|ix|x)$/.test(w)).join(',');
+    if (rom(x) !== rom(y)) return 0;
+    return comum / Math.max(x.size, y.size);
+}
+// { 'NOME DA DISCIPLINA': [{ ra, nome, turmaAluno }] } — só matrícula de disciplina FORA da turma (adaptação/dependência)
+async function foraDaTurma(semestre) {
+    const sem = semestre.replace('.', '-');
+    const snap = await db.collection('cad_turmas').where('semestre', '==', sem).get();
+    const porDisc = {};
+    let atualizadoEm = '';
+    snap.docs.forEach(d => {
+        const t = d.data();
+        if (t.segmento && t.segmento !== 'MED') return;
+        if (t.atualizadoEm > atualizadoEm) atualizadoEm = t.atualizadoEm;
+        const disc = new Map((t.disciplinas || []).map(x => [x.id, x]));
+        (t.alunos || []).forEach(a => (a.d || []).forEach(x => {
+            const di = disc.get(x.id);
+            if (!di || !di.dp || !a.alu) return;
+            (porDisc[di.nome] = porDisc[di.nome] || []).push({ ra: String(a.alu), nome: txt(a.nome, 160).toUpperCase(), turmaAluno: txt(t.turma, 60) });
+        }));
+    });
+    return { porDisc, atualizadoEm };
+}
+
 const podeImprimir = (user) => ['adm_l1', 'adm_l2', 'coord_medicina'].includes(user.role);
 function exigeImpressao(req, res, next) {
     if (!podeImprimir(req.user)) return res.status(403).json({ error: 'A impressão das provas (logins dos alunos) é só da coordenação e da secretaria acadêmica de Medicina.' });
@@ -253,9 +289,15 @@ function exigeImpressao(req, res, next) {
 }
 function salasDaConfig(conf) {
     const out = {};
-    (conf.turmas || []).forEach(t => { out[t.id] = { ...(SALAS_PADRAO[t.id] || { modo: 'unica', primeira: 'LAB12', ate: '', segunda: '' }), ...((conf.salas || {})[t.id] || {}) }; });
+    [...(conf.turmas || []).map(t => t.id), ...Object.keys(TURMAS_ESPECIAIS)].forEach(id => { out[id] = { ...(SALAS_PADRAO[id] || { modo: 'unica', primeira: 'LAB12', ate: '', segunda: '' }), ...((conf.salas || {})[id] || {}) }; });
     return out;
 }
+async function cpfsDoRelay(semestre) {
+    const r = await relay(`/med-provas/alunos?semestre=${encodeURIComponent(semestre.replace('.', '-'))}`, { timeoutMs: 30000 });
+    if (!r || !r.ok) throw Object.assign(new Error(`O Edubox não respondeu (${(r && r.erro) || 'relay'}). Tente de novo em instantes.`), { status: 502 });
+    return r.alunos || [];
+}
+const senhaDe = (cpf) => (/^\d{11}$/.test(cpf || '') ? `F${cpf}` : '');
 
 // GET /impressao/alunos?semestre=2026.2&turma=T1 → { turma, periodo, alunos: [{ nome, ra, senha }], semCpf, salas }
 router.get('/impressao/alunos', exigeImpressao, async (req, res) => {
@@ -264,7 +306,9 @@ router.get('/impressao/alunos', exigeImpressao, async (req, res) => {
         const semestre = req.query.semestre;
         if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Semestre inválido.' });
         const conf = await lerConfig(semestre);
-        const turma = (conf.turmas || []).find(t => t.id === String(req.query.turma || '').toUpperCase());
+        const pedida = String(req.query.turma || '').toUpperCase();
+        if (TURMAS_ESPECIAIS[pedida]) return res.json(await alunosEspeciais(semestre, conf, pedida, req.query));
+        const turma = (conf.turmas || []).find(t => t.id === pedida);
         if (!turma) return res.status(400).json({ error: 'Turma não encontrada na configuração.' });
         let r;
         try { r = await relay(`/med-provas/alunos?semestre=${encodeURIComponent(semestre.replace('.', '-'))}`, { timeoutMs: 30000 }); }
@@ -284,6 +328,33 @@ router.get('/impressao/alunos', exigeImpressao, async (req, res) => {
         res.json({ turma: turma.id, periodo: turma.periodo, alunos, semCpf: alunos.filter(a => !a.senha).length, salas: salasDaConfig(conf)[turma.id], capacidade: SALAS_LAB });
     } catch (e) { erro(res, e); }
 });
+
+// ADP/DP: alunos matriculados na disciplina fora da turma dela. ?disciplina=<nome na prova> escolhe a disciplina do
+// Edubox mais parecida; ?edubox=<nome exato> força a escolha (a tela deixa trocar).
+async function alunosEspeciais(semestre, conf, turmaId, q) {
+    const { porDisc, atualizadoEm } = await foraDaTurma(semestre);
+    const opcoes = Object.keys(porDisc).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(nome => ({ nome, n: new Set(porDisc[nome].map(a => a.ra)).size }));
+    let escolhida = porDisc[q.edubox] ? q.edubox : '';
+    if (!escolhida) {
+        const melhor = opcoes.map(o => ({ nome: o.nome, s: parecidaDisc(q.disciplina, o.nome) })).sort((a, b) => b.s - a.s)[0];
+        if (melhor && melhor.s >= 0.6) escolhida = melhor.nome;
+    }
+    const base = { turma: turmaId, rotuloTurma: TURMAS_ESPECIAIS[turmaId], periodo: null, especial: true, disciplinaEdubox: escolhida, opcoes, atualizadoEm, salas: salasDaConfig(conf)[turmaId], capacidade: SALAS_LAB };
+    if (!escolhida) return { ...base, alunos: [], semCpf: 0 };
+    let doRelay;
+    try { doRelay = await cpfsDoRelay(semestre); }
+    catch (e) {
+        if (e.status === 401 || e.status === 404) throw Object.assign(new Error('A busca dos alunos no Edubox para a impressão ainda não foi instalada no servidor do relay. Avise o Suporte AVA.'), { status: 503 });
+        throw Object.assign(new Error(e.status === 502 ? e.message : `O Edubox não respondeu (${e.message}). Tente de novo em instantes.`), { status: 502 });
+    }
+    const cpf = new Map(doRelay.filter(a => a.ra && !SAIU_MATRICULA.test(a.situacao || '')).map(a => [String(a.ra).trim(), a.cpf]));
+    const vistos = new Set();
+    const alunos = porDisc[escolhida]
+        .filter(a => { if (vistos.has(a.ra)) return false; vistos.add(a.ra); return true; })
+        .map(a => ({ nome: a.nome, ra: a.ra, senha: senhaDe(cpf.get(a.ra)), turmaAluno: a.turmaAluno }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    return { ...base, alunos, semCpf: alunos.filter(a => !a.senha).length };
+}
 
 // PUT /impressao/napa/:semestre { turma, nomes: [...] } — nomes completos dos alunos do NAPA da turma (a tela da
 // impressão troca o primeiro nome cadastrado pelo nome do Edubox). Não reabre o calendário validado: é só cadastro.
@@ -309,7 +380,7 @@ router.put('/impressao/salas/:semestre', exigeImpressao, async (req, res) => {
         const salas = { ...(conf.salas || {}) };
         Object.entries((req.body || {}).salas || {}).forEach(([t, s]) => {
             const id = txt(t, 10).toUpperCase();
-            if (!(conf.turmas || []).some(x => x.id === id) || !s) return;
+            if (!((conf.turmas || []).some(x => x.id === id) || TURMAS_ESPECIAIS[id]) || !s) return;
             const lab = (v) => (SALAS_LAB[v] ? v : '');
             const modo = s.modo === 'dividida' ? 'dividida' : 'unica';
             const primeira = lab(s.primeira) || 'LAB12';
