@@ -136,6 +136,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Resultado (coordenação): aluno × estação + total, com "!" quando há erro crítico, e planilha CSV (Excel/Google Planilhas).
 - Quem: ADM N1/N2, coord_medicina e responsável CADAM editam tudo; professor de Medicina monta as próprias estações e avalia só onde é avaliador. Módulo `osce-med` em core/permissions.js (coord_medicina e professor_medicina) e no padrão de src/middlewares/auth.js — **precisa do nível de acesso no config/permissions do Firestore (Usuários → Gerência de Acessos) para aparecer no menu**.
 - Dados: med_osce_estacoes, med_osce_provas, med_osce_notas (id `osce__estacao__RA`). Rotas em src/rotas/osce-med.js (/api/osce-med).
+- Responsivo: computador, tablet (768 px) e celular (375 px) sem rolagem lateral; no celular o cabeçalho fica compacto e, ao escolher o aluno (ou salvar), a tela pula direto para os itens.
 - Testado no Órbita local com dados reais (só leitura do Edubox): importação do Word original do Bougie (4 itens, cenário, tarefas, materiais), objetivos de Clínica Cirúrgica I (6), OSCE de teste com a T1 (57 alunos), marcação 1 / 0,5 / 1 / 0 → 25 de 40. Estação e OSCE de teste apagadas; nenhuma nota gravada. Folha impressa não conferida no papel.
 
 ### [2026-11-25] Medicina › Aplicação de Provas: provas de Adaptação (ADP) e Dependência (DP) na impressão; tipo da prova em destaque

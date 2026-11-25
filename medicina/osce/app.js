@@ -322,6 +322,9 @@ function renderAvaliar() {
       </aside>
       <section class="oc-bloco" id="oc-marcar">${tela.ra ? formMarcar(est) : '<div class="oc-vazio">Escolha o aluno que entrou na estação.</div>'}</section>
     </div>`;
+  // tablet/celular: a lista de alunos fica em cima — ao escolher o aluno (ou salvar), pula direto para os itens
+  if (tela.rolar && tela.ra && window.innerWidth <= 1150) el('oc-marcar').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  tela.rolar = false;
 }
 function formMarcar(est) {
   const a = aberta.alunos.find(x => x.ra === tela.ra);
@@ -356,7 +359,7 @@ async function salvarNota(ausente) {
   toast(res.message);
   // próximo aluno ainda sem nota nesta estação
   const prox = aberta.alunos.find(a => !notaDe(est.id, a.ra));
-  tela.ra = prox ? prox.ra : ''; tela.rasc = null;
+  tela.ra = prox ? prox.ra : ''; tela.rasc = null; tela.rolar = true;
   renderAvaliar();
 }
 
@@ -453,7 +456,7 @@ function ligarEventos() {
     if (!b) return;
     try {
       if (b.dataset.ir && b.dataset.ir.startsWith('estacao:')) return abrirEstacao(b.dataset.ir.slice(8));
-      if (b.dataset.ra) { tela.ra = b.dataset.ra; tela.rasc = null; return renderAvaliar(); }
+      if (b.dataset.ra) { tela.ra = b.dataset.ra; tela.rasc = null; tela.rolar = true; return renderAvaliar(); }
       if (b.dataset.m !== undefined && tela.rasc) { tela.rasc.marcas[Number(b.dataset.i)] = Number(b.dataset.m); el('oc-marcar').innerHTML = formMarcar(aberta.estacoes.find(e => e.id === tela.estacaoId)); return; }
       if (b.dataset.g && tela.rasc) { tela.rasc.global = Number(b.dataset.g); tela.rasc.comentario = el('oc-coment') ? el('oc-coment').value : ''; el('oc-marcar').innerHTML = formMarcar(aberta.estacoes.find(e => e.id === tela.estacaoId)); return; }
       const a = b.dataset.a;
