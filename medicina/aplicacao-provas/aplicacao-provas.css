@@ -78,6 +78,10 @@
 .ap-tp-disc { font-size: 0.9rem; font-weight: 600; line-height: 1.3; }
 .ap-turno { font-size: 0.74rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: var(--orb-raio-pilula); background: var(--cs); color: var(--c); white-space: nowrap; }
 .ap-tipo { font-style: normal; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em; padding: 0.05rem 0.4rem; border-radius: 4px; background: var(--orb-marca-suave); color: var(--orb-marca); vertical-align: 1px; }
+.ap-et { font-style: normal; font-size: 0.68rem; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 4px; vertical-align: 1px; white-space: nowrap; border: 1px solid currentColor; }
+.ap-et-c1 { color: #0052b8; background: #e6f0fb; }
+.ap-et-sub { color: #00628c; background: #e0f6ff; }
+.ap-et-exame { color: #fff; background: #0a2463; border-color: #0a2463; }
 .ap-eu { font-style: normal; font-size: 0.68rem; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 4px; background: #fff3d6; color: #7a4b00; vertical-align: 1px; }
 .ap-minha .ap-tp-btn { box-shadow: inset 4px 0 0 var(--orb-laranja); }
 .ap-turma-vazia { margin: 0; padding: 1.2rem 1rem; color: var(--orb-mudo); font-size: 0.86rem; }
@@ -253,3 +257,42 @@
 .ap-imp-botoes { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
 .ap-imp-lista { columns: 2; font-size: 0.8rem; margin: 0.4rem 0 0; padding-left: 1.6rem; }
 .ap-imp-geral { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
+
+/* tipo da prova em destaque na Impressão (25/11/2026) e alunos de ADP/DP */
+.ap-imp-tipo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.7rem 1rem; border-radius: 10px; border: 2px solid #0052b8; background: #e6f0fb; color: #0a2463; }
+.ap-imp-tipo b { font-size: 1.25rem; letter-spacing: 0.02em; }
+.ap-imp-tipo.ap-et-exame { background: #0a2463; color: #fff; border-color: #0a2463; }
+.ap-imp-tipo.ap-et-sub { background: #e0f6ff; border-color: #00628c; color: #00405c; }
+.ap-imp-esp-lista { margin: 0.4rem 0 0; padding-left: 1.4rem; font-size: 0.9rem; }
+.ap-imp-esp-lista small { color: var(--orb-texto-suave, #555); }
+
+/* campo de questões no cadastro e arte "Provas das Adaptações" (25/11/2026) — modelo da lista de 17/11 */
+.ap-grid-disc { display: grid; grid-template-columns: 1fr 110px; gap: 0 0.8rem; }
+.ap-tp-q { font-size: 0.72rem; color: var(--orb-texto-suave, #5b6a80); white-space: nowrap; }
+.ap-s-adp-tit { display: inline-block; margin: 0 0 14px; padding: 9px 18px; border-radius: 10px; background: #5b2a9e; color: #fff; font-family: var(--orb-display); font-size: 20px; }
+.ap-s-adp-tab { width: 100%; border-collapse: separate; border-spacing: 0; border: 2px solid #d9cdf0; border-radius: 12px; overflow: hidden; font-size: 15px; }
+.ap-s-adp-tab { table-layout: fixed; }
+.ap-s-adp-tab th:nth-child(1) { width: 66px; } .ap-s-adp-tab th:nth-child(2) { width: 50px; } .ap-s-adp-tab th:nth-child(4) { width: 128px; } .ap-s-adp-tab th:nth-child(5) { width: 158px; } .ap-s-adp-tab th:nth-child(6) { width: 118px; }
+.ap-s-adp-tab th { text-align: left; font-size: 13px; color: #0d1b33; padding: 12px 14px; background: #fff; }
+.ap-s-adp-tab td { padding: 9px 14px; border-top: 1px solid #e3e8f0; vertical-align: middle; }
+.ap-s-adp-tab tbody tr:nth-child(odd) td { background: #f7f4fc; }
+.ap-s-adp-tab td:first-child b { color: #5b2a9e; font-size: 16px; }
+.ap-s-adp-tab td:nth-child(2) { color: #5b6a80; }
+.ap-s-adp-tab small { color: #5b6a80; }
+.ap-s-adp-tipo { display: inline-block; min-width: 92px; text-align: center; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 13px; }
+.ap-s-adp-adp { background: #ece3f8; color: #5b2a9e; }
+.ap-s-adp-dp { background: #dceeff; color: #0052b8; }
+.ap-s-adp-pill { display: inline-block; padding: 4px 12px; border-radius: 8px; background: #ece3f8; color: #0d1b33; font-weight: 800; white-space: nowrap; }
+.ap-s-adp-pill svg { color: #0d1b33; }
+@media (max-width: 560px) { .ap-grid-disc { grid-template-columns: 1fr; } }
+/* ADP/DP: computador de cada aluno (25/11/2026) */
+.ap-esp-pcs { width: 100%; max-width: 720px; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.9rem; }
+.ap-esp-pcs th { text-align: left; font-size: 0.78rem; color: var(--orb-texto-suave, #5b6a80); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--orb-linha); }
+.ap-esp-pcs td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--orb-linha); }
+.ap-esp-pcs input { width: 5.5rem; min-height: 40px; }
+.ap-esp-pcs small { color: #a8650b; font-weight: 700; }
+
+/* arte da turma com a coluna Questões (25/11/2026) */
+.ap-s-bloco-q th:nth-child(4) { width: 104px; } .ap-s-bloco-q th:nth-child(5) { width: 80px; } .ap-s-bloco-q th:nth-child(6) { width: 180px; }
+.ap-s-ico { display: inline-block; font-size: 0.95em; line-height: 1; margin-right: 6px; }
+.ap-s-cab + .ap-s-adp-tit, .ap-s-cab + .ap-s-turma-per { margin-top: 16px; }

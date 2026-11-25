@@ -1,0 +1,170 @@
+/* OSCE — Medicina (25/11/2026). Tela pensada para o avaliador marcar rápido no computador/tablet da estação. */
+.oc-main { padding: 1.2rem; display: flex; flex-direction: column; gap: 1rem; max-width: 1400px; margin: 0 auto; }
+.oc-cab { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; background: var(--orb-marca, #12294d); color: #fff; border-radius: 14px; padding: 1rem 1.2rem; }
+.oc-cab-txt { display: flex; align-items: center; gap: 1rem; }
+.oc-cab h1 { margin: 0; font-size: 1.5rem; color: #fff; }
+.oc-cab p { margin: 0.15rem 0 0; font-size: 0.9rem; opacity: 0.85; }
+.oc-logo { height: 40px; background: #fff; border-radius: 8px; padding: 4px 8px; }
+.oc-sem { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; font-weight: 700; }
+.oc-sem select { min-height: 40px; border-radius: 8px; border: 0; padding: 0 0.6rem; }
+.oc-trilha { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; font-size: 0.9rem; color: var(--orb-texto-suave, #5b6a80); }
+.oc-trilha button { background: none; border: 0; color: var(--orb-marca, #12294d); font-weight: 700; cursor: pointer; padding: 0.3rem 0; text-decoration: underline; }
+.oc-trilha-atual { font-weight: 700; color: var(--orb-texto, #0d1b33); }
+.oc-conteudo { display: flex; flex-direction: column; gap: 1rem; }
+.oc-vazio { padding: 2rem; text-align: center; color: var(--orb-texto-suave, #5b6a80); background: var(--orb-sup, #fff); border: 1px dashed var(--orb-linha, #d8dee8); border-radius: 12px; }
+.oc-bloco { background: var(--orb-sup, #fff); border: 1px solid var(--orb-linha, #d8dee8); border-radius: 12px; padding: 1rem 1.1rem; }
+.oc-bloco > header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.6rem; margin-bottom: 0.8rem; }
+.oc-bloco h2 { margin: 0; font-size: 1.1rem; }
+.oc-bloco h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.oc-nota { font-size: 0.85rem; color: var(--orb-texto-suave, #5b6a80); margin: 0.3rem 0; }
+.oc-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.oc-btn { min-height: 40px; padding: 0 0.9rem; border-radius: 9px; border: 1px solid var(--orb-linha, #c9d2df); background: #fff; color: var(--orb-texto, #0d1b33); font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+.oc-btn:hover { border-color: var(--orb-marca, #12294d); }
+.oc-btn-pri { background: var(--orb-marca, #12294d); border-color: var(--orb-marca, #12294d); color: #fff; }
+.oc-btn-perigo { color: #a3261b; border-color: #e3b4ae; }
+.oc-btn:disabled { opacity: 0.55; cursor: default; }
+.oc-tab { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.oc-tab th { text-align: left; font-size: 0.78rem; color: var(--orb-texto-suave, #5b6a80); padding: 0.45rem 0.6rem; border-bottom: 2px solid var(--orb-linha, #d8dee8); }
+.oc-tab td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--orb-linha, #e3e8f0); vertical-align: top; }
+.oc-tab tr[data-ir] { cursor: pointer; }
+.oc-tab tr[data-ir]:hover td { background: #f6f8fb; }
+.oc-wrap { overflow-x: auto; }
+.oc-selo { display: inline-block; font-size: 0.74rem; font-weight: 800; padding: 0.1rem 0.45rem; border-radius: 6px; white-space: nowrap; }
+.oc-selo-ok { background: #e3f5ea; color: #0f6b3e; }
+.oc-selo-imp { background: #fdf0dd; color: #8a5200; }
+.oc-selo-sug { background: #e6f0fb; color: #0052b8; }
+.oc-selo-crit { background: #fde4e1; color: #a3261b; }
+.oc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.8rem; }
+.oc-card { border: 1px solid var(--orb-linha, #d8dee8); border-radius: 12px; padding: 0.9rem; display: flex; flex-direction: column; gap: 0.5rem; background: #fff; }
+.oc-card h3 { margin: 0; font-size: 1rem; }
+
+/* editor da estação + conferência ao lado */
+.oc-editor { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); gap: 1rem; align-items: start; }
+@media (max-width: 980px) { .oc-editor { grid-template-columns: 1fr; } }
+.oc-form { display: flex; flex-direction: column; gap: 0.8rem; }
+.oc-campo { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; font-weight: 700; }
+.oc-campo small { font-weight: 400; color: var(--orb-texto-suave, #5b6a80); }
+.oc-campo input, .oc-campo select, .oc-campo textarea { font: inherit; font-weight: 400; min-height: 40px; border: 1px solid var(--orb-linha, #c9d2df); border-radius: 8px; padding: 0.45rem 0.6rem; background: #fff; }
+.oc-campo textarea { min-height: 80px; resize: vertical; }
+.oc-grid3 { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 0.7rem; }
+@media (max-width: 700px) { .oc-grid3 { grid-template-columns: 1fr; } }
+.oc-itens { display: flex; flex-direction: column; gap: 0.5rem; }
+.oc-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) 76px 36px; gap: 0.5rem; align-items: start; padding: 0.6rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 10px; background: #fafbfd; }
+.oc-item-n { font-weight: 800; color: var(--orb-marca, #12294d); padding-top: 0.55rem; text-align: center; }
+.oc-item-campos { display: flex; flex-direction: column; gap: 0.35rem; }
+.oc-item-campos input[type=text] { min-height: 38px; border: 1px solid var(--orb-linha, #c9d2df); border-radius: 8px; padding: 0.35rem 0.55rem; font: inherit; }
+.oc-item-campos .oc-parcial { font-size: 0.85rem; }
+.oc-item label.oc-chk { font-size: 0.78rem; font-weight: 600; display: flex; gap: 0.35rem; align-items: center; color: var(--orb-texto-suave, #5b6a80); }
+.oc-item .oc-peso { display: flex; flex-direction: column; font-size: 0.72rem; font-weight: 700; gap: 0.2rem; }
+.oc-item .oc-peso input { min-height: 38px; width: 100%; border: 1px solid var(--orb-linha, #c9d2df); border-radius: 8px; padding: 0 0.4rem; }
+.oc-x { min-height: 38px; border: 1px solid #e3b4ae; color: #a3261b; background: #fff; border-radius: 8px; cursor: pointer; font-weight: 800; }
+
+.oc-conf { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 0.7rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
+.oc-conf-resumo { font-size: 0.9rem; font-weight: 700; padding: 0.6rem 0.8rem; border-radius: 10px; background: #e6f0fb; color: #0a2463; }
+.oc-conf ul { margin: 0; padding-left: 1.1rem; font-size: 0.86rem; }
+.oc-sug { border-left: 4px solid #0052b8; background: #f5f8fd; border-radius: 8px; padding: 0.55rem 0.7rem; font-size: 0.86rem; }
+.oc-sug.oc-imp { border-left-color: #c77700; background: #fdf6ea; }
+.oc-sug b { display: block; margin-bottom: 0.2rem; }
+.oc-sug p { margin: 0.2rem 0 0; }
+.oc-sug .oc-porque { color: #44536b; }
+.oc-sug .oc-como { color: #0f6b3e; }
+.oc-pt { font-size: 0.84rem; }
+.oc-pt s { color: #a3261b; } .oc-pt ins { color: #0f6b3e; text-decoration: none; font-weight: 700; }
+
+/* avaliar na estação */
+.oc-aval { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 1rem; align-items: start; }
+@media (max-width: 860px) { .oc-aval { grid-template-columns: 1fr; } }
+.oc-alunos { display: flex; flex-direction: column; gap: 0.3rem; max-height: 75vh; overflow-y: auto; }
+.oc-alunos input[type=search] { min-height: 40px; border: 1px solid var(--orb-linha, #c9d2df); border-radius: 8px; padding: 0 0.6rem; margin-bottom: 0.3rem; }
+.oc-aluno { display: flex; justify-content: space-between; gap: 0.4rem; align-items: center; text-align: left; min-height: 44px; padding: 0.35rem 0.6rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 9px; background: #fff; cursor: pointer; font-size: 0.85rem; }
+.oc-aluno.ativo { border-color: var(--orb-marca, #12294d); background: #eef3fa; font-weight: 700; }
+.oc-aluno small { white-space: nowrap; }
+.oc-marcar { display: flex; flex-direction: column; gap: 0.5rem; }
+.oc-linha { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 0.6rem; align-items: center; padding: 0.55rem 0.6rem; border: 1px solid var(--orb-linha, #e3e8f0); border-radius: 10px; }
+.oc-linha.feito { background: #fafbfd; }
+.oc-linha small { display: block; color: var(--orb-texto-suave, #5b6a80); font-size: 0.78rem; margin-top: 0.15rem; }
+.oc-opcoes { display: flex; gap: 0.35rem; }
+.oc-op { min-width: 74px; min-height: 44px; border: 2px solid var(--orb-linha, #c9d2df); background: #fff; border-radius: 9px; font-weight: 800; cursor: pointer; font-size: 0.85rem; }
+.oc-op[aria-pressed="true"].oc-fez { background: #0f6b3e; border-color: #0f6b3e; color: #fff; }
+.oc-op[aria-pressed="true"].oc-parc { background: #c77700; border-color: #c77700; color: #fff; }
+.oc-op[aria-pressed="true"].oc-nao { background: #a3261b; border-color: #a3261b; color: #fff; }
+.oc-op:disabled { opacity: 0.35; cursor: default; }
+.oc-global { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.oc-global button { min-height: 44px; padding: 0 0.8rem; border: 2px solid var(--orb-linha, #c9d2df); background: #fff; border-radius: 9px; font-weight: 700; cursor: pointer; }
+.oc-global button[aria-pressed="true"] { background: var(--orb-marca, #12294d); color: #fff; border-color: var(--orb-marca, #12294d); }
+.oc-crit { background: #fdf0dd; border: 1px solid #e8c98f; border-radius: 10px; padding: 0.6rem 0.8rem; }
+.oc-crit label { display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; min-height: 36px; }
+.oc-total { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.6rem; background: var(--orb-marca, #12294d); color: #fff; border-radius: 12px; padding: 0.7rem 1rem; }
+.oc-total b { font-size: 1.3rem; }
+.oc-total .oc-btn { background: #fff; color: var(--orb-marca, #12294d); }
+
+#oc-toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 0.7rem 1.1rem; border-radius: 10px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.18); max-width: 92vw; }
+.oc-toast-ok { background: #0f6b3e; color: #fff; } .oc-toast-erro { background: #a3261b; color: #fff; }
+
+/* impressão: folha do avaliador e orientação do aluno (A4 em pé) */
+.oc-impressao { display: none; }
+@media print {
+  body.oc-imprimindo > *:not(#oc-impressao) { display: none !important; }
+  body.oc-imprimindo, body.oc-imprimindo html { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body.oc-imprimindo #oc-impressao { display: block; }
+  @page { size: A4 portrait; margin: 12mm; }
+}
+.oc-folha { font-family: Arial, Helvetica, sans-serif; color: #0d1b33; font-size: 10.5pt; page-break-after: always; }
+.oc-folha:last-child { page-break-after: auto; }
+.oc-folha-cab { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0052b8; padding-bottom: 4mm; margin-bottom: 4mm; }
+.oc-folha-cab img { height: 12mm; }
+.oc-folha h1 { font-size: 13pt; color: #0052b8; text-align: center; margin: 0 0 1mm; }
+.oc-folha h2 { font-size: 11.5pt; text-align: center; margin: 0 0 3mm; }
+.oc-folha table { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
+.oc-folha td, .oc-folha th { border: 1px solid #9aa9bd; padding: 1.6mm 2mm; vertical-align: middle; }
+.oc-folha th { background: #0052b8; color: #fff; font-size: 9.5pt; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.oc-folha .oc-c { text-align: center; white-space: nowrap; }
+.oc-folha .oc-parc-txt { display: block; font-size: 8pt; font-style: italic; color: #5b6a80; }
+.oc-folha .oc-quadro { border: 1px solid #9aa9bd; padding: 2mm 3mm; margin-bottom: 3mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.oc-folha .oc-quadro-crit { background: #fdf0dd; }
+.oc-folha .oc-quadro-glob { background: #e6f0fb; }
+.oc-folha .oc-lado { display: flex; gap: 6mm; justify-content: center; flex-wrap: wrap; }
+.oc-folha p { margin: 0 0 2mm; }
+.oc-folha .oc-grande { font-size: 13pt; line-height: 1.5; }
+/* não deixar opção comprida (objetivo do plano de ensino) esticar a tela */
+.oc-editor > *, .oc-aval > *, .oc-form, .oc-campo { min-width: 0; }
+.oc-campo input, .oc-campo select, .oc-campo textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 980px) { .oc-editor { grid-template-columns: minmax(0, 1fr); } .oc-conf { position: static; max-height: none; } }
+@media (max-width: 860px) { .oc-aval { grid-template-columns: minmax(0, 1fr); } }
+/* tablet / tela estreita (25/11/2026): botões embaixo do texto do item; lista de alunos em cima; total no fim */
+.oc-linha { grid-template-columns: 28px minmax(0, 1fr); }
+.oc-linha .oc-opcoes { grid-column: 2 / -1; }
+.oc-op { flex: 1 1 0; min-width: 0; }
+.oc-total { position: static; }
+@media (max-width: 1150px) { .oc-aval { grid-template-columns: minmax(0, 1fr); } .oc-alunos { max-height: 260px; } }
+/* celular (25/11/2026): cabeçalho compacto e mais espaço para marcar */
+@media (max-width: 600px) {
+  .oc-main { padding: 0.6rem; gap: 0.7rem; }
+  .oc-cab { padding: 0.7rem 0.8rem; gap: 0.5rem; }
+  .oc-cab p { display: none; }
+  .oc-cab h1 { font-size: 1.2rem; }
+  .oc-logo { height: 28px; }
+  .oc-cab-ctrl { width: 100%; }
+  .oc-sem { flex-direction: row; align-items: center; gap: 0.5rem; }
+  .oc-bloco { padding: 0.8rem; }
+  .oc-alunos { max-height: 210px; }
+  .oc-linha { padding: 0.5rem; gap: 0.4rem; }
+  .oc-op { min-height: 48px; font-size: 0.9rem; }
+  .oc-global button { flex: 1 1 30%; }
+  .oc-item { grid-template-columns: 24px minmax(0, 1fr) 36px; }
+  .oc-item .oc-peso { grid-column: 2 / 3; flex-direction: row; align-items: center; gap: 0.4rem; }
+  .oc-item .oc-peso input { width: 5rem; }
+  .oc-tab { font-size: 0.82rem; }
+}
+
+/* conferência: "Ir até lá" e "Aplicar" (25/11/2026) */
+.oc-sug-acoes { margin-top: 0.45rem; gap: 0.35rem; }
+.oc-btn-mini { min-height: 34px; padding: 0 0.65rem; font-size: 0.8rem; }
+.oc-btn-aplicar { background: #0f6b3e; border-color: #0f6b3e; color: #fff; }
+.oc-btn-aplicar:hover { background: #0b5631; border-color: #0b5631; }
+.oc-pt .oc-sug-acoes { margin: 0.25rem 0 0.4rem; }
+@keyframes oc-pisca { 0%, 100% { box-shadow: 0 0 0 0 rgba(199, 119, 0, 0); } 30% { box-shadow: 0 0 0 4px rgba(199, 119, 0, 0.55); } }
+.oc-destaque { animation: oc-pisca 1.3s ease 2; border-radius: 10px; background: #fff8ea; }
+/* caixinha "sem parcial" do tamanho normal, colada no texto */
+.oc-item label.oc-chk { flex-direction: row; justify-content: flex-start; }
+.oc-item label.oc-chk input, label.oc-chk input[type=checkbox], .oc-crit input[type=checkbox] { width: 18px; height: 18px; min-height: 0; flex: 0 0 auto; margin: 0; }

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
   <link rel="stylesheet" href="/core/orbita.css?v=3">
-  <link rel="stylesheet" href="/medicina/aplicacao-provas/aplicacao-provas.css?v=7">
+  <link rel="stylesheet" href="/medicina/aplicacao-provas/aplicacao-provas.css?v=13">
 </head>
 <body class="orb-v2">
   <div id="auth-guard" class="layout-auth-guard">
@@ -30,11 +30,11 @@
             </div>
             <div class="ap-cab-ctrl">
               <label class="ap-sem"><span>Semestre</span><select id="ap-semestre"></select></label>
-              <label class="ap-sem"><span>Etapa</span>
+              <label class="ap-sem"><span>Tipo de prova</span>
                 <select id="ap-etapa">
                   <option value="">Todas</option>
-                  <option value="b1">1º bimestre</option>
-                  <option value="b2">2º bimestre</option>
+                  <option value="b1">1ª chamada · 1º bimestre</option>
+                  <option value="b2">1ª chamada · 2º bimestre</option>
                   <option value="sub">2ª chamada</option>
                   <option value="exame">Exame</option>
                 </select>
@@ -78,6 +78,6 @@
   <!-- área de impressão / imagem (montada na hora) -->
   <div id="ap-saida" class="ap-saida" aria-hidden="true"></div>
 
-  <script type="module" src="/medicina/aplicacao-provas/app.js?v=15"></script>
+  <script type="module" src="/medicina/aplicacao-provas/app.js?v=25"></script>
 </body>
 </html>

@@ -10,6 +10,12 @@ import { escapeHTML as esc } from '../../core/security.js';
 const ROTULO_SALA = { LAB12: 'Laboratório 12', LAB20: 'Laboratório 20' };
 const CAPACIDADE = { LAB12: 60, LAB20: 30 };
 const CHAMADA = { b1: '1ª chamada · 1º bimestre', b2: '1ª chamada · 2º bimestre', sub: '2ª chamada', exame: 'Exame' };
+// provas de adaptação e dependência (25/11/2026): os alunos são os que cursam a disciplina fora da turma dela
+const ESPECIAIS = { ADP: 'Adaptação', DP: 'Dependência' };
+const grupoEt = (et) => (et === 'b1' || et === 'b2' ? 'c1' : et);
+// "1ª CHAMADA · 2º BIMESTRE", "2ª CHAMADA", "EXAME" — com "ADAPTAÇÃO" / "DEPENDÊNCIA" na frente quando for o caso
+const tipoProva = (prova) => [ESPECIAIS[prova.turma], CHAMADA[prova.etapa]].filter(Boolean).join(' · ').toUpperCase();
+const turmaTxt = (info) => (info.especial ? `${info.rotuloTurma} (${info.turma})` : `Turma ${info.turma} (${info.periodo}º período)`);
 const PARTICULAS = new Set(['de', 'da', 'do', 'dos', 'das', 'e']);
 const toks = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]+/g, ' ').split(/\s+/).filter(w => w && !PARTICULAS.has(w));
 // "Emily Silva" ⊂ "EMILY SILVA SANTOS": mesmo primeiro nome e os outros nomes digitados aparecem no nome completo
@@ -21,13 +27,19 @@ const dataBR = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.sli
 const dois = (n) => String(n).padStart(2, '0');
 
 export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }) {
-  const cache = new Map(); // `${semestre}|${turma}` → resposta do servidor (só na memória desta aba)
+  const cache = new Map(); // chave da prova → resposta do servidor (só na memória desta aba)
+  const eduboxEscolhida = new Map(); // ADP/DP: disciplina do Edubox que a pessoa trocou na tela (por prova)
   let provaId = '';
 
-  async function alunosDa(turma) {
+  // turma regular: a turma toda; ADP/DP: quem cursa a disciplina da prova fora da turma dela
+  const chave = (prova) => `${dadosAtuais().semestre}|${prova.turma}${ESPECIAIS[prova.turma] ? `|${prova.disciplina}|${eduboxEscolhida.get(prova.id) || ''}` : ''}`;
+  async function alunosDa(prova) {
     const d = dadosAtuais();
-    const k = `${d.semestre}|${turma}`;
-    if (!cache.has(k)) cache.set(k, await api(`${BASE}/impressao/alunos?semestre=${encodeURIComponent(d.semestre)}&turma=${encodeURIComponent(turma)}`));
+    const k = chave(prova);
+    if (!cache.has(k)) {
+      const extra = ESPECIAIS[prova.turma] ? `&disciplina=${encodeURIComponent(prova.disciplina)}&edubox=${encodeURIComponent(eduboxEscolhida.get(prova.id) || '')}` : '';
+      cache.set(k, await api(`${BASE}/impressao/alunos?semestre=${encodeURIComponent(d.semestre)}&turma=${encodeURIComponent(prova.turma)}${extra}`));
+    }
     return cache.get(k);
   }
 
@@ -46,9 +58,10 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       const parecidos = ach.length ? ach : info.alunos.filter(a => ini && (toks(a.nome)[0] || '').startsWith(ini));
       napaProblemas.push({ i, nome: n, candidatos: parecidos.map(a => a.nome), ambiguo: ach.length > 1 });
     });
+    if (info.especial) return distribuirEspecial(info, prova, avisos);
     const napaAlunos = info.alunos.filter(a => napaRa.has(a.ra));
     const resto = info.alunos.filter(a => !napaRa.has(a.ra));
-    const s = info.salas || { modo: 'unica', primeira: 'LAB12' };
+    const s = info.especial ? { ...(info.salas || {}), modo: 'unica' } : (info.salas || { modo: 'unica', primeira: 'LAB12' });
     let partes;
     if (s.modo === 'dividida') {
       const alvos = info.alunos.filter(a => casa(s.ate, a.nome));
@@ -74,6 +87,58 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     return { salas, napa, avisos, napaProblemas };
   }
 
+  // ADP/DP (25/11/2026): uma sala só — LAB12, LAB20 ou outra (nome livre) — e o computador de CADA aluno, escolhido
+  // pela Joyce (às vezes fazem junto com outra turma no mesmo laboratório, nos computadores que sobram). O que não foi
+  // escolhido recebe o próximo número livre (fora dos ocupados pela outra turma).
+  function salaEsp(prova) {
+    const sa = prova.salaAdp || {};
+    const id = ['LAB12', 'LAB20', 'OUTRA'].includes(sa.sala) ? sa.sala : 'LAB12';
+    return { id, nome: String(sa.salaNome || '').trim(), pcs: sa.pcs || {} };
+  }
+  function distribuirEspecial(info, prova, avisos) {
+    const sp = { ...salaEsp(prova), ...(info.salaEdit || {}) };
+    const ocup = ((info.ocupados || {})[sp.id]) || [];
+    const ocupados = new Map(ocup.map(o => [o.pc, o.quem]));
+    const usados = new Set();
+    const comNum = info.alunos.map(a => ({ ...a, pc: parseInt(sp.pcs[a.nome], 10) || null }));
+    comNum.forEach(a => { if (a.pc) usados.add(a.pc); });
+    let prox = 1;
+    const livre = () => { while (usados.has(prox) || ocupados.has(prox)) prox++; usados.add(prox); return prox; };
+    comNum.forEach(a => { if (!a.pc && sp.id !== 'OUTRA') { a.pc = livre(); a.sugerido = true; } });
+    const vistos = new Map();
+    comNum.forEach(a => {
+      if (!a.pc) return;
+      if (vistos.has(a.pc)) avisos.push(`Computador ${dois(a.pc)} repetido: ${vistos.get(a.pc)} e ${a.nome}.`);
+      vistos.set(a.pc, a.nome);
+      if (ocupados.has(a.pc)) avisos.push(`Computador ${dois(a.pc)} (${a.nome}) já é de ${ocupados.get(a.pc)} no mesmo horário.`);
+      if (CAPACIDADE[sp.id] && a.pc > CAPACIDADE[sp.id]) avisos.push(`${ROTULO_SALA[sp.id]} tem ${CAPACIDADE[sp.id]} computadores; ${a.nome} está no ${a.pc}.`);
+    });
+    if (comNum.some(a => a.sugerido)) avisos.push('Há computador sugerido pelo Órbita (o próximo livre). Confira e clique em "Salvar sala e computadores".');
+    if (info.semCpf) avisos.push(`${info.semCpf} aluno(s) sem CPF no Edubox: a folha sai sem senha (procure a secretaria).`);
+    const rotulo = sp.id === 'OUTRA' ? (sp.nome ? (/^\d+$/.test(sp.nome) ? `Sala ${sp.nome}` : sp.nome) : 'Sala da prova') : ROTULO_SALA[sp.id];
+    const alunos = comNum.slice().sort((a, b) => (a.pc || 999) - (b.pc || 999) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    return { salas: [{ id: sp.id, rotulo, alunos, especial: true }], napa: null, avisos, napaProblemas: [], sp, ocup };
+  }
+  // computadores já usados por outras provas (turmas regulares) na mesma data e turno, por laboratório
+  async function ocupadosNoHorario(prova) {
+    const out = {};
+    // turno pelo horário quando tem (uma prova às 13:30 é da tarde, mesmo se o turno ficou "manhã" no cadastro)
+    const turnoDe = (p) => { const h = parseInt(String(p.horario || '').slice(0, 2), 10); return Number.isInteger(h) ? (h < 12 ? 'manha' : h < 18 ? 'tarde' : 'noite') : p.turno; };
+    const outras = dadosAtuais().provas.filter(p => p.id !== prova.id && p.data === prova.data && turnoDe(p) === turnoDe(prova) && !ESPECIAIS[p.turma]);
+    for (const p of outras) {
+      try {
+        const inf = await alunosDa(p);
+        distribuir(inf, p).salas.forEach(sl => sl.alunos.forEach(a => { (out[sl.id] = out[sl.id] || []).push({ pc: a.pc, quem: `${p.turma} (${p.disciplina})` }); }));
+      } catch (e) { /* sem acesso aos alunos da outra turma: só não avisa */ }
+    }
+    return out;
+  }
+  const faixas = (nums) => {
+    const v = [...new Set(nums)].sort((a, b) => a - b); const out = [];
+    for (let i = 0; i < v.length; i++) { let j = i; while (j + 1 < v.length && v[j + 1] === v[j] + 1) j++; out.push(i === j ? dois(v[i]) : `${dois(v[i])} a ${dois(v[j])}`); i = j; }
+    return out.join(', ');
+  };
+
   // ------------------------------------------------------------------ tela
   function opcoesProva() {
     const ps = provasVisiveis().slice().sort((a, b) => a.data.localeCompare(b.data) || a.turma.localeCompare(b.turma));
@@ -90,13 +155,15 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const prova = ps.find(p => p.id === provaId);
     alvo.innerHTML = `<div class="ap-imp">
       <div class="ap-imp-topo">
-        <label class="ap-campo"><span>Prova</span><select id="ap-imp-prova">${ps.map(p => `<option value="${esc(p.id)}" ${p.id === provaId ? 'selected' : ''}>${dataBR(p.data)} · ${esc(p.turma)} · ${esc(p.disciplina)}${p.etapa ? ` (${esc(CHAMADA[p.etapa] || '')})` : ''}</option>`).join('')}</select></label>
+        <label class="ap-campo"><span>Prova</span><select id="ap-imp-prova">${ps.map(p => `<option value="${esc(p.id)}" ${p.id === provaId ? 'selected' : ''}>${dataBR(p.data)} · ${esc(p.turma)} · ${esc(p.disciplina)} · ${esc(tipoProva(p))}</option>`).join('')}</select></label>
       </div>
-      <div id="ap-imp-corpo"><div class="ap-vazio">Buscando os alunos da ${esc(prova.turma)} no Edubox…</div></div>
+      <div class="ap-imp-tipo ap-et-${grupoEt(prova.etapa)}" role="note"><span>Tipo de prova:</span> <b>${esc(tipoProva(prova))}</b> <span>${esc(prova.disciplina)} · ${dataBR(prova.data)}</span></div>
+      <div id="ap-imp-corpo"><div class="ap-vazio">Buscando ${ESPECIAIS[prova.turma] ? `os alunos em ${esc(ESPECIAIS[prova.turma].toLowerCase())} de ${esc(prova.disciplina)}` : `os alunos da ${esc(prova.turma)}`} no Edubox…</div></div>
       <p class="ap-nota">Login = RA do aluno; senha = F + CPF (padrão da Fatec). Os dados vêm do Edubox na hora e não ficam gravados no Órbita. Só a coordenação e a secretaria de Medicina veem esta aba.</p>
     </div>`;
     try {
-      const info = await alunosDa(prova.turma);
+      const info = await alunosDa(prova);
+      if (info.especial && info.alunos.length && !info.ocupados) info.ocupados = await ocupadosNoHorario(prova);
       if (provaId !== prova.id) return; // trocou de prova enquanto buscava: a outra chamada desenha
       renderCorpo(prova, info);
     } catch (e) {
@@ -109,19 +176,46 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const c = document.getElementById('ap-imp-corpo');
     if (!c) return;
     const dist = distribuir(info, prova);
-    const s = info.salas || {};
+    const s = info.especial ? { ...(info.salas || {}), modo: 'unica' } : (info.salas || {});
     const todas = [...dist.salas, ...(dist.napa ? [dist.napa] : [])];
-    c.innerHTML = `
+    const atualiz = info.atualizadoEm ? new Date(info.atualizadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const blocoEspecial = info.especial ? `
       <section class="ap-imp-div">
-        <h3>Como a ${esc(info.turma)} (${info.periodo}º período · ${info.alunos.length} alunos no Edubox) fica nas salas</h3>
+        <h3>${esc(info.rotuloTurma)}: quem cursa a disciplina fora da turma dela (Edubox)</h3>
         <div class="ap-imp-div-campos">
-          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="unica" ${s.modo !== 'dividida' ? 'checked' : ''}> Uma sala só</label>
-          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="dividida" ${s.modo === 'dividida' ? 'checked' : ''}> Dividida em dois laboratórios</label>
+          <label class="ap-campo"><span>Disciplina no Edubox</span><select id="ap-imp-edubox"><option value="">— escolha —</option>${(info.opcoes || []).map(o => `<option value="${esc(o.nome)}" ${o.nome === info.disciplinaEdubox ? 'selected' : ''}>${esc(o.nome)} (${o.n} aluno${o.n === 1 ? '' : 's'})</option>`).join('')}</select></label>
+          <p class="ap-nota">${info.disciplinaEdubox ? `A prova "${esc(prova.disciplina)}" foi ligada a esta disciplina do Edubox. Se não for a certa, troque aqui.` : `Não achei no Edubox ninguém em ${esc(info.rotuloTurma.toLowerCase())} de "${esc(prova.disciplina)}". Escolha a disciplina na lista (só aparecem as que têm aluno fora da turma).`}${atualiz ? ` Dados do Edubox de ${atualiz}.` : ''}</p>
+        </div>
+        ${info.alunos.length ? `<ol class="ap-imp-esp-lista">${info.alunos.map(a => `<li>${esc(a.nome)} <small>(${esc(a.turmaAluno || '')})</small></li>`).join('')}</ol>` : ''}
+      </section>` : '';
+    if (info.especial && !info.alunos.length) { c.innerHTML = blocoEspecial; return; }
+    const blocoSalaEsp = info.especial ? (() => {
+      const sp = dist.sp;
+      const porQuem = {};
+      (dist.ocup || []).forEach(o => { (porQuem[o.quem] = porQuem[o.quem] || []).push(o.pc); });
+      return `<section class="ap-imp-div">
+        <h3>Sala e computador de cada aluno (${info.alunos.length})</h3>
+        <div class="ap-imp-div-campos">
+          <label class="ap-campo"><span>Sala</span><select id="ap-esp-sala">${[['LAB12', 'Laboratório 12'], ['LAB20', 'Laboratório 20'], ['OUTRA', 'Outra sala']].map(([k, l]) => `<option value="${k}" ${sp.id === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${sp.id === 'OUTRA' ? `<label class="ap-campo"><span>Nome da sala</span><input id="ap-esp-salanome" value="${esc(sp.nome)}" placeholder="Ex.: Sala 33" maxlength="60"></label>` : ''}
+        </div>
+        ${Object.keys(porQuem).length ? `<p class="ap-nota"><b>No mesmo horário, neste laboratório:</b> ${Object.entries(porQuem).map(([q, n]) => `${esc(q)} usa os computadores ${faixas(n)}`).join('; ')}. Escolha números fora desses.</p>` : `<p class="ap-nota">${sp.id === 'OUTRA' ? 'Em outra sala o número é opcional (deixe em branco se forem notebooks sem número).' : 'Nenhuma outra turma cadastrada neste laboratório no mesmo horário.'}</p>`}
+        <table class="ap-esp-pcs"><thead><tr><th>Aluno(a)</th><th>Turma de origem</th><th>Computador</th></tr></thead>
+          <tbody>${dist.salas[0].alunos.map(a => `<tr><td>${esc(a.nome)}</td><td>${esc(a.turmaAluno || '')}</td><td><input type="number" min="1" max="${CAPACIDADE[sp.id] || 999}" value="${a.pc || ''}" data-esp-pc="${esc(a.nome)}" aria-label="Computador de ${esc(a.nome)}">${a.sugerido ? ' <small>sugerido</small>' : ''}</td></tr>`).join('')}</tbody></table>
+        <button type="button" class="ap-btn ap-btn-pri" id="ap-esp-salvar">Salvar sala e computadores</button>
+      </section>`;
+    })() : '';
+    c.innerHTML = `${blocoEspecial}${blocoSalaEsp}
+      ${info.especial ? '' : `<section class="ap-imp-div">
+        <h3>${info.especial ? `Sala da prova (${info.alunos.length} aluno${info.alunos.length === 1 ? '' : 's'})` : `Como a ${esc(info.turma)} (${info.periodo}º período · ${info.alunos.length} alunos no Edubox) fica nas salas`}</h3>
+        <div class="ap-imp-div-campos">
+          ${info.especial ? '' : `<label class="ap-check"><input type="radio" name="ap-imp-modo" value="unica" ${s.modo !== 'dividida' ? 'checked' : ''}> Uma sala só</label>
+          <label class="ap-check"><input type="radio" name="ap-imp-modo" value="dividida" ${s.modo === 'dividida' ? 'checked' : ''}> Dividida em dois laboratórios</label>`}
           <label class="ap-campo"><span>${s.modo === 'dividida' ? 'Da letra A vai para o' : 'Sala'}</span><select id="ap-imp-primeira">${Object.keys(ROTULO_SALA).map(k => `<option value="${k}" ${(s.primeira || 'LAB12') === k ? 'selected' : ''}>${ROTULO_SALA[k]}</option>`).join('')}</select></label>
           ${s.modo === 'dividida' ? `<label class="ap-campo"><span>até o(a) aluno(a)</span><select id="ap-imp-ate">${info.alunos.map(a => `<option value="${esc(a.nome)}" ${casa(s.ate, a.nome) ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select></label>
             <p class="ap-nota">O resto da turma vai para o ${esc(ROTULO_SALA[(s.primeira || 'LAB12') === 'LAB12' ? 'LAB20' : 'LAB12'])}.</p>` : ''}
           <button type="button" class="ap-btn" id="ap-imp-salvar-div">Salvar divisão e numeração</button>        </div>
-      </section>
+      </section>`}
       ${dist.napaProblemas.length ? `<section class="ap-imp-avisos" role="alert"><b>NAPA da ${esc(info.turma)}: confirme quem é cada aluno</b>
         <p class="ap-nota" style="margin:.2rem 0 .5rem">O NAPA está cadastrado só com o primeiro nome. Escolha o aluno certo: o nome completo fica salvo e ele sai da lista do laboratório. Enquanto não escolher, não imprima.</p>
         ${dist.napaProblemas.map(p => `<label class="ap-campo"><span>"${esc(p.nome)}"${p.ambiguo ? ' (mais de um aluno com esse nome)' : ' (não achei com essa grafia)'}</span>
@@ -130,15 +224,15 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       ${dist.avisos.length ? `<div class="ap-imp-avisos" role="alert"><b>Confira antes de imprimir:</b><ul>${dist.avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}
       <div class="ap-imp-salas">${todas.map(sl => `<article class="ap-imp-sala">
         <h4>${esc(sl.rotulo)}${sl.napa ? ' <small>(NAPA)</small>' : ''}</h4>
-        <p><b>${sl.alunos.length}</b> aluno(s)${CAPACIDADE[sl.id] ? ` · computadores ${sl.inicio} a ${sl.inicio + sl.alunos.length - 1} (o laboratório tem ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
-        ${CAPACIDADE[sl.id] ? `<label class="ap-campo ap-imp-inicio"><span>Começar no computador nº</span><input type="number" min="1" max="${CAPACIDADE[sl.id]}" value="${sl.inicio}" data-inicio-sala="${sl.id}"></label>` : ''}
+        <p><b>${sl.alunos.length}</b> aluno(s)${sl.especial ? (sl.alunos.some(a => a.pc) ? ` · computadores ${faixas(sl.alunos.filter(a => a.pc).map(a => a.pc))}` : ' · sem número') : CAPACIDADE[sl.id] ? ` · computadores ${sl.inicio} a ${sl.inicio + sl.alunos.length - 1} (o laboratório tem ${CAPACIDADE[sl.id]})` : ' · notebooks, sem número'}</p>
+        ${CAPACIDADE[sl.id] && !sl.especial ? `<label class="ap-campo ap-imp-inicio"><span>Começar no computador nº</span><input type="number" min="1" max="${CAPACIDADE[sl.id]}" value="${sl.inicio}" data-inicio-sala="${sl.id}"></label>` : ''}
         <div class="ap-imp-botoes">
           <button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:${sl.id}">Baixar tudo desta sala (PDF)</button>
           ${sl.napa ? '' : `<button type="button" class="ap-btn" data-imp="porta:${sl.id}">Lista da porta (PDF)</button>`}
           <button type="button" class="ap-btn" data-imp="logins:${sl.id}">Folhas de login (${sl.alunos.length}) (PDF)</button>
           <button type="button" class="ap-btn" data-imp="ata:${sl.id}">Ata (PDF)</button>
         </div>
-        ${sl.napa ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista" start="${sl.inicio || 1}">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
+        ${sl.napa || sl.especial ? '' : `<details><summary>Ver a lista</summary><ol class="ap-imp-lista" start="${sl.inicio || 1}">${sl.alunos.map(a => `<li>${esc(a.nome)}</li>`).join('')}</ol></details>`}
       </article>`).join('')}</div>
       <div class="ap-imp-geral"><button type="button" class="ap-btn ap-btn-pri" data-imp="tudo:*">Baixar tudo da prova em PDF (todas as salas)</button>
         <span class="ap-nota">Sai na ordem: para cada sala, a lista da porta, a ata e as folhas de login na ordem dos computadores.</span></div>
@@ -160,6 +254,28 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     });
     return jspdfPromessa;
   }
+  // a palavra "FATEC" recortada da própria logo MED FATEC (mesma fonte e mesma cor) para a logo do Órbita no cabeçalho:
+  // é a parte azul-escura à direita da caixa ciano do "MED"
+  function recorteFatec(c) {
+    try {
+      const g = c.getContext('2d');
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      // só cor "cheia" (vermelho baixo): a borda suavizada das letras, misturada com branco, não conta
+      const tipo = (x, y) => { const k = (y * c.width + x) * 4; const r = d[k], gg = d[k + 1]; if (r > 60) return 0; return gg > 130 ? 1 : 2; };
+      let fimCiano = -1;
+      for (let x = 0; x < c.width; x++) { let n = 0; for (let y = 0; y < c.height; y += 2) if (tipo(x, y) === 1) n++; if (n > c.height * 0.15) fimCiano = x; }
+      let x0 = -1, x1 = -1, y0 = c.height, y1 = -1;
+      for (let x = fimCiano + 1; x < c.width; x++) for (let y = 0; y < c.height; y++) {
+        if (tipo(x, y) !== 2) continue;
+        if (x0 < 0) x0 = x; x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x0 < 0) return null;
+      const r = document.createElement('canvas');
+      r.width = x1 - x0 + 1; r.height = y1 - y0 + 1;
+      r.getContext('2d').drawImage(c, x0, y0, r.width, r.height, 0, 0, r.width, r.height);
+      return { data: r.toDataURL('image/png'), prop: r.width / r.height };
+    } catch (e) { return null; }
+  }
   let logoPromessa = null;
   function logoMed() {
     logoPromessa = logoPromessa || new Promise((ok) => {
@@ -170,7 +286,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         const g = c.getContext('2d');
         g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
         g.drawImage(img, 0, 0);
-        ok({ data: c.toDataURL('image/png'), prop: img.naturalWidth / img.naturalHeight });
+        ok({ data: c.toDataURL('image/png'), prop: img.naturalWidth / img.naturalHeight, fatec: recorteFatec(c) });
       };
       img.onerror = () => ok(null);
       img.src = '/img/medfatec-logo.png';
@@ -197,30 +313,33 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     while (t.length > 4 && doc.getTextWidth(t) > larg) t = `${t.slice(0, -4).trimEnd()}...`;
     return t;
   }
-  function cabecalho(doc, logo) {
-    let x = M;
-    if (logo) { const h = 11; doc.addImage(logo.data, 'PNG', M, 11, h * logo.prop, h); x = M + h * logo.prop + 5; }
-    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text('FATEC Ivaiporã', x, 15.5);
-    cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Bacharelado em Medicina', x, 20);
-    doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
-  }
+  // 25/11/2026: todas as folhas (porta, ata e login) com o mesmo cabeçalho — Órbita FATEC à esquerda, MED FATEC à direita
+  function cabecalho(doc, logo) { cabecalhoLogin(doc, logo); }
   function linhaProvaTxt(prova, info) {
-    return `${prova.disciplina}${prova.etapa ? ` - ${CHAMADA[prova.etapa] || ''}` : ''} · Turma ${info.turma} (${info.periodo}º período) · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
+    return `${prova.disciplina} · ${turmaTxt(info)} · ${dataBR(prova.data)}${prova.horario ? ` · ${prova.horario.replace(':', 'h')}` : ''}`;
+  }
+  // faixa com o tipo da prova (1ª chamada / 2ª chamada / exame) — em todas as folhas, bem visível
+  function faixaTipo(doc, prova, y) {
+    const t = tipoProva(prova);
+    const exame = prova.etapa === 'exame';
+    doc.setLineWidth(0.6); doc.setDrawColor(...AZUL); doc.setFillColor(...(exame ? AZUL : AZUL_CLARO)); doc.rect(M, y, LARG, 9, 'FD'); doc.setDrawColor(...PRETO);
+    cor(doc, exame ? BRANCO : AZUL); doc.setFont('helvetica', 'bold'); caber(doc, t, LARG - 6, 14); doc.text(t, 105, y + 6.4, { align: 'center' }); cor(doc, PRETO);
   }
   function pdfPorta(doc, logo, sl, prova, info) {
     cabecalho(doc, logo);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(26); doc.text(sl.rotulo.toUpperCase(), 105, 40, { align: 'center' });
     cor(doc, PRETO); doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 10); doc.text(linhaProvaTxt(prova, info), 105, 47, { align: 'center' });
+    faixaTipo(doc, prova, 50);
     const duas = sl.alunos.length > 30;
     const linhas = duas ? Math.ceil(sl.alunos.length / 2) : sl.alunos.length;
-    const alt = duas ? 7 : Math.min(7.5, 215 / Math.max(linhas, 1));
+    const alt = duas ? 7 : Math.min(7.5, 205 / Math.max(linhas, 1));
     const colLarg = duas ? LARG / 2 : LARG, pcLarg = 11;
-    let y = 53;
+    let y = 62;
     doc.setLineWidth(0.3);
     const cel = (x, yy, aluno) => {
       doc.rect(x, yy, pcLarg, alt); doc.rect(x + pcLarg, yy, colLarg - pcLarg, alt);
       if (!aluno) return;
-      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(duas ? 10 : 11); doc.text(dois(aluno.pc), x + pcLarg / 2, yy + alt - 2.1, { align: 'center' });
+      cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(duas ? 10 : 11); doc.text(aluno.pc ? dois(aluno.pc) : '—', x + pcLarg / 2, yy + alt - 2.1, { align: 'center' });
       cor(doc, PRETO); doc.setFont('helvetica', 'normal'); doc.text(caberTxt(doc, aluno.nome, colLarg - pcLarg - 3, duas ? 9.5 : 11), x + pcLarg + 1.5, yy + alt - 2.1);
     };
     // cabeçalho da tabela
@@ -239,12 +358,14 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   function pdfAta(doc, logo, sl, prova, info) {
     cabecalho(doc, logo);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('ATA DE APLICAÇÃO DE PROVA', 105, 36, { align: 'center' }); cor(doc, PRETO);
-    let y = 46;
+    faixaTipo(doc, prova, 39);
+    let y = 55;
     const campo = (rot, val) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(rot, M, y); const w = doc.getTextWidth(rot) + 1.5; doc.setFont('helvetica', 'normal'); caber(doc, val, LARG - w, 10.5); doc.text(val, M + w, y); y += 6.5; };
     campo('Instituição:', 'FACULDADE TECNOLÓGICA DO VALE DO IVAÍ');
     campo('Curso:', 'BACHARELADO EM MEDICINA');
-    campo('Disciplina:', `${prova.disciplina.toUpperCase()}${prova.etapa ? ` - ${(CHAMADA[prova.etapa] || '').toUpperCase()}` : ''}`);
-    campo('Turma:', `${info.turma} (${info.periodo}º período)    Sala: ${sl.rotulo.toUpperCase()}    Alunos previstos: ${sl.alunos.length}`);
+    campo('Disciplina:', prova.disciplina.toUpperCase());
+    campo('Tipo de prova:', tipoProva(prova));
+    campo('Turma:', `${info.especial ? `${info.rotuloTurma.toUpperCase()} (${info.turma})` : `${info.turma} (${info.periodo}º período)`}    Sala: ${sl.rotulo.toUpperCase()}    Alunos previstos: ${sl.alunos.length}`);
     campo('Data:', `${dataBR(prova.data)}    Horário de início: ________    Horário de término: ________`);
     y += 3;
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text('Ocorrências durante a aplicação', M, y); y += 7; cor(doc, PRETO);
@@ -252,11 +373,11 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     doc.text('(    ) Nenhuma ocorrência registrada.', M, y); y += 6;
     doc.text('(    ) Ocorreram as seguintes situações:', M, y); y += 4;
     doc.setLineWidth(0.3);
-    for (let i = 0; i < 4; i++) { y += 7.5; doc.line(M, y, 210 - M, y); }
+    for (let i = 0; i < 3; i++) { y += 7.5; doc.line(M, y, 210 - M, y); }
     y += 8;
     doc.text(doc.splitTextToSize('Nada mais havendo a relatar, lavra-se a presente ata, que vai assinada pelo(a) professor(a) responsável e, se necessário, por fiscais presentes.', LARG), M, y);
     y += 14;
-    const tabela = (titulo, cols, n) => {
+    const tabela = (titulo, cols, n, nomes = []) => {
       cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text(titulo, M, y); y += 3;
       const alt = 8.5;
       let x = M;
@@ -265,30 +386,49 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       cor(doc, PRETO);
       y += alt;
       doc.setFont('helvetica', 'normal');
-      for (let i = 1; i <= n; i++) { x = M; cols.forEach(([, w], j) => { doc.rect(x, y, w, alt); if (j === 0) doc.text(String(i), x + 1.5, y + alt - 2.8); x += w; }); y += alt; }
+      for (let i = 1; i <= n; i++) { x = M; cols.forEach(([, w], j) => { doc.rect(x, y, w, alt); if (j === 0) doc.text(String(i), x + 1.5, y + alt - 2.8); if (j === 1 && nomes[i - 1]) doc.text(caberTxt(doc, nomes[i - 1], w - 3, 10), x + 1.5, y + alt - 2.8); x += w; }); y += alt; }
       y += 8;
     };
-    tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], 4);
+    tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], Math.max(4, (prova.aplicadores || []).length), prova.aplicadores || []);
     tabela('Registro dos dois últimos alunos a deixar a sala', [['Nº', 12], ['Nome do(a) aluno(a)', LARG - 12 - 32 - 52], ['Horário de saída', 32], ['Assinatura', 52]], 2);
   }
+  // cabeçalho da folha de login (25/11/2026, pedido do Suporte AVA): logo do Órbita FATEC à esquerda e MED FATEC
+  // à direita, sem o texto "FATEC Ivaiporã". A logo do Órbita é desenhada (círculo azul-marinho com o F e o ponto laranja).
+  function cabecalhoLogin(doc, logo) {
+    const cx = M + 6, cy = 17.5, r = 6;
+    doc.setLineWidth(0.7); doc.setDrawColor(31, 111, 178); doc.setFillColor(13, 27, 51); doc.circle(cx, cy, r, 'FD');
+    doc.setFillColor(235, 112, 37); doc.circle(cx + 4.3, cy - 4.6, 1.7, 'F');
+    cor(doc, BRANCO); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('F', cx, cy + 2.3, { align: 'center' });
+    const x = cx + r + 3.5;
+    doc.setFontSize(15); cor(doc, [13, 27, 51]); doc.text('ÓRBITA', x, cy + 2.4);
+    const w = doc.getTextWidth('ÓRBITA') + 2;
+    // "FATEC" igual ao da logo MED FATEC (recorte da imagem); sem a imagem, texto no mesmo azul
+    const hF = 3.9;
+    if (logo && logo.fatec) doc.addImage(logo.fatec.data, 'PNG', x + w, cy + 2.4 - hF, hF * logo.fatec.prop, hF);
+    else { cor(doc, [0, 82, 165]); doc.text('FATEC', x + w, cy + 2.4); }
+    cor(doc, PRETO);
+    if (logo) { const h = 11; const lw = h * logo.prop; doc.addImage(logo.data, 'PNG', 210 - M - lw, 12, lw, h); }
+    doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
+  }
   function pdfLogin(doc, logo, a, sl, prova, info) {
-    cabecalho(doc, logo);
-    const lugar = sl.napa ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
+    cabecalhoLogin(doc, logo);
+    const lugar = sl.napa || !a.pc ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
     doc.setLineWidth(1); doc.setDrawColor(...AZUL); doc.setFillColor(...AZUL_CLARO); doc.rect(M, 31, LARG, 15, 'FD'); doc.setDrawColor(...PRETO);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); caber(doc, lugar, LARG - 6, 20); doc.text(lugar, 105, 41.5, { align: 'center' }); cor(doc, PRETO);
     doc.setFont('helvetica', 'normal'); caber(doc, linhaProvaTxt(prova, info), LARG, 9.5); doc.text(linhaProvaTxt(prova, info), 105, 52, { align: 'center' });
-    doc.setFont('helvetica', 'bold'); doc.text(caberTxt(doc, a.nome, LARG, 15, 9), M, 64);
-    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Login:', M, 74); doc.text('Senha:', M, 83); cor(doc, PRETO);
-    doc.setFont('courier', 'bold'); doc.setFontSize(17); doc.text(a.ra, M + 22, 74); doc.text(a.senha || '(procure a secretaria)', M + 22, 83);
-    doc.setLineDashPattern([1.2, 1.2], 0); doc.setLineWidth(0.3); doc.line(M, 92, 210 - M, 92); doc.setLineDashPattern([], 0);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anotações', M, 97);
+    faixaTipo(doc, prova, 55);
+    doc.setFont('helvetica', 'bold'); doc.text(caberTxt(doc, a.nome, LARG, 15, 9), M, 75);
+    cor(doc, AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Login:', M, 85); doc.text('Senha:', M, 94); cor(doc, PRETO);
+    doc.setFont('courier', 'bold'); doc.setFontSize(17); doc.text(a.ra, M + 22, 85); doc.text(a.senha || '(procure a secretaria)', M + 22, 94);
+    doc.setLineDashPattern([1.2, 1.2], 0); doc.setLineWidth(0.3); doc.line(M, 103, 210 - M, 103); doc.setLineDashPattern([], 0);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anotações', M, 108);
   }
 
   async function baixar(acao) {
     const [o, salaId] = acao.split(':');
     const prova = provasVisiveis().find(p => p.id === provaId);
     if (!prova) return;
-    const info = await alunosDa(prova.turma);
+    const info = await alunosDa(prova);
     const dist = distribuir(info, prova);
     const todas = [...dist.salas, ...(dist.napa ? [dist.napa] : [])];
     const alvo = salaId === '*' ? todas : todas.filter(s => s.id === salaId);
@@ -306,7 +446,8 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     if (primeira) { toast('Nada para baixar nesta sala.', 'erro'); return; }
     const OQUE = { tudo: 'Prova', porta: 'Lista da porta', logins: 'Logins', ata: 'Ata' };
     const ondeTxt = salaId === '*' ? 'todas as salas' : alvo.map(s => s.rotulo).join(' ');
-    const nomeArq = `${OQUE[o] || 'Prova'} ${info.turma} - ${prova.disciplina} - ${ondeTxt} - ${dataBR(prova.data).replace(/\//g, '-')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 150);
+    const tipoArq = { b1: '1a chamada', b2: '1a chamada', sub: '2a chamada', exame: 'Exame' }[prova.etapa] || '';
+    const nomeArq = `${OQUE[o] || 'Prova'} ${info.turma} - ${prova.disciplina} - ${tipoArq} - ${ondeTxt} - ${dataBR(prova.data).replace(/\//g, '-')}`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 150);
     doc.save(`${nomeArq}.pdf`);
     toast(`PDF baixado (${doc.getNumberOfPages()} folha(s) A4). Abra o arquivo e imprima.`);
   }
@@ -323,17 +464,35 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     const r = await api(`${BASE}/impressao/napa/${encodeURIComponent(d.semestre)}`, { method: 'PUT', body: JSON.stringify({ turma: prova.turma, nomes }) });
     d.config.napaAlunos = { ...(d.config.napaAlunos || {}), [prova.turma]: r.nomes };
     toast(r.message);
-    renderCorpo(prova, await alunosDa(prova.turma));
+    renderCorpo(prova, await alunosDa(prova));
   }
 
+  function lerSalaEsp(prova) {
+    const atual = salaEsp(prova);
+    const sala = (document.getElementById('ap-esp-sala') || {}).value || atual.id;
+    const nomeEl = document.getElementById('ap-esp-salanome');
+    const pcs = {};
+    document.querySelectorAll('[data-esp-pc]').forEach(i => { const v = parseInt(i.value, 10); if (v > 0) pcs[i.dataset.espPc] = v; });
+    return { id: sala, nome: nomeEl ? nomeEl.value : atual.nome, pcs };
+  }
+  async function salvarSalaEsp() {
+    const prova = provasVisiveis().find(p => p.id === provaId);
+    if (!prova) return;
+    const sp = lerSalaEsp(prova);
+    const r = await api(`${BASE}/impressao/prova/${encodeURIComponent(prova.id)}/sala`, { method: 'PUT', body: JSON.stringify({ sala: sp.id, salaNome: sp.nome, pcs: sp.pcs }) });
+    prova.salaAdp = r.salaAdp;
+    const inf = cache.get(chave(prova));
+    if (inf) { delete inf.salaEdit; renderCorpo(prova, inf); }
+    toast(r.message);
+  }
   async function salvarDivisao() {
     const d = dadosAtuais();
     const prova = provasVisiveis().find(p => p.id === provaId);
     if (!prova) return;
-    const modo = (document.querySelector('[name="ap-imp-modo"]:checked') || {}).value || 'unica';
+    const modo = ESPECIAIS[prova.turma] ? 'unica' : ((document.querySelector('[name="ap-imp-modo"]:checked') || {}).value || 'unica');
     const primeira = document.getElementById('ap-imp-primeira').value;
     const ateSel = document.getElementById('ap-imp-ate');
-    const info = await alunosDa(prova.turma);
+    const info = await alunosDa(prova);
     const ate = modo === 'dividida' ? (ateSel ? ateSel.value : (info.alunos[Math.floor(info.alunos.length / 2)] || {}).nome || '') : '';
     // número inicial de cada laboratório: o que está na tela (ou o que já estava salvo); cada laboratório tem a sua numeração
     const inicio = { ...((info.salas || {}).inicio || {}) };
@@ -347,10 +506,18 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
   function ligar(alvo) {
     alvo.addEventListener('change', (e) => {
       if (e.target.id === 'ap-imp-prova') { provaId = e.target.value; render(alvo); return; }
+      if (e.target.id === 'ap-imp-edubox') { eduboxEscolhida.set(provaId, e.target.value); render(alvo); return; }
+      if (e.target.id === 'ap-esp-sala' || e.target.id === 'ap-esp-salanome' || e.target.dataset.espPc !== undefined) {
+        // mostra na hora (sem salvar): sala e números digitados
+        const pr = provasVisiveis().find(p => p.id === provaId);
+        const inf = pr && cache.get(chave(pr));
+        if (inf) { inf.salaEdit = lerSalaEsp(pr); renderCorpo(pr, inf); }
+        return;
+      }
       if (e.target.dataset.inicioSala) {
         // mostra a nova numeração na hora; fica salva em "Salvar divisão"
         const pr = provasVisiveis().find(p => p.id === provaId);
-        const inf = pr && cache.get(`${dadosAtuais().semestre}|${pr.turma}`);
+        const inf = pr && cache.get(chave(pr));
         if (inf) {
           inf.salas = { ...(inf.salas || {}), inicio: { ...((inf.salas || {}).inicio || {}), [e.target.dataset.inicioSala]: Math.max(1, parseInt(e.target.value, 10) || 1) } };
           renderCorpo(pr, inf);
@@ -361,7 +528,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
       if (e.target.name === 'ap-imp-modo') {
         // mostra/esconde o "até" sem salvar ainda
         const prova = provasVisiveis().find(p => p.id === provaId);
-        const info = cache.get(`${dadosAtuais().semestre}|${prova.turma}`);
+        const info = cache.get(chave(prova));
         if (info) { info.salas = { ...(info.salas || {}), modo: e.target.value, ate: info.salas && info.salas.ate ? info.salas.ate : (info.alunos[Math.floor(info.alunos.length / 2)] || {}).nome || '' }; renderCorpo(prova, info); }
       }
     });
@@ -371,6 +538,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         if (b) { b.disabled = true; try { await baixar(b.dataset.imp); } finally { b.disabled = false; } return; }
         if (e.target.closest('#ap-imp-salvar-div')) await salvarDivisao();
         if (e.target.closest('#ap-imp-salvar-napa')) await salvarNapa();
+        if (e.target.closest('#ap-esp-salvar')) await salvarSalaEsp();
       } catch (err) { toast(err.message, 'erro'); }
     });
   }
