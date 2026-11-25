@@ -126,6 +126,13 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - medicina/portfolio/app.js: botões "Ligar à Tarefa do AVA" (com os cursos de SCIC de 2026.2 já preenchidos: T1 3645, T2 3640, T3 3632), "Buscar entregas do AVA" (no lugar do ZIP, que continua como alternativa), "Abrir o PDF do AVA" na correção e "Lançar notas no AVA" no Quadro-resumo, com prévia e escolha dos alunos.
 - Testado com o AVA real, só leitura: Tarefas 3969, 3968 e 3967, envios, participantes e download do PDF pelo proxy. O lançamento de nota não foi testado, para não gravar nota em aluno. Limite do Vercel: resposta de até 4,5 MB por arquivo, então PDF maior que isso não abre pelo proxy e precisa do ZIP.
 
+### [2026-11-25] Medicina › Aplicação de Provas: arte das adaptações com os ícones no PNG; coluna Questões na arte da turma
+- Autor: Claude Code (pedido do Suporte AVA: "tá saindo errado", "não tem quantidade de questões")
+- Arte "Provas das Adaptações": os ícones (prancheta, folha, relógio) eram `<svg>` embutido, que o html2canvas não desenha — no PNG saíam faltando. Agora são `<img>` com o SVG em data URI.
+- Arte da turma (Imagem/PDF da T1, T2, T3): coluna **Questões** entre Disciplina e Horário, quando alguma prova da turma tem a quantidade cadastrada (sem quantidade sai "—"; se nenhuma tem, a coluna não aparece).
+- Dado: "Saúde da Criança e do Adolescente" (T1, 02/12) está cadastrada como 1º bimestre e sai num bloco "1ª chamada · 1º bimestre" separado — corrigir em Editar prova → Tipo de prova.
+- Arquivos: medicina/aplicacao-provas/{app.js, aplicacao-provas.css, index.html}.
+
 ### [2026-11-25] Medicina › Aplicação de Provas: provas de Adaptação (ADP) e Dependência (DP) na impressão; tipo da prova em destaque
 - Autor: Claude Code (pedido do Suporte AVA: "não aparece a prova ADP/DP, só o nome da disciplina e a turma" e "tem que ser mais claro que tipo de prova é: 1ª chamada, 2ª chamada, exame")
 - Cadastro: no "+ Prova", a turma ganha **ADP · Adaptação** e **DP · Dependência** (fora da configuração das turmas; sem NAPA; lista de disciplinas = todas da Medicina). Em "Por turma" elas viram colunas só quando têm prova.

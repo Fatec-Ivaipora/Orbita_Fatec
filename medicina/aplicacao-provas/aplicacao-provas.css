@@ -291,3 +291,7 @@
 .ap-esp-pcs td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--orb-linha); }
 .ap-esp-pcs input { width: 5.5rem; min-height: 40px; }
 .ap-esp-pcs small { color: #a8650b; font-weight: 700; }
+
+/* arte da turma com a coluna Questões (25/11/2026) */
+.ap-s-bloco-q th:nth-child(4) { width: 104px; } .ap-s-bloco-q th:nth-child(5) { width: 80px; } .ap-s-bloco-q th:nth-child(6) { width: 180px; }
+.ap-s-adp-tit img, .ap-s-adp-pill img { display: block; }
