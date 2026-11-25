@@ -78,6 +78,25 @@ function professorHtml(p) {
   return `<li class="ea-prof ${cls}"><b>${esc(p.nome)}</b><span>${p.feitas}${p.meta ? `/${p.meta}` : ''} questões · ${estado}</span></li>`;
 }
 
+// O questionário no AVA, lido pelo agente (25/11/2026): a Joyce decide pelo Órbita sem abrir o AVA.
+// Avisa quando o questionário tem quantidade diferente da prova do Órbita ou quando a soma das notas não fecha a nota máxima.
+const fmt = (n) => (n === null || n === undefined ? '–' : String(n).replace('.', ','));
+function quadroHtml(p) {
+  const q = p.ava && p.ava.quadro;
+  if (!q) return '';
+  if (q.erro) return `<p class="ea-quadro ea-quadro-alerta">${ic('alerta')}<span>No AVA: ${esc(q.erro)}</span></p>`;
+  const esperado = p.qtdProva || p.total;
+  const avisos = [];
+  if (q.noQuestionario !== esperado) avisos.push(q.noQuestionario ? `o questionário tem ${q.noQuestionario} e a prova tem ${esperado}` : 'as questões ainda não foram colocadas no questionário');
+  if (q.noQuestionario && q.somaNotas !== q.notaMaxima) avisos.push(`a soma das notas (${fmt(q.somaNotas)}) é diferente da nota máxima (${fmt(q.notaMaxima)})`);
+  return `<div class="ea-quadro ${avisos.length ? 'ea-quadro-alerta' : 'ea-quadro-ok'}">
+    <p><b>No questionário do AVA:</b> ${q.noQuestionario} questão(ões) · nota máxima ${fmt(q.notaMaxima)} · soma das notas ${fmt(q.somaNotas)}${q.naPasta !== null && q.naPasta !== undefined ? ` · ${q.naPasta} na pasta do banco` : ''}</p>
+    ${q.abertura ? `<p class="ea-quadro-abre">${esc(q.abertura)}</p>` : ''}
+    ${avisos.length ? `<p class="ea-quadro-aviso">${ic('alerta')}<span>Atenção: ${avisos.join('; ')}.</span></p>` : ''}
+    <p class="ea-quadro-lido">Lido no AVA em ${dataHora(q.lidoEm)}</p>
+  </div>`;
+}
+
 function provaHtml(p) {
   const s = SITUACAO[p.situacao] || SITUACAO.aguardando;
   const total = p.total;
@@ -101,6 +120,7 @@ function provaHtml(p) {
       ${p.prontas.length ? `<span class="ea-num-pronta"><b>${p.prontas.length}</b> pronta(s) para enviar</span>` : ''}
       ${onde}
     </div>
+    ${quadroHtml(p)}
     ${msg}
     <ul class="ea-profs">${p.professores.map(professorHtml).join('')}</ul>
     ${acoes}

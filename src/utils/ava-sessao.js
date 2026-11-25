@@ -122,6 +122,15 @@ function contarQuestoesNoQuestionario(html) {
     // o nome da questão fica longe do começo do <li> (no AVA real, ~56 mil caracteres na prova de Patologia Clínica I)
     return partes.filter(p => !/QUESTAO PARA APAGAR/i.test(p.slice(0, 120000))).length;
 }
+// /mod/quiz/edit.php → o que a Joyce precisa para decidir (25/11/2026): quantas questões, nota máxima,
+// soma das notas das questões e o texto de abertura/fechamento que o próprio AVA mostra.
+function lerResumoQuestionario(html) {
+    const num = (s) => { const n = Number(String(s || '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const maxgrade = (String(html).match(/<input[^>]*name="maxgrade"[^>]*value="([^"]*)"/) || [])[1];
+    const soma = (String(html).match(/class="mod_quiz_summarks"[^>]*>\s*([\d.,]+)/) || [])[1];
+    const status = (String(html).match(/class="quizopeningstatus"[^>]*title="([^"]*)"/) || [])[1];
+    return { noQuestionario: contarQuestoesNoQuestionario(html), notaMaxima: num(maxgrade), somaNotas: num(soma), abertura: status ? semTags(status) : '' };
+}
 // resposta do POST da importação
 function lerResultadoImportacao(html) {
     const erro = (html.match(/<div[^>]*class="[^"]*(?:alert-danger|notifyproblem|errorbox)[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1];
@@ -129,4 +138,4 @@ function lerResultadoImportacao(html) {
     return { erro: erro ? semTags(erro).slice(0, 400) : null, importando: n ? Number(n) : null };
 }
 
-module.exports = { SessaoAva, lerCursos, lerQuestionarios, lerFormImportacao, contarQuestoesNoQuestionario, lerResultadoImportacao, semTags };
+module.exports = { SessaoAva, lerCursos, lerQuestionarios, lerFormImportacao, contarQuestoesNoQuestionario, lerResumoQuestionario, lerResultadoImportacao, semTags };

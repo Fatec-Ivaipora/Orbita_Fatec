@@ -646,3 +646,11 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .ea-confirma { padding: 0.6rem 0.7rem; border-radius: 10px; background: var(--av-aviso-bg); font-size: 0.85rem; color: #78350F; }
 .ea-confirma > span { flex: 1 1 260px; }
 @media (max-width: 640px) { .ea-cab { flex-direction: column; } .ea-topo-acoes { width: 100%; } }
+/* quadro do questionário no AVA (25/11/2026) */
+.ea-quadro { margin: 0.45rem 0; padding: 0.55rem 0.75rem; border-radius: 10px; font-size: 0.84rem; line-height: 1.45; }
+.ea-quadro p { margin: 0.1rem 0; }
+.ea-quadro-ok { background: var(--av-ok-bg); color: #065F46; }
+.ea-quadro-alerta { background: var(--av-aviso-bg); color: #78350F; display: block; }
+.ea-quadro-abre, .ea-quadro-lido { color: var(--av-tinta-2); font-size: 0.8rem; }
+.ea-quadro-aviso { display: flex; gap: 0.4rem; align-items: flex-start; font-weight: 600; }
+.ea-quadro .bmf-icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 0.15rem; }

@@ -29,6 +29,7 @@ const { SessaoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-se
 const { ImportadorBancoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-banco-importar'));
 
 const INTERVALO_MS = 15 * 60 * 1000;
+const QUADRO_MS = 60 * 60 * 1000; // números do questionário (questões, notas) de cada prova: no máximo 1 leitura por hora
 const PULSO_MS = 5 * 60 * 1000;
 const pastaLog = path.join(__dirname, 'logs');
 const arquivoLog = path.join(pastaLog, 'ava-banco-med-agente.log');
@@ -50,9 +51,17 @@ function log(msg) {
 // mesma parte pronta da última tentativa? (aí "conferir"/"erro" não repete na rodada automática)
 const chaveTentativa = (ids) => ids.slice().sort().join(',');
 
+// quadro do questionário no AVA, para a Joyce decidir pelo Órbita (25/11/2026)
+const quadroDe = (r) => (r && r.resumo ? {
+    'avaBanco.quadro': { cmid: r.cmid || null, quiz: r.quiz || '', curso: r.curso || '', naPasta: Number.isFinite(r.naPasta) ? r.naPasta : null, ...r.resumo, lidoEm: new Date().toISOString() }
+} : {});
+async function gravarQuadro(sit, r) {
+    await db.collection(COL_AV).doc(sit.id).update(r.erro ? { 'avaBanco.quadro': { erro: r.erro, curso: r.curso || '', lidoEm: new Date().toISOString() } } : quadroDe(r));
+}
+
 async function gravarResultado(sit, r) {
     const ref = db.collection(COL_AV).doc(sit.id);
-    const comum = {
+    const comum = { ...quadroDe(r),
         'avaBanco.em': r.em, 'avaBanco.msg': String(r.msg || '').slice(0, 500), 'avaBanco.curso': r.curso || '', 'avaBanco.cursoId': r.cursoId || null,
         'avaBanco.quiz': r.quiz || '', 'avaBanco.cmid': r.cmid || null, 'avaBanco.noAva': Number.isFinite(r.noAva) ? r.noAva : null, 'avaBanco.por': 'Agente automático',
         'avaBanco.historico': admin.firestore.FieldValue.arrayUnion({ em: r.em, status: r.status, qtd: (r.enviadas || sit.prontas).length, msg: String(r.msg || '').slice(0, 300), por: 'Agente automático' })
@@ -74,9 +83,12 @@ async function rodada(origem) {
     const avs = new Map();
     for (const s of lista) avs.set(s.id, (await db.collection(COL_AV).doc(s.id).get()).data());
     const fila = lista.filter(s => origem === 'pedido' || args['uma-vez'] || !['conferir', 'erro'].includes(s.ava.status) || (avs.get(s.id).avaBanco || {}).tentativa !== chaveTentativa(s.prontas));
-    const resumo = { importada: 0, ja_estava: 0, conferir: 0, erro: 0, simulado: 0, questoes: 0 };
-    if (!fila.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
-    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
+    const resumo = { importada: 0, ja_estava: 0, conferir: 0, erro: 0, simulado: 0, questoes: 0, quadros: 0 };
+    const todas = (await situacaoDoSemestre(args.semestre || semestreAtual())).filter(s => s.total && (!args.so || s.id === args.so));
+    const velho = (s) => { const q = s.ava && s.ava.quadro; return !q || !q.lidoEm || Date.now() - new Date(q.lidoEm).getTime() > QUADRO_MS; };
+    const quadros = todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
+    if (!fila.length && !quadros.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
+    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas, ${quadros.length} para atualizar os números${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
 
     const sessao = new SessaoAva();
     await sessao.entrar();
@@ -95,6 +107,16 @@ async function rodada(origem) {
         if (r.status === 'importada') resumo.questoes += sit.prontas.length;
         log(`  ${r.status.padEnd(9)} ${sit.disciplina} · ${sit.prova} — ${sit.prontas.length} pronta(s) · ${r.msg || ''}${r.quiz ? ` [${r.curso} › ${r.quiz}]` : ''}`);
         if (!simular && !teste) await gravarResultado(sit, r);
+    }
+    // números do questionário das outras provas (só leitura no AVA)
+    for (const sit of quadros) {
+        if (teste) break;
+        try {
+            const r = await imp.resumoDaProva(sit);
+            if (!simular) await gravarQuadro(sit, r);
+            resumo.quadros++;
+            if (simular || args['uma-vez']) log(`  quadro    ${sit.disciplina} · ${sit.prova} — ${r.erro || `${r.resumo.noQuestionario} questões no questionário, nota máx. ${r.resumo.notaMaxima}, soma ${r.resumo.somaNotas}`}`);
+        } catch (e) { log(`  quadro    ${sit.disciplina} · ${sit.prova} — erro: ${e.message}`); }
     }
     const segundos = Math.round((Date.now() - inicio) / 1000);
     log(`Fim da rodada em ${segundos}s: ${JSON.stringify(resumo)}`);

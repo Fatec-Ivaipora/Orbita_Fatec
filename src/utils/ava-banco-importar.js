@@ -10,7 +10,7 @@
 //   4. sobe o XML (só as questões novas, com imagens) e importa com "categoria do arquivo";
 //   5. reconta a pasta.
 // ==========================================================================
-const { lerCursos, lerQuestionarios, lerFormImportacao, contarQuestoesNoQuestionario, lerResultadoImportacao } = require('./ava-sessao');
+const { lerCursos, lerQuestionarios, lerFormImportacao, lerResumoQuestionario, lerResultadoImportacao } = require('./ava-sessao');
 const { montarXmlDaAvaliacao } = require('./banco-med-xml-ava');
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
@@ -89,6 +89,17 @@ class ImportadorBancoAva {
         return lerResultadoImportacao(texto);
     }
 
+    // Só lê o questionário da prova (25/11/2026): quantas questões tem, nota máxima, soma das notas e abertura.
+    // A Joyce decide pelo Órbita com esses números; nada muda no AVA.
+    async resumoDaProva(sit) {
+        const d = await this.destino(sit, null);
+        if (d.erro) return { erro: d.erro, curso: d.curso || '', cursoId: d.cursoId || null };
+        const pasta = [sit.disciplina, sit.semestre, ...(sit.tipo === 'exame' ? ['Exame semestral'] : [`${sit.bimestre}º Bimestre`, `${sit.chamada}ª chamada`])];
+        const naPasta = (await this.lerBanco(d.cmid, pasta)).naPasta;
+        const resumo = lerResumoQuestionario((await this.s.req(`/mod/quiz/edit.php?cmid=${d.cmid}`)).texto);
+        return { curso: d.curso, cursoId: d.cursoId, cmid: d.cmid, quiz: d.quiz, naPasta, resumo };
+    }
+
     // sit: situação da avaliação (fila); av: documento da avaliação. simular: só confere, não importa.
     async enviar(sit, av, { simular = false, cmidTeste = null } = {}) {
         const P = sit.prontas.length, J = sit.jaNoAva;
@@ -98,7 +109,8 @@ class ImportadorBancoAva {
         const r = { ...base, curso: d.curso, cursoId: d.cursoId, cmid: d.cmid, quiz: d.quiz, teste: !!d.teste };
         const pasta = [sit.disciplina, sit.semestre, ...(sit.tipo === 'exame' ? ['Exame semestral'] : [`${sit.bimestre}º Bimestre`, `${sit.chamada}ª chamada`])];
         const { form, naPasta } = await this.lerBanco(d.cmid, pasta);
-        const noQuiz = contarQuestoesNoQuestionario((await this.s.req(`/mod/quiz/edit.php?cmid=${d.cmid}`)).texto);
+        r.resumo = lerResumoQuestionario((await this.s.req(`/mod/quiz/edit.php?cmid=${d.cmid}`)).texto);
+        const noQuiz = r.resumo.noQuestionario;
         r.naPasta = naPasta; r.noQuiz = noQuiz;
         if (P && (naPasta === J + P || (naPasta === 0 && noQuiz === J + P)))
             return { ...r, status: 'ja_estava', enviadas: sit.prontas, noAva: Math.max(naPasta, noQuiz), msg: naPasta ? `a pasta do AVA já tinha as ${naPasta} questões` : `o questionário já tinha as ${noQuiz} questões (de outro banco)` };
@@ -109,6 +121,7 @@ class ImportadorBancoAva {
         if (n !== P) throw new Error(`o XML saiu com ${n} questões e eram ${P}`);
         const res = await this.subirEImportar(form, d.cmid, xml, nomeArquivo);
         const depois = (await this.lerBanco(d.cmid, pasta)).naPasta;
+        r.naPasta = depois;
         if (depois === J + P) return { ...r, status: 'importada', enviadas: sit.prontas, noAva: depois, msg: `${P} questão(ões) importada(s)` };
         if (res.erro && depois === naPasta) return { ...r, status: 'erro', noAva: depois, msg: `o AVA não importou: ${res.erro}` };
         return { ...r, status: 'conferir', noAva: depois, msg: `importou, mas a pasta ficou com ${depois} e o esperado era ${J + P}: confira no AVA${res.erro ? ` (${res.erro})` : ''}` };

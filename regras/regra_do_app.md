@@ -149,6 +149,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   1. No AVA (feito em 25/11/2026): senha do orbita.integracao e, no papel "Integração Órbita (Medicina)", `moodle/question:add`, `moodle/question:managecategory`, `moodle/course:viewhiddenactivities`, `moodle/course:viewhiddensections`, `moodle/course:ignoreavailabilityrestrictions`, `mod/quiz:view` e `mod/quiz:manage` (além de `moodle/course:view`). As provas ficam ocultas, em subseções com restrição de acesso; sem qualquer uma delas o AVA responde "atividade oculta" para o usuário de integração.
   2. AVA_LOGIN_USUARIO e AVA_LOGIN_SENHA no .env do droplet.
   3. Instalar o serviço (seção 8).
+- **Quadro do questionário para a Joyce** (25/11, depois do teste): o agente lê no AVA, só leitura (/mod/quiz/edit.php), quantas questões o questionário de cada prova tem, a nota máxima, a soma das notas e o texto de abertura e fechamento, e grava em avaliacao.avaBanco.quadro. Lê no máximo 1 vez por hora por prova, ou na hora com "Enviar agora". A aba Envio ao AVA mostra o quadro e avisa quando a quantidade não bate com a prova do Órbita ou a soma das notas não fecha a nota máxima. Exemplo real: SCIC IV com 20 questões, nota máxima 30 e soma 19. O agente não coloca questões no questionário: isso continua com a Joyce no AVA.
 - Tipo: Funcionalidade (fluxo novo) · Como reverter: `git revert` deste commit e `systemctl disable --now orbita-ava-banco-agente` no droplet.
 
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)

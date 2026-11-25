@@ -10,7 +10,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../c
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
 import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=48";
-import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=2";
+import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=3";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
