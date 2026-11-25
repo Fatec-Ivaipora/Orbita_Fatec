@@ -8,7 +8,7 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
-import { criarImpressao } from "./impressao.js?v=14";
+import { criarImpressao } from "./impressao.js?v=15";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);

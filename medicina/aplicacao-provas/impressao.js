@@ -184,6 +184,28 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     });
     return jspdfPromessa;
   }
+  // a palavra "FATEC" recortada da própria logo MED FATEC (mesma fonte e mesma cor) para a logo do Órbita no cabeçalho:
+  // é a parte azul-escura à direita da caixa ciano do "MED"
+  function recorteFatec(c) {
+    try {
+      const g = c.getContext('2d');
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      // só cor "cheia" (vermelho baixo): a borda suavizada das letras, misturada com branco, não conta
+      const tipo = (x, y) => { const k = (y * c.width + x) * 4; const r = d[k], gg = d[k + 1]; if (r > 60) return 0; return gg > 130 ? 1 : 2; };
+      let fimCiano = -1;
+      for (let x = 0; x < c.width; x++) { let n = 0; for (let y = 0; y < c.height; y += 2) if (tipo(x, y) === 1) n++; if (n > c.height * 0.15) fimCiano = x; }
+      let x0 = -1, x1 = -1, y0 = c.height, y1 = -1;
+      for (let x = fimCiano + 1; x < c.width; x++) for (let y = 0; y < c.height; y++) {
+        if (tipo(x, y) !== 2) continue;
+        if (x0 < 0) x0 = x; x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x0 < 0) return null;
+      const r = document.createElement('canvas');
+      r.width = x1 - x0 + 1; r.height = y1 - y0 + 1;
+      r.getContext('2d').drawImage(c, x0, y0, r.width, r.height, 0, 0, r.width, r.height);
+      return { data: r.toDataURL('image/png'), prop: r.width / r.height };
+    } catch (e) { return null; }
+  }
   let logoPromessa = null;
   function logoMed() {
     logoPromessa = logoPromessa || new Promise((ok) => {
@@ -194,7 +216,7 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
         const g = c.getContext('2d');
         g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
         g.drawImage(img, 0, 0);
-        ok({ data: c.toDataURL('image/png'), prop: img.naturalWidth / img.naturalHeight });
+        ok({ data: c.toDataURL('image/png'), prop: img.naturalWidth / img.naturalHeight, fatec: recorteFatec(c) });
       };
       img.onerror = () => ok(null);
       img.src = '/img/medfatec-logo.png';
@@ -309,8 +331,12 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     cor(doc, BRANCO); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('F', cx, cy + 2.3, { align: 'center' });
     const x = cx + r + 3.5;
     doc.setFontSize(15); cor(doc, [13, 27, 51]); doc.text('ÓRBITA', x, cy + 2.4);
-    const w = doc.getTextWidth('ÓRBITA ');
-    doc.setFont('helvetica', 'normal'); cor(doc, [0, 179, 255]); doc.text('FATEC', x + w, cy + 2.4); cor(doc, PRETO);
+    const w = doc.getTextWidth('ÓRBITA') + 2;
+    // "FATEC" igual ao da logo MED FATEC (recorte da imagem); sem a imagem, texto no mesmo azul
+    const hF = 3.9;
+    if (logo && logo.fatec) doc.addImage(logo.fatec.data, 'PNG', x + w, cy + 2.4 - hF, hF * logo.fatec.prop, hF);
+    else { cor(doc, [0, 82, 165]); doc.text('FATEC', x + w, cy + 2.4); }
+    cor(doc, PRETO);
     if (logo) { const h = 11; const lw = h * logo.prop; doc.addImage(logo.data, 'PNG', 210 - M - lw, 12, lw, h); }
     doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
   }
