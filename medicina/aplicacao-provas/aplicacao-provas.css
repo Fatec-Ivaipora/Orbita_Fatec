@@ -265,3 +265,23 @@
 .ap-imp-tipo.ap-et-sub { background: #e0f6ff; border-color: #00628c; color: #00405c; }
 .ap-imp-esp-lista { margin: 0.4rem 0 0; padding-left: 1.4rem; font-size: 0.9rem; }
 .ap-imp-esp-lista small { color: var(--orb-texto-suave, #555); }
+
+/* campo de questões no cadastro e arte "Provas das Adaptações" (25/11/2026) — modelo da lista de 17/11 */
+.ap-grid-disc { display: grid; grid-template-columns: 1fr 110px; gap: 0 0.8rem; }
+.ap-tp-q { font-size: 0.72rem; color: var(--orb-texto-suave, #5b6a80); white-space: nowrap; }
+.ap-s-adp-tit { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 9px 18px; border-radius: 10px; background: #5b2a9e; color: #fff; font-family: var(--orb-display); font-size: 20px; }
+.ap-s-adp-tab { width: 100%; border-collapse: separate; border-spacing: 0; border: 2px solid #d9cdf0; border-radius: 12px; overflow: hidden; font-size: 15px; }
+.ap-s-adp-tab { table-layout: fixed; }
+.ap-s-adp-tab th:nth-child(1) { width: 66px; } .ap-s-adp-tab th:nth-child(2) { width: 50px; } .ap-s-adp-tab th:nth-child(4) { width: 128px; } .ap-s-adp-tab th:nth-child(5) { width: 158px; } .ap-s-adp-tab th:nth-child(6) { width: 118px; }
+.ap-s-adp-tab th { text-align: left; font-size: 13px; color: #0d1b33; padding: 12px 14px; background: #fff; }
+.ap-s-adp-tab td { padding: 9px 14px; border-top: 1px solid #e3e8f0; vertical-align: middle; }
+.ap-s-adp-tab tbody tr:nth-child(odd) td { background: #f7f4fc; }
+.ap-s-adp-tab td:first-child b { color: #5b2a9e; font-size: 16px; }
+.ap-s-adp-tab td:nth-child(2) { color: #5b6a80; }
+.ap-s-adp-tab small { color: #5b6a80; }
+.ap-s-adp-tipo { display: inline-block; min-width: 92px; text-align: center; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 13px; }
+.ap-s-adp-adp { background: #ece3f8; color: #5b2a9e; }
+.ap-s-adp-dp { background: #dceeff; color: #0052b8; }
+.ap-s-adp-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 8px; background: #ece3f8; color: #0d1b33; font-weight: 800; white-space: nowrap; }
+.ap-s-adp-pill svg { color: #0d1b33; }
+@media (max-width: 560px) { .ap-grid-disc { grid-template-columns: 1fr; } }

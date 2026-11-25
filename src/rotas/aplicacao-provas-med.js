@@ -92,6 +92,8 @@ function provaDoBody(b) {
         etapa: ETAPAS.includes(b.etapa) ? b.etapa : 'b2',
         aplicadores: lista(b.aplicadores, 120, 12),
         laboratorios: txt(b.laboratorios, 200),
+        // quantas questões tem a prova (25/11/2026; aparece na arte das adaptações). 0 = não informado
+        questoes: Math.max(0, Math.min(300, parseInt(b.questoes, 10) || 0)),
         observacao: txt(b.observacao, 500),
         napa: b.napa && typeof b.napa === 'object' ? {
             sala: txt(b.napa.sala, 120), responsavel: txt(b.napa.responsavel, 120),

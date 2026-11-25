@@ -131,7 +131,7 @@ function linhaTurma(p) {
   return `<li class="ap-tp ${p.minha ? 'ap-minha' : ''} ${p.tipo === 'osce' ? 'ap-osce' : ''}">
     <button type="button" class="ap-tp-btn" data-prova="${esc(p.id)}" ${dados.editor ? '' : 'data-ler="1"'} aria-label="${esc(`${ddmm(p.data)}, ${p.disciplina}, ${TURNO[p.turno]}`)}">
       <span class="ap-tp-data"><b>${ddmm(p.data)}</b><small>${diaSemana(p.data)}</small></span>
-      <span class="ap-tp-disc">${chipEtapa(p.etapa)} ${esc(p.disciplina)}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}${p.minha ? ' <em class="ap-eu">você aplica</em>' : ''}</span>
+      <span class="ap-tp-disc">${chipEtapa(p.etapa)} ${esc(p.disciplina)}${p.questoes ? ` <small class="ap-tp-q">${p.questoes} questões</small>` : ''}${p.tipo !== 'prova' ? ` <em class="ap-tipo">${TIPO[p.tipo]}</em>` : ''}${p.minha ? ' <em class="ap-eu">você aplica</em>' : ''}</span>
       <span class="ap-turno ap-turno-${p.turno}">${TURNO[p.turno]}</span>
     </button>
   </li>`;
@@ -220,6 +220,7 @@ function render() {
   el('ap-menu-exportar').innerHTML = `<fieldset class="ap-sai"><legend>O que sai na arte da turma</legend>${Object.entries(SAI_ROTULO).map(([k, l]) => `<label><input type="checkbox" data-sai="${k}" ${SAI[k] ? 'checked' : ''}> ${l}</label>`).join('')}</fieldset>`
     + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="img-turma:${esc(t.id)}">Imagem da ${esc(t.id)} (alunos)</button>`).join('')
     + (dados.config.turmas || []).map(t => `<button type="button" role="menuitem" data-exp="pdf-turma:${esc(t.id)}">Imprimir / PDF da ${esc(t.id)} (alunos)</button>`).join('')
+    + (dados.provas.some(p => ESPECIAIS[p.turma]) ? '<hr><button type="button" role="menuitem" data-exp="img-adaptacoes">Imagem: Provas das Adaptações (ADP e DP)</button><button type="button" role="menuitem" data-exp="pdf-adaptacoes">Imprimir / PDF: Provas das Adaptações</button>' : '')
     + '<hr><button type="button" role="menuitem" data-exp="img-turmas">Imagem: todas as turmas lado a lado</button>'
     + '<button type="button" role="menuitem" data-exp="img-aplicadores">Imagem: professores aplicadores</button>'
     + '<button type="button" role="menuitem" data-exp="pdf-turmas">Imprimir / PDF: todas as turmas</button>'
@@ -269,7 +270,7 @@ function lerProva(p) {
       <label class="ap-campo"><span>Tipo de prova</span><input value="${esc(ETAPA[p.etapa] || '')}" disabled></label>
       <label class="ap-campo"><span>Horário</span><input value="${hora(p.horario) || ''} ${TURNO[p.turno]}" disabled></label>
     </div>
-    <label class="ap-campo"><span>Disciplina</span><input value="${esc(p.disciplina)}" disabled></label>
+    <label class="ap-campo"><span>Disciplina</span><input value="${esc(p.disciplina)}${p.questoes ? ` · ${p.questoes} questões` : ''}" disabled></label>
     <label class="ap-campo"><span>Professores aplicadores</span><input value="${esc((p.aplicadores || []).join(', '))}" disabled></label>
     <label class="ap-campo"><span>Laboratório(s)</span><input value="${esc(p.laboratorios)}" disabled></label>
     ${napaDe(p.turma) && napaTxt(p) ? `<label class="ap-campo"><span>NAPA</span><input value="${esc(napaTxt(p))}" disabled></label>` : ''}
@@ -298,7 +299,10 @@ async function abrirProva(id) {
         <label class="ap-campo"><span>Horário</span><input type="time" name="horario" value="${esc(v.horario)}"></label>
         <label class="ap-campo"><span>Tipo</span><select name="tipo">${Object.entries(TIPO).map(([k, l]) => `<option value="${k}" ${k === v.tipo ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
-      <label class="ap-campo"><span>Disciplina</span><input name="disciplina" list="ap-dl-disc" value="${esc(v.disciplina)}" required placeholder="Escolha da lista ou escreva (ex.: OSCE – Teórico e Prático)" autocomplete="off"></label>
+      <div class="ap-grid-disc">
+        <label class="ap-campo"><span>Disciplina</span><input name="disciplina" list="ap-dl-disc" value="${esc(v.disciplina)}" required placeholder="Escolha da lista ou escreva (ex.: OSCE – Teórico e Prático)" autocomplete="off"></label>
+        <label class="ap-campo"><span>Questões</span><input type="number" name="questoes" min="0" max="300" value="${v.questoes ? esc(String(v.questoes)) : ''}" placeholder="Ex.: 40"></label>
+      </div>
       <datalist id="ap-dl-disc"></datalist>
       <div class="ap-campo"><span>Professores aplicadores</span>
         <div class="ap-chips" id="ap-chips">${(v.aplicadores || []).map(a => `<span class="ap-chip-ed">${esc(a)}<button type="button" data-tirar aria-label="Tirar ${esc(a)}">✕</button></span>`).join('')}</div>
@@ -345,7 +349,7 @@ async function abrirProva(id) {
     const pendente = el('ap-add-prof').value.trim(); if (pendente) addProf();
     const corpoReq = {
       semestre: dados.semestre, turma: f.turma.value, data: f.data.value, etapa: f.etapa.value, turno: f.turno.value, horario: f.horario.value,
-      tipo: f.tipo.value, disciplina: f.disciplina.value.trim(), laboratorios: f.laboratorios.value.trim(), observacao: f.observacao.value.trim(),
+      tipo: f.tipo.value, disciplina: f.disciplina.value.trim(), questoes: f.questoes.value, laboratorios: f.laboratorios.value.trim(), observacao: f.observacao.value.trim(),
       aplicadores: [...el('ap-chips').querySelectorAll('.ap-chip-ed')].map(x => x.firstChild.textContent.trim()),
       napa: el('ap-napa-f').hidden ? null : { sala: f.napaSala.value.trim(), responsavel: f.napaResp.value.trim(), notebooks: f.napaNb.value }
     };
@@ -437,6 +441,23 @@ function saidaTurma(tid) {
       <tbody>${b.ps.map(p => `<tr><td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}</td><td>${hora(p.horario) ? `<b>${hora(p.horario)}</b>` : TURNO[p.turno]}</td><td>${esc(p.laboratorios || '')}</td></tr>`).join('')}</tbody></table></section>`).join('') || '<p>Nenhuma prova.</p>'}
     <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
 }
+// arte "Provas das Adaptações" (ADP e DP) — mesmo modelo da lista validada em 17/11/2026
+function saidaAdaptacoes() {
+  const ps = provasVisiveis().filter(p => ESPECIAIS[p.turma]);
+  const icone = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M8 4h8v3H8zM6 5.5H4.8V21h14.4V5.5H18M8 11h8M8 15h8M8 19h5"/></svg>';
+  const iconeQ = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M6 3h9l4 4v14H6zM9 11h7M9 15h7M9 7h3"/></svg>';
+  const iconeH = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M12 7v5l3 2"/></svg>';
+  return `<div class="ap-s ap-s-turma ap-s-adp">${cabecalhoSaida('Provas das Adaptações')}
+    <h2 class="ap-s-adp-tit">${icone} Provas das Adaptações</h2>
+    <table class="ap-s-adp-tab"><thead><tr><th>Data</th><th>Dia</th><th>Disciplina</th><th>Tipo</th><th>Questões</th><th>Horário</th></tr></thead>
+    <tbody>${ps.map(p => `<tr>
+      <td><b>${ddmm(p.data)}</b></td><td>${diaSemana(p.data)}</td><td>${esc(p.disciplina)}${p.etapa !== 'b1' && p.etapa !== 'b2' ? ` <small>(${ETAPA_CURTA[p.etapa]})</small>` : ''}</td>
+      <td><span class="ap-s-adp-tipo ap-s-adp-${p.turma.toLowerCase()}">${p.turma === 'DP' ? 'DP' : 'Adaptação'}</span></td>
+      <td>${p.questoes ? `<span class="ap-s-adp-pill">${iconeQ} ${p.questoes} questões</span>` : ''}</td>
+      <td><span class="ap-s-adp-pill">${iconeH} ${hora(p.horario) || TURNO[p.turno]}</span></td>
+    </tr>`).join('')}</tbody></table>
+    <p class="ap-s-rod">Confirme sempre com a coordenação possíveis alterações.</p></div>`;
+}
 function saidaAplicadores() {
   const provas = provasVisiveis();
   const c = dados.config;
@@ -468,9 +489,10 @@ async function exportar(tipo) {
   const turmaSo = (tipo.match(/-turma:(.+)$/) || [])[1];
   if (turmaSo && !Object.values(SAI).some(Boolean)) { toast('Marque o que vai sair na arte: 1ª chamada, 2ª chamada ou exames.', 'erro'); return; }
   if (turmaSo && !provasVisiveis().some(p => p.turma === turmaSo && SAI[grupoDe(p.etapa)])) { toast(`A ${turmaSo} não tem provas no que foi marcado.`, 'erro'); return; }
+  if (tipo.endsWith('adaptacoes') && !provasVisiveis().some(p => ESPECIAIS[p.turma])) { toast('Não há provas de adaptação ou DP nessa etapa.', 'erro'); return; }
   if (!provasVisiveis().filter(p => !turmaSo || p.turma === turmaSo).length) { toast(turmaSo ? `A ${turmaSo} não tem provas nessa etapa.` : 'Não há provas nessa etapa.', 'erro'); return; }
   const saida = el('ap-saida');
-  saida.innerHTML = turmaSo ? saidaTurma(turmaSo) : tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
+  saida.innerHTML = turmaSo ? saidaTurma(turmaSo) : tipo.endsWith('adaptacoes') ? saidaAdaptacoes() : tipo.endsWith('turmas') ? saidaTurmas() : tipo.endsWith('napa') ? saidaNapa() : saidaAplicadores();
   saida.firstElementChild.insertAdjacentHTML('beforeend', `<footer class="ap-s-pe">
       <span class="ap-s-orbita"><span class="ap-s-orb"><span>F</span><i></i></span><span class="ap-s-orb-nome"><b>ÓRBITA</b> FATEC</span></span>
       <span>Gerado pelo Órbita em ${new Date().toLocaleDateString('pt-BR')}</span>
@@ -488,7 +510,7 @@ async function exportar(tipo) {
     const canvas = await html2canvas(saida.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     const a = document.createElement('a');
     const sufixo = turmaSo ? '-' + Object.keys(SAI).filter(k => SAI[k]).map(k => ({ c1: '1chamada', sub: '2chamada', exame: 'exames' }[k])).join('-') : '';
-    a.download = `${turmaSo ? `calendario-provas-${turmaSo}${sufixo}` : tipo === 'img-turmas' ? 'calendario-provas' : tipo === 'img-napa' ? 'napa-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
+    a.download = `${turmaSo ? `calendario-provas-${turmaSo}${sufixo}` : tipo === 'img-turmas' ? 'calendario-provas' : tipo === 'img-adaptacoes' ? 'provas-adaptacoes' : tipo === 'img-napa' ? 'napa-provas' : 'aplicadores-provas'}-medicina-${dados.semestre}.png`;
     a.href = canvas.toDataURL('image/png'); a.click();
     toast('Imagem baixada. É só mandar no WhatsApp.');
   } catch (e) { toast(e.message, 'erro'); }
