@@ -170,7 +170,7 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
   - O papel de integração precisa de mod/quiz:viewreports (liberado em 25/11) e moodle/grade:viewhidden. Sem esta última, nas provas com a nota oculta no Livro de Notas o relatório vem sem a coluna Nota.
   - O relatório do usuário de integração não traz e-mail nem RA, por isso o RA vem do Edubox pelo nome.
 - **Teste em 25/11 (simulação, sem gravar):** questionário achado nas 6 provas regulares que já aconteceram. Saúde Mental: 56 fizeram e 2 não fizeram, nota sobre 80. As outras 5 esperam moodle/grade:viewhidden. A tela ainda não foi vista no navegador.
-- Tipo: Funcionalidade · Como reverter:  deste commit (a coleção med_resultados_ava pode ser apagada).
+- Tipo: Funcionalidade · Como reverter: `git revert` deste commit (a coleção med_resultados_ava pode ser apagada).
 
 ### [2026-11-24] Medicina › Portfólio Reflexivo: leitura do PDF em tela cheia (modo apresentação)
 - **Por quê:** na correção, o leitor de PDF do navegador abria com a coluna de miniaturas ocupando metade do quadro e a página ficava pequena demais para ler.
