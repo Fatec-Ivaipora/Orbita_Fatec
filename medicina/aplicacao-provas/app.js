@@ -9,7 +9,7 @@ import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
 import { criarImpressao } from "./impressao.js?v=17";
-import { criarResultados } from "./resultados.js?v=1";
+import { criarResultados } from "./resultados.js?v=2";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);

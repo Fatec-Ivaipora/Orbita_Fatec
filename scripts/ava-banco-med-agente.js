@@ -17,6 +17,7 @@
 //   node scripts/ava-banco-med-agente.js --uma-vez [--simular] [--so=<id da avaliação>] [--teste-cmid=<cmid>]
 //   --simular      só confere curso, questionário e pasta; não importa e não grava nada no Órbita
 //   --teste-cmid   importa no questionário indicado (ex.: II Semana Acadêmica) e NÃO grava no Órbita
+//   --so-resultados  só lê e grava os resultados das provas (Aplicação de Provas), sem importar questão
 //
 // Credenciais no .env: AVA_URL, AVA_LOGIN_USUARIO, AVA_LOGIN_SENHA (+ Firebase). Log em scripts/logs/ (fora do git).
 // ==========================================================================
@@ -112,7 +113,7 @@ async function rodada(origem) {
     const inicio = Date.now();
     const simular = !!args.simular, teste = args['teste-cmid'] || null;
     const lista = (await situacaoDoSemestre(args.semestre || semestreAtual()))
-        .filter(s => s.prontas.length && (!args.so || s.id === args.so));
+        .filter(s => s.prontas.length && (!args.so || s.id === args.so) && !args['so-resultados']);
     // na rodada automática, o que já deu "conferir"/"erro" com a MESMA parte pronta espera a secretaria pedir de novo
     const avs = new Map();
     for (const s of lista) avs.set(s.id, (await db.collection(COL_AV).doc(s.id).get()).data());
@@ -120,7 +121,7 @@ async function rodada(origem) {
     const resumo = { importada: 0, ja_estava: 0, conferir: 0, erro: 0, simulado: 0, questoes: 0, quadros: 0 };
     const todas = (await situacaoDoSemestre(args.semestre || semestreAtual())).filter(s => s.total && (!args.so || s.id === args.so));
     const velho = (s) => { const q = s.ava && s.ava.quadro; return !q || !q.lidoEm || Date.now() - new Date(q.lidoEm).getTime() > QUADRO_MS; };
-    const quadros = todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
+    const quadros = args['so-resultados'] ? [] : todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
     const resultados = args.so ? [] : await resultadosAFazer(origem);
     resumo.resultados = 0;
     if (!fila.length && !quadros.length && !resultados.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }

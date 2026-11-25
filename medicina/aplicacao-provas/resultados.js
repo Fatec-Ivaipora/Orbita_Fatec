@@ -35,7 +35,7 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
   function linhaProva(p, r) {
     let situacao;
     if (!r) situacao = '<span class="ar-s ar-s-espera">Ainda não lido</span>';
-    else if (r.status === 'ok') situacao = `<span class="ar-s ar-s-ok"><b>${r.contagem.fizeram}</b> fizeram · <b>${r.contagem.naoFizeram}</b> não fizeram${r.contagem.outros ? ` · ${r.contagem.outros} não enviaram` : ''}</span><span class="ar-media">média ${nota(r.media)} / ${nota(r.notaMax)}</span>`;
+    else if (r.status === 'ok') situacao = `<span class="ar-s ar-s-ok"><b>${r.contagem.fizeram}</b> ${r.contagem.fizeram === 1 ? 'fez' : 'fizeram'} · <b>${r.contagem.naoFizeram}</b> não ${r.contagem.naoFizeram === 1 ? 'fez' : 'fizeram'}${r.contagem.outros ? ` · ${r.contagem.outros} não enviaram` : ''}</span><span class="ar-media">média ${nota(r.media)} / ${nota(r.notaMax)}</span>`;
     else if (r.status === 'aberta') situacao = '<span class="ar-s ar-s-espera">Questionário ainda aberto</span>';
     else situacao = `<span class="ar-s ar-s-alerta">${esc(r.erro || 'não consegui ler')}</span>`;
     const botao = r && r.status === 'ok' ? `<button type="button" class="ar-btn" data-ar-abrir="${esc(p.id)}">Ver alunos</button>`
