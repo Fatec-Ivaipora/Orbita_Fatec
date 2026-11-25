@@ -305,8 +305,22 @@ export function criarImpressao({ api, toast, BASE, dadosAtuais, provasVisiveis }
     tabela('Aplicadores', [['Nº', 12], ['Nome', LARG - 12 - 72], ['Assinatura', 72]], 4);
     tabela('Registro dos dois últimos alunos a deixar a sala', [['Nº', 12], ['Nome do(a) aluno(a)', LARG - 12 - 32 - 52], ['Horário de saída', 32], ['Assinatura', 52]], 2);
   }
+  // cabeçalho da folha de login (25/11/2026, pedido do Suporte AVA): logo do Órbita FATEC à esquerda e MED FATEC
+  // à direita, sem o texto "FATEC Ivaiporã". A logo do Órbita é desenhada (círculo azul-marinho com o F e o ponto laranja).
+  function cabecalhoLogin(doc, logo) {
+    const cx = M + 6, cy = 17.5, r = 6;
+    doc.setLineWidth(0.7); doc.setDrawColor(31, 111, 178); doc.setFillColor(13, 27, 51); doc.circle(cx, cy, r, 'FD');
+    doc.setFillColor(235, 112, 37); doc.circle(cx + 4.3, cy - 4.6, 1.7, 'F');
+    cor(doc, BRANCO); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('F', cx, cy + 2.3, { align: 'center' });
+    const x = cx + r + 3.5;
+    doc.setFontSize(15); cor(doc, [13, 27, 51]); doc.text('ÓRBITA', x, cy + 2.4);
+    const w = doc.getTextWidth('ÓRBITA ');
+    doc.setFont('helvetica', 'normal'); cor(doc, [0, 179, 255]); doc.text('FATEC', x + w, cy + 2.4); cor(doc, PRETO);
+    if (logo) { const h = 11; const lw = h * logo.prop; doc.addImage(logo.data, 'PNG', 210 - M - lw, 12, lw, h); }
+    doc.setDrawColor(...AZUL); doc.setLineWidth(0.8); doc.line(M, 25, 210 - M, 25); doc.setDrawColor(...PRETO);
+  }
   function pdfLogin(doc, logo, a, sl, prova, info) {
-    cabecalho(doc, logo);
+    cabecalhoLogin(doc, logo);
     const lugar = sl.napa ? sl.rotulo.toUpperCase() : `${sl.rotulo.toUpperCase()} · COMPUTADOR ${dois(a.pc)}`;
     doc.setLineWidth(1); doc.setDrawColor(...AZUL); doc.setFillColor(...AZUL_CLARO); doc.rect(M, 31, LARG, 15, 'FD'); doc.setDrawColor(...PRETO);
     cor(doc, AZUL); doc.setFont('helvetica', 'bold'); caber(doc, lugar, LARG - 6, 20); doc.text(lugar, 105, 41.5, { align: 'center' }); cor(doc, PRETO);
