@@ -173,6 +173,16 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>`,
     url: "/medicina/aplicacao-provas/index.html"
   },
+  // OSCE da Medicina (25/11/2026): o professor monta a estação (ou importa o Word) e o Órbita mostra o que pode
+  // melhorar e por quê; a coordenação monta a OSCE (estações, valores, avaliadores); no dia o avaliador marca os
+  // itens na tela e a nota sai somada. Professor vê as próprias estações e avalia só onde é avaliador.
+  "osce-med": {
+    id: "osce-med",
+    category: "medicina",
+    title: "OSCE",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v3h6V3"/><path d="M8 11l2 2 4-4"/><line x1="8" y1="17" x2="16" y2="17"/></svg>`,
+    url: "/medicina/osce/index.html"
+  },
   // Portfólio Reflexivo SCIC (23/11/2026): o professor sobe o ZIP das entregas da Tarefa do AVA e corrige com a
   // MESMA matriz (medicina/portfolio/matriz.js); a nota é calculada, não digitada. Coordenação configura as turmas
   // (objetivos, questão norteadora, corretores) e vê tudo; professor só as turmas em que é corretor.
@@ -387,14 +397,14 @@ export const ROLE_PERMISSIONS = {
   // (ver CARGOS_SEM_CARTAO em core/layout.js).
   coord_medicina: {
     label: "Coordenação Medicina",
-    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "aplicacao-provas-med", "portfolio-med", "agenda-espacos", "cpa", "cad", "correcao-provas"]
+    modules: ["dashboard", "banco-med-fatec", "relatorio-desempenho", "aplicacao-provas-med", "osce-med", "portfolio-med", "agenda-espacos", "cpa", "cad", "correcao-provas"]
   },
   // Professor da Medicina — mesmo acesso do coord_medicina (Meu Espaço +
   // Banco de Questões), cargo separado só pra aparecer com rótulo próprio na
   // tela de Usuários (não misturar professor com coordenador na listagem).
   professor_medicina: {
     label: "Professor Medicina",
-    modules: ["dashboard", "banco-med-fatec", "agenda-espacos"] // 16/11/2026: menu Medicina só com o Banco (Portfólio Reflexivo: só coordenação por enquanto, 23/11)
+    modules: ["dashboard", "banco-med-fatec", "osce-med", "agenda-espacos"] // OSCE (25/11/2026): monta as próprias estações e avalia onde é avaliador. 16/11/2026: menu Medicina só com o Banco (Portfólio Reflexivo: só coordenação por enquanto, 23/11)
   },
   // Setor Comercial — por enquanto só o Meu Espaço (Painel do Setor, Quadro
   // de Avisos, atividades). Módulo próprio do comercial ainda vai ser criado;

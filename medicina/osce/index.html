@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSCE · Órbita - FatecIVP</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/core/layout.css">
+  <link rel="stylesheet" href="/core/orbita.css?v=3">
+  <link rel="stylesheet" href="/medicina/osce/osce.css?v=3">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+  <script src="/banco-med-fatec/revisao-pt.js?v=1"></script>
+  <script src="/medicina/osce/conferencia.js?v=1"></script>
+</head>
+<body class="orb-v2">
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <div class="layout-main">
+      <div class="layout-content">
+        <main class="oc-main">
+          <header class="oc-cab">
+            <div class="oc-cab-txt">
+              <img src="/img/medfatec-logo.png" alt="MED FATEC" class="oc-logo">
+              <div>
+                <h1>OSCE</h1>
+                <p>Estações, avaliação na estação e nota somada · os critérios valem para todos os avaliadores</p>
+              </div>
+            </div>
+            <div class="oc-cab-ctrl">
+              <label class="oc-sem"><span>Semestre</span><select id="oc-semestre"></select></label>
+            </div>
+          </header>
+          <nav class="oc-trilha" id="oc-trilha" aria-label="Onde você está"></nav>
+          <section id="oc-conteudo" class="oc-conteudo"><div class="oc-vazio">Carregando…</div></section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="oc-impressao" class="oc-impressao" aria-hidden="true"></div>
+  <input type="file" id="oc-word" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+
+  <script type="module" src="/medicina/osce/app.js?v=2"></script>
+</body>
+</html>
