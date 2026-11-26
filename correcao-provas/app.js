@@ -262,7 +262,7 @@ function blocoIdent() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome da avaliação <small>(opcional — se ficar vazio, usa o tipo e a disciplina)</small><input id="f-nome" maxlength="120" value="${esc(f.nome)}" placeholder="${esc(nomeAuto({ ...f, tipo: dpFixo ? 'dp' : f.tipo, disciplina: dpFixo && f.dp ? f.dp.nome : f.disciplina }))}"></label>
       <label class="cp-campo">Data da aplicação <input type="date" id="f-data" value="${esc(f.data)}"></label>
-      <label class="cp-campo">Valor da prova <small>(opcional)</small><input type="number" id="f-valor" min="0" max="100" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: 2,0"></label>
+      <label class="cp-campo">Valor da prova <small>(até 10 — escala do Edubox, 10 = 100%)</small><input type="number" id="f-valor" min="0" max="10" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: simulado 2,0"></label>
     </div>
   </section>`;
 }
@@ -431,8 +431,8 @@ function certaNaFolha(l, i) {
   if (acertou(q.g, resp)) return true;
   return !!(av.aceitarDupla && resp === '*' && q.g && q.g !== 'X' && [...String((l.duplas || {})[i] || '')].some(x => q.g.includes(x)));
 }
-// Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. Igual ao backend.
-const arredNota = (v) => Math.round(v + 1e-9);
+// Nota na escala do Edubox (10 = 100%), 1 casa, meio pra cima (26/11/2026): 2,44 → 2,4; 2,45 → 2,5. Igual ao backend.
+const arredNota = (v) => Math.round(v * 10 + 1e-9) / 10;
 // Questão de disciplina que o coordenador marcou DISPENSA para este aluno (sai do cálculo da nota dele).
 const dispensou = (l, i) => !!(l && l.dispensadas && av.questoes[i].d && l.dispensadas[av.questoes[i].d]);
 function resultado(l) {
@@ -633,7 +633,7 @@ function abaGabarito() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome <input id="g-nome" value="${esc(f.nome)}" ${ed ? '' : 'disabled'}></label>
       <label class="cp-campo">Data <input type="date" id="g-data" value="${esc(f.data)}" ${ed ? '' : 'disabled'}></label>
-      <label class="cp-campo">Valor <input type="number" id="g-valor" step="0.1" min="0" value="${esc(f.valorTotal)}" ${ed ? '' : 'disabled'}></label>
+      <label class="cp-campo">Valor <small>(até 10)</small><input type="number" id="g-valor" step="0.1" min="0" max="10" value="${esc(f.valorTotal)}" placeholder="Ex.: 2,0" ${ed ? '' : 'disabled'}></label>
     </div>
     <div class="cp-campos">
       <label class="cp-campo">Tipo <select id="g-tipo" ${ed ? '' : 'disabled'}>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${f.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -702,7 +702,7 @@ async function baixarPlanilha(btn) {
 
 // ---------- ARQUIVO PARA O EDUBOX (04/11/2026) ----------
 // Mesmo modelo da Trilha EAD (docencia/trilha-ead): CSV UTF-8 com BOM, cabeçalho "Nome;Nota", uma
-// linha por aluno, nota inteira (arredondada) escrita com ponto e 1 casa (o Edubox guarda numeric(3,1)), UM ARQUIVO POR TURMA
+// linha por aluno, nota com ponto e 1 casa (o Edubox guarda numeric(3,1) e recusa nota acima de 10), UM ARQUIVO POR TURMA
 // (= diário do Edubox; os alunos vêm do CADD, com o nome igual ao do Edubox), em ordem alfabética.
 // Quem não teve folha lida sai com 0 — avisado antes, como a Trilha faz com quem não fez nada no AVA.
 const SEM_TURMA = '__sem_turma__';
@@ -737,8 +737,9 @@ function dialogoEdubox() {
   d.innerHTML = `<div class="cp-modal-box cp-modal-edubox"><h2>Arquivo para o Edubox</h2>
     <p class="cp-dica">Uma linha por aluno: <b>Nome;Nota</b>, com ponto (ex.: 1.5). Mesmo modelo do arquivo da Trilha EAD. Um arquivo por turma (diário do Edubox), com os alunos da turma.</p>
     ${grupos.filter(g => g.turma).length > 1 ? `<div class="cp-aviso-banco">Esta prova foi aplicada a <b>${grupos.filter(g => g.turma).length} períodos juntos</b>. No Edubox cada período é um diário separado, então sai <b>um arquivo por período</b> — os alunos não se misturam. Importe cada arquivo no diário do período dele.</div>` : ''}
+    ${Number(av.valorTotal) > 10 ? `<div class="cp-alerta">O <b>Valor da prova</b> está em ${String(av.valorTotal).replace('.', ',')}, mas o Edubox só aceita nota até 10 (10 = 100%). Um simulado de 2,0 pontos tem valor <b>2</b>, não 20. Corrija o Valor na aba <b>Gabarito</b> antes de gerar o arquivo.</div>` : ''}
     ${semValor ? '<div class="cp-alerta">Esta avaliação está sem <b>Valor da prova</b>, então não há nota pra lançar. Preencha o Valor na aba <b>Gabarito</b> e volte aqui.</div>'
-      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), arredondada para inteiro (24,4 → 24; 24,5 → 25).</p>`}
+      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), com 1 casa (2,44 → 2,4; 2,45 → 2,5).</p>`}
     <div class="cp-edubox-lista">
       ${grupos.map(g => {
         const sem = g.alunos.filter(a => !leituras[a.i]).length;
