@@ -532,21 +532,25 @@ router.post('/', async (req, res) => {
 // que a fila marca como pronto (src/utils/banco-med-ava-fila.js). Aqui a secretaria acompanha, pede "Enviar agora",
 // baixa o arquivo do que está pronto (se precisar importar à mão) e registra "já está no AVA".
 const FilaAva = require('../utils/banco-med-ava-fila');
+const { pedirAoAgente, estadoDoAgente } = require('../utils/ava-pedidos');
 const cfgAva = () => db.collection('config').doc('ava_banco_sync');
 router.get('/envio-ava', async (req, res) => {
     try {
         exigeEditorAv(req, 'acompanham o envio ao AVA');
         const sem = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : FilaAva.semestreAtual();
-        const [provas, cfg] = await Promise.all([FilaAva.situacaoDoSemestre(sem), cfgAva().get()]);
-        const c = cfg.exists ? cfg.data() : {};
-        res.json({ semestre: sem, agente: { vivoEm: c.agenteVivoEm || null, intervaloMin: c.intervaloMin || 15, ultimaRodada: c.ultimaRodada || null, pedidoEm: c.pedidoEm || null, pedidoPorNome: c.pedidoPorNome || '' }, provas });
+        const [provas, agente] = await Promise.all([FilaAva.situacaoDoSemestre(sem), estadoDoAgente()]);
+        res.json({ semestre: sem, agente, provas });
     } catch (e) { erro(res, e); }
 });
 router.post('/envio-ava/agora', async (req, res) => {
     try {
         exigeEditorAv(req, 'pedem o envio ao AVA');
-        await cfgAva().set({ pedidoEm: agora(), pedidoPorNome: quem(req) }, { merge: true });
-        res.json({ message: 'Pedido enviado: o envio automático começa em instantes.' });
+        // 26/11/2026: com { id } é só aquela prova ("Enviar esta prova"); sem id, a conferência completa ("Conferir todas")
+        const id = req.body && req.body.id ? String(req.body.id) : null;
+        if (id) await lerAvaliacao(id);
+        const p = await pedirAoAgente({ tipo: id ? 'envio' : 'tudo', alvo: id, por: quem(req) });
+        res.json({ ...p, message: id ? (p.jaNaFila ? 'Esta prova já está na fila do AVA.' : `Pedido enviado: o Órbita confere esta prova no AVA${p.naFrente ? ` (${p.naFrente} pedido(s) na frente)` : ''}.`)
+            : 'Pedido enviado: o Órbita confere todas as provas no AVA. Pode levar de 5 a 15 minutos.' });
     } catch (e) { erro(res, e); }
 });
 // dados para montar no navegador o XML só do que está pronto (igual ao /exportar; GIF grande não passa pelo servidor)
@@ -872,7 +876,7 @@ router.post('/:id/ava-trazer', async (req, res) => {
         exigeRascunho(av);
         const agoraIso = agora();
         await db.collection(COL_AV).doc(av.id).set({ avaTrazer: { status: 'pedido', pedidoEm: agoraIso, pedidoPor: quem(req) } }, { merge: true });
-        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: agoraIso, pedidoPorNome: quem(req) }, { merge: true });
+        await pedirAoAgente({ tipo: 'trazer', alvo: av.id, por: quem(req) });
         res.json({ message: 'Pedido enviado: o Órbita busca as questões no AVA em instantes.' });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
@@ -902,7 +906,7 @@ router.post('/:id/ava-levar', async (req, res) => {
         if (!pend.length) return res.status(400).json({ error: 'Nenhuma questão alterada esperando ir para o AVA.' });
         const agoraIso = agora();
         await db.collection(COL_AV).doc(av.id).set({ avaLevar: { status: 'pedido', pedidoEm: agoraIso, pedidoPor: quem(req), total: pend.length } }, { merge: true });
-        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: agoraIso, pedidoPorNome: quem(req) }, { merge: true });
+        await pedirAoAgente({ tipo: 'levar', alvo: av.id, por: quem(req) });
         res.json({ message: `Pedido enviado: ${pend.length} questão(ões) vão ser alteradas no AVA em instantes.`, total: pend.length });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });

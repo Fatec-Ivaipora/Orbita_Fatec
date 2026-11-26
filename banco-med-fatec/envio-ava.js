@@ -13,6 +13,7 @@ let api, esc;
 let dados = null;
 let filtro = 'acao';
 let carregando = false;
+let timerFila = null; // recarrega sozinho enquanto há pedido na fila (26/11/2026)
 let jaEscolheu = false; // a pessoa já clicou num filtro
 let confirmando = null; // id da prova com "Já está no AVA" aberto para confirmar
 
@@ -57,6 +58,9 @@ async function carregar() {
       filtro = (['direto', 'acao', 'pronta', 'aguardando'].find(k => visiveis.some(FILTROS.find(f => f[0] === k)[2]))) || 'todas';
     }
     render();
+    clearTimeout(timerFila);
+    const aba = $('#bmf-view-envio-ava');
+    if (((dados.agente.pedidos || []).length || dados.agente.rodandoDesde) && aba && !aba.classList.contains('hidden')) timerFila = setTimeout(carregar, 8000);
   } catch (e) {
     $('#bmf-view-envio-ava').innerHTML = `<p class="av-vazio">Não consegui carregar o envio ao AVA: ${esc(e.message)}</p>`;
   } finally { carregando = false; }
@@ -65,12 +69,16 @@ async function carregar() {
 function estadoAgente(a) {
   const vivo = a.vivoEm && (Date.now() - new Date(a.vivoEm).getTime()) < 15 * 60000;
   const u = a.ultimaRodada;
-  const ultima = u ? (u.ok ? `Última conferência ${dataHora(u.em)}${u.resumo && (u.resumo.importada || u.resumo.ja_estava) ? `: ${u.resumo.importada || 0} prova(s) importada(s), ${u.resumo.ja_estava || 0} já estavam no AVA` : ''}.` : `Última tentativa ${dataHora(u.em)} falhou: ${esc(u.erro || '')}`) : 'Ainda não rodou.';
-  const pedido = a.pedidoEm && (!u || a.pedidoEm > u.em) ? ` Pedido de ${esc(a.pedidoPorNome || 'alguém')} às ${dataHora(a.pedidoEm)}, aguardando.` : '';
+  const ultima = u ? (u.ok ? `Última conferência completa ${dataHora(u.em)}.` : `Última tentativa ${dataHora(u.em)} falhou: ${esc(u.erro || '')}`) : '';
+  const fila = (a.pedidos || []).length;
+  // 26/11/2026: o agente avisa quando está trabalhando; a fila mostra quantos pedidos esperam
+  const agora = a.rodandoDesde ? ` <b>Conferindo agora no AVA</b> desde ${dataHora(a.rodandoDesde).slice(-5)}${a.rodandoOrigem === 'automatica' ? ' (conferência automática)' : ''}.` : '';
+  const filaTxt = fila ? ` ${fila} pedido(s) na fila: a tela se atualiza sozinha.` : '';
   return vivo
-    ? `<p class="ea-agente ea-agente-ok"><span class="ea-ponto"></span><span><b>Envio automático ligado</b> — confere a cada ${a.intervaloMin || 15} min. ${ultima}${pedido}</span></p>`
+    ? `<p class="ea-agente ea-agente-ok"><span class="ea-ponto ${a.rodandoDesde ? 'ea-ponto-ativo' : ''}"></span><span><b>Envio automático ligado</b> — confere tudo a cada ${a.intervaloMin || 15} min.${agora}${filaTxt} ${ultima}</span></p>`
     : `<p class="ea-agente ea-agente-fora"><span class="ea-ponto"></span><span><b>Envio automático fora do ar.</b> As questões prontas não vão sozinhas: baixe o arquivo de cada prova e importe no AVA, ou avise o Suporte AVA. ${ultima}</span></p>`;
 }
+
 
 function professorHtml(p) {
   let estado, cls;
@@ -114,6 +122,20 @@ function proximoPasso(p) {
   if (p.situacao === 'no_ava') return { tom: 'ok', txt: '<b>Tudo certo:</b> as questões estão no AVA.' };
   return { tom: 'espera', txt: 'Sem questões no Órbita ainda.' };
 }
+// pedido aberto desta prova (envio, trazer ou levar): mostra "na fila" / "conferindo agora" no lugar dos botões
+function pedidoDaProva(p) {
+  const ped = ((dados && dados.agente && dados.agente.pedidos) || []).find(x => x.alvo === p.id && ['envio', 'trazer', 'levar'].includes(x.tipo));
+  if (!ped) return '';
+  const oque = { envio: 'Enviando esta prova', trazer: 'Trazendo do AVA', levar: 'Levando alterações' }[ped.tipo];
+  return ped.status === 'rodando'
+    ? `<span class="ea-pedido ea-pedido-ativo"><span class="av-spin"></span>${oque} agora…</span>`
+    : `<span class="ea-pedido">Na fila desde ${dataHora(ped.em).slice(-5)} — ${oque.toLowerCase()}</span>`;
+}
+// "Enviar esta prova": só esta prova (manda o que está pronto e relê o questionário) — leva segundos
+function botaoEnviar(p) {
+  const n = p.prontas.length;
+  return `<button type="button" class="btn ${n ? 'btn-primary' : 'btn-secondary'} av-btn" data-ea-enviar-prova="${esc(p.id)}" title="Só esta prova: ${n ? 'manda as questões prontas e ' : ''}confere o questionário no AVA">${ic('importar')}${n ? `Enviar esta prova (${n})` : 'Conferir no AVA'}</button>`;
+}
 function provaHtml(p) {
   const s = SITUACAO[p.situacao] || SITUACAO.aguardando;
   const q = (p.ava && p.ava.quadro) || null;
@@ -137,7 +159,7 @@ function provaHtml(p) {
       ${numero('No questionário do AVA', q && !q.erro ? `${q.noQuestionario}` : '–', q && !q.erro ? `nota máx. ${fmt(q.notaMaxima)}` : 'não lido')}
       ${temOrigem ? numero('Quem colocou', `${q.pelaOrbita || 0} <i>Órbita</i> · ${q.direto} <i>direto</i>`, '', q.direto ? 'ea-n-alerta' : '') : ''}
     </div>
-    <div class="ea-passo"><p>${passo.txt}</p><div class="ea-passo-acoes">${passo.botao || ''}${acoes}</div></div>
+    <div class="ea-passo"><p>${passo.txt}</p><div class="ea-passo-acoes">${pedidoDaProva(p) || `${passo.botao || ''}${botaoEnviar(p)}${acoes}`}</div></div>
     <details class="ea-det"><summary>Ver detalhes</summary>
       ${p.ava.quiz ? `<p><b>No AVA:</b> ${esc(p.ava.curso)} › ${esc(p.ava.quiz)}</p>` : ''}
       ${q && !q.erro ? `<p>Soma das notas ${fmt(q.somaNotas)} · nota máxima ${fmt(q.notaMaxima)}${q.naPasta !== null && q.naPasta !== undefined ? ` · ${q.naPasta} na pasta do banco` : ''}</p>${q.abertura ? `<p>${esc(q.abertura)}</p>` : ''}<p class="ea-quadro-lido">Lido no AVA em ${dataHora(q.lidoEm)}</p>` : ''}
@@ -161,7 +183,7 @@ function render() {
           <p class="av-nota">O professor termina no Órbita. Quando ele cumpre a parte dele (a cota da disciplina, com tudo no padrão) ou a prova é finalizada, as questões vão sozinhas para o banco de questões do questionário no AVA, na pasta disciplina / semestre / bimestre / chamada. Colocar as questões dentro do questionário continua sendo feito no AVA.</p>
         </div>
         <div class="ea-topo-acoes">
-          <button type="button" class="btn btn-primary av-btn" data-ea-agora>Enviar agora</button>
+          <button type="button" class="btn btn-secondary av-btn" data-ea-agora title="Confere todas as provas no AVA: pode levar de 5 a 15 minutos">Conferir todas</button>
           <button type="button" class="btn btn-secondary av-btn" data-ea-recarregar>Atualizar</button>
         </div>
       </header>
@@ -204,6 +226,12 @@ export function iniciarEnvioAva(opcoes) {
     if (b.dataset.eaConfirmar) { confirmando = b.dataset.eaConfirmar; render(); return; }
     if (b.dataset.eaBaixar) { await baixarArquivo(b.dataset.eaBaixar, b); return; }
     if (b.dataset.eaTrazer) { await abrirProvaParaTrazer(b.dataset.eaTrazer); return; }
+    if (b.dataset.eaEnviarProva) {
+      b.disabled = true;
+      try { const r = await api(`${BASE}/agora`, { method: 'POST', body: JSON.stringify({ id: b.dataset.eaEnviarProva }) }); toast(r.message); await carregar(); }
+      catch (e) { toast(e.message, 'erro'); b.disabled = false; }
+      return;
+    }
     if (b.hasAttribute('data-ea-agora')) {
       b.disabled = true;
       try { const r = await api(`${BASE}/agora`, { method: 'POST' }); toast(r.message); setTimeout(carregar, 20000); await carregar(); }

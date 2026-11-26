@@ -99,6 +99,33 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] AVA: pedido por prova ("Enviar esta prova") em vez de conferir tudo a cada clique
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/ava-pedido-rapido
+- Arquivos alterados:
+  - `src/utils/ava-pedidos.js` (novo): fila `ava_pedidos` com `{ tipo: 'envio'|'resultados'|'trazer'|'levar'|'tudo', alvo, por, em, status }`. O mesmo pedido já na fila é reaproveitado. `estadoDoAgente()` devolve para as telas a fila e se o agente está trabalhando (`rodandoDesde`).
+  - `scripts/ava-banco-med-agente.js`: atende os pedidos da fila um por um, marcando cada um como feito ou erro:
+    - "envio": manda o que está pronto daquela prova e relê o questionário dela;
+    - "resultados": lê aquela prova, ou todas se não houver alvo;
+    - "trazer" e "levar": fazem só isso;
+    - "tudo": a rodada completa.
+    - Pedido que chega durante uma rodada passa na frente da automática.
+    - Grava `rodandoDesde` e `rodandoOrigem` enquanto trabalha.
+  - `src/rotas/banco-med-avaliacoes.js`: `POST /envio-ava/agora { id }` pede só aquela prova; sem id, "Conferir todas". Trazer e Levar viram pedidos. `GET /envio-ava` devolve o estado do agente com a fila.
+  - `src/rotas/aplicacao-provas-med.js`: `POST /resultados/agora { provaId }` lê só aquela prova.
+  - `banco-med-fatec/envio-ava.js` (v=6):
+    - botão **Enviar esta prova (N)** ou **Conferir no AVA** em cada prova;
+    - o topo vira "Conferir todas";
+    - a prova mostra "Na fila desde…" ou "Enviando esta prova agora…";
+    - a faixa do agente mostra "Conferindo agora no AVA desde…";
+    - a tela se recarrega sozinha a cada 8 s enquanto há pedido.
+  - `banco-med-fatec/avaliacoes.css` (v=36), `app.js`, `index.html` (app.js v=86).
+  - `medicina/aplicacao-provas/resultados.js` (v=4): dentro de uma prova, "Ler de novo no AVA" lê só ela. `app.js` e `index.html` (app.js v=28).
+- Tipo: Melhoria
+- Motivo: o "Enviar agora" refazia tudo (relia os 30 questionários e todos os resultados) e levava mais de 10 minutos. Enquanto isso a tela ficava em "aguardando". O usuário pediu o envio na própria prova.
+- Depois do merge, no droplet: `git pull` + `npm ci` e `systemctl restart orbita-ava-banco-agente`.
+- Como reverter: reverter o commit. A coleção `ava_pedidos` pode ser apagada.
+
 ### [2026-11-26] Envio ao AVA: disciplina só com curso de adaptação/DP e contagem de questionário vazio
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/ava-contagem-e-curso-adp
