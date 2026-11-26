@@ -99,6 +99,16 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Envio ao AVA: questão trazida do AVA nunca é enviada de novo
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/trazida-do-ava-nao-reenvia
+- Arquivos alterados:
+  - `src/utils/banco-med-ava-fila.js` (`situacaoDaAvaliacao`): questão com `avaOrigem`, trazida pelo "Trazer do AVA", conta como já enviada. Ela não entra em "prontas" nem volta para a fila de envio. A correção dela vai pelo "Levar alterações para o AVA", que edita a mesma questão lá.
+- Tipo: Correção
+- Motivo: as questões trazidas do AVA, para validar, não estavam marcadas como enviadas. Com a prova finalizada, o envio podia importar de novo no banco do questionário e duplicar. Na maioria dos casos ele já parava sozinho ("não importou para não duplicar").
+- Depois do merge, no droplet: `git pull` + `npm ci` e `systemctl restart orbita-ava-banco-agente`.
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Banco MED: aviso de prova montada nos dois lugares (Órbita e por fora no AVA)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/ava-prova-nos-dois-lugares

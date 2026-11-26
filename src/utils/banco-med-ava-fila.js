@@ -40,7 +40,9 @@ async function situacaoDaAvaliacao(av, critCache = new Map()) {
     const fin = av.status === 'finalizada';
     const questoes = await lerQuestoes(av.questoesIds || []);
     const ab = av.avaBanco || {};
-    const enviadas = new Set(ab.enviadas || []);
+    // questão trazida do AVA (Trazer do AVA, 26/11/2026) já está lá: conta como enviada e nunca volta para a fila —
+    // senão, com a prova finalizada, o envio poderia importar de novo no banco do questionário (duplicada)
+    const enviadas = new Set([...(ab.enviadas || []), ...questoes.filter(q => q.avaOrigem && q.avaOrigem.id).map(q => q.id)]);
 
     // por professor
     const grupos = new Map();
