@@ -396,11 +396,15 @@ router.post('/avaliacoes', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+const nomeSocialUtil = require('../utils/nome-social');
 async function carregar(req, id) {
     const s = await db.collection(COL).doc(String(id)).get();
     if (!s.exists) return { erro: [404, 'Avaliação não encontrada.'] };
     const av = { id: s.id, ...s.data() };
     if (!podeAvaliacao(await escopo(req), av)) return { erro: [403, 'Você não tem acesso a esta avaliação.'] };
+    // nome social (26/11/2026): a avaliação guarda os nomes do dia em que foi criada — sai sempre com o nome social
+    await nomeSocialUtil.carregarNomesSociais().catch(() => {});
+    av.alunos = (av.alunos || []).map(a => ({ ...a, nome: nomeSocialUtil.trocarNoTexto(a.nome) }));
     return { av };
 }
 

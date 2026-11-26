@@ -8,7 +8,15 @@
 // ==========================================
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-let cache = null; // { em, social: Map(registro → social), registro: Map(social → registro) }
+let cache = null; // { em, social: Map(registro → social), registro: Map(social → registro), trocas: [{ re, social }] }
+
+// nome de registro como expressão: sem diferença de maiúscula, acento e espaço (o Edubox às vezes tem espaço duplo)
+const VARIANTES = { A: '[AÁÀÂÃÄaáàâãä]', E: '[EÉÈÊËeéèêë]', I: '[IÍÌÎÏiíìîï]', O: '[OÓÒÔÕÖoóòôõö]', U: '[UÚÙÛÜuúùûü]', C: '[CÇcç]', N: '[NÑnñ]' };
+function expressaoDoNome(nome) {
+    const partes = norm(nome).split(' ').filter(Boolean)
+        .map(p => [...p].map(ch => VARIANTES[ch] || (/[A-Z]/.test(ch) ? `[${ch}${ch.toLowerCase()}]` : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join(''));
+    return partes.length >= 2 ? new RegExp(`(?<![\\p{L}])${partes.join('[\\s.]+')}(?![\\p{L}])`, 'gu') : null;
+}
 
 async function carregarNomesSociais() {
     if (cache && Date.now() - cache.em < 10 * 60 * 1000) return cache;
@@ -18,9 +26,31 @@ async function carregarNomesSociais() {
     cache = {
         em: Date.now(),
         social: new Map(lista.filter(a => a.nomeRegistro && a.nomeSocial).map(a => [norm(a.nomeRegistro), a.nomeSocial])),
-        registro: new Map(lista.filter(a => a.nomeRegistro && a.nomeSocial).map(a => [norm(a.nomeSocial), a.nomeRegistro]))
+        registro: new Map(lista.filter(a => a.nomeRegistro && a.nomeSocial).map(a => [norm(a.nomeSocial), a.nomeRegistro])),
+        trocas: lista.filter(a => a.nomeRegistro && a.nomeSocial).map(a => ({ re: expressaoDoNome(a.nomeRegistro), social: a.nomeSocial })).filter(t => t.re)
     };
     return cache;
+}
+
+// NOME SOCIAL EM TODO O ÓRBITA (26/11/2026): troca o nome de registro pelo nome social em QUALQUER texto — campo
+// inteiro ("nome": "...") ou dentro de uma frase ("Fulano de Tal tirou 8,0"). Nome completo, sem diferença de
+// maiúscula/acento/espaço. Usado na saída de TODA a API (api/index.js) e onde o servidor monta arquivo (Excel).
+function trocarNoTexto(s) {
+    if (!cache || !cache.trocas.length || typeof s !== 'string' || s.length < 5) return s;
+    let out = s;
+    for (const t of cache.trocas) { t.re.lastIndex = 0; if (t.re.test(out)) { t.re.lastIndex = 0; out = out.replace(t.re, t.social); } }
+    return out;
+}
+function trocarNoObjeto(v, prof = 0) {
+    if (!cache || !cache.trocas.length || prof > 40) return v;
+    if (typeof v === 'string') return trocarNoTexto(v);
+    if (Array.isArray(v)) { let mudou = false; const a = v.map(x => { const y = trocarNoObjeto(x, prof + 1); if (y !== x) mudou = true; return y; }); return mudou ? a : v; }
+    if (v && typeof v === 'object' && (v.constructor === Object || !v.constructor)) {
+        let mudou = false; const o = {};
+        for (const k of Object.keys(v)) { const y = trocarNoObjeto(v[k], prof + 1); if (y !== v[k]) mudou = true; o[k] = y; }
+        return mudou ? o : v;
+    }
+    return v;
 }
 
 // nome de registro (como vem do Edubox) → nome social, se o aluno tiver
@@ -38,4 +68,4 @@ async function aplicarNasLinhas(linhas) {
     return linhas.map(l => (l && typeof l.nome === 'string' && cache.social.has(norm(l.nome)) ? { ...l, nome: cache.social.get(norm(l.nome)) } : l));
 }
 
-module.exports = { carregarNomesSociais, nomeSocial, nomeRegistro, aplicarNasLinhas };
+module.exports = { carregarNomesSociais, nomeSocial, nomeRegistro, aplicarNasLinhas, trocarNoTexto, trocarNoObjeto };
