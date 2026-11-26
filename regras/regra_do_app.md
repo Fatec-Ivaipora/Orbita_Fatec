@@ -3116,3 +3116,10 @@ Para garantir que o front-end estático e a API servida em Node.js (funções se
 - Funcionários: o universo não existe no Edubox (63 cadastros sem cargo); mostramos respondentes por cargo cadastrado. Docentes: universo = professores avaliados pelos alunos no ciclo.
 - PDF "Relatório institucional completo" = capa + quadro consolidado por dimensão (alunos × docentes × funcionários) + relatório de cada público. Conferido contra o Edubox: 0 divergências (campanhas 75, 77, 78).
 - Cuidado: scripts Python no Windows gravam CRLF; converter para LF após patch.
+
+### [2026-11-26] Migração de infraestrutura — Coolify (self-hosted)
+- **Motivo**: deixar o repositório privado sem perder deploy automático. O Vercel (plano Hobby) não permite deploy a partir de repositório privado de organização sem pagar; a saída foi sair do Vercel e hospedar num Coolify próprio (servidor da Iguana IT).
+- **Como está hoje**: aplicação `orbita-fatec-v2` no Coolify, ligada via GitHub App (não mais usuário/senha ou deploy key) ao repositório `Fatec-Ivaipora/Orbita_Fatec`, branch `main` — push nela deve disparar deploy automático (webhook do GitHub App), sem precisar chamar a API do Coolify manualmente. Build via Nixpacks (detecta Node sozinho, roda `npm ci` e `npm run start`).
+- **CORS**: domínio temporário do Coolify é um subdomínio de `sslip.io` (`<uuid-da-app>.177.104.189.118.sslip.io`); liberado no `api/index.js` por regex restrita a esse IP específico, não a qualquer `sslip.io`.
+- **Pendente**: domínio próprio (o link `sslip.io` é feio/confunde usuário), resolver os avisos `SecretsUsedInArgOrEnv` do Nixpacks (variáveis de ambiente hoje viram ARG/ENV do Docker), repetir a migração pra SIGMA/Conecta/Gestão de TI/site novo, e então voltar o repositório a privado.
+- Este commit também serve de teste: confirma se o webhook do GitHub App dispara o deploy sozinho no Coolify.
