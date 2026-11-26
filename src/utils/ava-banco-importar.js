@@ -10,10 +10,52 @@
 //   4. sobe o XML (só as questões novas, com imagens) e importa com "categoria do arquivo";
 //   5. reconta a pasta.
 // ==========================================================================
-const { lerCursos, lerQuestionarios, lerFormImportacao, lerResumoQuestionario, lerResultadoImportacao } = require('./ava-sessao');
+const { lerCursos, lerQuestionarios, lerFormImportacao, lerResumoQuestionario, lerResultadoImportacao, semTags } = require('./ava-sessao');
 const { montarXmlDaAvaliacao } = require('./banco-med-xml-ava');
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+
+// ---------- formulário do AVA (editor de questão) — 26/11/2026 ----------
+const escHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function decodificarHtml(s) {
+    return String(s || '').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+        .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+function atributo(tag, nome) {
+    const m = tag.match(new RegExp(`\\s${nome}\\s*=\\s*"([^"]*)"`, 'i')) || tag.match(new RegExp(`\\s${nome}\\s*=\\s*'([^']*)'`, 'i'));
+    return m ? m[1] : null;
+}
+// campos do formulário na ordem em que o navegador enviaria: [[nome, valor], ...]
+function lerCamposForm(form) {
+    const out = [];
+    const re = /<(input|textarea|select)\b([^>]*)>/gi;
+    let m;
+    while ((m = re.exec(form))) {
+        const tag = m[1].toLowerCase(), attrs = m[0];
+        const nomeBruto = atributo(attrs, 'name');
+        if (!nomeBruto) continue;
+        const nome = decodificarHtml(nomeBruto);
+        if (tag === 'input') {
+            const tipo = (atributo(attrs, 'type') || 'text').toLowerCase();
+            if (['submit', 'button', 'image', 'reset', 'file'].includes(tipo)) continue;
+            if ((tipo === 'checkbox' || tipo === 'radio') && !/\schecked\b/i.test(attrs)) continue;
+            out.push([nome, decodificarHtml(atributo(attrs, 'value') || (tipo === 'checkbox' ? 'on' : ''))]);
+        } else if (tag === 'textarea') {
+            const fim = form.indexOf('</textarea>', re.lastIndex);
+            out.push([nome, decodificarHtml(form.slice(re.lastIndex, fim < 0 ? re.lastIndex : fim))]);
+            if (fim >= 0) re.lastIndex = fim;
+        } else {
+            const fim = form.indexOf('</select>', re.lastIndex);
+            const opcoes = [...form.slice(re.lastIndex, fim < 0 ? re.lastIndex : fim).matchAll(/<option\b([^>]*)>/gi)].map(o => o[1]);
+            const marcadas = opcoes.filter(o => /\sselected\b/i.test(' ' + o));
+            const vale = (o) => decodificarHtml(atributo(' ' + o, 'value') || '');
+            if (/\smultiple\b/i.test(attrs)) marcadas.forEach(o => out.push([nome, vale(o)]));
+            else if (opcoes.length) out.push([nome, vale(marcadas[0] || opcoes[0])]);
+            if (fim >= 0) re.lastIndex = fim;
+        }
+    }
+    return out;
+}
 
 function questionarioDaProva(p, nome) {
     const n = norm(nome);
@@ -78,6 +120,78 @@ class ImportadorBancoAva {
         const qs = (await this.questionariosDoCurso(curso.id)).filter(q => questionarioDaProva(sit, q.nome));
         if (qs.length !== 1) return { curso: curso.nome, cursoId: curso.id, erro: qs.length ? `mais de um questionário possível (${qs.map(q => q.nome).join(' / ')})` : `o curso não tem o questionário da prova (${sit.prova})` };
         return { curso: curso.nome, cursoId: curso.id, cmid: qs[0].cmid, quiz: qs[0].nome };
+    }
+
+    // ---------- trazer do AVA para validar (26/11/2026) ----------
+    // Prova que o professor montou direto no AVA: exporta o banco do questionário em Moodle-XML (categoria "Topo",
+    // que leva todas as pastas) e lê o nome das questões que estão de fato na prova (edit.php), para separar das
+    // que só estão no banco. Precisa de moodle/question:viewall e exportall no papel de integração.
+    // → [{ nome, id }] na ordem da prova; id = questão no AVA (link "Editar no AVA" da tela de validação)
+    async questoesDaProva(cmid) {
+        const { texto } = await this.s.req(`/mod/quiz/edit.php?cmid=${cmid}`);
+        const out = [];
+        for (const bloco of texto.split(/<li\b[^>]*class="[^"]*\bslot\b/).slice(1)) {
+            const nome = (bloco.match(/<span[^>]*class="[^"]*\bquestionname\b[^"]*"[^>]*>([\s\S]*?)<\/span>/) || [])[1];
+            if (!nome) continue;
+            const id = (bloco.match(/editquestion\/question\.php\?[^"]*?\bid=(\d+)/) || [])[1];
+            out.push({ nome: semTags(nome).replace(/\s+/g, ' ').trim(), id: id ? Number(id) : null });
+        }
+        return out.filter(q => q.nome);
+    }
+    async exportarXml(cmid) {
+        const pag = (await this.s.req(`/question/bank/exportquestions/export.php?cmid=${cmid}`)).texto;
+        const sesskey = (pag.match(/name="sesskey"\s+value="([^"]+)"/) || [])[1] || this.s.sesskey;
+        const sel = (pag.match(/<select[^>]*name="category"[^>]*>([\s\S]*?)<\/select>/) || [])[1] || '';
+        const topo = (sel.match(/<option[^>]*value="([^"]+)"/) || [])[1];
+        if (!sesskey || !topo) throw new Error('não consegui abrir a exportação do banco do questionário (falta moodle/question:exportall no papel de integração?)');
+        const corpo = new URLSearchParams({ cmid: String(cmid), sesskey, _qf__qbank_exportquestions_form_export_form: '1', format: 'xml', category: topo.replace(/&amp;/g, '&'), cattofile: '1', contexttofile: '1', submitbutton: 'Exportar' });
+        const res = (await this.s.req('/question/bank/exportquestions/export.php', { method: 'POST', body: corpo.toString() })).texto;
+        const link = (res.match(/href="([^"]*\/question\/export\/[^"]+)"/) || [])[1];
+        if (!link) throw new Error('o AVA não gerou o arquivo de exportação');
+        const xml = (await this.s.req(link.replace(/&amp;/g, '&'))).texto;
+        if (!/^\s*(<\?xml|<quiz)/.test(xml)) throw new Error('o arquivo exportado não é um Moodle-XML');
+        return xml;
+    }
+
+    // ---------- levar a alteração feita no Órbita para a questão no AVA (26/11/2026) ----------
+    // Abre o editor da questão (question.php), reenvia todos os campos do formulário como vieram (inclusive as áreas
+    // de arquivos das imagens) e troca só o enunciado, as alternativas, a correta e o feedback geral. As imagens que
+    // já estavam no AVA continuam (as <img> do enunciado/feedback antigos são mantidas). O AVA guarda versão nova.
+    async editarQuestao(cmid, id, { enunciadoHtml, alternativas, feedbackHtml }) {
+        const pag = await this.s.req(`/question/bank/editquestion/question.php?cmid=${cmid}&id=${id}`);
+        const form = (pag.texto.match(/<form\b[^>]*class="[^"]*\bmform\b[^"]*"[^>]*>[\s\S]*?<\/form>/) || [])[0];
+        if (!form) throw new Error('não consegui abrir o editor da questão no AVA (sem permissão de editar?)');
+        const action = new URL(decodificarHtml(atributo(form.match(/<form\b[^>]*>/)[0], 'action') || 'question.php'), pag.url).toString();
+        const campos = lerCamposForm(form);
+        const valor = (k) => (campos.find(([n]) => n === k) || [])[1] || '';
+        if (!campos.some(([k]) => k === 'questiontext[text]') || !campos.some(([k]) => k === 'answer[0][text]')) throw new Error('o editor do AVA não é de múltipla escolha');
+        const vagas = Number(valor('noanswers')) || 0;
+        if (alternativas.length > vagas) throw new Error(`a questão no AVA tem ${vagas} alternativas e no Órbita ${alternativas.length}: ajuste pelo "Editar no AVA"`);
+        const imgs = (h) => (String(h || '').match(/<img\b[^>]*>/g) || []).join(' ');
+        const comImgs = (novoHtml, antigo) => { const i = imgs(antigo); return i && !/<img\b/.test(novoHtml) ? `${novoHtml}\n<p>${i}</p>` : novoHtml; };
+        const novo = new Map([
+            ['questiontext[text]', comImgs(String(enunciadoHtml || ''), valor('questiontext[text]'))],
+            ['generalfeedback[text]', comImgs(String(feedbackHtml || ''), valor('generalfeedback[text]'))]
+        ]);
+        for (let i = 0; i < vagas; i++) {
+            const a = alternativas[i];
+            novo.set(`answer[${i}][text]`, a ? `<p>${escHtml(a.texto)}</p>` : '');
+            novo.set(`fraction[${i}]`, a && a.correta ? '1.0' : '0.0');
+        }
+        const corpo = new URLSearchParams();
+        const feitos = new Set();
+        for (const [k, v] of campos) {
+            if (!novo.has(k)) { corpo.append(k, v); continue; }
+            if (!feitos.has(k)) { corpo.append(k, novo.get(k)); feitos.add(k); }
+        }
+        corpo.set('submitbutton', 'Salvar mudanças');
+        const res = await this.s.req(action, { method: 'POST', body: corpo.toString() });
+        // deu certo: o AVA redireciona para a prova; se o formulário volta, foi recusado
+        if (/name="_qf__qtype_[a-z]+_edit_form"/.test(res.texto)) {
+            const msg = (res.texto.match(/class="[^"]*\b(?:error|invalid-feedback)\b[^"]*"[^>]*>\s*([^<]{3,})/) || [])[1];
+            throw new Error(`o AVA recusou a alteração${msg ? `: ${decodificarHtml(msg).trim()}` : ''}`);
+        }
+        return true;
     }
 
     async lerBanco(cmid, pasta) {
@@ -145,4 +259,4 @@ class ImportadorBancoAva {
     }
 }
 
-module.exports = { ImportadorBancoAva, questionarioDaProva };
+module.exports = { ImportadorBancoAva, questionarioDaProva, lerCamposForm };

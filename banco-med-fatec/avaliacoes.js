@@ -223,6 +223,7 @@ function renderEditor() {
       </div>
       <div class="av-ed-acoes">
         ${souEditor() ? `<button type="button" class="btn btn-secondary av-btn" data-conferir ${questoes.length ? '' : 'disabled'}>Conferência CADAM</button>` : ''}
+        ${(() => { const n = questoes.filter(q => q.avaPendente && q.avaOrigem).length; return n ? `<button type="button" class="btn btn-primary av-btn" data-levar-ava title="O Órbita abre cada questão alterada no editor do AVA e salva a versão nova">${ic('importar')}Levar alterações para o AVA (${n})</button>` : ''; })()}
         <button type="button" class="btn btn-secondary av-btn" data-relatorio-cadam ${questoes.length ? '' : 'disabled'} title="${souEditor() ? 'Parecer da prova e devolutiva de cada professor' : 'Devolutiva das questões: o que está bom e como melhorar'}">Relatório CADAM</button>
         ${fin ? `${souEditor() ? `<button type="button" class="btn btn-primary av-btn" data-xml>${ic('baixar')}Baixar para o AVA</button>` : ''}
                  ${souTitular(av.chave) ? '<button type="button" class="btn btn-secondary av-btn" data-reabrir>Reabrir</button>' : ''}`
@@ -286,6 +287,34 @@ function envioNaProvaHtml(av, questoes) {
   </section>`;
 }
 
+// Questão trazida do AVA (26/11/2026): de onde veio, se a alteração já foi levada de volta e o atalho para o editor do AVA
+function avaSelos(q) {
+  const o = q.avaOrigem;
+  if (!o || !o.id) return '';
+  const link = o.cmid ? `${AVA_BASE}/question/bank/editquestion/question.php?cmid=${o.cmid}&id=${o.id}` : '';
+  return `<span class="av-tag av-tag-ava">Veio do AVA</span>${q.avaPendente ? '<span class="av-selo av-selo-ava-pend">Alterada: falta levar ao AVA</span>' : ''}${q.avaLevadaErro && q.avaPendente ? `<span class="av-selo av-selo-erro" title="${esc(q.avaLevadaErro)}">Não foi para o AVA</span>` : ''}${link ? `<a class="av-ava-link" href="${esc(link)}" target="_blank" rel="noopener">Editar no AVA ↗</a>` : ''}`;
+}
+async function levarParaAva(btn) {
+  const id = atual.avaliacao.id, rot = btn.innerHTML;
+  btn.disabled = true;
+  try {
+    const p = await api(`${BASE}/${encodeURIComponent(id)}/ava-levar`, { method: 'POST' });
+    toast(p.message);
+    let r = null;
+    for (let i = 0; i < 60; i++) {
+      await new Promise(ok => setTimeout(ok, 4000));
+      btn.textContent = `Alterando no AVA… ${(i + 1) * 4}s`;
+      r = await api(`${BASE}/${encodeURIComponent(id)}/ava-levar`);
+      if (r.status === 'pronto' || r.status === 'erro') break;
+    }
+    if (!r || r.status === 'pedido') throw new Error('O AVA não respondeu em 4 minutos. A leitura automática pode estar fora do ar: avise o Suporte AVA.');
+    const erros = r.erros || [];
+    if (r.levadas) toast(`${r.levadas} questão(ões) alterada(s) no AVA.${erros.length ? ` ${erros.length} com erro: ${erros[0].erro}` : ''}`, erros.length ? 'aviso' : '');
+    else throw new Error(`Nada foi alterado no AVA: ${(erros[0] && erros[0].erro) || 'erro desconhecido'}`);
+    await recarregarAtual();
+  } catch (e) { toast(e.message, 'erro'); btn.disabled = false; btn.innerHTML = rot; }
+}
+
 function linhaQuestao(q, n, fin, total) {
   const p = q.padrao;
   // português e ABNT na própria lista (16/11/2026): o professor vê e corrige sem abrir a questão
@@ -296,7 +325,7 @@ function linhaQuestao(q, n, fin, total) {
     <span class="av-q-n">${n}</span>
     <div class="av-q-corpo">
       <div class="av-q-topo">${chipProfessor(q.professorNome)}<span class="av-tag">${esc(rotuloUnidade(q.unidade))}</span>
-        <span class="av-tag ${p.aplicacao ? 'av-tag-caso' : ''}">${p.aplicacao ? 'Caso clínico' : 'Memorização'}</span>${(q.imagens || []).length || q.temImagem ? `<span class="av-tag">${(q.imagens || []).length + (q.temImagem ? 1 : 0)} imagem(ns)</span>` : ''}${status}</div>
+        <span class="av-tag ${p.aplicacao ? 'av-tag-caso' : ''}">${p.aplicacao ? 'Caso clínico' : 'Memorização'}</span>${(q.imagens || []).length || q.temImagem ? `<span class="av-tag">${(q.imagens || []).length + (q.temImagem ? 1 : 0)} imagem(ns)</span>` : ''}${status}${avaSelos(q)}</div>
       <p class="av-q-obj">${q.objetivo ? esc(q.objetivo) : '<i>Objetivo a definir</i>'}</p>
       <p class="av-q-enun">${esc(P.texto(q.casoClinico || q.enunciadoHtml).slice(0, 240))}${P.texto(q.casoClinico || q.enunciadoHtml).length > 240 ? '…' : ''}</p>
       ${(!p.ok || p.avisos.length) ? `<details class="av-q-det"><summary>${p.bloqueios.length ? `${p.bloqueios.length} a corrigir` : ''}${p.bloqueios.length && p.avisos.length ? ' · ' : ''}${p.avisos.length ? `${p.avisos.length} orientação(ões)` : ''}</summary>
@@ -944,6 +973,10 @@ function abrirImportar() {
               </div>
             </div>
           </section>
+          <div class="av-trazer-ava">
+            <div><b>A prova já está no AVA?</b><span class="av-nota">O professor montou direto no AVA, sem passar pelo Órbita? Traga as questões do questionário para validar aqui (Conferência CADAM). Nada muda no AVA.</span></div>
+            <button type="button" class="btn btn-primary av-btn" id="av-imp-ava">Trazer do AVA</button>
+          </div>
           <p class="av-modelo-baixar"><button type="button" class="btn btn-secondary av-btn" id="av-imp-modelo">Baixar o modelo desta disciplina (Word)</button><span class="av-nota">Já vem com as <b>unidades do bimestre</b> e os <b>objetivos do plano de ensino</b> numerados. Mande aos professores: em cada questão eles preenchem Unidade e Objetivo, pintam a <b>correta de amarelo</b> e o feedback pode ser texto ou imagem.</span></p>
           <div class="av-campos2">
             <label class="av-campo"><span>Arquivo Word (.docx), de preferência. PDF só com texto</span><input type="file" id="av-imp-arq" accept=".docx,.doc,.pdf"></label>
@@ -964,6 +997,7 @@ function abrirImportar() {
     m = $('#av-modal-imp');
     m.addEventListener('click', (e) => { if (e.target.closest('[data-fechar-imp]') || e.target === m) { m.hidden = true; document.body.classList.remove('av-sem-rolagem'); } });
     $('#av-imp-ler').addEventListener('click', lerImportacao);
+    $('#av-imp-ava').addEventListener('click', trazerDoAva);
     $('#av-imp-salvar').addEventListener('click', salvarImportacao);
     $('#av-imp-modelo').addEventListener('click', async (ev) => {
       const b = ev.currentTarget; b.disabled = true; const t = b.textContent; b.textContent = 'Montando o modelo…';
@@ -978,6 +1012,88 @@ function abrirImportar() {
   $('#av-imp-arq').value = ''; $('#av-imp-txt').value = ''; $('#av-imp-previa').innerHTML = ''; previaImport = []; $('#av-imp-salvar').disabled = true;
   m.hidden = false; document.body.classList.add('av-sem-rolagem');
 }
+// ---------- TRAZER DO AVA PARA VALIDAR (26/11/2026) ----------
+// Prova montada direto no AVA, sem passar pelo Órbita. O agente do droplet exporta o banco do questionário em
+// Moodle-XML (e lista as questões que estão de fato na prova); aqui o XML vira a mesma prévia do Word e entra na
+// avaliação pelo /importar, para a coordenação validar pela Conferência CADAM. Nada é alterado no AVA.
+const AVA_BASE = 'https://fatecivaipora.mrooms.net';
+const normAva = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+const MIME_IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+function imagensDoMoodle(el) {
+  return [...(el ? el.querySelectorAll(':scope > file') : [])].filter(f => f.getAttribute('encoding') === 'base64').map((f, i) => {
+    const nome = f.getAttribute('name') || `imagem-${i + 1}.png`;
+    const mime = MIME_IMG[(nome.split('.').pop() || '').toLowerCase()];
+    return mime ? { dataUrl: `data:${mime};base64,${f.textContent.replace(/\s+/g, '')}`, nome } : null;
+  }).filter(Boolean);
+}
+function htmlSemImg(html) {
+  const d = document.createElement('div'); d.innerHTML = html || '';
+  d.querySelectorAll('img').forEach(i => i.remove());
+  return { html: d.innerHTML.trim(), texto: d.textContent.replace(/\s+/g, ' ').trim() };
+}
+function questoesDoXmlAva(xmlTexto, naProva) {
+  const doc = new DOMParser().parseFromString(xmlTexto, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('O arquivo do AVA veio corrompido. Tente de novo.');
+  const ordem = new Map((naProva || []).map((q, i) => [normAva(q.nome), { i, id: q.id }]));
+  const itens = [];
+  for (const q of doc.querySelectorAll('quiz > question')) {
+    const tipo = q.getAttribute('type');
+    if (!['multichoice', 'multichoiceset', 'truefalse'].includes(tipo)) continue;
+    const nome = (q.querySelector(':scope > name > text') || {}).textContent || '';
+    const pos = ordem.get(normAva(nome));
+    if (ordem.size && !pos) continue;          // está no banco, mas não na prova
+    const qt = q.querySelector(':scope > questiontext');
+    const enun = htmlSemImg((qt && qt.querySelector(':scope > text') || {}).textContent);
+    const gf = q.querySelector(':scope > generalfeedback');
+    const fb = htmlSemImg((gf && gf.querySelector(':scope > text') || {}).textContent);
+    const resp = [...q.querySelectorAll(':scope > answer')];
+    const icerta = resp.findIndex(a => parseFloat(a.getAttribute('fraction') || '0') > 0);
+    // "[2ºB 1ªCH 07] Prof. Fulano – começo do enunciado": o tema é o que vem depois do professor
+    const tema = nome.replace(/^\[[^\]]*\]\s*/, '').replace(/^Prof[a-z]*\.?\s+[^–-]+[–-]\s*/i, '').trim();
+    itens.push({
+      ordem: pos ? pos.i : itens.length, avaId: pos ? pos.id : null, nomeAva: nome,
+      tema, casoHtml: enun.html, pergunta: '', enunciado: enun.texto,
+      alternativas: resp.map(a => htmlSemImg((a.querySelector(':scope > text') || {}).textContent).texto),
+      gabarito: icerta >= 0 ? 'ABCDE'[icerta] : null,
+      justificativa: fb.html, fonte: '',
+      imagens: imagensDoMoodle(qt), imagensFeedback: imagensDoMoodle(gf)
+    });
+  }
+  itens.sort((a, b) => a.ordem - b.ordem);
+  itens.forEach((q, i) => { q.numero = i + 1; });
+  return itens;
+}
+async function trazerDoAva() {
+  const btn = $('#av-imp-ava');
+  const id = atual.avaliacao.id;
+  const caixa = $('#av-imp-previa');
+  const rot = btn.textContent;
+  btn.disabled = true;
+  const estado = (t) => { caixa.innerHTML = `<p class="av-nota av-trazer-estado">${t}</p>`; };
+  try {
+    await api(`${BASE}/${encodeURIComponent(id)}/ava-trazer`, { method: 'POST' });
+    estado('Pedido enviado. O Órbita está entrando no AVA e exportando as questões do questionário desta prova…');
+    let r = null;
+    for (let i = 0; i < 60; i++) {           // até 4 minutos
+      await new Promise(ok => setTimeout(ok, 4000));
+      btn.textContent = `Buscando no AVA… ${(i + 1) * 4}s`;
+      r = await api(`${BASE}/${encodeURIComponent(id)}/ava-trazer`);
+      if (r.status === 'pronto' || r.status === 'erro') break;
+    }
+    if (!r || r.status === 'pedido') throw new Error('O AVA não respondeu em 4 minutos. A leitura automática pode estar fora do ar: avise o Suporte AVA.');
+    if (r.status === 'erro') throw new Error(`Não consegui trazer do AVA: ${r.msg || 'erro desconhecido'}`);
+    btn.textContent = 'Lendo as questões…';
+    const xml = await (await fetch(r.url)).text();
+    const itens = questoesDoXmlAva(xml, r.questoesNaProva);
+    if (!itens.length) throw new Error('O questionário desta prova no AVA está sem questões.');
+    itens.forEach(q => { q.avaCmid = r.cmid; q.avaEditar = q.avaId && r.cmid ? `${AVA_BASE}/question/bank/editquestion/question.php?cmid=${r.cmid}&id=${q.avaId}` : ''; });
+    previaImport = itens;
+    const fora = (r.noBanco || 0) - itens.length;
+    mostrarPrevia(`Vieram do AVA (${r.curso || ''} › ${r.quiz || ''}) as ${itens.length} questões que estão na prova${fora > 0 ? `; ${fora} que estão só no banco do questionário ficaram de fora` : ''}. Escolha o professor acima e clique em “Importar para a avaliação”. Para mudar uma questão, use “Editar no AVA”.`);
+  } catch (e) { estado(esc(e.message)); toast(e.message, 'erro'); }
+  finally { btn.disabled = false; btn.textContent = rot; }
+}
+
 // Word lido no navegador: confere no servidor se alguma questão já existe (16/11/2026)
 async function repetidasWord() {
   try {
@@ -1032,7 +1148,7 @@ function mostrarPrevia(aviso) {
     const nImg = previaImport.reduce((s2, q) => s2 + (q.imagens || []).length, 0);
     $('#av-imp-previa').innerHTML = `
       <p class="av-nota"><b>${previaImport.length}</b> questão(ões) encontrada(s)${nImg ? `, com <b>${nImg}</b> imagem(ns)` : ''}.${semGab ? ` ${semGab} sem gabarito: marque abaixo.` : ''} ${aviso ? esc(aviso) : ''}</p>
-      <ol class="av-previa">${previaImport.map((q, i) => `<li><label class="av-previa-incluir"><input type="checkbox" data-previa-incluir="${i}" ${q.incluir === false || (q.incluir === undefined && (q.repetida || q.problema)) ? '' : 'checked'}> Importar esta questão${q.numero ? ` <small>(nº ${esc(q.numero)} no arquivo)</small>` : ''}</label>${q.problema ? `<p class="av-previa-rep">Problema na leitura: ${esc(q.problema)} Ela vem desmarcada; marque se quiser importar mesmo assim e acertar na edição.</p>` : ''}${q.repetida ? `<p class="av-previa-rep">Questão repetida: ${esc(q.repetida)}. Ela vem desmarcada; marque se quiser importar mesmo assim.</p>` : ''}${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa || (q.imagensFeedback || []).length ? `<span class="av-selo av-selo-ok">Feedback${(q.imagensFeedback || []).length ? ` (${q.imagensFeedback.length} imagem${q.imagensFeedback.length > 1 ? 's' : ''})` : ''}</span>` : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.provaWord ? `<span class="av-tag av-tag-prova av-uso-${usoDoTextoTela(q.provaWord)}">${esc(q.provaWord)}</span>` : ''}${q.unidadeWord ? `<span class="av-tag">Unidade ${esc(q.unidadeWord)}</span>` : ''}${q.objetivoWord ? `<span class="av-tag">Objetivo ${esc(q.objetivoWord.slice(0, 40))}</span>` : ''}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>
+      <ol class="av-previa">${previaImport.map((q, i) => `<li><label class="av-previa-incluir"><input type="checkbox" data-previa-incluir="${i}" ${q.incluir === false || (q.incluir === undefined && (q.repetida || q.problema)) ? '' : 'checked'}> Importar esta questão${q.numero ? ` <small>(nº ${esc(q.numero)} no arquivo)</small>` : ''}</label>${q.problema ? `<p class="av-previa-rep">Problema na leitura: ${esc(q.problema)} Ela vem desmarcada; marque se quiser importar mesmo assim e acertar na edição.</p>` : ''}${q.repetida ? `<p class="av-previa-rep">Questão repetida: ${esc(q.repetida)}. Ela vem desmarcada; marque se quiser importar mesmo assim.</p>` : ''}${q.tema || q.tituloOriginal ? `<div class="av-previa-meta">${q.tema ? `<span class="av-tag">${esc(q.tema)}</span>` : ''}${q.dificuldade ? `<span class="av-tag">${esc({ facil: 'Fácil', media: 'Média', intermediaria: 'Intermediária', dificil: 'Difícil' }[q.dificuldade] || q.dificuldade)}</span>` : ''}${q.justificativa || (q.imagensFeedback || []).length ? `<span class="av-selo av-selo-ok">Feedback${(q.imagensFeedback || []).length ? ` (${q.imagensFeedback.length} imagem${q.imagensFeedback.length > 1 ? 's' : ''})` : ''}</span>` : '<span class="av-selo av-selo-erro">Sem feedback</span>'}${q.provaWord ? `<span class="av-tag av-tag-prova av-uso-${usoDoTextoTela(q.provaWord)}">${esc(q.provaWord)}</span>` : ''}${q.unidadeWord ? `<span class="av-tag">Unidade ${esc(q.unidadeWord)}</span>` : ''}${q.objetivoWord ? `<span class="av-tag">Objetivo ${esc(q.objetivoWord.slice(0, 40))}</span>` : ''}${q.fonte ? '<span class="av-selo av-selo-ok">Referência</span>' : ''}${q.gabarito ? '' : '<span class="av-selo av-selo-erro">Sem marca-texto: marque a correta</span>'}</div>` : ''}<p>${esc(q.enunciado.slice(0, 260))}${q.enunciado.length > 260 ? '…' : ''}</p>${q.avaEditar ? `<p class="av-ava-editar"><a href="${esc(q.avaEditar)}" target="_blank" rel="noopener">Editar no AVA ↗</a> <span class="av-nota">abre esta questão no editor do AVA; depois clique em “Trazer do AVA” de novo</span></p>` : ''}
         ${(q.imagens || []).length ? `<div class="av-previa-imgs">${q.imagens.map(im => `<img src="${im.dataUrl}" alt="">`).join('')}</div>` : ''}
         <div class="av-previa-alts">${q.alternativas.map((a, j) => `<span class="${q.gabarito === LETRAS[j] ? 'av-previa-certa' : ''}"><b>${LETRAS[j]})</b> ${esc(String(a).slice(0, 90))}</span>`).join('')}</div>
         <label class="av-previa-gab">Correta <select class="av-imp-gab" data-i="${i}"><option value="">?</option>${q.alternativas.map((a, j) => `<option ${q.gabarito === LETRAS[j] ? 'selected' : ''}>${LETRAS[j]}</option>`).join('')}</select></label></li>`).join('')}</ol>`;
@@ -1068,6 +1184,7 @@ async function salvarImportacao() {
         imagensFeedback.push({ caminho: env.caminho, nome: env.nome });
       }
       questoes.push({ numero: q.numero, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, imagens, imagensFeedback,
+        ...(q.avaId ? { avaId: q.avaId, avaCmid: q.avaCmid, nomeAva: q.nomeAva } : {}),
         unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
         ...(q.pergunta !== undefined && q.casoHtml !== undefined ? { casoHtml: q.casoHtml, pergunta: q.pergunta, justificativa: q.justificativa, fonte: q.fonte, dificuldade: q.dificuldade, tema: q.tema } : {}) });
     }
@@ -1859,6 +1976,7 @@ export async function iniciarAvaliacoes(opcoes) {
     if (t.hasAttribute('data-excluir-av')) return excluirAvaliacao();
     if (t.hasAttribute('data-xml')) return baixarXml();
     if (t.hasAttribute('data-xml-como-esta')) return baixarXml(true);
+    if (t.hasAttribute('data-levar-ava')) return levarParaAva(t);
     if (t.hasAttribute('data-conferir')) return conferirProvaAberta();
     if (t.hasAttribute('data-relatorio-cadam')) return abrirRelatorioCadam();
     if (t.dataset.fp !== undefined) { filtroProfessor = t.dataset.fp; renderEditor(); }
