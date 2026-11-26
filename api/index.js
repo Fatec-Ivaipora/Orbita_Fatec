@@ -16,6 +16,7 @@ const ALLOWED_ORIGINS = [
     'https://orbita-fatecivp.web.app',       // Firebase Hosting (produção)
     'https://orbita-fatecivp.firebaseapp.com', // Firebase Hosting (alternativo)
     'https://orbita-fatec-ti.vercel.app',     // Vercel (produção, antigo)
+    'https://orbita.fatecivaipora.com.br',    // Coolify (produção, domínio próprio — 26/11/2026)
     'http://localhost:3000',                  // Desenvolvimento local (backend)
     'http://127.0.0.1:3000',                  // Desenvolvimento local (backend)
 ];

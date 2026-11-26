@@ -3150,3 +3150,8 @@ Para garantir que o front-end estático e a API servida em Node.js (funções se
 - **CORS**: domínio temporário do Coolify é um subdomínio de `sslip.io` (`<uuid-da-app>.177.104.189.118.sslip.io`); liberado no `api/index.js` por regex restrita a esse IP específico, não a qualquer `sslip.io`.
 - **Pendente**: domínio próprio (o link `sslip.io` é feio/confunde usuário), resolver os avisos `SecretsUsedInArgOrEnv` do Nixpacks (variáveis de ambiente hoje viram ARG/ENV do Docker), repetir a migração pra SIGMA/Conecta/Gestão de TI/site novo, e então voltar o repositório a privado.
 - Este commit também serve de teste: confirma se o webhook do GitHub App dispara o deploy sozinho no Coolify.
+
+### [2026-11-26] Domínio próprio no Coolify — orbita.fatecivaipora.com.br
+- Domínio próprio configurado na aplicação `orbita-fatec-v2` do Coolify (`orbita.fatecivaipora.com.br`, registro A no Cloudflare para `177.104.189.118`, sem proxy, SSL emitido automaticamente pelo Coolify). O link `sslip.io` continua ativo como alternativo.
+- CORS (`api/index.js`): domínio adicionado em `ALLOWED_ORIGINS` (é domínio fixo de produção, diferente do `sslip.io`, que é temporário e tratado por regex à parte).
+- Pendente: atualizar em Firebase Authentication → Domínios autorizados (e a URL de redefinição de senha) para este novo domínio.
