@@ -99,6 +99,22 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Portfólio MED: nota de corte lida pelo Claude fica guardada
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/portfolio-nota-corte-claude
+- Arquivos alterados:
+  - `src/rotas/portfolio-med.js`:
+    - a nota de corte gravada com `referencia.origem = 'claude'` nunca é recalculada pela regra fixa;
+    - reimportar o mesmo texto não apaga essa nota (texto novo volta para a regra).
+  - `medicina/portfolio/app.js` (v=8):
+    - a correção nunca salva vem com as marcações e a evidência da leitura do Claude;
+    - a faixa diz "Nota de corte (leitura do Claude)" e mostra a observação geral;
+    - o botão vira "Voltar às marcações da nota de corte";
+    - a Análise da nota cita a origem.
+- Tipo: Melhoria
+- Motivo: a coordenação autorizou (26/11) o Claude a ler os portfólios, sem nome e RA do aluno, e dar a nota de corte pela matriz. Sem este ajuste, abrir a atividade trocaria essa nota pela regra fixa.
+- Como reverter: reverter o commit. As notas gravadas continuam em `med_portfolio_entregas.referencia`.
+
 ### [2026-11-26] Portfólio MED: nota de corte do Órbita, sugestão para o professor confirmar, análise da nota e distribuição
 - Autor: Claude Code (a pedido do usuário e do João)
 - Branch: feat/portfolio-sugestao

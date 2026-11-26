@@ -244,7 +244,9 @@ router.get('/atividades/:id', async (req, res) => {
         const { atividade, turma } = await lerAtividade(req, req.params.id);
         const snap = await db.collection(COL_ENT).where('atividadeId', '==', atividade.id).get();
         const entregas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => minhaEntrega(req.user, e)).sort((a, b) => a.nome.localeCompare(b.nome));
-        const semRef = entregas.filter(e => !e.referencia || e.referencia.versao !== Sugestao.VERSAO);
+        // nota de corte LIDA PELO CLAUDE (referencia.origem = 'claude', gravada por script com autorização da coordenação,
+        // 26/11/2026) nunca é recalculada pela regra; só a da regra fixa é atualizada quando a regra muda de versão
+        const semRef = entregas.filter(e => !e.referencia || (e.referencia.origem !== 'claude' && e.referencia.versao !== Sugestao.VERSAO));
         for (const e of semRef) {
             const t = await db.collection(COL_TXT).doc(e.id).get();
             e.referencia = referenciaDe(t.exists ? t.data().texto : '', turma);
@@ -287,6 +289,8 @@ router.post('/atividades/:id/entregas', async (req, res) => {
         if (atual.exists) {
             const a = atual.data();
             meta.reimportado = true;
+            // reimportar o mesmo texto não apaga a nota de corte lida pelo Claude; texto novo volta para a regra fixa
+            if (a.referencia && a.referencia.origem === 'claude' && (a.palavras || 0) === meta.palavras) delete meta.referencia;
             // reenvio depois de finalizada: avisa o professor (a correção não é apagada)
             if (a.status === 'finalizada' && (a.palavras || 0) !== meta.palavras) meta.alteradoAposCorrecao = true;
             await ref.set(meta, { merge: true });
