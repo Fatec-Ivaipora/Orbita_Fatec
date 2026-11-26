@@ -336,7 +336,7 @@ function renderAba() {
   if (abaAtiv === 'resumo') return renderResumo();
   const { entregas } = ativ;
   el('pf-aba').innerHTML = `<div class="pf-tab-wrap"><table class="pf-tab">
-    <thead><tr><th>Estudante</th>${ativ.editor ? '<th>Professor</th>' : ''}<th>Arquivo</th><th>Situação</th><th class="num" title="Nota de corte do Órbita: mesma regra para todos">Corte</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
+    <thead><tr><th>Estudante</th>${ativ.editor ? '<th>Professor</th>' : ''}<th>Arquivo</th><th>Situação</th><th class="num" title="Nota de corte: a mesma para o trabalho, seja quem for o professor">Corte</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
     <tbody>${entregas.map(e => {
       const avisos = [];
       if (e.semTexto) avisos.push('<span class="pf-av pf-av-crit">sem texto (escaneado ou foto?)</span>');
@@ -712,7 +712,8 @@ async function abrirCorrecao(id) {
   try { corr.texto = (await api(`${BASE}/entregas/${encodeURIComponent(id)}/texto`)).texto; } catch (e) { corr.texto = ''; }
   if (!corr || corr.entrega.id !== id) return;
   // nunca corrigido: já vem com a sugestão marcada (o professor confere e ajusta) — 26/11/2026
-  if (!entrega.avaliacao && corr.texto && window.PortfolioSugestao) { aplicarSugestao(); return; }
+  const refClaude = entrega.referencia && entrega.referencia.origem === 'claude';
+  if (!entrega.avaliacao && ((refClaude && !entrega.referencia.semTexto) || (!refClaude && corr.texto && window.PortfolioSugestao))) { aplicarSugestao(); return; }
   renderLeitor();
 }
 
@@ -720,8 +721,20 @@ async function abrirCorrecao(id) {
 // A sugestão é a mesma regra que o servidor usa para a NOTA DE REFERÊNCIA (medicina/portfolio/sugestao.js): o mesmo
 // texto dá sempre a mesma sugestão, seja quem for o professor. Só preenche o formulário; quem salva é o professor.
 function aplicarSugestao() {
-  const s = window.PortfolioSugestao.sugerir(corr.texto || '', ativ.turma.objetivos || []);
+  const ref = corr.entrega.referencia;
   const av = corr.av;
+  // nota de corte lida pelo Claude: as marcações vêm dela (com a evidência de cada critério)
+  if (ref && ref.origem === 'claude' && !ref.semTexto && ref.niveis) {
+    const ev = (id) => `Nota de corte (leitura do Claude): ${(ref.evidencias && ref.evidencias[id]) || ''}`;
+    av.c1 = { ...av.c1, nivel: ref.niveis.c1, justificativa: ev('c1') };
+    av.c2 = { ...av.c2, analise: ref.c2.analise, necessidades: !!ref.c2.necessidades, acoes: !!ref.c2.acoes, nivelManual: ref.c2.nivelManual || null, justificativa: ev('c2') };
+    av.c3 = { ...av.c3, objetivos: (ativ.turma.objetivos || []).map((_, i) => !!(ref.c3.objetivos || [])[i]), justificativa: ev('c3') };
+    av.c4 = { ...av.c4, nivel: ref.niveis.c4, justificativa: ev('c4') };
+    corr.sugerida = true; corr.sujo = true;
+    renderCorrecao(); renderLeitor();
+    return;
+  }
+  const s = window.PortfolioSugestao.sugerir(corr.texto || '', ativ.turma.objetivos || []);
   av.c1 = { ...av.c1, nivel: s.c1.nivel, justificativa: s.c1.justificativa };
   av.c2 = { ...av.c2, analise: s.c2.analise, necessidades: s.c2.necessidades, acoes: s.c2.acoes, nivelManual: s.c2.nivelManual || null, justificativa: s.c2.justificativa };
   av.c3 = { ...av.c3, objetivos: (ativ.turma.objetivos || []).map((_, i) => !!s.c3.objetivos[i]), justificativa: s.c3.justificativa };
@@ -740,13 +753,14 @@ function faixaReferencia() {
   const dif = Math.abs(atual.soma - ref.nota);
   const diverge = !ref.semTexto && atual.completo && dif >= lim;
   return `<div class="pf-ref ${diverge ? 'pf-ref-diverge' : ''}" role="status">
-    <div><b>Nota de corte do Órbita: ${fmt(ref.nota)}</b>${noAva(ref.nota)}
+    <div><b>Nota de corte ${ref.origem === 'claude' ? '(leitura do Claude)' : 'do Órbita'}: ${fmt(ref.nota)}</b>${noAva(ref.nota)}
+      ${ref.origem === 'claude' && ref.observacao ? `<small>${esc(ref.observacao)}</small>` : ''}
       <small>${M.CRITERIOS.map(c => `C${c.num} ${ref.niveis[c.id] ? NOME_NIVEL_CURTO[ref.niveis[c.id]] : '—'}`).join(' · ')}</small>
       <small>Calculada pelas mesmas regras para todos os professores, a partir do texto. ${ref.semTexto ? 'Sem texto legível: a referência não vale para este trabalho.' : `Se a sua nota ficar ${String(lim).replace('.', ',')} pontos ou mais longe dela, a correção é marcada para a coordenação.`}</small>
       ${corr.sugerida ? '<small class="pf-ref-sug"><b>As marcações abaixo são a sugestão automática.</b> Confira cada critério no texto e ajuste o que precisar antes de finalizar.</small>' : ''}
       ${diverge ? `<small class="pf-ref-alerta">A sua nota (${fmt(atual.soma)}) está ${fmt(dif)} pontos longe da nota de corte: deixe a justificativa clara em cada critério.</small>` : ''}</div>
     <div class="pf-acoes">
-      <button type="button" class="pf-btn pf-btn-peq" data-acao="sugerir" ${corr.texto ? '' : 'disabled'}>Refazer sugestão pelo texto</button>
+      <button type="button" class="pf-btn pf-btn-peq" data-acao="sugerir" ${corr.texto || ref.origem === 'claude' ? '' : 'disabled'}>${ref.origem === 'claude' ? 'Voltar às marcações da nota de corte' : 'Refazer sugestão pelo texto'}</button>
       <button type="button" class="pf-btn pf-btn-peq" data-acao="analise-nota" title="Para quando o aluno questionar a nota: referência × correção, critério a critério">Análise da nota</button>
     </div></div>`;
 }
@@ -773,7 +787,7 @@ function analiseDaNota() {
     <button onclick="print()">Imprimir</button>
     <h1>Análise da nota — Portfólio</h1>
     <p class="meta">${esc(entrega.nome)} · ${esc(ativ.turma.turma)} · ${esc(ativ.atividade.titulo)} · corrigido por ${esc(entrega.corrigidoPor || '—')}</p>
-    <table><thead><tr><th style="width:22%">Critério</th><th>Referência do Órbita (regra fixa, igual para todos)</th><th>Correção do professor</th></tr></thead>
+    <table><thead><tr><th style="width:22%">Critério</th><th>Nota de corte (${ref && ref.origem === 'claude' ? 'leitura do Claude pela matriz' : 'regra fixa do Órbita'}, igual para todos)</th><th>Correção do professor</th></tr></thead>
     <tbody>${linhas}
     <tr class="tot"><td>Soma dos critérios</td><td>${ref ? fmt(ref.nota) : '—'}</td><td>${fmt(r.soma)}${r.penalidade !== 'nenhuma' ? ` → nota ${fmt(r.nota)} (${esc(M.PENALIDADES[r.penalidade].rotulo)})` : ''}</td></tr></tbody></table>
     <p class="nota">Linhas em destaque: critério em que a correção do professor difere da referência. A referência é calculada pelas mesmas regras para todos os trabalhos, a partir do texto do portfólio (versão ${esc(ref ? ref.versao : '—')}); a nota final é do professor, com a evidência registrada em cada critério.</p>
