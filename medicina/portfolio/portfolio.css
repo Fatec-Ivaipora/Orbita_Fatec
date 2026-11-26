@@ -108,6 +108,18 @@
 .pf-leitor { position: sticky; top: 0.75rem; height: calc(100vh - 1.5rem); display: flex; flex-direction: column; gap: 0.5rem; background: var(--orb-sup); border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-card); padding: 0.6rem; }
 .pf-leitor-barra { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .pf-pdf { flex: 1; width: 100%; min-height: 300px; border: 0; border-radius: 8px; background: var(--orb-sup2); }
+/* distribuição dos portfólios (26/11/2026) */
+.pf-dist-lista { max-height: 50vh; overflow-y: auto; border: 1px solid var(--orb-linha, #DCE3EC); border-radius: 8px; }
+.pf-dist-lista label { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--orb-linha, #DCE3EC); font-weight: 400; }
+.pf-dist-lista label:last-child { border-bottom: 0; }
+.pf-dist-lista select { max-width: 55%; }
+/* nota de referência do Órbita (26/11/2026) */
+.pf-ref { display: flex; gap: 0.75rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; border: 1px solid #B8D2EE; background: #E8F2FC; color: #003E7D; border-radius: var(--orb-raio-ctrl, 8px); padding: 0.6rem 0.8rem; margin: 0 0 0.6rem; }
+.pf-ref b { font-size: 0.95rem; }
+.pf-ref small { display: block; margin-top: 0.2rem; font-size: 0.8rem; line-height: 1.4; }
+.pf-ref .pf-ref-sug { color: #0B5535; }
+.pf-ref-diverge { border-color: #F0D3A4; background: #FDF0DD; color: #6B4206; }
+.pf-ref .pf-ref-alerta { color: #9B2A21; font-weight: 600; }
 /* outros formatos (26/11/2026): Word/LibreOffice/PowerPoint mostram o texto lido; foto do trabalho aparece inteira */
 .pf-doc { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .pf-doc-cab, .pf-img figcaption { margin: 0; padding: 0.35rem 0.8rem; font-size: 0.8rem; color: var(--orb-tinta2, #44536B); border-bottom: 1px solid var(--orb-linha, #DCE3EC); }

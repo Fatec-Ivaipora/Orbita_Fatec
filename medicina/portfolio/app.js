@@ -156,6 +156,34 @@ function dialogo(html, aoAbrir) {
   return d;
 }
 
+// Distribuir os portfólios entre os professores corretores da turma (26/11/2026)
+function dlgDistribuir() {
+  const profs = (ativ.turma.professores || []).filter(p => p.uid);
+  if (!profs.length) { toast('Cadastre os professores corretores da turma em "Configurar turma" antes de distribuir.', 'erro'); return; }
+  const conta = (uid) => ativ.entregas.filter(e => e.corretorUid === uid).length;
+  const semProf = ativ.entregas.filter(e => !e.corretorUid).length;
+  const opcoes = (atual) => `<option value="">— sem professor —</option>${profs.map(p => `<option value="${esc(p.uid)}" ${p.uid === atual ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}`;
+  const d = dialogo(`<form method="dialog" class="pf-form pf-dist">
+    <h2>Distribuir os portfólios — ${esc(ativ.atividade.titulo)}</h2>
+    <p class="pf-dica">Cada professor vai ver e corrigir só os portfólios que receber, com a nota de corte do Órbita como ponto de partida. <b>Por enquanto o Portfólio está liberado só para a coordenação</b>: a distribuição fica pronta para quando liberar. Hoje: ${profs.map(p => `${esc(p.nome.split(' ')[0])} ${conta(p.uid)}`).join(' · ')} · sem professor ${semProf}.</p>
+    <button type="button" class="pf-btn pf-btn-pri" data-dist="igual" ${semProf ? '' : 'disabled'}>Dividir igualmente os ${semProf} sem professor</button>
+    <p class="pf-dica" style="margin-top:0.8rem">Ou escolha à mão:</p>
+    <div class="pf-dist-lista">${ativ.entregas.map(e => `<label><span>${esc(e.nome)}${e.status === 'finalizada' ? ' <small>(finalizado)</small>' : ''}</span><select data-ent="${esc(e.id)}">${opcoes(e.corretorUid)}</select></label>`).join('')}</div>
+    <div class="pf-dlg-acoes"><button type="button" class="pf-btn" data-fechar>Cancelar</button><button type="button" class="pf-btn pf-btn-pri" data-dist="salvar">Salvar escolhas</button></div>
+  </form>`);
+  const enviar = async (corpo, b) => {
+    b.disabled = true;
+    try { const r = await post(`${BASE}/atividades/${encodeURIComponent(ativ.atividade.id)}/distribuir`, corpo, 'PUT'); toast(r.message); d.close(); await abrirAtividade(ativ.atividade.id); }
+    catch (e) { toast(e.message, 'erro'); b.disabled = false; }
+  };
+  d.querySelector('[data-dist="igual"]').addEventListener('click', (ev) => enviar({ modo: 'igual' }, ev.currentTarget));
+  d.querySelector('[data-dist="salvar"]').addEventListener('click', (ev) => {
+    const atribuicoes = {};
+    d.querySelectorAll('select[data-ent]').forEach(s => { atribuicoes[s.dataset.ent] = s.value; });
+    enviar({ atribuicoes }, ev.currentTarget);
+  });
+}
+
 function dlgNovaAtividade(turmaId) {
   const t = dados.turmas.find(x => x.id === turmaId);
   const n = dados.atividades.filter(a => a.turmaId === turmaId).length + 1;
@@ -273,7 +301,8 @@ function renderAtividade() {
       <div class="pf-acoes">
         ${ativ.editor && atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-buscar">Buscar entregas do AVA</button>' : ''}
         ${ativ.editor && !atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-ligar">Ligar à Tarefa do AVA</button>' : ''}
-        <button type="button" class="pf-btn" data-acao="importar">Importar ZIP do AVA</button>
+        ${ativ.editor ? '<button type="button" class="pf-btn" data-acao="importar">Importar ZIP do AVA</button>' : ''}
+        ${ativ.editor && entregas.length ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="distribuir">Distribuir para os professores</button>' : ''}
         ${ativ.editor ? '<button type="button" class="pf-btn pf-btn-perigo" data-acao="excluir-ativ">Excluir atividade</button>' : ''}
       </div>
     </section>
@@ -283,6 +312,10 @@ function renderAtividade() {
         `<button type="button" role="tab" class="pf-aba ${abaAtiv === k ? 'ativa' : ''}" aria-selected="${abaAtiv === k}" data-aba="${k}">${t}</button>`).join('')}
     </nav>
     <section id="pf-aba"></section>`;
+  if (!entregas.length && !ativ.editor) {
+    el('pf-aba').innerHTML = '<div class="pf-vazio">Nenhum portfólio desta atividade foi distribuído para você ainda. A coordenação avisa quando distribuir.</div>';
+    return;
+  }
   if (!entregas.length) {
     el('pf-aba').innerHTML = `<div class="pf-vazio pf-passos">
       <h3>Como trazer as entregas do AVA</h3>
@@ -303,7 +336,7 @@ function renderAba() {
   if (abaAtiv === 'resumo') return renderResumo();
   const { entregas } = ativ;
   el('pf-aba').innerHTML = `<div class="pf-tab-wrap"><table class="pf-tab">
-    <thead><tr><th>Estudante</th><th>Arquivo</th><th>Situação</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
+    <thead><tr><th>Estudante</th>${ativ.editor ? '<th>Professor</th>' : ''}<th>Arquivo</th><th>Situação</th><th class="num" title="Nota de corte do Órbita: mesma regra para todos">Corte</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
     <tbody>${entregas.map(e => {
       const avisos = [];
       if (e.semTexto) avisos.push('<span class="pf-av pf-av-crit">sem texto (escaneado ou foto?)</span>');
@@ -313,9 +346,11 @@ function renderAba() {
       if (e.resultado && e.resultado.penalidade !== 'nenhuma') avisos.push(`<span class="pf-av">${esc(M.PENALIDADES[e.resultado.penalidade].rotulo)}</span>`);
       return `<tr tabindex="0" data-acao="corrigir" data-id="${esc(e.id)}">
         <td><b>${esc(e.nome)}</b>${e.corrigidoPor ? `<small>corrigido por ${esc(e.corrigidoPor)}</small>` : ''}</td>
+        ${ativ.editor ? `<td>${e.corretorNome ? esc(e.corretorNome) : '<span class="pf-av pf-av-alerta">sem professor</span>'}</td>` : ''}
         <td><small>${esc((e.arquivos || []).join(', ') || '—')}</small>${pdfs.has(chavePdf(e)) ? '' : ''}</td>
         <td><span class="pf-st pf-st-${esc(e.status)}">${STATUS[e.status] || e.status}</span></td>
-        <td class="num">${e.resultado ? fmt(e.resultado.nota) : '—'}</td>
+        <td class="num">${e.referencia && !e.referencia.semTexto ? fmt(e.referencia.nota) : '—'}</td>
+        <td class="num">${e.resultado ? fmt(e.resultado.nota) : '—'}${e.divergeDaReferencia && e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="2 pontos ou mais longe da nota de corte">diverge</span>' : ''}</td>
         <td>${avisos.join(' ')}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
@@ -672,10 +707,78 @@ async function abrirCorrecao(id) {
     conformidade: { capa: '', capaFaltando: [], formatacao: '', foraAva: false, obs: '', ...(base.conformidade || {}) },
     penalidade: base.penalidade || 'nenhuma'
   };
-  corr = { entrega, av, texto: null, sujo: false };
+  corr = { entrega, av, texto: null, sujo: false, sugerida: false };
   renderCorrecao();
   try { corr.texto = (await api(`${BASE}/entregas/${encodeURIComponent(id)}/texto`)).texto; } catch (e) { corr.texto = ''; }
-  if (corr && corr.entrega.id === id) renderLeitor();
+  if (!corr || corr.entrega.id !== id) return;
+  // nunca corrigido: já vem com a sugestão marcada (o professor confere e ajusta) — 26/11/2026
+  if (!entrega.avaliacao && corr.texto && window.PortfolioSugestao) { aplicarSugestao(); return; }
+  renderLeitor();
+}
+
+// ---------- sugestão automática e nota de referência (26/11/2026) ----------
+// A sugestão é a mesma regra que o servidor usa para a NOTA DE REFERÊNCIA (medicina/portfolio/sugestao.js): o mesmo
+// texto dá sempre a mesma sugestão, seja quem for o professor. Só preenche o formulário; quem salva é o professor.
+function aplicarSugestao() {
+  const s = window.PortfolioSugestao.sugerir(corr.texto || '', ativ.turma.objetivos || []);
+  const av = corr.av;
+  av.c1 = { ...av.c1, nivel: s.c1.nivel, justificativa: s.c1.justificativa };
+  av.c2 = { ...av.c2, analise: s.c2.analise, necessidades: s.c2.necessidades, acoes: s.c2.acoes, nivelManual: s.c2.nivelManual || null, justificativa: s.c2.justificativa };
+  av.c3 = { ...av.c3, objetivos: (ativ.turma.objetivos || []).map((_, i) => !!s.c3.objetivos[i]), justificativa: s.c3.justificativa };
+  av.c4 = { ...av.c4, nivel: s.c4.nivel, justificativa: s.c4.justificativa };
+  corr.sugerida = true; corr.sujo = true;
+  renderCorrecao(); renderLeitor();
+}
+const NOME_NIVEL_CURTO = { O: 'Ótimo', B: 'Bom', DM: 'Deve melhorar', I: 'Insuficiente' };
+// o portfólio vale o que a Tarefa do AVA vale (ex.: 3,0): a nota da matriz (0 a 10) × valor ÷ 10, igual ao lançamento
+const noAva = (nota) => { const max = ativ.atividade.ava && Number(ativ.atividade.ava.notaMax); return max ? ` <small style="display:inline">(= ${fmt(Math.round(nota * max / 10 * 100) / 100)} de ${fmt(max)} no AVA)</small>` : ''; };
+function faixaReferencia() {
+  const ref = corr.entrega.referencia;
+  if (!ref) return '';
+  const atual = M.calcular(corr.av, (ativ.turma.objetivos || []).length);
+  const lim = ativ.divergencia || 2;
+  const dif = Math.abs(atual.soma - ref.nota);
+  const diverge = !ref.semTexto && atual.completo && dif >= lim;
+  return `<div class="pf-ref ${diverge ? 'pf-ref-diverge' : ''}" role="status">
+    <div><b>Nota de corte do Órbita: ${fmt(ref.nota)}</b>${noAva(ref.nota)}
+      <small>${M.CRITERIOS.map(c => `C${c.num} ${ref.niveis[c.id] ? NOME_NIVEL_CURTO[ref.niveis[c.id]] : '—'}`).join(' · ')}</small>
+      <small>Calculada pelas mesmas regras para todos os professores, a partir do texto. ${ref.semTexto ? 'Sem texto legível: a referência não vale para este trabalho.' : `Se a sua nota ficar ${String(lim).replace('.', ',')} pontos ou mais longe dela, a correção é marcada para a coordenação.`}</small>
+      ${corr.sugerida ? '<small class="pf-ref-sug"><b>As marcações abaixo são a sugestão automática.</b> Confira cada critério no texto e ajuste o que precisar antes de finalizar.</small>' : ''}
+      ${diverge ? `<small class="pf-ref-alerta">A sua nota (${fmt(atual.soma)}) está ${fmt(dif)} pontos longe da nota de corte: deixe a justificativa clara em cada critério.</small>` : ''}</div>
+    <div class="pf-acoes">
+      <button type="button" class="pf-btn pf-btn-peq" data-acao="sugerir" ${corr.texto ? '' : 'disabled'}>Refazer sugestão pelo texto</button>
+      <button type="button" class="pf-btn pf-btn-peq" data-acao="analise-nota" title="Para quando o aluno questionar a nota: referência × correção, critério a critério">Análise da nota</button>
+    </div></div>`;
+}
+// "Análise da nota" (recurso do aluno): referência do Órbita × correção do professor, critério a critério, para imprimir
+function analiseDaNota() {
+  const { entrega, av } = corr;
+  const ref = entrega.referencia;
+  const total = (ativ.turma.objetivos || []).length;
+  const r = M.calcular(av, total);
+  const linhas = M.CRITERIOS.map(c => {
+    const rn = ref && ref.niveis[c.id], pn = r.criterios[c.id].nivel;
+    const rp = ref ? ref.pts[c.id] : null, pp = r.criterios[c.id].pts;
+    return `<tr class="${rp !== null && rp !== pp ? 'dif' : ''}"><td><b>C${c.num}</b> ${esc(c.nome)}<br><small>máx. ${fmt(c.max)}</small></td>
+      <td>${rn ? `${NOME_NIVEL_CURTO[rn]} — ${fmt(rp)}` : '—'}<p>${esc(ref ? ref.evidencias[c.id] || '' : '')}</p></td>
+      <td>${pn ? `${NOME_NIVEL_CURTO[pn]} — ${fmt(pp)}` : '—'}<p>${esc(av[c.id].justificativa || '')}</p></td></tr>`;
+  }).join('');
+  const w = window.open('', '_blank');
+  if (!w) { toast('O navegador bloqueou a janela. Libere pop-ups para este site.', 'erro'); return; }
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Análise da nota — ${esc(entrega.nome)}</title>
+    <style>body{font-family:Segoe UI,Arial,sans-serif;color:#0D1B33;margin:24px;font-size:12px}h1{font-size:18px;margin:0 0 4px}p.meta{color:#44536B;margin:0 0 14px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #C9D3E0;padding:7px;vertical-align:top;text-align:left}th{background:#004F9F;color:#fff}
+    td p{margin:5px 0 0;color:#44536B;white-space:pre-wrap}tr.dif td{background:#FFF6E5}.tot td{font-weight:700;background:#EEF2F7}
+    .nota{margin-top:12px;font-size:11px;color:#44536B}@media print{button{display:none}}</style></head><body>
+    <button onclick="print()">Imprimir</button>
+    <h1>Análise da nota — Portfólio</h1>
+    <p class="meta">${esc(entrega.nome)} · ${esc(ativ.turma.turma)} · ${esc(ativ.atividade.titulo)} · corrigido por ${esc(entrega.corrigidoPor || '—')}</p>
+    <table><thead><tr><th style="width:22%">Critério</th><th>Referência do Órbita (regra fixa, igual para todos)</th><th>Correção do professor</th></tr></thead>
+    <tbody>${linhas}
+    <tr class="tot"><td>Soma dos critérios</td><td>${ref ? fmt(ref.nota) : '—'}</td><td>${fmt(r.soma)}${r.penalidade !== 'nenhuma' ? ` → nota ${fmt(r.nota)} (${esc(M.PENALIDADES[r.penalidade].rotulo)})` : ''}</td></tr></tbody></table>
+    <p class="nota">Linhas em destaque: critério em que a correção do professor difere da referência. A referência é calculada pelas mesmas regras para todos os trabalhos, a partir do texto do portfólio (versão ${esc(ref ? ref.versao : '—')}); a nota final é do professor, com a evidência registrada em cada critério.</p>
+    </body></html>`);
+  w.document.close();
 }
 
 function nivelRadios(c, valor, nome) {
@@ -710,6 +813,7 @@ function renderCorrecao() {
   <div class="pf-corr">
     <section class="pf-leitor" id="pf-leitor" aria-label="Portfólio do estudante"><div class="pf-vazio">Carregando o texto…</div></section>
     <form class="pf-matriz" id="pf-matriz" autocomplete="off">
+      <div id="pf-ref-box">${faixaReferencia()}</div>
       <details class="pf-turma-info">
         <summary>Questão norteadora e instruções da ${esc(turma.turma)}</summary>
         <blockquote class="pf-questao">${esc(turma.questaoNorteadora || '')}</blockquote>
@@ -955,9 +1059,10 @@ async function salvarCorrecao(finalizar) {
   lerForm();
   try {
     const r = await post(`${BASE}/entregas/${encodeURIComponent(corr.entrega.id)}/avaliacao`, { avaliacao: corr.av, finalizar }, 'PUT');
-    Object.assign(corr.entrega, { avaliacao: JSON.parse(JSON.stringify(corr.av)), resultado: r.resultado, status: r.status, corrigidoPor: dados.eu.nome, alteradoAposCorrecao: false });
-    corr.sujo = false;
-    toast(finalizar ? `Finalizada: nota ${fmt(r.resultado.nota)}.` : 'Rascunho salvo.');
+    Object.assign(corr.entrega, { avaliacao: JSON.parse(JSON.stringify(corr.av)), resultado: r.resultado, status: r.status, corrigidoPor: dados.eu.nome, alteradoAposCorrecao: false,
+      referencia: r.referencia || corr.entrega.referencia, divergeDaReferencia: !!r.divergeDaReferencia });
+    corr.sujo = false; corr.sugerida = false;
+    toast(finalizar ? `Finalizada: nota ${fmt(r.resultado.nota)}.${r.divergeDaReferencia ? ` Ficou longe da referência (${fmt(r.referencia.nota)}): a coordenação vai ver no Resumo.` : ''}` : 'Rascunho salvo.');
     return true;
   } catch (e) {
     if (e.corpo && e.corpo.faltando) {
@@ -1022,10 +1127,11 @@ async function renderResumo() {
       <li>No AVA → <b>Ação de avaliação</b> → <b>Enviar planilha de avaliação</b>, envie o arquivo preenchido e confira a prévia antes de confirmar.</li>
     </ol></details>
     <div class="pf-tab-wrap"><table class="pf-tab">
-      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num">Nota</th><th>Similaridade</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num">Nota</th><th class="num" title="Nota de referência do Órbita: mesma regra para todos os professores">Referência</th><th>Similaridade</th><th>Situação</th></tr></thead>
       <tbody>${linhas.map(l => `<tr data-acao="corrigir" data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(l.e.nome)}</td>
         <td class="num">${fmt(l.c1)}</td><td class="num">${fmt(l.c2)}</td><td class="num">${fmt(l.c3)}</td><td class="num">${fmt(l.c4)}</td>
         <td class="num"><b>${l.r ? fmt(l.r.nota) : '—'}</b>${l.r && l.r.penalidade !== 'nenhuma' ? ` <small>(× ${String(l.r.fator).replace('.', ',')})</small>` : ''}</td>
+        <td class="num">${l.e.referencia ? fmt(l.e.referencia.nota) : '—'}${l.e.divergeDaReferencia && l.e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="A nota do professor ficou 2 pontos ou mais longe da referência">diverge</span>' : ''}</td>
         <td>${l.alerta ? '<span class="pf-av pf-av-crit">Sim</span>' : 'Não'}</td>
         <td><span class="pf-st pf-st-${esc(l.e.status)}">${STATUS[l.e.status]}</span></td></tr>`).join('')}</tbody>
     </table></div>`;
@@ -1039,9 +1145,9 @@ function baixar(conteudo, nome, tipo) {
 }
 function baixarCsvResumo() {
   const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-  const cab = ['Estudante', 'Participante', 'C1', 'C2', 'C3', 'C4', 'Soma', 'Condição especial', 'Nota', 'Similaridade', 'Situação', 'Corrigido por'];
+  const cab = ['Estudante', 'Participante', 'C1', 'C2', 'C3', 'C4', 'Soma', 'Condição especial', 'Nota', 'Referência', 'Diverge', 'Similaridade', 'Situação', 'Corrigido por'];
   const linhas = linhasResumo().map(l => [l.e.nome, l.e.participante, fmt(l.c1), fmt(l.c2), fmt(l.c3), fmt(l.c4), l.r ? fmt(l.r.soma) : '', l.r ? M.PENALIDADES[l.r.penalidade].rotulo : '',
-    l.r ? fmt(l.r.nota) : '', l.alerta ? 'Sim' : 'Não', STATUS[l.e.status], l.e.corrigidoPor || '']);
+    l.r ? fmt(l.r.nota) : '', l.e.referencia ? fmt(l.e.referencia.nota) : '', l.e.divergeDaReferencia ? 'Sim' : '', l.alerta ? 'Sim' : 'Não', STATUS[l.e.status], l.e.corrigidoPor || '']);
   baixar('﻿' + [cab, ...linhas].map(r => r.map(q).join(';')).join('\r\n'), nomeArquivo(`portfolio_${ativ.turma.turma}_${ativ.atividade.titulo}.csv`), 'text/csv;charset=utf-8');
 }
 
@@ -1196,6 +1302,12 @@ function ligarEventos() {
         if (prox) abrirCorrecao(prox.id); else { corr = null; abaAtiv = 'resumo'; renderAtividade(); }
       }
     }
+    else if (a === 'distribuir') dlgDistribuir();
+    else if (a === 'sugerir') {
+      if (corr.entrega.avaliacao && !window.confirm('Trocar as marcações atuais pela sugestão automática do texto? Nada é salvo até você clicar em Salvar.')) return;
+      aplicarSugestao();
+    }
+    else if (a === 'analise-nota') { lerForm(); analiseDaNota(); }
     else if (a === 'anterior' || a === 'proximo') {
       const i = ativ.entregas.findIndex(x => x.id === corr.entrega.id);
       const alvo = ativ.entregas[i + (a === 'proximo' ? 1 : -1)];
