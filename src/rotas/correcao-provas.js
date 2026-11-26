@@ -55,6 +55,11 @@ function certaNaFolha(av, l, i) {
     if (av.aceitarDupla && r === '*' && q.g && q.g !== 'X' && [...String((l.duplas || {})[i] || '')].some(x => q.g.includes(x))) return true;
     return false;
 }
+// Valor da prova na escala do Edubox: 10 = 100% (o Edubox recusa nota acima de 10). Teto por tipo
+// (26/11/2026): simulado vale até 2,0 e prova bimestral até 5,0; os demais até 10 — nunca 20 ou 50.
+const VALOR_MAX = { simulado: 2, bimestral: 5 };
+const valorMax = (tipo) => VALOR_MAX[tipo] || 10;
+const erroValor = (tipo) => `O valor ${tipo === 'simulado' ? 'do simulado' : tipo === 'bimestral' ? 'da prova bimestral' : 'da prova'} vai até ${String(valorMax(tipo)).replace('.', ',')} (escala do Edubox: 10 = 100%).`;
 function resultado(av, respostasOuLeitura) {
     const l = Array.isArray(respostasOuLeitura) ? { respostas: respostasOuLeitura } : (respostasOuLeitura || {});
     const porDisc = {};
@@ -71,9 +76,9 @@ function resultado(av, respostasOuLeitura) {
         const x = (porDisc[d] = porDisc[d] || { acertos: 0, total: 0 });
         x.total++; if (ok) x.acertos++;
     });
-    // Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. O 1e-9 evita
-    // que um 24,5 que sai da divisão como 24,4999999 desça pra 24.
-    const nota = av.valorTotal && total ? Math.round(acertos / total * av.valorTotal + 1e-9) : null;
+    // Nota na escala do Edubox (10 = 100%; simulado vale 2,0), com 1 casa e meio pra cima (26/11/2026):
+    // 2,44 → 2,4; 2,45 → 2,5. O 1e-9 evita que um 2,45 que sai da divisão como 2,4499999 desça.
+    const nota = av.valorTotal && total ? Math.round(acertos / total * av.valorTotal * 10 + 1e-9) / 10 : null;
     return { acertos, total, nota, porDisc, dispensadas: Object.keys(disp).filter(d => disp[d]) };
 }
 
@@ -370,7 +375,9 @@ router.post('/avaliacoes', verifyToken, checkPermission, async (req, res) => {
             if (usado.empty) codigo = n;
         }
         if (!codigo) return res.status(500).json({ error: 'Não foi possível gerar o código da avaliação. Tente de novo.' });
-        const valorTotal = Number(req.body.valorTotal) > 0 ? Math.min(100, Number(req.body.valorTotal)) : null;
+        if (req.body.tipo !== 'simulado' && Number(req.body.valorTotal) > valorMax(req.body.tipo)) return res.status(400).json({ error: erroValor(req.body.tipo) });
+        // Simulado vale sempre 2,0, em todos os cursos (26/11/2026).
+        const valorTotal = req.body.tipo === 'simulado' ? VALOR_MAX.simulado : Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
         const dado = {
             nome, codigo, data: /^\d{4}-\d{2}-\d{2}$/.test(req.body.data || '') ? req.body.data : null,
             nAlt, questoes: limparQuestoes(req.body.questoes), questaoIds: idsDoBanco(limparQuestoes(req.body.questoes)), valorTotal,
@@ -422,7 +429,14 @@ router.put('/avaliacoes/:id', verifyToken, checkPermission, async (req, res) => 
         Object.assign(mud, camposRastreio(req.body));
         if (req.body.disciplina !== undefined && !mud.disciplina) return res.status(400).json({ error: 'Informe a disciplina.' });
         if (req.body.aceitarDupla !== undefined) mud.aceitarDupla = !!req.body.aceitarDupla;
-        if (req.body.valorTotal !== undefined) mud.valorTotal = Number(req.body.valorTotal) > 0 ? Math.min(100, Number(req.body.valorTotal)) : null;
+        const tipoFinal = mud.tipo || av.tipo;
+        const valorFinal = req.body.valorTotal !== undefined ? Number(req.body.valorTotal) : Number(av.valorTotal);
+        // Simulado vale sempre 2,0, em todos os cursos (26/11/2026) — grava 2,0 mesmo que venha outro valor.
+        if (tipoFinal === 'simulado') mud.valorTotal = VALOR_MAX.simulado;
+        else {
+            if (valorFinal > valorMax(tipoFinal)) return res.status(400).json({ error: erroValor(tipoFinal) });
+            if (req.body.valorTotal !== undefined) mud.valorTotal = Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
+        }
         if (req.body.questoes !== undefined) {
             // o número de questões não muda depois de criada: as folhas já foram impressas com essa quantidade
             if (!Array.isArray(req.body.questoes) || req.body.questoes.length !== av.questoes.length) return res.status(400).json({ error: 'O número de questões não pode mudar depois de criada (as folhas já saíram com essa quantidade).' });

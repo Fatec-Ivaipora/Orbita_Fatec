@@ -157,6 +157,9 @@ async function abrirLista() {
 
 // ---------- NOVA AVALIAÇÃO ----------
 const novaQuestao = () => ({ g: '', d: '' });
+// Teto do Valor da prova por tipo, na escala do Edubox (10 = 100%) — igual ao backend (26/11/2026).
+const VALOR_MAX = { simulado: 2, bimestral: 5 };
+const valorMax = (tipo) => VALOR_MAX[tipo] || 10;
 const TIPOS = { bimestral: 'Prova bimestral', exame: 'Exame', simulado: 'Simulado', ead: 'Prova EAD', dp: 'Prova de DP', outra: 'Outra avaliação' };
 const VARIAS = 'Várias (simulado)';
 const rotuloAv = (a) => [TIPOS[a.tipo] || '', a.bimestre ? `${a.bimestre}º bimestre` : ''].filter(Boolean).join(' · ');
@@ -262,7 +265,8 @@ function blocoIdent() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome da avaliação <small>(opcional — se ficar vazio, usa o tipo e a disciplina)</small><input id="f-nome" maxlength="120" value="${esc(f.nome)}" placeholder="${esc(nomeAuto({ ...f, tipo: dpFixo ? 'dp' : f.tipo, disciplina: dpFixo && f.dp ? f.dp.nome : f.disciplina }))}"></label>
       <label class="cp-campo">Data da aplicação <input type="date" id="f-data" value="${esc(f.data)}"></label>
-      <label class="cp-campo">Valor da prova <small>(opcional)</small><input type="number" id="f-valor" min="0" max="100" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: 2,0"></label>
+      ${f.tipo === 'simulado' && !dpFixo ? `<label class="cp-campo">Valor da prova <small>(simulado vale sempre 2,0)</small><input type="number" id="f-valor" value="2" disabled></label>`
+        : `<label class="cp-campo">Valor da prova <small>(até ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')} — escala do Edubox, 10 = 100%)</small><input type="number" id="f-valor" min="0" max="${valorMax(dpFixo ? 'dp' : f.tipo)}" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')}"></label>`}
     </div>
   </section>`;
 }
@@ -414,7 +418,7 @@ async function salvarNova(btn) {
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
     const r = await apiFetch('/correcao/avaliacoes', { method: 'POST', body: JSON.stringify({
-      nome: f.nome, tipo, bimestre: f.bimestre || null, disciplina, professor: prof, data: f.data, valorTotal: f.valorTotal ? Number(String(f.valorTotal).replace(',', '.')) : null,
+      nome: f.nome, tipo, bimestre: f.bimestre || null, disciplina, professor: prof, data: f.data, valorTotal: tipo === 'simulado' ? 2 : f.valorTotal ? Number(String(f.valorTotal).replace(',', '.')) : null,
       turmas: f.modo === 'dp' ? [] : [...f.turmasSel], dp: f.modo === 'dp' ? f.dp : null, nAlt: f.nAlt, questoes: f.questoes, origem: f.origem === 'banco' ? 'manual' : f.origem, provaId: f.provaId
     }) });
     toast('Avaliação criada. Agora imprima as folhas.');
@@ -431,8 +435,8 @@ function certaNaFolha(l, i) {
   if (acertou(q.g, resp)) return true;
   return !!(av.aceitarDupla && resp === '*' && q.g && q.g !== 'X' && [...String((l.duplas || {})[i] || '')].some(x => q.g.includes(x)));
 }
-// Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. Igual ao backend.
-const arredNota = (v) => Math.round(v + 1e-9);
+// Nota na escala do Edubox (10 = 100%), 1 casa, meio pra cima (26/11/2026): 2,44 → 2,4; 2,45 → 2,5. Igual ao backend.
+const arredNota = (v) => Math.round(v * 10 + 1e-9) / 10;
 // Questão de disciplina que o coordenador marcou DISPENSA para este aluno (sai do cálculo da nota dele).
 const dispensou = (l, i) => !!(l && l.dispensadas && av.questoes[i].d && l.dispensadas[av.questoes[i].d]);
 function resultado(l) {
@@ -633,7 +637,8 @@ function abaGabarito() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome <input id="g-nome" value="${esc(f.nome)}" ${ed ? '' : 'disabled'}></label>
       <label class="cp-campo">Data <input type="date" id="g-data" value="${esc(f.data)}" ${ed ? '' : 'disabled'}></label>
-      <label class="cp-campo">Valor <input type="number" id="g-valor" step="0.1" min="0" value="${esc(f.valorTotal)}" ${ed ? '' : 'disabled'}></label>
+      ${f.tipo === 'simulado' ? `<label class="cp-campo">Valor <small>(simulado: sempre 2,0)</small><input type="number" id="g-valor" value="2" disabled></label>`
+        : `<label class="cp-campo">Valor <small>(até ${String(valorMax(f.tipo)).replace('.', ',')})</small><input type="number" id="g-valor" step="0.1" min="0" max="${valorMax(f.tipo)}" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(f.tipo)).replace('.', ',')}" ${ed ? '' : 'disabled'}></label>`}
     </div>
     <div class="cp-campos">
       <label class="cp-campo">Tipo <select id="g-tipo" ${ed ? '' : 'disabled'}>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${f.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -659,8 +664,8 @@ async function salvarGabarito(btn) {
   aplicarFaixas();
   btn.disabled = true;
   try {
-    await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}`, { method: 'PUT', body: JSON.stringify({ nome: form.nome, tipo: form.tipo, bimestre: form.bimestre || null, disciplina: form.disciplina, aceitarDupla: form.aceitarDupla, data: form.data, valorTotal: form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes }) });
-    av = { ...av, nome: form.nome, aceitarDupla: form.aceitarDupla, tipo: form.tipo, bimestre: form.bimestre ? Number(form.bimestre) : null, disciplina: form.disciplina, data: form.data || null, valorTotal: form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes.map(q => ({ ...q })) };
+    await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}`, { method: 'PUT', body: JSON.stringify({ nome: form.nome, tipo: form.tipo, bimestre: form.bimestre || null, disciplina: form.disciplina, aceitarDupla: form.aceitarDupla, data: form.data, valorTotal: form.tipo === 'simulado' ? 2 : form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes }) });
+    av = { ...av, nome: form.nome, aceitarDupla: form.aceitarDupla, tipo: form.tipo, bimestre: form.bimestre ? Number(form.bimestre) : null, disciplina: form.disciplina, data: form.data || null, valorTotal: form.tipo === 'simulado' ? 2 : form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes.map(q => ({ ...q })) };
     toast('Gabarito salvo. Os resultados foram recalculados.'); avaliacoes = null; renderAvaliacao();
   } catch (err) { toast(err.message, 'erro'); btn.disabled = false; }
 }
@@ -702,7 +707,7 @@ async function baixarPlanilha(btn) {
 
 // ---------- ARQUIVO PARA O EDUBOX (04/11/2026) ----------
 // Mesmo modelo da Trilha EAD (docencia/trilha-ead): CSV UTF-8 com BOM, cabeçalho "Nome;Nota", uma
-// linha por aluno, nota inteira (arredondada) escrita com ponto e 1 casa (o Edubox guarda numeric(3,1)), UM ARQUIVO POR TURMA
+// linha por aluno, nota com ponto e 1 casa (o Edubox guarda numeric(3,1) e recusa nota acima de 10), UM ARQUIVO POR TURMA
 // (= diário do Edubox; os alunos vêm do CADD, com o nome igual ao do Edubox), em ordem alfabética.
 // Quem não teve folha lida sai com 0 — avisado antes, como a Trilha faz com quem não fez nada no AVA.
 const SEM_TURMA = '__sem_turma__';
@@ -737,8 +742,9 @@ function dialogoEdubox() {
   d.innerHTML = `<div class="cp-modal-box cp-modal-edubox"><h2>Arquivo para o Edubox</h2>
     <p class="cp-dica">Uma linha por aluno: <b>Nome;Nota</b>, com ponto (ex.: 1.5). Mesmo modelo do arquivo da Trilha EAD. Um arquivo por turma (diário do Edubox), com os alunos da turma.</p>
     ${grupos.filter(g => g.turma).length > 1 ? `<div class="cp-aviso-banco">Esta prova foi aplicada a <b>${grupos.filter(g => g.turma).length} períodos juntos</b>. No Edubox cada período é um diário separado, então sai <b>um arquivo por período</b> — os alunos não se misturam. Importe cada arquivo no diário do período dele.</div>` : ''}
+    ${Number(av.valorTotal) > valorMax(av.tipo) ? `<div class="cp-alerta">O <b>Valor da prova</b> está em ${String(av.valorTotal).replace('.', ',')}, mas ${av.tipo === 'simulado' ? 'o simulado vale até 2,0' : av.tipo === 'bimestral' ? 'a prova bimestral vale até 5,0' : 'o Edubox só aceita até 10'} (escala do Edubox: 10 = 100%). Corrija o Valor na aba <b>Gabarito</b> antes de gerar o arquivo.</div>` : ''}
     ${semValor ? '<div class="cp-alerta">Esta avaliação está sem <b>Valor da prova</b>, então não há nota pra lançar. Preencha o Valor na aba <b>Gabarito</b> e volte aqui.</div>'
-      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), arredondada para inteiro (24,4 → 24; 24,5 → 25).</p>`}
+      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), com 1 casa (2,44 → 2,4; 2,45 → 2,5).</p>`}
     <div class="cp-edubox-lista">
       ${grupos.map(g => {
         const sem = g.alunos.filter(a => !leituras[a.i]).length;
