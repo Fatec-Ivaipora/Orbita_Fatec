@@ -99,6 +99,41 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Aplicação de Provas: visual novo, Resultados do AVA no molde da Correção de Provas, anular questão e arquivo para o Edubox
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/ava-resultados-dp-adp
+- Arquivos alterados:
+  - `medicina/aplicacao-provas/aplicacao-provas.css` (v=15): bloco "Refinamento visual" no fim. As abas viram navegação sublinhada e os botões viram ação: ícone, contorno firme e cor da submarca MED FATEC (#004F9F). Os botões de PDF da Impressão ganham ícone de baixar, e linhas/itens que abrem a prova destacam ao passar o mouse. Inclui também os estilos novos da aba Resultados (`.ar-*`).
+  - `medicina/aplicacao-provas/index.html` (app.js v=27): botões "Nova prova", "Configurar" e "Imprimir / imagem" com ícone, num grupo "Ações" separado das abas.
+  - `medicina/aplicacao-provas/resultados.js` (v=3, reescrito):
+    - lista das provas com números do semestre, situação em pílula e botão "Ver resultado";
+    - detalhe com cartões (fizeram, média, maior · menor, não fizeram), distribuição das notas e abas Fizeram / 2ª chamada / Questões;
+    - nota final REDONDA pela regra matemática (24,4 → 24; 24,5 → 25), com a nota do AVA embaixo;
+    - botão Anular/Desfazer em cada questão;
+    - "Arquivo para o Edubox": CSV `Nome;Nota`, nota inteira, BOM, só quem fez, com opção de incluir quem faltou com 0.
+  - `src/utils/ava-resultados.js` + `scripts/ava-banco-med-agente.js`: o agente guarda a nota de cada questão (colunas "Q. n /valor" do relatório do AVA) em `questoes` e `alunos[].q`.
+  - `src/rotas/aplicacao-provas-med.js`:
+    - `aplicarAnulacao` reconta as notas: quem fez ganha o valor cheio da questão anulada e a nota é reescalada para a nota máxima do questionário;
+    - também calcula o acerto de cada questão (`porQuestao`);
+    - `PUT /resultados/:id/anuladas { questoes }` grava em `med_resultados_anuladas/<prova>` (coleção própria, porque o agente regrava o resultado inteiro a cada leitura).
+  - Dispensado: na aba 2ª chamada, cada aluno sem nota tem o botão "Dispensado", para quem não precisa fazer a prova. Ele sai da lista da 2ª chamada, da contagem "Não fizeram", da lista copiada e nunca entra com 0 no arquivo do Edubox. Fica em `med_resultados_anuladas/<prova>.dispensados`, pelo nome normalizado, via `PUT /resultados/:id/dispensado { nome, dispensado }`. A anulação grava com merge, para não apagar os dispensados.
+  - Correção: a linha "Média geral" do relatório do AVA entrava como um aluno que não fez a prova. O leitor ignora essa linha, e o servidor tira ela das leituras já gravadas.
+  - "Anular questão" também como botão no topo da prova, ao lado de "Arquivo para o Edubox", e nome da aba.
+- Tipo: Funcionalidade + visual
+- Motivo: pedido para a Joyce. A tela de resultados precisava ficar igual à da Correção de Provas, com a possibilidade de anular questão e recontar, e com o arquivo de notas para o Edubox. O usuário também achou o visual do módulo feio e pediu botões de ação claros.
+- Depois do merge, no droplet: `git pull` + `npm ci` em /opt/orbita-sync e `systemctl restart orbita-ava-banco-agente`. As provas lidas antes disso só mostram as questões (e permitem anular) depois da próxima leitura ("Ler de novo no AVA").
+- Como reverter: reverter o commit. A coleção `med_resultados_anuladas` pode ser apagada.
+
+### [2026-11-26] Resultados do AVA e agente do banco: provas de DP e ADP da Medicina passam a ser lidas
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/ava-resultados-dp-adp
+- Arquivos alterados:
+  - `src/utils/ava-banco-importar.js`: `cursosDo` também busca os cursos de dependência e adaptação da Medicina, que têm outro padrão de nome ("ADP - MEDICINA - 2026.2 - PATOLOGIA CLÍNICA I", "DP - MEDICINA - 2026.2 - SISTEMAS MORFOFISIOLÓGICOS III" e "DP - ADP - MEDICINA - …"), com `turma` 'ADP'/'DP' e `turmas`. O envio de questões (`destino`) continua só nos cursos T.n, porque os cursos DP/ADP têm o mesmo nome de disciplina. `questionarioDaProva` aceita também "AVALIAÇÃO 2º BIMESTRE" e "AVALIAÇÃO 2º CHAMADA - 2º BIMESTRE" (ADP de Habilidades Clínicas I).
+  - `src/utils/ava-resultados.js`: deixa de pular as provas das turmas DP e ADP ("não tem curso próprio no AVA") e procura o curso delas como faz com as T.n.
+- Tipo: Correção
+- Motivo: no primeiro teste do agente no servidor (26/11), as provas DP Sistemas Morfofisiológicos III, ADP Habilidades Clínicas I e ADP Mecanismos de Defesa e Doença ficaram sem resultado. Os cursos existem no AVA da Medicina: 5 ADP e 3 DP em 2026.2. Testado com a lista real de cursos e questionários do AVA: cada prova acha o seu curso, e o envio de questões de Patologia Clínica I continua indo para o curso da T2.
+- Depois do merge, no droplet: `cd /opt/orbita-sync && sudo -u orbita git pull && sudo -u orbita npm ci --omit=dev && systemctl restart orbita-ava-banco-agente`.
+- Como reverter: reverter o commit.
 ### [2026-11-26] Correção de Provas: nota com 1 casa na escala do Edubox (corrige o arredondamento para inteiro) e Valor por tipo (simulado fixo 2,0; bimestral até 5,0)
 - **Por quê:** no Edubox 10 = 100% e ele recusa nota acima de 10; o simulado vale 2,0. O arredondamento para inteiro (entrada logo abaixo) estava errado para essa escala (1,55 viraria 2). A importação de notas da Fisio deu "Nota inválida" porque os simulados estavam com Valor 20 (deveria ser 2).
 - **O que mudou:** nota = acertos ÷ questões × valor da prova, com **1 casa, meio pra cima** (2,44 → 2,4; 2,45 → 2,5) — tela, planilha e arquivo do Edubox. **Teto do Valor da prova por tipo:** simulado até **2,0**, prova bimestral até **5,0**, demais tipos até 10 (máximo do Edubox). A tela mostra o teto no campo e o servidor recusa acima dele (POST/PUT de avaliação; no PUT vale o tipo e o valor finais). A tela do arquivo do Edubox avisa se uma avaliação antiga estiver acima do teto.

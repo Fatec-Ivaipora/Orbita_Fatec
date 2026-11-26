@@ -8,7 +8,7 @@
 // dos alunos do NAPA (dado de saúde / LGPD) — só sala, responsável e quantos notebooks.
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 
 const checkPermission = verifyToken.requireModulePermission('aplicacao-provas-med');
@@ -428,13 +428,67 @@ router._interno = { ehMinha, podeEditar, norm };
 // em med_resultados_ava/<id da prova>: quem fez (com a nota), quem não fez (lista da 2ª chamada) e a média.
 // Notas de aluno: só coordenação de Medicina e ADM (os mesmos da Impressão). O RA vem do Edubox, casando pelo nome.
 const COL_RES = 'med_resultados_ava';
+// Questão anulada (26/11/2026): a coordenação anula no Órbita e as notas são recontadas — quem fez a prova ganha o
+// valor cheio da questão (mesma regra da Correção de Provas). Fica em coleção própria porque o agente regrava
+// med_resultados_ava/<id> inteiro a cada leitura. Precisa da nota de cada questão (colunas "Q. n" do AVA).
+const COL_ANUL = 'med_resultados_anuladas';
 const normNomeAluno = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const arred = (n, c = 2) => Math.round(n * 10 ** c) / 10 ** c;
+function aplicarAnulacao(r, anul) {
+    const questoes = Array.isArray(r.questoes) ? r.questoes : [];
+    const anuladas = ((anul && anul.questoes) || []).filter(n => questoes.some(q => q.n === n));
+    const fez = (r.alunos || []).filter(a => a.situacao === 'finalizada');
+    const comQ = fez.filter(a => Array.isArray(a.q) && a.q.length === questoes.length);
+    const somaMax = questoes.reduce((s, q) => s + (q.max || 0), 0);
+    // desempenho de cada questão: média obtida ÷ valor (com a nota original do AVA)
+    const porQuestao = questoes.map((q, i) => {
+        const obtidas = comQ.map(a => a.q[i]).filter(v => v !== null && v !== undefined);
+        const acerto = obtidas.length && q.max ? obtidas.reduce((s, v) => s + v, 0) / (obtidas.length * q.max) : null;
+        return { n: q.n, max: q.max, acerto: acerto === null ? null : arred(acerto, 3), respostas: obtidas.length, anulada: anuladas.includes(q.n) };
+    });
+    // leituras antigas guardaram a linha "Média geral" do relatório como se fosse aluno
+    let alunos = (r.alunos || []).filter(a => !/^MEDIA GERAL\b/.test(normNomeAluno(a.nome)));
+    let media = r.media;
+    if (anuladas.length && somaMax && r.notaMax) {
+        alunos = alunos.map(a => {
+            if (a.situacao !== 'finalizada' || !Array.isArray(a.q) || a.q.length !== questoes.length) return a;
+            const soma = questoes.reduce((s, q, i) => s + (anuladas.includes(q.n) ? q.max : (a.q[i] || 0)), 0);
+            return { ...a, notaAva: a.nota, nota: arred(soma / somaMax * r.notaMax) };
+        });
+        const notas = alunos.filter(a => a.situacao === 'finalizada' && a.nota !== null && a.nota !== undefined).map(a => a.nota);
+        media = notas.length ? arred(notas.reduce((s, n) => s + n, 0) / notas.length) : null;
+    }
+    // Dispensado (26/11/2026): aluno sem nota que não precisa fazer a prova (dispensa da disciplina etc.). A
+    // coordenação marca na aba 2ª chamada; sai da lista da 2ª chamada e da contagem "não fizeram". Guardado
+    // pelo nome normalizado em med_resultados_anuladas/<prova>.dispensados (o agente não mexe nessa coleção).
+    const dispensados = new Set((anul && anul.dispensados) || []);
+    const semLinhaMedia = (r.alunos || []).length - alunos.length;
+    alunos = alunos.map(a => (a.situacao !== 'finalizada' && dispensados.has(normNomeAluno(a.nome)) ? { ...a, dispensado: true } : a));
+    const contagem = r.contagem ? {
+        ...r.contagem, inscritos: (r.contagem.inscritos || 0) - semLinhaMedia,
+        naoFizeram: alunos.filter(a => a.situacao === 'nao_fez' && !a.dispensado).length,
+        outros: alunos.filter(a => a.situacao !== 'finalizada' && a.situacao !== 'nao_fez' && !a.dispensado).length,
+        dispensados: alunos.filter(a => a.dispensado).length
+    } : r.contagem;
+    return {
+        ...r, alunos, media, mediaAva: r.media, porQuestao, anuladas, contagem,
+        anulacao: anuladas.length ? { por: anul.por || '', em: anul.em || '' } : null,
+        podeAnular: questoes.length > 0 && comQ.length === fez.length
+    };
+}
+router._interno.aplicarAnulacao = aplicarAnulacao;
 router.get('/resultados', exigeImpressao, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : semestreAtual();
-        const [snap, cfg] = await Promise.all([db.collection(COL_RES).where('semestre', '==', semestre).get(), db.collection('config').doc('ava_banco_sync').get()]);
-        const resultados = snap.docs.map(d => { const { alunos, ...r } = d.data(); return { id: d.id, ...r }; });
+        const [snap, cfg, anSnap] = await Promise.all([db.collection(COL_RES).where('semestre', '==', semestre).get(), db.collection('config').doc('ava_banco_sync').get(),
+            db.collection(COL_ANUL).where('semestre', '==', semestre).get()]);
+        const anulPor = new Map(anSnap.docs.map(d => [d.id, d.data()]));
+        const resultados = snap.docs.map(d => {
+            const { alunos, porQuestao, ...r } = aplicarAnulacao({ id: d.id, ...d.data() }, anulPor.get(d.id));
+            const notas = (alunos || []).filter(a => a.situacao === 'finalizada' && a.nota !== null && a.nota !== undefined).map(a => a.nota);
+            return { ...r, maior: notas.length ? Math.max(...notas) : null, menor: notas.length ? Math.min(...notas) : null, questoes: undefined };
+        });
         const c = cfg.exists ? cfg.data() : {};
         res.json({ semestre, resultados, agente: { vivoEm: c.agenteVivoEm || null, pedidoEm: c.pedidoEm || null, ultimaRodada: c.ultimaRodada || null } });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
@@ -442,9 +496,9 @@ router.get('/resultados', exigeImpressao, async (req, res) => {
 router.get('/resultados/:id', exigeImpressao, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
-        const snap = await db.collection(COL_RES).doc(req.params.id).get();
+        const [snap, an] = await Promise.all([db.collection(COL_RES).doc(req.params.id).get(), db.collection(COL_ANUL).doc(req.params.id).get()]);
         if (!snap.exists) return res.status(404).json({ error: 'Ainda não há resultado do AVA para esta prova.' });
-        const r = { id: snap.id, ...snap.data() };
+        const r = aplicarAnulacao({ id: snap.id, ...snap.data() }, an.exists ? an.data() : null);
         // RA pelo nome (Edubox via relay). Sem o Edubox, a lista sai só com o nome.
         let semRa = null;
         try {
@@ -454,6 +508,43 @@ router.get('/resultados/:id', exigeImpressao, async (req, res) => {
             r.alunos = (r.alunos || []).map(a => { const ra = porNome.get(normNomeAluno(a.nome)); return { ...a, ra: ra && ra !== 'duplicado' ? ra : '' }; });
         } catch (e) { semRa = `Não consegui buscar o RA no Edubox (${e.message}).`; }
         res.json({ ...r, semRa });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+// PUT /resultados/:id/anuladas { questoes: [3, 17] } — anula (ou desfaz, com lista vazia) e reconta as notas
+router.put('/resultados/:id/anuladas', exigeImpressao, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_RES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Ainda não há resultado do AVA para esta prova.' });
+        const r = snap.data();
+        const validas = new Set((r.questoes || []).map(q => q.n));
+        if (!validas.size) return res.status(400).json({ error: 'Esta leitura do AVA não trouxe a nota de cada questão. Clique em "Ler agora no AVA" e tente de novo.' });
+        const questoes = [...new Set((Array.isArray(req.body.questoes) ? req.body.questoes : []).map(Number))].filter(n => validas.has(n)).sort((a, b) => a - b);
+        if (questoes.length >= validas.size) return res.status(400).json({ error: 'Não dá para anular todas as questões.' });
+        const quemFoi = req.user.name || req.user.email || 'Coordenação';
+        // merge: não apaga os dispensados guardados no mesmo documento
+        await db.collection(COL_ANUL).doc(req.params.id).set({ semestre: r.semestre, provaId: req.params.id, questoes, por: quemFoi, em: new Date().toISOString() }, { merge: true });
+        res.json({ message: questoes.length ? `Questão${questoes.length > 1 ? 'ões' : ''} ${questoes.join(', ')} anulada${questoes.length > 1 ? 's' : ''}: notas recontadas.` : 'Anulação desfeita: valem as notas do AVA.', questoes });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+// PUT /resultados/:id/dispensado { nome, dispensado: true|false } — aluno sem nota que não faz 2ª chamada
+router.put('/resultados/:id/dispensado', exigeImpressao, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_RES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Ainda não há resultado do AVA para esta prova.' });
+        const r = snap.data();
+        const chave = normNomeAluno(req.body.nome);
+        const aluno = (r.alunos || []).find(a => normNomeAluno(a.nome) === chave);
+        if (!aluno) return res.status(404).json({ error: 'Aluno não encontrado nesta prova.' });
+        if (aluno.situacao === 'finalizada') return res.status(400).json({ error: 'Esse aluno fez a prova: não dá para marcar como dispensado.' });
+        const ref = db.collection(COL_ANUL).doc(req.params.id);
+        const marca = !!req.body.dispensado;
+        const quemFoi = req.user.name || req.user.email || 'Coordenação';
+        await ref.set({
+            semestre: r.semestre, provaId: req.params.id,
+            dispensados: marca ? admin.firestore.FieldValue.arrayUnion(chave) : admin.firestore.FieldValue.arrayRemove(chave),
+            dispensadosPor: quemFoi, dispensadosEm: new Date().toISOString()
+        }, { merge: true });
+        res.json({ message: marca ? `${aluno.nome} marcado(a) como dispensado(a): sai da 2ª chamada.` : `${aluno.nome} voltou para a lista da 2ª chamada.` });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 router.post('/resultados/agora', exigeImpressao, async (req, res) => {

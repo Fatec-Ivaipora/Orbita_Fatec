@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/core/layout.css">
   <link rel="stylesheet" href="/core/orbita.css?v=3">
-  <link rel="stylesheet" href="/medicina/aplicacao-provas/aplicacao-provas.css?v=14">
+  <link rel="stylesheet" href="/medicina/aplicacao-provas/aplicacao-provas.css?v=15">
 </head>
 <body class="orb-v2">
   <div id="auth-guard" class="layout-auth-guard">
@@ -53,11 +53,11 @@
               <button type="button" role="tab" class="ap-aba" data-aba="impressao" aria-selected="false" hidden>Impressão</button>
               <button type="button" role="tab" class="ap-aba" data-aba="resultados" aria-selected="false" hidden>Resultados do AVA</button>
             </nav>
-            <div class="ap-acoes">
-              <button type="button" class="ap-btn ap-btn-pri ap-so-editor" id="ap-nova" hidden>+ Prova</button>
-              <button type="button" class="ap-btn ap-so-editor" id="ap-config" hidden>Configurar</button>
+            <div class="ap-acoes" role="group" aria-label="Ações">
+              <button type="button" class="ap-btn ap-btn-pri ap-so-editor" id="ap-nova" hidden><svg class="ap-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova prova</button>
+              <button type="button" class="ap-btn ap-so-editor" id="ap-config" hidden><svg class="ap-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Configurar</button>
               <div class="ap-menu-wrap">
-                <button type="button" class="ap-btn" id="ap-exportar" aria-haspopup="true" aria-expanded="false">Imprimir / imagem</button>
+                <button type="button" class="ap-btn" id="ap-exportar" aria-haspopup="true" aria-expanded="false"><svg class="ap-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 17H4v-6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6h-3M7 14h10v7H7z"/></svg>Imprimir / imagem<svg class="ap-ic ap-ic-seta" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
                 <div class="ap-menu" id="ap-menu-exportar" role="menu" hidden>
                   <button type="button" role="menuitem" data-exp="img-turmas">Imagem: calendário das turmas (alunos)</button>
                   <button type="button" role="menuitem" data-exp="img-aplicadores">Imagem: professores aplicadores</button>
@@ -79,6 +79,6 @@
   <!-- área de impressão / imagem (montada na hora) -->
   <div id="ap-saida" class="ap-saida" aria-hidden="true"></div>
 
-  <script type="module" src="/medicina/aplicacao-provas/app.js?v=26"></script>
+  <script type="module" src="/medicina/aplicacao-provas/app.js?v=27"></script>
 </body>
 </html>

@@ -104,7 +104,7 @@ async function lerResultadoDaProva(imp, p) {
     try {
         const r = await lerResultados(imp, q.cmid);
         const fizeram = r.alunos.filter(a => a.situacao === 'finalizada').length;
-        return { ...base, ...ligado, status: 'ok', erro: '', notaMax: r.notaMax, media: r.media, alunos: r.alunos,
+        return { ...base, ...ligado, status: 'ok', erro: '', notaMax: r.notaMax, media: r.media, alunos: r.alunos, questoes: r.questoes || [],
             contagem: { inscritos: r.alunos.length, fizeram, naoFizeram: r.alunos.filter(a => a.situacao === 'nao_fez').length, outros: r.alunos.length - fizeram - r.alunos.filter(a => a.situacao === 'nao_fez').length } };
     } catch (e) { return { ...base, ...ligado, status: e.semNota ? 'sem_nota' : 'erro', erro: e.message }; }
 }
