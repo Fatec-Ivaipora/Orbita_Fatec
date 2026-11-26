@@ -4,7 +4,8 @@
 // lidos no AVA pelo agente do droplet (scripts/ava-banco-med-agente.js). Só coordenação de Medicina e ADM.
 // 26/11: no molde da tela de resultado da Correção de Provas — números no topo, distribuição das notas, abas
 // Alunos / 2ª chamada / Questões, ANULAR questão (o servidor reconta as notas) e "Arquivo para o Edubox"
-// (Nome;Nota). A nota final é REDONDA, pela regra matemática: 24,4 → 24 e 24,5 → 25.
+// (Nome;Nota). Nota do Edubox no mesmo padrão da Correção de Provas da graduação (26/11/2026): escala do Edubox
+// (10 = 100%), valor da prova até 10, 1 casa e meio pra cima (2,44 → 2,4; 2,45 → 2,5).
 // Rotas: src/rotas/aplicacao-provas-med.js (/resultados, /resultados/:id, /resultados/:id/anuladas).
 // ==========================================================================================
 import { escapeHTML as esc } from "../../core/security.js";
@@ -16,8 +17,11 @@ const dataBr = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
 const diaSemana = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '') : '');
 const quando = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
 const dec = (n, c = 2) => (n === null || n === undefined ? '–' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: c }));
-// regra matemática: a partir de ,5 sobe (24,5 → 25); o 1e-9 evita 24,4999… de conta com vírgula flutuante
-const redonda = (n) => (n === null || n === undefined ? null : Math.round(Number(n) + 1e-9));
+// 1 casa, meio pra cima (2,45 → 2,5); o 1e-9 evita 2,4499… de conta com vírgula flutuante
+const umaCasa = (n) => (n === null || n === undefined ? null : Math.round(Number(n) * 10 + 1e-9) / 10);
+// nota do Edubox: nota do AVA ÷ nota máxima do questionário × valor da prova (até 10), com 1 casa
+const paraEdubox = (nota, notaMax, valor) => (nota === null || nota === undefined || !notaMax || !valor ? null : Math.round(Number(nota) / notaMax * valor * 10 + 1e-9) / 10);
+const virgula = (n) => (n === null || n === undefined ? '–' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
 const IC = {
@@ -126,11 +130,14 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
     </div>`;
   }
 
-  function celulaNota(a, notaMax) {
-    const final = redonda(a.nota);
+  // com o valor do Edubox definido, a nota grande é a do Edubox (0 a valor, 1 casa); senão, a do AVA com 1 casa
+  function celulaNota(a, notaMax, valor) {
+    const ed = valor ? paraEdubox(a.nota, notaMax, valor) : null;
+    const final = valor ? ed : umaCasa(a.nota);
+    const teto = valor || notaMax;
     const recontada = a.notaAva !== undefined && a.notaAva !== a.nota;
-    return `<span class="ar-nota ${final !== null && final < notaMax / 2 ? 'baixa' : ''}">${final === null ? '–' : final}<small>/ ${dec(notaMax)}</small></span>
-      <small class="ar-ava">${recontada ? `<s>AVA ${dec(a.notaAva)}</s><b>recontada ${dec(a.nota)}</b>` : `AVA ${dec(a.nota)}`}</small>`;
+    return `<span class="ar-nota ${final !== null && final < teto / 2 ? 'baixa' : ''}">${virgula(final)}<small>/ ${dec(teto)}</small></span>
+      <small class="ar-ava">${recontada ? `<s>AVA ${dec(a.notaAva)}</s><b>recontada ${dec(a.nota)} de ${dec(notaMax)}</b>` : `AVA ${dec(a.nota)} de ${dec(notaMax)}`}</small>`;
   }
 
   function abaAlunos(r, fizeram) {
@@ -139,11 +146,11 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
       .sort((a, b) => ordem === 'nota' ? (b.nota || 0) - (a.nota || 0) || a.nome.localeCompare(b.nome, 'pt-BR') : a.nome.localeCompare(b.nome, 'pt-BR'));
     const th = (k, rot, cls = '') => `<th class="${cls}"><button type="button" class="ar-th-ord" data-ar-ordem="${k}" ${ordem === k ? `aria-sort="${k === 'nota' ? 'descending' : 'ascending'}"` : ''}>${rot}${ordem === k ? ' ↓' : ''}</button></th>`;
     return `<div class="ar-ferr"><input type="search" class="ar-busca" data-ar-busca placeholder="Procurar aluno pelo nome ou RA" value="${esc(busca)}" aria-label="Procurar aluno">
-        <p>Nota final redonda pela regra matemática (24,4 → 24 · 24,5 → 25). Embaixo, a nota com casas que veio do AVA.</p></div>
-      <div class="ar-tab-wrap"><table class="ar-tab"><thead><tr>${th('nome', 'Aluno')}<th>RA</th>${th('nota', 'Nota final', 'dir')}<th class="dir">Tempo</th></tr></thead><tbody>
+        <p>${r.valorEdubox ? `Nota do Edubox: a prova vale <b>${virgula(r.valorEdubox)}</b> (10 = 100%), com 1 casa (2,44 → 2,4 · 2,45 → 2,5). Embaixo, a nota que veio do AVA.` : 'Nota do AVA com 1 casa. Defina o <b>valor da prova no Edubox</b> em “Arquivo para o Edubox” para ver a nota que vai para o Edubox.'}</p></div>
+      <div class="ar-tab-wrap"><table class="ar-tab"><thead><tr>${th('nome', 'Aluno')}<th>RA</th>${th('nota', r.valorEdubox ? 'Nota no Edubox' : 'Nota', 'dir')}<th class="dir">Tempo</th></tr></thead><tbody>
       ${lista.map(a => `<tr><td><b>${esc(a.nome)}</b>${a.tentativas > 1 ? `<small>${a.tentativas} tentativas (vale a melhor)</small>` : ''}</td>
         <td>${esc(a.ra || '') || '<span class="ap-falta">sem RA</span>'}</td>
-        <td class="dir">${celulaNota(a, r.notaMax)}</td><td class="dir ar-num">${esc(a.duracao || '–')}</td></tr>`).join('') || '<tr><td colspan="4" class="ap-nada">Ninguém com esse nome.</td></tr>'}
+        <td class="dir">${celulaNota(a, r.notaMax, r.valorEdubox)}</td><td class="dir ar-num">${esc(a.duracao || '–')}</td></tr>`).join('') || '<tr><td colspan="4" class="ap-nada">Ninguém com esse nome.</td></tr>'}
       </tbody></table></div>`;
   }
 
@@ -212,7 +219,7 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
       <div class="ar-kpis">
         ${kpi('kpi-verde', 'Fizeram a prova', `${fizeram.length}<small>de ${r.alunos.length}</small>`, r.alunos.length ? `${dec(fizeram.length / r.alunos.length * 100, 0)}% dos alunos do curso no AVA` : '')}
         ${kpi('', 'Média da turma', `${dec(r.media, 1)}<small>de ${dec(r.notaMax)}</small>`, anul.length && r.mediaAva !== r.media ? `era ${dec(r.mediaAva, 1)} antes de anular` : 'só de quem fez a prova')}
-        ${kpi('', 'Maior · menor', notas.length ? `${redonda(maior)} · ${redonda(menor)}` : '–', 'nota final, redonda')}
+        ${kpi('', 'Maior · menor', notas.length ? `${virgula(umaCasa(maior))} · ${virgula(umaCasa(menor))}` : '–', `de ${dec(r.notaMax)}, nota do AVA`)}
         ${kpi('kpi-perda', 'Não fizeram', segunda.length, `${segunda.length ? 'vão para a 2ª chamada' : 'ninguém para a 2ª chamada'}${outros.length - segunda.length ? ` · ${plural(outros.length - segunda.length, 'dispensado', 'dispensados')}` : ''}`)}
       </div>
       ${notas.length ? distribuicao(fizeram, r.notaMax || 10) : ''}
@@ -230,14 +237,17 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
     const r = aberta;
     const fizeram = r.alunos.filter(a => a.situacao === 'finalizada');
     const outros = r.alunos.filter(a => a.situacao !== 'finalizada' && !a.dispensado); // dispensado nunca entra com 0
-    const ex = fizeram.slice(0, 2).map(a => `${a.nome};${redonda(a.nota)}`).join('\n');
+    const valorIni = r.valorEdubox || '';
+    const exemplo = (valor) => fizeram.slice(0, 2).map(a => `${a.nome};${valor ? (paraEdubox(a.nota, r.notaMax, valor) ?? 0).toFixed(1) : '?'}`).join('\n');
     const fundo = document.createElement('div');
     fundo.className = 'ap-modal-fundo';
     fundo.innerHTML = `<div class="ap-modal" role="dialog" aria-modal="true" aria-labelledby="ar-ed-tit">
       <header><h2 id="ar-ed-tit">Arquivo para o Edubox</h2><button type="button" class="ap-x" data-fechar aria-label="Fechar">✕</button></header>
       <div class="ap-modal-corpo">
-        <p class="ap-nota" style="font-size:0.9rem;color:var(--orb-tinta2)">Uma linha por aluno, <b>Nome;Nota</b>, igual ao arquivo da Correção de Provas. A nota sai <b>redonda</b>, pela regra matemática (24,4 → 24 · 24,5 → 25), na escala da prova (0 a ${dec(r.notaMax)})${(r.anuladas || []).length ? ', já com as questões anuladas' : ''}.</p>
-        <div class="ar-exemplo">Nome;Nota\n${esc(ex)}${fizeram.length > 2 ? '\n…' : ''}</div>
+        <p class="ap-nota" style="font-size:0.9rem;color:var(--orb-tinta2)">Uma linha por aluno, <b>Nome;Nota</b>, igual ao arquivo da Correção de Provas. A nota vai na <b>escala do Edubox (10 = 100%)</b>: nota do AVA ÷ ${dec(r.notaMax)} × valor da prova, com 1 casa (2,44 → 2,4 · 2,45 → 2,5)${(r.anuladas || []).length ? ', já com as questões anuladas' : ''}.</p>
+        <label class="ar-check" style="display:block"><b>Valor da prova no Edubox</b> <small style="color:var(--orb-mudo)">(até 10; ex.: prova que vale 5,0 no bimestre → 5)</small><br>
+          <input type="number" id="ar-ed-valor" min="0.1" max="10" step="0.1" value="${esc(String(valorIni))}" placeholder="Ex.: 5" style="margin-top:6px;width:120px"></label>
+        <div class="ar-exemplo" id="ar-ed-ex">Nome;Nota\n${esc(exemplo(valorIni))}${fizeram.length > 2 ? '\n…' : ''}</div>
         <div class="ar-modal-lista">
           <p style="margin:0">${plural(fizeram.length, 'aluno fez', 'alunos fizeram')} a prova e ${fizeram.length === 1 ? 'entra' : 'entram'} no arquivo.</p>
           ${outros.length ? `<label class="ar-check"><input type="checkbox" id="ar-ed-zero"> <span>Incluir também ${plural(outros.length, 'aluno que não fez', 'alunos que não fizeram')}, com nota 0.<br><small style="color:var(--orb-mudo)">Deixe desmarcado se ${outros.length === 1 ? 'ele vai' : 'eles vão'} fazer a 2ª chamada.</small></span></label>` : ''}
@@ -247,19 +257,36 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
     </div>`;
     document.body.appendChild(fundo);
     const fechar = () => fundo.remove();
-    fundo.addEventListener('click', (e) => {
+    const campo = fundo.querySelector('#ar-ed-valor');
+    const lerValor = () => Math.round(Number(String(campo.value).replace(',', '.')) * 10) / 10;
+    campo.addEventListener('input', () => {
+      const v = lerValor();
+      fundo.querySelector('#ar-ed-ex').textContent = `Nome;Nota\n${exemplo(v > 0 && v <= 10 ? v : 0)}${fizeram.length > 2 ? '\n…' : ''}`;
+    });
+    fundo.addEventListener('click', async (e) => {
       if (e.target === fundo || e.target.closest('[data-fechar]')) { fechar(); return; }
-      if (e.target.closest('[data-ar-baixar]')) {
+      const bt = e.target.closest('[data-ar-baixar]');
+      if (bt) {
+        const valor = lerValor();
+        if (!(valor > 0) || valor > 10) { toast('Informe o valor da prova no Edubox, de 0,1 até 10 (10 = 100%).', 'erro'); campo.focus(); return; }
         const zero = !!(fundo.querySelector('#ar-ed-zero') || {}).checked;
-        baixarCsv(zero); fechar();
+        bt.disabled = true;
+        try {
+          if (valor !== r.valorEdubox) {
+            await api(`${BASE}/resultados/${encodeURIComponent(r.id)}/valor-edubox`, { method: 'PUT', body: JSON.stringify({ valor }) });
+            r.valorEdubox = valor;
+          }
+          baixarCsv(zero, valor); fechar(); desenhar();
+        } catch (err) { toast(err.message, 'erro'); bt.disabled = false; }
       }
     });
-    fundo.querySelector('[data-ar-baixar]').focus();
+    (valorIni ? fundo.querySelector('[data-ar-baixar]') : campo).focus();
   }
-  function baixarCsv(incluirZero) {
+  function baixarCsv(incluirZero, valor) {
     const r = aberta;
     const alunos = r.alunos.filter(a => a.situacao === 'finalizada' || (incluirZero && !a.dispensado)).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-    const linhas = ['Nome;Nota', ...alunos.map(a => `${String(a.nome).replace(/;/g, ' ')};${a.situacao === 'finalizada' ? redonda(a.nota) ?? 0 : 0}`)];
+    // com ponto e 1 casa (ex.: 2.5), igual ao arquivo da Correção de Provas e da Trilha EAD
+    const linhas = ['Nome;Nota', ...alunos.map(a => `${String(a.nome).replace(/;/g, ' ')};${(a.situacao === 'finalizada' ? paraEdubox(a.nota, r.notaMax, valor) ?? 0 : 0).toFixed(1)}`)];
     const blob = new Blob(['﻿' + linhas.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
     const nome = ['Notas AVA', r.disciplina, r.turma, ETAPA_CURTA[r.etapa] || r.etapa, r.semestre].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]+/g, ' ');
     const link = document.createElement('a');

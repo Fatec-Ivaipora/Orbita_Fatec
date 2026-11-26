@@ -434,6 +434,10 @@ const COL_RES = 'med_resultados_ava';
 const COL_ANUL = 'med_resultados_anuladas';
 const normNomeAluno = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const arred = (n, c = 2) => Math.round(n * 10 ** c) / 10 ** c;
+// Nota do Edubox (26/11/2026), mesmo padrão da Correção de Provas da graduação: escala do Edubox (10 = 100%),
+// valor da prova até 10, 1 casa e meio pra cima (2,44 → 2,4; 2,45 → 2,5). O 1e-9 evita 2,4499… de vírgula flutuante.
+const VALOR_EDUBOX_MAX = 10;
+const notaEdubox = (nota, notaMax, valor) => (nota === null || nota === undefined || !notaMax || !valor ? null : Math.round(Number(nota) / notaMax * valor * 10 + 1e-9) / 10);
 function aplicarAnulacao(r, anul) {
     const questoes = Array.isArray(r.questoes) ? r.questoes : [];
     const anuladas = ((anul && anul.questoes) || []).filter(n => questoes.some(q => q.n === n));
@@ -470,8 +474,10 @@ function aplicarAnulacao(r, anul) {
         outros: alunos.filter(a => a.situacao !== 'finalizada' && a.situacao !== 'nao_fez' && !a.dispensado).length,
         dispensados: alunos.filter(a => a.dispensado).length
     } : r.contagem;
+    const valorEdubox = (anul && Number(anul.valorEdubox) > 0) ? Number(anul.valorEdubox) : null;
+    if (valorEdubox) alunos = alunos.map(a => (a.situacao === 'finalizada' ? { ...a, notaEdubox: notaEdubox(a.nota, r.notaMax, valorEdubox) } : a));
     return {
-        ...r, alunos, media, mediaAva: r.media, porQuestao, anuladas, contagem,
+        ...r, alunos, media, mediaAva: r.media, porQuestao, anuladas, contagem, valorEdubox,
         anulacao: anuladas.length ? { por: anul.por || '', em: anul.em || '' } : null,
         podeAnular: questoes.length > 0 && comQ.length === fez.length
     };
@@ -524,6 +530,20 @@ router.put('/resultados/:id/anuladas', exigeImpressao, async (req, res) => {
         // merge: não apaga os dispensados guardados no mesmo documento
         await db.collection(COL_ANUL).doc(req.params.id).set({ semestre: r.semestre, provaId: req.params.id, questoes, por: quemFoi, em: new Date().toISOString() }, { merge: true });
         res.json({ message: questoes.length ? `Questão${questoes.length > 1 ? 'ões' : ''} ${questoes.join(', ')} anulada${questoes.length > 1 ? 's' : ''}: notas recontadas.` : 'Anulação desfeita: valem as notas do AVA.', questoes });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+// PUT /resultados/:id/valor-edubox { valor } — quanto a prova vale no Edubox (até 10; 10 = 100%)
+router.put('/resultados/:id/valor-edubox', exigeImpressao, async (req, res) => {
+    try {
+        const snap = await db.collection(COL_RES).doc(req.params.id).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Ainda não há resultado do AVA para esta prova.' });
+        const valor = Math.round(Number(String(req.body.valor).replace(',', '.')) * 10) / 10;
+        if (!(valor > 0) || valor > VALOR_EDUBOX_MAX) return res.status(400).json({ error: 'O valor da prova vai de 0,1 até 10 (escala do Edubox: 10 = 100%).' });
+        await db.collection(COL_ANUL).doc(req.params.id).set({
+            semestre: snap.data().semestre, provaId: req.params.id, valorEdubox: valor,
+            valorEduboxPor: req.user.name || req.user.email || 'Coordenação', valorEduboxEm: new Date().toISOString()
+        }, { merge: true });
+        res.json({ message: `Valor da prova no Edubox: ${String(valor).replace('.', ',')}.`, valor });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 // PUT /resultados/:id/dispensado { nome, dispensado: true|false } — aluno sem nota que não faz 2ª chamada

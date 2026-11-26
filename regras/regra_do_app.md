@@ -99,6 +99,22 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Aplicação de Provas MED: nota do Edubox no padrão da graduação (escala 10 = 100%, 1 casa)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/med-edubox-escala
+- Arquivos alterados:
+  - `src/rotas/aplicacao-provas-med.js`:
+    - `PUT /resultados/:id/valor-edubox`: valor da prova no Edubox, de 0,1 até 10, guardado em `med_resultados_anuladas/<prova>.valorEdubox`;
+    - `aplicarAnulacao` devolve `valorEdubox` e `notaEdubox` de cada aluno = nota do AVA ÷ nota máxima × valor, com 1 casa e meio pra cima.
+  - `medicina/aplicacao-provas/resultados.js` (v=5), `app.js`, `index.html` (app.js v=29):
+    - "Arquivo para o Edubox" pede o valor da prova e mostra a prévia;
+    - o CSV sai com ponto e 1 casa (ex.: 2.5), igual à Correção de Provas e à Trilha EAD;
+    - a coluna de nota mostra a nota do Edubox quando há valor;
+    - acabou a nota inteira (24,4 → 24), que era a regra antiga.
+- Tipo: Correção
+- Motivo: o arquivo da MED saía com nota inteira na escala do questionário (10, 50, 70, 80 ou 100, conforme a prova). O Edubox usa 10 = 100% e recusa nota acima de 10. A graduação já foi corrigida hoje cedo (a073c32, 348606e).
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Envio ao AVA: botão "Colocar no questionário"
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/ava-colocar-no-questionario
