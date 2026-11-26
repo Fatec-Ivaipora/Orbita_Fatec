@@ -79,7 +79,9 @@ function resultado(av, respostasOuLeitura) {
     // Nota na escala do Edubox (10 = 100%; simulado vale 2,0), com 1 casa e meio pra cima (26/11/2026):
     // 2,44 → 2,4; 2,45 → 2,5. O 1e-9 evita que um 2,45 que sai da divisão como 2,4499999 desça.
     const nota = av.valorTotal && total ? Math.round(acertos / total * av.valorTotal * 10 + 1e-9) / 10 : null;
-    return { acertos, total, nota, porDisc, dispensadas: Object.keys(disp).filter(d => disp[d]) };
+    // discDispensadas (lista de nomes) — NÃO pode se chamar "dispensadas": o resultado é espalhado por cima
+    // da leitura ({ ...l, ...resultado }) e apagaria o objeto l.dispensadas, e a tela não recalculava (26/11/2026).
+    return { acertos, total, nota, porDisc, discDispensadas: Object.keys(disp).filter(d => disp[d]) };
 }
 
 async function escopo(req) { return escopoDe(req); }
@@ -568,8 +570,10 @@ router.put('/avaliacoes/:id/leituras/:i', verifyToken, checkPermission, async (r
         const ref = db.collection(COL_LEIT).doc(`${av.id}__${i}`);
         const antes = await ref.get();
         const consideradas = antes.exists ? (antes.data().consideradas || {}) : {};
+        // a dispensa de disciplina do aluno sobrevive a reler a folha / salvar respostas (26/11/2026)
+        const dispensadas = antes.exists ? (antes.data().dispensadas || {}) : {};
         const dado = {
-            avaliacaoId: av.id, i, respostas, duplas, duvidosas: req.body.origem === 'manual' ? [] : duvidosas, consideradas,
+            avaliacaoId: av.id, i, respostas, duplas, duvidosas: req.body.origem === 'manual' ? [] : duvidosas, consideradas, dispensadas,
             origem: req.body.origem === 'manual' ? 'manual' : 'camera',
             lidoPor: req.user.name || req.user.email || '', lidoPorUid: req.user.uid, lidoEm: new Date().toISOString(),
             ...(antes.exists ? { leituraAnteriorEm: antes.data().lidoEm || null } : {})
@@ -662,8 +666,8 @@ router.get('/avaliacoes/:id/planilha', verifyToken, checkPermission, async (req,
             const r = l ? resultado(av, l) : null;
             const lin = { Turma: turmaNome[a.turmaId] || '', Matrícula: a.mat, Aluno: a.nome, Situação: l ? 'Corrigida' : 'Sem folha lida', Acertos: r ? r.acertos : '', Questões: r ? r.total : av.questoes.length, '% de acerto': r && r.total ? Math.round(r.acertos / r.total * 1000) / 10 : '' };
             if (av.valorTotal) lin[`Nota (de ${String(av.valorTotal).replace('.', ',')})`] = r ? r.nota : '';
-            discs.forEach(d => { lin[d] = r && r.dispensadas.includes(d) ? 'DISPENSA' : r && r.porDisc[d] ? `${r.porDisc[d].acertos}/${r.porDisc[d].total}` : ''; });
-            lin['Disciplinas dispensadas'] = r ? r.dispensadas.join(', ') : '';
+            discs.forEach(d => { lin[d] = r && r.discDispensadas.includes(d) ? 'DISPENSA' : r && r.porDisc[d] ? `${r.porDisc[d].acertos}/${r.porDisc[d].total}` : ''; });
+            lin['Disciplinas dispensadas'] = r ? r.discDispensadas.join(', ') : '';
             av.questoes.forEach((q, k) => { lin[`Q${k + 1}`] = l ? (l.respostas[k] === '*' ? `dupla (${String((l.duplas || {})[k] || '').split('').join('+') || '?'})` : l.respostas[k] || '') + (l.consideradas && l.consideradas[k] ? ' *' : '') : ''; });
             lin['Consideradas certas pelo coordenador'] = l && l.consideradas ? Object.keys(l.consideradas).map(k => Number(k) + 1).sort((a, b) => a - b).join(', ') : '';
             return lin;
