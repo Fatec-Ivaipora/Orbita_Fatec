@@ -6,7 +6,7 @@
 //  baixa o arquivo do que está pronto (se precisar importar à mão) e registra "já está no AVA".
 //  Rotas: src/rotas/banco-med-avaliacoes.js (/envio-ava). Regra da fila: src/utils/banco-med-ava-fila.js
 // ================================================================
-import { prepararParaXml, toast, ic, abrirProvaParaTrazer } from "./avaliacoes.js?v=51";
+import { prepararParaXml, toast, ic, abrirProvaParaTrazer } from "./avaliacoes.js?v=52";
 
 const BASE = '/banco-med-fatec/avaliacoes/envio-ava';
 let api, esc;
@@ -29,8 +29,10 @@ const SITUACAO = {
 };
 // prova com questões postas direto no AVA (fora do Órbita) — 26/11/2026
 const temNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0);
+const nosDoisLugares = (p) => !!(p.total > 0 && p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0 && p.ava.quadro.direto > 0);
 const diretoNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0 && p.ava.quadro.direto > 0);
 const FILTROS = [
+  ['dois', 'Nos dois lugares', nosDoisLugares],
   ['direto', 'Direto no AVA', diretoNoAva],
   ['acao', 'Precisa de atenção', p => ['conferir', 'erro'].includes(p.situacao)],
   ['pronta', 'Prontas', p => p.situacao === 'pronta'],
@@ -55,7 +57,7 @@ async function carregar() {
     // começa no primeiro filtro que tem prova (26/11/2026: antes abria em "Prontas" vazio)
     if (!jaEscolheu) {
       const visiveis = dados.provas.filter(p => p.situacao !== 'vazia' || temNoAva(p));
-      filtro = (['direto', 'acao', 'pronta', 'aguardando'].find(k => visiveis.some(FILTROS.find(f => f[0] === k)[2]))) || 'todas';
+      filtro = (['dois', 'direto', 'acao', 'pronta', 'aguardando'].find(k => visiveis.some(FILTROS.find(f => f[0] === k)[2]))) || 'todas';
     }
     render();
     clearTimeout(timerFila);
@@ -104,6 +106,12 @@ const fmt = (n) => (n === null || n === undefined ? '–' : String(n).replace('.
 function proximoPasso(p) {
   const q = (p.ava && p.ava.quadro) || null;
   const esperado = p.qtdProva || p.total;
+  // 26/11/2026: a professora montou a prova no Órbita E por fora no AVA — trabalho dobrado, a coordenação decide qual vale
+  if (nosDoisLugares(p)) {
+    const profs = [...new Set(p.professores.map(x => x.nome.split(' ')[0]))].join(', ');
+    return { tom: 'erro', txt: `<b>Montada nos dois lugares:</b> o Órbita tem <b>${p.total}</b> questão(ões) desta prova${profs ? ` (${esc(profs)})` : ''} e o questionário do AVA tem <b>${q.direto}</b> postas por fora (nome fora do padrão do Órbita). Podem ser as mesmas, subidas antes do padrão de nome, ou outras. Use <b>Trazer do AVA</b> para comparar: as que já existem no Órbita aparecem como <b>repetidas</b>.`,
+      botao: p.status === 'finalizada' ? '' : `<button type="button" class="btn btn-primary av-btn" data-ea-trazer="${esc(p.id)}">${ic('importar')}Abrir e comparar com o AVA</button>` };
+  }
   if (q && !q.erro && q.noQuestionario > 0 && q.direto > 0) {
     return { tom: 'atencao', txt: q.direto === q.noQuestionario
       ? `<b>Montada direto no AVA</b> (${q.direto} questões fora do Órbita). Traga para o Órbita para validar.`

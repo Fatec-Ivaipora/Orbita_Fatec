@@ -696,3 +696,6 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .ea-ponto-ativo { animation: ea-pulso 1.2s ease-in-out infinite; }
 @keyframes ea-pulso { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .ea-ponto-ativo { animation: none; } }
+/* prova com questões postas por fora no AVA (26/11/2026) */
+.av-faixa-ava-fora { background: #FBE9E6; border: 1px solid #F1C4BD; color: #7D1F17; }
+.av-faixa-ava-fora b { color: #7D1F17; }
