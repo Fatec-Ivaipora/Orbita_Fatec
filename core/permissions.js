@@ -48,6 +48,16 @@ export const MODULES = {
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg>`,
     url: "/ti/ead-aulas/index.html"
   },
+  // Custos de Nuvem (26/11/2026) — gasto do Firebase/GCP (Órbita + SIGMA,
+  // mesma conta de faturamento, via BigQuery Billing Export) e da
+  // DigitalOcean (relay), com uso diário robô (ODTech) x humano.
+  "custos-ti": {
+    id: "custos-ti",
+    category: "ti",
+    title: "Custos de Nuvem",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-6 3 3 5-8"/></svg>`,
+    url: "/ti/custos/index.html"
+  },
   // Financeiro Medicina (18/11/2026) — rematrícula da Medicina: contrato mãe, mensal do acordo, saldos e reajuste
   // por turma. SÓ os usuários de somenteUsuarios veem (Lisa e Fábio Costa) — nem outros ADM N1. A rota
   // (src/rotas/financeiro-medicina.js, USUARIOS_PERMITIDOS) barra os outros. Incluir alguém só quando pedirem.
@@ -355,15 +365,15 @@ export const ROLE_PERMISSIONS = {
   // restringir só pra este) — se algum dia isso mudar, revisar aqui também.
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "portfolio-med", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "acessos", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "portfolio-med", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios", "custos-ti"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "portfolio-med", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "empresas", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp", "licitacao", "matriculas", "orcamento", "avaliacao-docente", "banco-med-fatec", "relatorio-desempenho", "portfolio-med", "banco-provas", "confirmacao-evento", "contratos", "aula-experimental", "auloes", "palestras", "agenda-espacos", "matrizes", "cpa", "cad", "correcao-provas", "trilha-ead", "plano-acao", "automacao-ava", "ead-aulas", "levantamento-ead", "formularios", "custos-ti"]
   },
   ti: {
     label: "T.I.",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava", "ead-aulas", "levantamento-ead"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "acessos", "agenda-espacos", "automacao-ava", "ead-aulas", "levantamento-ead", "custos-ti"]
   },
   rh: {
     label: "RH",

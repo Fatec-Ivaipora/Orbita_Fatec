@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custos de Nuvem - Órbita FATEC</title>
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/core/layout.css">
+    <link rel="stylesheet" href="/ti/custos/custos.css">
+    <link rel="stylesheet" href="/core/orbita.css?v=3">
+</head>
+<body class="orb-v2">
+    <div id="auth-guard" class="layout-auth-guard">
+        <div class="layout-spinner"></div>
+        <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+    </div>
+
+    <div id="app" class="layout-wrapper hidden">
+        <main class="layout-main">
+            <div class="layout-content cst-content">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Custos de Nuvem</h1>
+                        <p class="page-subtitle">Gasto do Firebase/Google Cloud (Órbita e SIGMA) e do servidor do relay na DigitalOcean</p>
+                    </div>
+                </div>
+
+                <div id="cst-aviso-gcp" class="cst-aviso-pendente hidden"></div>
+                <div id="cst-aviso-do" class="cst-aviso-pendente hidden"></div>
+
+                <div id="kpi-cards" class="kpi-grid">
+                    <!-- preenchido dinamicamente por app.js: um card por projeto/fonte que vier da API -->
+                </div>
+
+                <div class="cst-filtros">
+                    <button type="button" class="cst-filtro-btn active" data-visao="dias">Últimos 30 dias</button>
+                    <button type="button" class="cst-filtro-btn" data-visao="comparar">Comparar meses</button>
+                    <button type="button" class="cst-filtro-btn" data-visao="mes">Um mês específico</button>
+                    <select id="cst-select-mes" class="cst-select hidden"></select>
+                    <select id="cst-select-qtd-meses" class="cst-select hidden">
+                        <option value="3">Últimos 3 meses</option>
+                        <option value="5" selected>Últimos 5 meses</option>
+                        <option value="12">Últimos 12 meses</option>
+                    </select>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card full">
+                        <h3 id="chart-custo-titulo">Custo diário por projeto (últimos 30 dias)</h3>
+                        <div class="chart-canvas-wrap"><canvas id="chart-custo-diario"></canvas></div>
+                        <p class="cst-fonte">Fonte: BigQuery Billing Export do Google Cloud. Precisa estar configurado (ver aviso acima se não estiver).</p>
+                        <p id="cst-sem-dados" class="cst-sem-dados hidden">Sem dados nesse período ainda.</p>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Uso do Órbita — robô (ODTech) x humano</h3>
+                        <div class="chart-canvas-wrap"><canvas id="chart-uso"></canvas></div>
+                        <p class="cst-fonte">Contagem de requisições autenticadas por dia, medida pelo próprio Órbita.</p>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Custo por categoria de serviço (GCP)</h3>
+                        <div class="chart-canvas-wrap"><canvas id="chart-servicos"></canvas></div>
+                        <p class="cst-fonte">Separa, por exemplo, leitura/escrita do Firestore de Hosting/Functions.</p>
+                    </div>
+                </div>
+
+                <div class="chart-card full">
+                    <h3>Uso por módulo do Órbita (últimos 30 dias)</h3>
+                    <div class="tabela-wrap">
+                        <table class="data-table" id="tabela-uso-modulo">
+                            <thead><tr><th>Módulo</th><th>Requisições</th></tr></thead>
+                            <tbody id="tabela-uso-modulo-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script type="module" src="/ti/custos/app.js"></script>
+</body>
+</html>

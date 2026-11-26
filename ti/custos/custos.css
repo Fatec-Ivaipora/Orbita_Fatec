@@ -1,0 +1,79 @@
+.cst-content { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.cst-filtros { display: flex; gap: 0.5rem; }
+.cst-filtro-btn {
+  border: 1px solid var(--orb-linha, #E3E8F0);
+  background: var(--orb-sup, #FFFFFF);
+  color: var(--orb-tinta2, #44536B);
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--orb-raio-pilula, 999px);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cst-filtro-btn:hover { border-color: var(--orb-azul, #1F6FB2); color: var(--orb-azul, #1F6FB2); }
+.cst-filtro-btn.active { background: var(--orb-marca, #12294D); border-color: var(--orb-marca, #12294D); color: #FFFFFF; }
+
+/* Números grandes de verdade e uma cor própria por fonte, em vez de 4
+   cards idênticos — pedido do usuário (26/11/2026, "tudo pequeno e sem vida"). */
+.kpi-card.kpi-destaque .kpi-value { font-size: 2.4rem; }
+.kpi-card.kpi-destaque .kpi-label { font-size: 0.8rem; }
+.cst-kpi-topo { display: flex; align-items: center; gap: 0.5rem; }
+.cst-kpi-topo svg { flex-shrink: 0; }
+/* Cor por posição — os cards são gerados em JS (quantidade de projetos
+   pode mudar no futuro), então a cor é um ciclo de classes, não nomes fixos. */
+.cst-kpi-cor-0 { --orb-kpi: var(--orb-azul, #1F6FB2); }
+.cst-kpi-cor-0 .cst-kpi-topo svg, .cst-kpi-cor-0 .kpi-value { color: var(--orb-azul, #1F6FB2); }
+.cst-kpi-cor-1 { --orb-kpi: var(--orb-marca, #12294D); }
+.cst-kpi-cor-1 .cst-kpi-topo svg, .cst-kpi-cor-1 .kpi-value { color: var(--orb-marca, #12294D); }
+.cst-kpi-cor-2 { --orb-kpi: var(--orb-laranja, #E8791E); }
+.cst-kpi-cor-2 .cst-kpi-topo svg, .cst-kpi-cor-2 .kpi-value { color: var(--orb-laranja, #E8791E); }
+.cst-kpi-cor-3 { --orb-kpi: var(--orb-alerta, #A8650B); }
+.cst-kpi-cor-3 .cst-kpi-topo svg, .cst-kpi-cor-3 .kpi-value { color: var(--orb-alerta, #A8650B); }
+.cst-kpi-total { --orb-kpi: var(--orb-bom, #0F7A4B); }
+.cst-kpi-total .cst-kpi-topo svg, .cst-kpi-total .kpi-value { color: var(--orb-bom, #0F7A4B); }
+
+.cst-select {
+  border: 1px solid var(--orb-linha, #E3E8F0);
+  background: var(--orb-sup, #FFFFFF);
+  color: var(--orb-tinta, #0D1B33);
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--orb-raio-controle, 8px);
+  cursor: pointer;
+}
+.cst-sem-dados { font-size: 0.86rem; color: var(--orb-mudo, #5B6A80); text-align: center; padding: 1.5rem 0; }
+
+.cst-aviso-pendente {
+  background: var(--orb-alerta-suave, #FDF0DD);
+  border: 1px solid var(--orb-alerta, #A8650B);
+  color: var(--orb-tinta, #0D1B33);
+  border-radius: var(--orb-raio-controle, 8px);
+  padding: 0.85rem 1rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.cst-aviso-pendente strong { color: var(--orb-alerta, #A8650B); }
+.cst-aviso-pendente code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.82em; }
+
+.charts-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.25rem; }
+.chart-card {
+  background: var(--orb-sup, #FFFFFF);
+  border: 1px solid var(--orb-linha, #E3E8F0);
+  border-radius: var(--orb-raio-card, 12px);
+  padding: 1.25rem;
+}
+.chart-card h3 { margin: 0 0 1rem; font-size: 1rem; color: var(--orb-tinta, #0D1B33); }
+.chart-card.full { grid-column: 1 / -1; }
+
+/* Chart.js com responsive:true precisa de um pai com altura travada. */
+.chart-canvas-wrap { position: relative; height: 280px; }
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+
+.cst-fonte { font-size: 0.74rem; color: var(--orb-mudo, #5B6A80); margin-top: 0.5rem; }
+
+@media (max-width: 900px) {
+  .charts-grid { grid-template-columns: 1fr; }
+}

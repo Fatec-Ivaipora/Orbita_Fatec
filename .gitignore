@@ -76,6 +76,11 @@ firebase-debug.log
 firebase-debug.*.log
 .firebase/
 serviceAccountKey.json
+# Qualquer outra chave de service account do Google Cloud baixada localmente
+# (ex.: custos-ti-sa-key.json) — achado do relatório de segurança de 17/11
+# (o .gitignore só cobria o nome exato da chave do Firebase).
+*-sa-key.json
+*serviceaccount*.json
 
 # Leitor de fichas (Python)
 leitor-ficha/.venv/

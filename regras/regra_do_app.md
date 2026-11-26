@@ -115,6 +115,22 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Motivo: o arquivo da MED saía com nota inteira na escala do questionário (10, 50, 70, 80 ou 100, conforme a prova). O Edubox usa 10 = 100% e recusa nota acima de 10. A graduação já foi corrigida hoje cedo (a073c32, 348606e).
 - Como reverter: reverter o commit.
 
+### [2026-11-26] Novo módulo: Custos de Nuvem (Gestão de T.I.)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/custos-ti
+- Arquivos criados: `ti/custos/{index.html, app.js, custos.css}`, `src/rotas/custos-ti.js`, `src/utils/custos-gcp.js`, `src/utils/custos-digitalocean.js`.
+- Arquivos alterados: `api/index.js` (rota montada), `core/permissions.js` (módulo `custos-ti`, categoria `ti`, listas de `adm_l1`/`adm_l2`/`ti`), `src/middlewares/auth.js` (níveis padrão + instrumentação de uso, ver abaixo), `.env_exemplo` (nomes das variáveis novas, sem valor real).
+- Tipo: Novo módulo
+- Motivo: o gasto do Firebase subiu e o usuário precisa separar o que é uso humano normal do Órbita do que é o robô de automação da ODTech (cargo `robo`, mexe em Matrículas) chamando o sistema, além de acompanhar o custo do SIGMA (mesma conta de faturamento do Google) e do servidor do relay na DigitalOcean — hoje isso é olhado manualmente, sem histórico.
+- Impacto:
+  - **Instrumentação nova** (`src/middlewares/auth.js`, função `registrarUso`, chamada no fim do `verifyToken` antes do `next()`): toda requisição autenticada passa a incrementar `custos_ti_uso/{AAAA-MM-DD}` (`total`, `porOrigem.{robo|humano}`, `porModulo.<1º segmento da URL>`), via `FieldValue.increment`, sem `await` e com erro sempre engolido (nunca atrasa nem derruba a requisição real). Não existia nenhuma contagem de uso no sistema antes disso.
+  - **Custo do Google Cloud** (Órbita + SIGMA): `src/utils/custos-gcp.js` consulta o BigQuery Billing Export via API REST (autenticação com `google-auth-library`, já dependência transitiva do `firebase-admin` — não precisou instalar nada novo). **Precisa ser configurado no Console do Google Cloud antes de funcionar** (Billing → Billing export → BigQuery, mais uma service account nova só de leitura — não reaproveita a chave de admin do Firebase). Sem isso configurado, devolve `{ configurado: false }` e a tela mostra aviso, em vez de erro.
+  - **Custo da DigitalOcean**: `src/utils/custos-digitalocean.js` chama a API de billing deles (`/v2/customers/my/balance`, `/v2/customers/my/billing_history`) com um token (escopo Billing, só leitura) em `DIGITALOCEAN_API_TOKEN`. Mesmo fallback gracioso sem o token configurado.
+  - **Tela** (`ti/custos/`): cards de resumo (Órbita, SIGMA, DigitalOcean, total, com variação vs. mês anterior), gráfico de linha (custo diário por projeto), gráfico de barra empilhada (uso robô x humano) e gráfico por categoria de serviço do GCP — Chart.js 4.4.4, mesmo padrão já usado em `cpa/` e `financeiro/licitacao/`. Acesso: ADM N1, ADM N2 e cargo TI (nível 3 por padrão; depende também de `config/permissions` no Firestore, como qualquer módulo novo).
+- Como testar: sem as credenciais do GCP/DigitalOcean configuradas, abrir Gestão de T.I. → Custos de Nuvem como ADM N1/TI deve mostrar os avisos de "configuração pendente", não erro 500; o gráfico de uso robô x humano já funciona sem nenhuma configuração extra (testado localmente: `GET /api/custos-ti/resumo` e `/uso` sem token respondem 401, não 404/500; com o módulo HTML acessível em `/ti/custos/index.html`). Depois de configurar o BigQuery export e o token da DigitalOcean, conferir que os valores batem com o Console do Google Cloud e o painel da DigitalOcean.
+- Como reverter: tirar o módulo de `core/permissions.js` e a rota de `api/index.js`; tirar a chamada a `registrarUso` de `src/middlewares/auth.js` (a função pode ficar, só não é mais chamada); a coleção `custos_ti_uso` pode ser apagada.
+- **Pendente (fora do código, console do usuário):** ligar o BigQuery Billing Export no Google Cloud Console + criar a service account de leitura; gerar o token de API (Billing, read-only) na DigitalOcean. Até lá, só o gráfico de uso robô x humano funciona de verdade.
+
 ### [2026-11-26] Envio ao AVA: botão "Colocar no questionário"
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/ava-colocar-no-questionario
