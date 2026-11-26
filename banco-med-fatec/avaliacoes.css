@@ -667,3 +667,25 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .av-tag-ava { background: #E8F2FC; color: #004F9F; border: 1px solid #B8D2EE; }
 .av-selo-ava-pend { background: #FDF0DD; color: #7A4706; border: 1px solid #F0D3A4; }
 .av-ava-link { font-size: 0.8rem; font-weight: 700; color: #004F9F; text-decoration: underline; text-underline-offset: 3px; margin-left: 0.25rem; white-space: nowrap; }
+
+/* Envio ao AVA — cartão para ler rápido (26/11/2026) */
+.ea-ns { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin: 0.6rem 0; }
+.ea-n { border: 1px solid var(--av-linha, #E3E8F0); border-radius: 8px; padding: 0.45rem 0.7rem; display: grid; gap: 0.05rem; background: #fff; }
+.ea-n span { font-size: 0.74rem; font-weight: 600; color: var(--av-tinta-2, #44536B); }
+.ea-n b { font-size: 1.15rem; font-weight: 800; color: var(--av-tinta, #0D1B33); font-variant-numeric: tabular-nums; }
+.ea-n b i { font-style: normal; font-size: 0.78rem; font-weight: 600; color: var(--av-tinta-2, #44536B); }
+.ea-n small { font-size: 0.74rem; color: #5B6A80; }
+.ea-n-alerta { border-color: #F0D3A4; background: #FFFBF3; }
+.ea-passo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid; }
+.ea-passo p { margin: 0; flex: 1 1 320px; font-size: 0.9rem; line-height: 1.45; }
+.ea-passo-acoes { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.ea-tom-atencao .ea-passo { background: #FDF0DD; border-color: #F0D3A4; color: #6B4206; }
+.ea-tom-erro .ea-passo { background: #FBE9E6; border-color: #F1C4BD; color: #7D1F17; }
+.ea-tom-acao .ea-passo { background: #E8F2FC; border-color: #B8D2EE; color: #003E7D; }
+.ea-tom-espera .ea-passo { background: #F6F8FB; border-color: #E3E8F0; color: #44536B; }
+.ea-tom-ok .ea-passo { background: #E2F2EA; border-color: #B7DCC7; color: #0B5535; }
+.ea-det { margin-top: 0.5rem; font-size: 0.84rem; color: #44536B; }
+.ea-det summary { cursor: pointer; font-weight: 700; color: #004F9F; width: fit-content; }
+.ea-det summary:focus-visible { outline: 2px solid #009FE3; outline-offset: 2px; }
+.ea-det p { margin: 0.3rem 0; }
+.ea-det .ea-profs { margin-top: 0.4rem; }
