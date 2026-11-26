@@ -129,10 +129,16 @@ function anteriores(semestre, n = 4) {
 // estudam juntas viram uma linha só, com os períodos/turmas juntos).
 // Síncrona não entra: tem formato de presencial (aula ao vivo), não é sala EAD.
 // "A Distância" com carga EAD zerada também não é EAD (ex.: Projeto Integrador Extensionista).
+// Disciplinas que o Edubox marca como "A Distância" mas NÃO são sala EAD (26/11/2026, pedido do T.I). Ex.: Estudos de
+// Arquitetura e Urbanismo (20 h EAD + 60 h de extensão, códigos 6039 e 6712). Pelo nome, sem acento e sem espaço
+// duplo, em qualquer semestre e matriz. Para tirar outra, é só acrescentar o nome aqui.
+const NAO_EAD = ['ESTUDOS DE ARQUITETURA E URBANISMO'];
+const nomeComparar = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const naoEhEad = (nome) => NAO_EAD.includes(nomeComparar(nome));
 function eadDoSemestre(docs) {
     const m = new Map();
     docs.forEach(d => d.turmas.forEach(t => t.disciplinas.forEach(x => {
-        if (x.naoOfertada || !/dist/i.test(x.tipo) || x.ch.sincrona > 0 || !(x.ch.ead > 0)) return;
+        if (x.naoOfertada || !/dist/i.test(x.tipo) || x.ch.sincrona > 0 || !(x.ch.ead > 0) || naoEhEad(x.nome)) return;
         const id = `${d.semestre}__${d.cursoId}__${x.codDisciplina}`;
         if (!m.has(id)) {
             m.set(id, {
@@ -472,7 +478,7 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
         const linhas = [];
         (r.salas || []).forEach(s => {
             const codcur = String(s.codcur).trim(), cursoId = cursoIdDe(codcur);
-            if (!CURSOS_FATEC.includes(cursoId) || !/dist/i.test(s.tipdis) || !(s.chead > 0) || s.sinc > 0) return;
+            if (!CURSOS_FATEC.includes(cursoId) || !/dist/i.test(s.tipdis) || !(s.chead > 0) || s.sinc > 0 || naoEhEad(s.disciplina)) return;
             const id = `${semestre}__${cursoId}__${s.coddis}`;
             const x = lista.get(id);
             if (!x) return;
