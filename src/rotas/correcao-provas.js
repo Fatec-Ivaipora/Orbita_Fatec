@@ -58,17 +58,23 @@ function certaNaFolha(av, l, i) {
 function resultado(av, respostasOuLeitura) {
     const l = Array.isArray(respostasOuLeitura) ? { respostas: respostasOuLeitura } : (respostasOuLeitura || {});
     const porDisc = {};
-    let acertos = 0;
+    // Disciplinas dispensadas pelo coordenador para ESTE aluno (26/11/2026): as questões delas saem do
+    // cálculo — a nota é só sobre as disciplinas que ele precisava fazer. { [disciplina]: { por, em } }
+    const disp = l.dispensadas || {};
+    let acertos = 0, total = 0;
     av.questoes.forEach((q, i) => {
+        if (q.d && disp[q.d]) return;
+        total++;
         const ok = certaNaFolha(av, l, i);
         if (ok) acertos++;
         const d = q.d || '';
         const x = (porDisc[d] = porDisc[d] || { acertos: 0, total: 0 });
         x.total++; if (ok) x.acertos++;
     });
-    const total = av.questoes.length;
-    const nota = av.valorTotal ? Math.round(acertos / total * av.valorTotal * 100) / 100 : null;
-    return { acertos, total, nota, porDisc };
+    // Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. O 1e-9 evita
+    // que um 24,5 que sai da divisão como 24,4999999 desça pra 24.
+    const nota = av.valorTotal && total ? Math.round(acertos / total * av.valorTotal + 1e-9) : null;
+    return { acertos, total, nota, porDisc, dispensadas: Object.keys(disp).filter(d => disp[d]) };
 }
 
 async function escopo(req) { return escopoDe(req); }
@@ -587,6 +593,33 @@ router.put('/avaliacoes/:id/leituras/:i/considerar', verifyToken, checkPermissio
     }
 });
 
+// PUT /api/correcao/avaliacoes/:id/leituras/:i/dispensa — { disciplina, dispensa: true|false } (26/11/2026)
+// Aluno que dispensou a disciplina faz no simulado só as que precisa: o coordenador marca DISPENSA na
+// disciplina e a nota DESTE aluno passa a ser calculada só com as questões das outras. Fica registrado
+// quem e quando; dispensa:false desfaz.
+router.put('/avaliacoes/:id/leituras/:i/dispensa', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { av, erro } = await carregar(req, req.params.id);
+        if (erro) return res.status(erro[0]).json({ error: erro[1] });
+        const disc = String(req.body.disciplina || '');
+        if (!disc || !av.questoes.some(q => q.d === disc)) return res.status(400).json({ error: 'Disciplina inválida para esta avaliação.' });
+        const ref = db.collection(COL_LEIT).doc(`${av.id}__${Number(req.params.i)}`);
+        const s = await ref.get();
+        if (!s.exists) return res.status(404).json({ error: 'Leia ou lance a folha deste aluno antes.' });
+        const l = s.data();
+        const dispensadas = { ...(l.dispensadas || {}) };
+        if (req.body.dispensa) dispensadas[disc] = { por: req.user.name || req.user.email || '', em: new Date().toISOString() };
+        else delete dispensadas[disc];
+        if (av.questoes.every(q => q.d && dispensadas[q.d])) return res.status(400).json({ error: 'Não dá para dispensar todas as disciplinas da prova.' });
+        await ref.update({ dispensadas });
+        const nova = { ...l, dispensadas };
+        res.json({ message: req.body.dispensa ? `${disc}: dispensa registrada. A nota do aluno foi recalculada.` : 'Dispensa desfeita. A nota do aluno foi recalculada.', leitura: { ...nova, ...resultado(av, nova) } });
+    } catch (err) {
+        console.error('[correcao] dispensa:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE /api/correcao/avaliacoes/:id/leituras/:i — desfaz a leitura de um aluno (para ler de novo)
 router.delete('/avaliacoes/:id/leituras/:i', verifyToken, checkPermission, async (req, res) => {
     try {
@@ -613,9 +646,10 @@ router.get('/avaliacoes/:id/planilha', verifyToken, checkPermission, async (req,
         const linhas = av.alunos.map(a => {
             const l = leit[a.i];
             const r = l ? resultado(av, l) : null;
-            const lin = { Turma: turmaNome[a.turmaId] || '', Matrícula: a.mat, Aluno: a.nome, Situação: l ? 'Corrigida' : 'Sem folha lida', Acertos: r ? r.acertos : '', Questões: av.questoes.length, '% de acerto': r ? Math.round(r.acertos / r.total * 1000) / 10 : '' };
+            const lin = { Turma: turmaNome[a.turmaId] || '', Matrícula: a.mat, Aluno: a.nome, Situação: l ? 'Corrigida' : 'Sem folha lida', Acertos: r ? r.acertos : '', Questões: r ? r.total : av.questoes.length, '% de acerto': r && r.total ? Math.round(r.acertos / r.total * 1000) / 10 : '' };
             if (av.valorTotal) lin[`Nota (de ${String(av.valorTotal).replace('.', ',')})`] = r ? r.nota : '';
-            discs.forEach(d => { lin[d] = r && r.porDisc[d] ? `${r.porDisc[d].acertos}/${r.porDisc[d].total}` : ''; });
+            discs.forEach(d => { lin[d] = r && r.dispensadas.includes(d) ? 'DISPENSA' : r && r.porDisc[d] ? `${r.porDisc[d].acertos}/${r.porDisc[d].total}` : ''; });
+            lin['Disciplinas dispensadas'] = r ? r.dispensadas.join(', ') : '';
             av.questoes.forEach((q, k) => { lin[`Q${k + 1}`] = l ? (l.respostas[k] === '*' ? `dupla (${String((l.duplas || {})[k] || '').split('').join('+') || '?'})` : l.respostas[k] || '') + (l.consideradas && l.consideradas[k] ? ' *' : '') : ''; });
             lin['Consideradas certas pelo coordenador'] = l && l.consideradas ? Object.keys(l.consideradas).map(k => Number(k) + 1).sort((a, b) => a - b).join(', ') : '';
             return lin;

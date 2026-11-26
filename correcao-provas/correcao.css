@@ -216,3 +216,19 @@ input.cp-comp-nome { font: inherit; padding: 7px 9px; border: 1px solid var(--or
 .cp-edubox-linha span { display: grid; gap: 2px; min-width: 0; }
 .cp-edubox-linha small { color: var(--orb-mudo, #5b6a80); }
 .cp-edubox-zero { color: var(--orb-alerta, #a8650b); font-weight: 700; }
+
+/* Respostas a conferir (26/11/2026): o card leva até os alunos com duas marcações */
+button.kpi-card.cp-kpi-acao { font: inherit; text-align: left; cursor: pointer; width: 100%; transition: box-shadow .15s, transform .15s; }
+button.kpi-card.cp-kpi-acao:hover, button.kpi-card.cp-kpi-acao:focus-visible { box-shadow: 0 0 0 2px #f2c46b; transform: translateY(-1px); outline: none; }
+.cp-kpi-link { font-weight: 700; color: #9a5b00; }
+.cp-conf-faixa { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #fff1d6; border: 1px solid #f2c46b; color: #6b4000; border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; font-size: 0.88rem; }
+.cp-conf-badge { display: inline-block; margin-top: 3px; font-size: 0.72rem; font-weight: 700; background: #fff1d6; color: #9a5b00; border: 1px solid #f2c46b; border-radius: 999px; padding: 1px 8px; }
+.cp-aluno.conferir { scroll-margin-top: 80px; }
+
+/* Dispensa de disciplina por aluno (26/11/2026) */
+.cp-dispensa { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--orb-linha, #e3e8f0); border-radius: 10px; font-size: 0.88rem; }
+.cp-dispensa ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.cp-dispensa li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--orb-sup2, #f6f8fb); }
+.cp-dispensa li.dispensada { background: #eef0f4; }
+.cp-disp-tag { display: inline-block; margin: 3px 6px 0 0; font-size: 0.7rem; font-weight: 800; letter-spacing: .03em; background: #e2e6ee; color: #3b4a63; border-radius: 999px; padding: 1px 8px; }
+.cp-resp.dispensa { opacity: .4; text-decoration: line-through; background: #eef0f4 !important; color: #5b6a80 !important; border-color: #d5dae3 !important; }
