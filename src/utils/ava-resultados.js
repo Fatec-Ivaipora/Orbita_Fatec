@@ -45,10 +45,11 @@ async function questionarioDaAplicacao(imp, prova) {
     const etapa = prova.etapa;
     const sit = etapa === 'exame' ? { tipo: 'exame' } : { tipo: '', bimestre: etapa === 'b1' ? 1 : 2, chamada: etapa === 'sub' ? 2 : 1 };
     let curso = null;
-    // DP e adaptação não têm curso "T.n" no AVA: só com o questionário ligado à mão
-    if (!prova.avaCmid && !/^T\d+$/.test(String(prova.turma || ''))) return { erro: `turma ${prova.turma} (dependência/adaptação) não tem curso próprio no AVA: ligue o questionário à mão`, especial: true };
+    // DP e adaptação (26/11/2026): têm curso próprio no AVA da Medicina, "ADP - MEDICINA - 2026.2 - …" e
+    // "DP - MEDICINA - 2026.2 - …" (cursosDo já traz esses, com turma 'ADP'/'DP'). Antes o agente pulava essas provas.
     if (!prova.avaCmid) {
-        const cursos = (await imp.cursosDo(prova.semestre)).filter(c => c.turma === prova.turma)
+        const turma = String(prova.turma || '').toUpperCase();
+        const cursos = (await imp.cursosDo(prova.semestre)).filter(c => (c.turmas || [c.turma]).includes(turma))
             .map(c => ({ ...c, nota: parecido(prova.disciplina, c.nomeDisc) })).filter(c => c.nota >= 0.5).sort((a, b) => b.nota - a.nota);
         if (!cursos.length) return { erro: `não achei no AVA o curso da ${prova.turma} parecido com "${prova.disciplina}"` };
         if (cursos.length > 1 && cursos[0].nota === cursos[1].nota) return { erro: `mais de um curso parecido no AVA (${cursos.slice(0, 3).map(c => c.nome).join(' / ')})` };
@@ -103,14 +104,20 @@ function lerRelatorio(texto) {
     // sem a coluna Nota: a nota está oculta no Livro de Notas e o papel de integração não tem moodle/grade:viewhidden
     if (iNota < 0) throw Object.assign(new Error('o AVA não mostrou as notas (nota oculta no Livro de Notas: falta moodle/grade:viewhidden no papel de integração)'), { semNota: true });
     const notaMax = num(cab[iNota].split('/')[1]);
+    // nota de cada questão (26/11/2026): colunas "Q. 1 /1,00", "Q. 2 /1,00"… — servem para anular questão e
+    // recontar as notas no Órbita (aba Resultados do AVA). Sem essas colunas a anulação fica indisponível.
+    const colQ = cab.map((c, i) => { const m = c.trim().match(/^Q\.?\s*(\d+)\s*\/\s*([\d.,]+)/i); return m ? { i, n: Number(m[1]), max: num(m[2]) } : null; }).filter(Boolean);
+    const questoes = colQ.map(c => ({ n: c.n, max: c.max }));
     let media = null;
     const porAluno = new Map();
     for (const l of linhas) {
         const nome = `${(l[iN] || '').trim()} ${(l[iS] || '').trim()}`.trim();
-        if (!nome) { media = num(l[iNota]); continue; } // linha da média geral
+        // linha da média geral: sem nome, ou com "Média geral" no lugar do nome (26/11/2026: virava um "aluno que não fez")
+        if (!nome || /^M[EÉ]DIA GERAL\b/.test(norm(nome))) { media = num(l[iNota]); continue; }
         const s = norm(l[iSit] || '');
         const situacao = !s || s === '-' ? 'nao_fez' : /FINALIZ/.test(s) ? 'finalizada' : /ANDAMENTO/.test(s) ? 'em_andamento' : /NUNCA|VENCID|ABANDON/.test(s) ? 'nao_enviada' : 'outra';
         const at = { nome, situacao, nota: num(l[iNota]), inicio: (l[iIni] || '').trim(), fim: (l[iFim] || '').trim(), duracao: (l[iDur] || '').trim() };
+        if (colQ.length && situacao === 'finalizada') at.q = colQ.map(c => num(l[c.i]));
         const k = norm(nome);
         const antes = porAluno.get(k);
         // mais de uma tentativa: fica a melhor finalizada (e conta as tentativas)
@@ -124,11 +131,11 @@ function lerRelatorio(texto) {
     // a linha de média nem sempre vem para o usuário de integração: calcula com as finalizadas
     const notas = alunos.filter(a => a.situacao === 'finalizada' && a.nota !== null).map(a => a.nota);
     if (media === null && notas.length) media = Math.round(notas.reduce((s, n) => s + n, 0) / notas.length * 100) / 100;
-    return { notaMax, media, alunos };
+    return { notaMax, media, alunos, questoes };
 }
 
 async function lerResultados(imp, cmid) {
-    const { texto } = await imp.s.req(`/mod/quiz/report.php?id=${cmid}&mode=overview&attempts=enrolled_any&download=csv`);
+    const { texto } = await imp.s.req(`/mod/quiz/report.php?id=${cmid}&mode=overview&attempts=enrolled_any&slotmarks=1&download=csv`);
     if (/<html/i.test(texto.slice(0, 500))) throw new Error('o AVA não entregou o relatório (sem permissão de ver relatórios do questionário?)');
     return lerRelatorio(texto);
 }

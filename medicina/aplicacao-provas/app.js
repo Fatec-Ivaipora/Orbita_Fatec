@@ -9,7 +9,7 @@ import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
 import { criarImpressao } from "./impressao.js?v=17";
-import { criarResultados } from "./resultados.js?v=2";
+import { criarResultados } from "./resultados.js?v=3";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -145,7 +145,7 @@ function renderTurmas(provas) {
     const ps = provas.filter(p => p.turma === t.id);
     return `<section class="ap-turma ap-${corTurma(t.id)}" aria-label="Turma ${esc(t.id)}">
       <header><h2>${esc(t.id)}</h2><span>${t.especial ? ESPECIAIS[t.id] : `${t.periodo}º período`} · ${ps.length} ${ps.length === 1 ? 'prova' : 'provas'}</span></header>
-      ${ps.length ? `<ol class="ap-tp-lista">${ps.map(linhaTurma).join('')}</ol>` : `<p class="ap-turma-vazia">${dados.editor ? 'Nenhuma prova ainda. Use “+ Prova”.' : 'Nenhuma prova cadastrada.'}</p>`}
+      ${ps.length ? `<ol class="ap-tp-lista">${ps.map(linhaTurma).join('')}</ol>` : `<p class="ap-turma-vazia">${dados.editor ? 'Nenhuma prova ainda. Use “Nova prova”.' : 'Nenhuma prova cadastrada.'}</p>`}
     </section>`;
   }).join('')}</div>`;
 }

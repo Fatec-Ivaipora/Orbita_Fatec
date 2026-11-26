@@ -18,7 +18,9 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toU
 function questionarioDaProva(p, nome) {
     const n = norm(nome);
     if (p.tipo === 'exame') return /\bEXAME\b/.test(n);
-    if (!new RegExp(`\\bPROVA ${p.bimestre} BIMESTRE\\b`).test(n)) return false;
+    // "📝 Prova · 2º Bimestre — 2ª Chamada" (padrão) e, no ADP de Habilidades Clínicas I (26/11/2026),
+    // "AVALIAÇÃO 2º BIMESTRE - ADP - …" / "AVALIAÇÃO 2º CHAMADA - 2º BIMESTRE - ADP - …"
+    if (!new RegExp(`\\b(PROVA|AVALIACAO)( 2 CHAMADA)? ${p.bimestre} BIMESTRE\\b`).test(n)) return false;
     return p.chamada === 2 ? /\b2 CHAMADA\b/.test(n) : !/\bCHAMADA\b/.test(n);
 }
 
@@ -28,10 +30,24 @@ class ImportadorBancoAva {
     async cursosDo(semestre) {
         if (!this.cursos[semestre]) {
             const { texto } = await this.s.req(`/course/search.php?search=${encodeURIComponent(semestre + ' PER')}&perpage=all`);
-            this.cursos[semestre] = lerCursos(texto).map(c => {
+            const turmasT = lerCursos(texto).map(c => {
                 const m = c.nome.match(/^(\d{4}\.\d)\s*-\s*T\.\s*(\d+)\s*-\s*\d+\s*\S*\s*PER\s*-\s*(.+)$/i);
-                return m && m[1] === semestre ? { ...c, turma: `T${m[2]}`, nomeDisc: m[3], disc: norm(m[3]) } : null;
+                return m && m[1] === semestre ? { ...c, turma: `T${m[2]}`, turmas: [`T${m[2]}`], nomeDisc: m[3], disc: norm(m[3]) } : null;
             }).filter(Boolean);
+            // Dependência e adaptação da Medicina (26/11/2026) têm curso próprio, em outro padrão de nome:
+            // "ADP - MEDICINA - 2026.2 - PATOLOGIA CLÍNICA I", "DP - MEDICINA - 2026.2 - SISTEMAS MORFOFISIOLÓGICOS III"
+            // (e "DP - ADP - MEDICINA - …", que serve às duas turmas).
+            let especiais = [];
+            try {
+                const r = await this.s.req(`/course/search.php?search=${encodeURIComponent('MEDICINA - ' + semestre)}&perpage=all`);
+                especiais = lerCursos(r.texto).map(c => {
+                    const m = c.nome.match(/^((?:A?DP)(?:\s*-\s*A?DP)?)\s*-\s*MEDICINA\s*-\s*(\d{4}\.\d)\s*-\s*(.+)$/i);
+                    if (!m || m[2] !== semestre) return null;
+                    const turmas = m[1].toUpperCase().split(/\s*-\s*/);
+                    return { ...c, turma: turmas[0], turmas, nomeDisc: m[3], disc: norm(m[3]) };
+                }).filter(Boolean);
+            } catch (e) { especiais = []; }
+            this.cursos[semestre] = [...turmasT, ...especiais];
         }
         return this.cursos[semestre];
     }
@@ -55,7 +71,8 @@ class ImportadorBancoAva {
     // acha curso e questionário. cmidTeste: manda para um questionário escolhido (teste), sem procurar
     async destino(sit, cmidTeste) {
         if (cmidTeste) return { cmid: Number(cmidTeste), quiz: 'questionário de teste', curso: '', cursoId: null, teste: true };
-        const cursos = (await this.cursosDo(sit.semestre)).filter(c => c.disc === norm(sit.disciplina));
+        // envio de questões continua só nos cursos das turmas T.n (as de DP/ADP têm o mesmo nome de disciplina)
+        const cursos = (await this.cursosDo(sit.semestre)).filter(c => /^T\d+$/.test(c.turma) && c.disc === norm(sit.disciplina));
         if (cursos.length !== 1) return { erro: cursos.length ? `mais de um curso no AVA com esse nome (${cursos.map(c => c.id).join(', ')})` : `não há curso "${sit.semestre} - T.n - … - ${sit.disciplina}" no AVA` };
         const curso = cursos[0];
         const qs = (await this.questionariosDoCurso(curso.id)).filter(q => questionarioDaProva(sit, q.nome));
