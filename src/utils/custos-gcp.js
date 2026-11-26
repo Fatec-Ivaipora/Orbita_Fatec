@@ -83,35 +83,66 @@ async function resumoMensal() {
         configurado: true,
         porProjeto: linhas.map(l => ({
             projeto: l.projeto,
+            // Nome amigável quando a gente sabe qual é (Órbita/SIGMA); projeto
+            // novo que apareça no futuro mostra o próprio id do GCP, sem
+            // precisar mexer no código — é só não ter nome bonito ainda.
+            nome: l.projeto === PROJETO_ORBITA ? 'Órbita' : (l.projeto === PROJETO_SIGMA ? 'SIGMA' : l.projeto),
             mesAtual: Number(l.mesAtual || 0),
             mesAnterior: Number(l.mesAnterior || 0)
         }))
     };
 }
 
-// Gasto diário dos últimos N dias, por projeto e por categoria de serviço
-// (separa "Cloud Firestore" de "Cloud Functions"/"Hosting" etc. — é o mais
-// perto que dá de "é mais leitura ou escrita" só com o billing export).
-async function historicoDiario(dias = 30) {
+// Gasto por projeto e por categoria de serviço (separa "Cloud Firestore" de
+// "Cloud Functions"/"Hosting" etc. — é o mais perto que dá de "é mais
+// leitura ou escrita" só com o billing export). Três modos:
+//   { mes: 'AAAA-MM' } -> um ponto por dia, só dentro daquele mês (drill-down)
+//   { meses: N }       -> um ponto por mês, últimos N meses (comparar mês a mês)
+//   { dias: N }        -> um ponto por dia, últimos N dias (padrão: 30)
+// `periodo` é sempre o rótulo do eixo X: "AAAA-MM-DD" ou "AAAA-MM".
+async function historico({ dias, meses, mes } = {}) {
     if (!configurado()) return { configurado: false };
     const projetos = [PROJETO_ORBITA, PROJETO_SIGMA].filter(Boolean);
+
+    // Validação rígida antes de ir pro SQL (interpolado na string — nunca
+    // aceitar texto livre aqui, mesmo sendo uso interno).
+    const mesValido = typeof mes === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) ? mes : null;
+
+    let condicaoData, colunaPeriodo, granularidade;
+    if (mesValido) {
+        condicaoData = `DATE(usage_start_time) >= DATE('${mesValido}-01')
+                         AND DATE(usage_start_time) < DATE_ADD(DATE('${mesValido}-01'), INTERVAL 1 MONTH)`;
+        colunaPeriodo = `FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time))`;
+        granularidade = 'dia';
+    } else if (meses) {
+        condicaoData = `DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${Math.min(Number(meses) || 5, 24)} MONTH)`;
+        colunaPeriodo = `FORMAT_DATE('%Y-%m', DATE(usage_start_time))`;
+        granularidade = 'mes';
+    } else {
+        condicaoData = `DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${Math.min(Number(dias) || 30, 366)} DAY)`;
+        colunaPeriodo = `FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time))`;
+        granularidade = 'dia';
+    }
+
     const sql = `
         SELECT
-            DATE(usage_start_time) AS dia,
+            ${colunaPeriodo} AS periodo,
             project.id AS projeto,
             service.description AS servico,
             SUM(cost) AS custo
         FROM ${TABELA()}
         WHERE project.id IN UNNEST(@projetos)
-          AND DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${Math.min(Number(dias) || 30, 365)} DAY)
-        GROUP BY dia, projeto, servico
-        ORDER BY dia
+          AND ${condicaoData}
+        GROUP BY periodo, projeto, servico
+        ORDER BY periodo
     `.replace('@projetos', `[${projetos.map(p => `'${p}'`).join(',')}]`);
     const linhas = await query(sql);
+    const nomeDe = (id) => id === PROJETO_ORBITA ? 'Órbita' : (id === PROJETO_SIGMA ? 'SIGMA' : id);
     return {
         configurado: true,
-        linhas: linhas.map(l => ({ dia: l.dia, projeto: l.projeto, servico: l.servico, custo: Number(l.custo || 0) }))
+        granularidade,
+        linhas: linhas.map(l => ({ periodo: l.periodo, projeto: l.projeto, nomeProjeto: nomeDe(l.projeto), servico: l.servico, custo: Number(l.custo || 0) }))
     };
 }
 
-module.exports = { configurado, resumoMensal, historicoDiario };
+module.exports = { configurado, resumoMensal, historico };

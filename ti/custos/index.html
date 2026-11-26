@@ -31,33 +31,28 @@
                 <div id="cst-aviso-gcp" class="cst-aviso-pendente hidden"></div>
                 <div id="cst-aviso-do" class="cst-aviso-pendente hidden"></div>
 
-                <div class="kpi-grid">
-                    <div class="kpi-card">
-                        <div class="kpi-label">Órbita (Firebase/GCP) este mês</div>
-                        <div class="kpi-value" id="kpi-orbita">—</div>
-                        <div class="kpi-hint" id="kpi-orbita-hint"></div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">SIGMA (mesma conta de faturamento) este mês</div>
-                        <div class="kpi-value" id="kpi-sigma">—</div>
-                        <div class="kpi-hint" id="kpi-sigma-hint"></div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">DigitalOcean (relay) este mês</div>
-                        <div class="kpi-value" id="kpi-do">—</div>
-                        <div class="kpi-hint" id="kpi-do-hint"></div>
-                    </div>
-                    <div class="kpi-card kpi-destaque">
-                        <div class="kpi-label">Total este mês</div>
-                        <div class="kpi-value" id="kpi-total">—</div>
-                    </div>
+                <div id="kpi-cards" class="kpi-grid">
+                    <!-- preenchido dinamicamente por app.js: um card por projeto/fonte que vier da API -->
+                </div>
+
+                <div class="cst-filtros">
+                    <button type="button" class="cst-filtro-btn active" data-visao="dias">Últimos 30 dias</button>
+                    <button type="button" class="cst-filtro-btn" data-visao="comparar">Comparar meses</button>
+                    <button type="button" class="cst-filtro-btn" data-visao="mes">Um mês específico</button>
+                    <select id="cst-select-mes" class="cst-select hidden"></select>
+                    <select id="cst-select-qtd-meses" class="cst-select hidden">
+                        <option value="3">Últimos 3 meses</option>
+                        <option value="5" selected>Últimos 5 meses</option>
+                        <option value="12">Últimos 12 meses</option>
+                    </select>
                 </div>
 
                 <div class="charts-grid">
                     <div class="chart-card full">
-                        <h3>Custo diário por projeto (últimos 30 dias)</h3>
+                        <h3 id="chart-custo-titulo">Custo diário por projeto (últimos 30 dias)</h3>
                         <div class="chart-canvas-wrap"><canvas id="chart-custo-diario"></canvas></div>
                         <p class="cst-fonte">Fonte: BigQuery Billing Export do Google Cloud. Precisa estar configurado (ver aviso acima se não estiver).</p>
+                        <p id="cst-sem-dados" class="cst-sem-dados hidden">Sem dados nesse período ainda.</p>
                     </div>
                     <div class="chart-card">
                         <h3>Uso do Órbita — robô (ODTech) x humano</h3>

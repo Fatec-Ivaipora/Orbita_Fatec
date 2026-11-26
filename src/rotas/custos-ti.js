@@ -21,13 +21,21 @@ router.get('/resumo', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
-// GET /api/custos-ti/historico?dias=30 — série diária de custo (GCP) pro
-// gráfico de linha, e faturas da DigitalOcean.
+// GET /api/custos-ti/historico?periodo=... — três modos:
+//   30d (padrão) -> diário, últimos 30 dias
+//   5m / 12m     -> mensal, comparar os últimos N meses lado a lado
+//   AAAA-MM      -> diário, só dentro daquele mês específico (drill-down)
+const PERIODOS_FIXOS = {
+    '30d': { dias: 30 },
+    '5m': { meses: 5 },
+    '12m': { meses: 12 }
+};
 router.get('/historico', verifyToken, checkPermission, async (req, res) => {
     try {
-        const dias = Number(req.query.dias) || 30;
+        const periodo = req.query.periodo || '30d';
+        const opcoes = PERIODOS_FIXOS[periodo] || (/^\d{4}-\d{2}$/.test(periodo) ? { mes: periodo } : PERIODOS_FIXOS['30d']);
         const [gcp, digitalOcean] = await Promise.all([
-            custosGcp.historicoDiario(dias),
+            custosGcp.historico(opcoes),
             custosDigitalOcean.historicoFaturas()
         ]);
         res.json({ gcp, digitalOcean });
