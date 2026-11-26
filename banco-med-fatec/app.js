@@ -9,7 +9,7 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=48";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=49";
 import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=3";
 
 const fbApp = initializeApp(firebaseConfig);

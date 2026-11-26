@@ -5,6 +5,7 @@
 (function () {
 'use strict';
 const FORMATOS_DECIMAIS = new Set(['decimal', 'decimalZero']);
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function lerAtributo(xml, tag, atributo) {
     const m = new RegExp(`<w:${tag}\\b[^>]*\\bw:${atributo}="([^"]*)"`).exec(xml);
@@ -148,6 +149,43 @@ const RE_FEED = /^(feedback|justificativa|coment[áa]rio)(\s+d[ao]\s+quest[ãa]o
 const RE_REF = /^refer[êe]ncias?(\s+bibliogr[áa]ficas?)?\s*:?$/i;
 const RE_LETRA = /^\s*\(?([A-Ea-e])\s*[).\-–]\s+/;
 const DIFIC = [[/f[áa]cil/i, 'facil'], [/intermedi[áa]ria/i, 'intermediaria'], [/dif[íi]cil/i, 'dificil'], [/m[ée]dia/i, 'media']];
+// Erros comuns dos professores no modelo (23/11/2026 — Saúde Mental, 12 questões do ENAMED não carregavam):
+// o texto na MESMA linha do rótulo ("Enunciado: (ENAMED 2025-77) Uma equipe…", "Feedback da Questão: A questão…",
+// "Referência Bibliográfica: BRASIL…") e rótulo sobrando colado ("Objetivo:Enunciado: …"). O arquivo inteiro deixava
+// de ser reconhecido como modelo e caía no leitor genérico. Agora o rótulo abre a seção e o resto da linha vira o
+// 1º parágrafo dela. "Gabarito: B" numa linha à parte vale como correta quando nenhuma alternativa está pintada.
+const ROTULOS_INLINE = [
+  ['enun', /^(?:(?:objetivo|unidade|prova)\s*:\s*)*enunciado\s*[:\-–]\s*(?=\S)/i],
+  ['feedback', /^(?:feedback|justificativa|coment[áa]rio)(?:\s+d[ao]\s+quest[ãa]o)?\s*[:\-–]\s*(?=\S)/i],
+  ['ref', /^refer[êe]ncias?(?:\s+bibliogr[áa]ficas?)?\s*[:\-–]\s*(?=\S)/i]
+];
+const RE_GABARITO = /^(?:gabarito|resposta(?:\s+correta)?|alternativa\s+correta)\s*[:\-–]?\s*\(?([A-Ea-e])\)?\s*[.)]?\s*$/i;
+const RE_ROTULO_SOBRANDO = /^(?:(?:objetivo|unidade|prova)\s*:\s*)+(?=enunciado\b)/i;
+// tira o rótulo do começo do html, mesmo dentro de <strong>/<em> ("<strong>Enunciado:</strong> texto").
+// Cada tag vira um marcador (caractere de uso privado) para contar só as letras do rótulo.
+const MARCA_TAG = '';
+function htmlSemRotulo(html, re) {
+  const tags = [];
+  const plano = html.replace(/<[^>]+>/g, (t) => { tags.push(t); return MARCA_TAG; });
+  const m = re.exec(plano.split(MARCA_TAG).join(''));
+  if (!m) return html;
+  let tirar = m[0].length, out = '', k = 0;
+  for (const c of plano) {
+    if (c === MARCA_TAG) { out += tags[k++]; continue; }
+    if (tirar > 0) { tirar--; continue; }
+    out += c;
+  }
+  return out.replace(/<(strong|b|em|i|u)>\s*<\/\1>/g, '').trim();
+}
+function separarRotulo(b) {
+  for (const [sec, re] of ROTULOS_INLINE) {
+    const m = re.exec(b.texto);
+    if (!m) continue;
+    const texto = b.texto.slice(m[0].length).trim();
+    return { sec, resto: { ...b, texto, html: htmlSemRotulo(b.html, re) || texto } };
+  }
+  return null;
+}
 
 function blocosDoHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -183,8 +221,19 @@ function lerModeloDeBlocos(blocos) {
   let q = null, sec = null;
   for (const b of blocos) {
     const m = RE_INICIO.exec(b.texto);
-    if (m && b.texto.length < 30) { q = { numero: Number(m[1]), titulo: '', enun: [], feedback: [], ref: [] }; qs.push(q); sec = 'titulo'; continue; }
+    if (m && b.texto.length < 30) { q = { numero: Number(m[1]), titulo: '', enun: [], feedback: [], ref: [], ajustes: new Set() }; qs.push(q); sec = 'titulo'; continue; }
     if (!q) continue;
+    if (RE_ROTULO_SOBRANDO.test(b.texto) && RE_ENUN.test(b.texto.replace(RE_ROTULO_SOBRANDO, ''))) { q.ajustes.add('rótulo sobrando antes do "Enunciado"'); sec = 'enun'; continue; }
+    const mG = RE_GABARITO.exec(b.texto);
+    if (mG) { q.gabaritoWord = mG[1].toUpperCase(); continue; }
+    const inline = separarRotulo(b);
+    if (inline) {
+      q.ajustes.add(RE_ROTULO_SOBRANDO.test(b.texto) ? 'rótulo sobrando antes do "Enunciado"' : 'texto na mesma linha do rótulo');
+      sec = inline.sec;
+      if (sec === 'ref') q.ref.push(inline.resto.texto);
+      else q[sec].push(inline.resto);
+      continue;
+    }
     if (RE_ENUN.test(b.texto)) { sec = 'enun'; continue; }
     if (RE_FEED.test(b.texto)) { sec = 'feedback'; continue; }
     if (RE_REF.test(b.texto)) { sec = 'ref'; continue; }
@@ -216,9 +265,20 @@ function lerModeloDeBlocos(blocos) {
     let alts = linhas.slice(ip + 1);
     if (alts.length > 5) { alts = alts.slice(-5); }
     const antes = linhas.slice(0, ip + 1);
-    const pergunta = antes.length ? antes[antes.length - 1].texto : '';
-    const caso = antes.slice(0, -1).map(b => `<p>${b.html}</p>`).join('');
-    const icorreta = alts.findIndex(a => a.marcado);
+    let pergunta = antes.length ? antes[antes.length - 1].texto : '';
+    let caso = antes.slice(0, -1).map(b => `<p>${b.html}</p>`).join('');
+    // pergunta no fim do parágrafo do caso, sem linha própria (24/11/2026, Saúde Mental Q33): "…ruídos aumentados.
+    // Considerando a hipótese, qual é a conduta?" — a última frase que termina em ? ou : vira a pergunta.
+    if (antes.length === 1 && !caso) {
+      const mPerg = /^([\s\S]{40,}?[.!])\s+([^.!?]{10,}[?:])\s*$/.exec(pergunta);
+      if (mPerg) {
+        caso = `<p>${esc(mPerg[1].trim())}</p>`;
+        pergunta = mPerg[2].trim();
+        q.ajustes.add('pergunta separada do caso clínico');
+      }
+    }
+    let icorreta = alts.findIndex(a => a.marcado);
+    if (icorreta < 0 && q.gabaritoWord && 'ABCDE'.indexOf(q.gabaritoWord) < alts.length) { icorreta = 'ABCDE'.indexOf(q.gabaritoWord); q.ajustes.add('correta pela linha "Gabarito:"'); }
     const partes = String(q.titulo || '').split(/\s+[–—-]\s+/).map(x => x.trim()).filter(Boolean);
     let dificuldade = 'media';
     const ehDific = (p) => DIFIC.some(([re]) => re.test(p)) && p.split(' ').length <= 2;
@@ -236,7 +296,8 @@ function lerModeloDeBlocos(blocos) {
       justificativa: q.feedback.filter(b => b.texto).map(b => b.tag === 'LI' ? `<p>• ${b.html}</p>` : `<p>${b.html}</p>`).join(''),
       imagensFeedback: q.feedback.flatMap(b => b.imgs).map((dataUrl, i) => ({ dataUrl, nome: `feedback-${q.numero}-${i + 1}` })),
       unidadeWord: q.unidadeWord || '', objetivoWord: q.objetivoWord || '', provaWord: q.provaWord || '',
-      fonte: q.ref.join(' ')
+      fonte: q.ref.join(' '),
+      ajustes: [...q.ajustes]
     };
   });
   // questão que não deu pra ler direito continua na prévia, com o problema escrito (17/11/2026): antes ela sumia
@@ -247,6 +308,9 @@ function lerModeloDeBlocos(blocos) {
     else if (!q.pergunta && !q.casoHtml) q.problema = 'Não achei o enunciado/pergunta antes das alternativas.';
   });
   todas.comProblema = todas.filter(q => q.problema).map(q => q.numero);
+  // o que o Órbita acertou sozinho, para a prévia avisar o professor (24/11/2026)
+  todas.ajustadas = todas.filter(q => q.ajustes.length).map(q => q.numero);
+  todas.tiposDeAjuste = [...new Set(todas.flatMap(q => q.ajustes))];
   return todas;
 }
 
@@ -300,7 +364,8 @@ async function lerModelo(file) {
   const numerado = await escreverNumeracaoAutomatica(await sombreamentoComoMarcaTexto(await file.arrayBuffer()));
   const { value: html } = await window.mammoth.convertToHtml({ arrayBuffer: numerado }, { styleMap: ["highlight[color='yellow'] => mark", "highlight[color='green'] => mark"] });
   const blocos = blocosDoHtml(html);
-  const temModelo = blocos.some(b => RE_ENUN.test(b.texto)) && blocos.some(b => RE_INICIO.test(b.texto));
+  const temModelo = blocos.some(b => RE_ENUN.test(b.texto) || ROTULOS_INLINE[0][1].test(b.texto) ||
+    (RE_ROTULO_SOBRANDO.test(b.texto) && RE_ENUN.test(b.texto.replace(RE_ROTULO_SOBRANDO, '')))) && blocos.some(b => RE_INICIO.test(b.texto));
   if (temModelo) return lerModeloDeBlocos(blocos);
   // questões sem número, cada uma aberta por "NÍVEL DE DIFICULDADE:" (16/11/2026) — o Órbita numera 1, 2, 3…
   const P = window.PadraoMed;
