@@ -113,9 +113,13 @@ class ImportadorBancoAva {
     // acha curso e questionário. cmidTeste: manda para um questionário escolhido (teste), sem procurar
     async destino(sit, cmidTeste) {
         if (cmidTeste) return { cmid: Number(cmidTeste), quiz: 'questionário de teste', curso: '', cursoId: null, teste: true };
-        // envio de questões continua só nos cursos das turmas T.n (as de DP/ADP têm o mesmo nome de disciplina)
-        const cursos = (await this.cursosDo(sit.semestre)).filter(c => /^T\d+$/.test(c.turma) && c.disc === norm(sit.disciplina));
-        if (cursos.length !== 1) return { erro: cursos.length ? `mais de um curso no AVA com esse nome (${cursos.map(c => c.id).join(', ')})` : `não há curso "${sit.semestre} - T.n - … - ${sit.disciplina}" no AVA` };
+        // envio de questões vai para o curso da turma T.n (as de DP/ADP têm o mesmo nome de disciplina). Sem turma
+        // regular no semestre — Habilidades Clínicas I em 2026.2 só existe como "ADP - MEDICINA - 2026.2 - …" — usa o
+        // único curso DP/ADP da disciplina (26/11/2026).
+        const daDisc = (await this.cursosDo(sit.semestre)).filter(c => c.disc === norm(sit.disciplina));
+        let cursos = daDisc.filter(c => /^T\d+$/.test(c.turma));
+        if (!cursos.length) cursos = daDisc.filter(c => !/^T\d+$/.test(c.turma));
+        if (cursos.length !== 1) return { erro: cursos.length ? `mais de um curso no AVA com esse nome (${cursos.map(c => c.nome).join(' / ')})` : `a disciplina ${sit.disciplina} não tem curso no AVA em ${sit.semestre} (nem de turma, nem de DP/adaptação)` };
         const curso = cursos[0];
         const qs = (await this.questionariosDoCurso(curso.id)).filter(q => questionarioDaProva(sit, q.nome));
         if (qs.length !== 1) return { curso: curso.nome, cursoId: curso.id, erro: qs.length ? `mais de um questionário possível (${qs.map(q => q.nome).join(' / ')})` : `o curso não tem o questionário da prova (${sit.prova})` };

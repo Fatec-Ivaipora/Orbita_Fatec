@@ -129,16 +129,20 @@ function lerResumoQuestionario(html) {
     const maxgrade = (String(html).match(/<input[^>]*name="maxgrade"[^>]*value="([^"]*)"/) || [])[1];
     const soma = (String(html).match(/class="mod_quiz_summarks"[^>]*>\s*([\d.,]+)/) || [])[1];
     const status = (String(html).match(/class="quizopeningstatus"[^>]*title="([^"]*)"/) || [])[1];
-    return { noQuestionario: contarQuestoesNoQuestionario(html), notaMaxima: num(maxgrade), somaNotas: num(soma), abertura: status ? semTags(status) : '', ...origemDasQuestoes(html) };
+    const noQuestionario = contarQuestoesNoQuestionario(html);
+    return { noQuestionario, notaMaxima: num(maxgrade), somaNotas: num(soma), abertura: status ? semTags(status) : '', ...origemDasQuestoes(html, noQuestionario) };
 }
 // Quem colocou as questões no questionário (26/11/2026): o Órbita sempre dá o nome "[2ºB 1ªCH 07] Prof. …" ou
 // "[EXAME 05] …"; o que tem outro nome foi posto direto no AVA pelo professor. A partir de 26/11 só o Órbita (com a
 // coordenação) coloca questões no AVA, e as provas antigas montadas direto lá são trazidas para validar.
 const RE_NOME_ORBITA = /^\[\s*(?:\d+\s*[ºo°]\s*B\s+\d+\s*[ªa]\s*CH|EXAME)\s*\d+\s*\]/i;
-function origemDasQuestoes(html) {
+// A conta vale pelo número de questões do questionário: a página tem outros "questionname" fora da prova (questionário
+// vazio aparecia como "0 questões = 0 Órbita + 1 direto" — 26/11/2026).
+function origemDasQuestoes(html, noQuestionario) {
     const nomes = [...String(html).matchAll(/<span[^>]*class="[^"]*\bquestionname\b[^"]*"[^>]*>([\s\S]*?)<\/span>/g)].map(m => semTags(m[1]));
-    const pelaOrbita = nomes.filter(n => RE_NOME_ORBITA.test(n)).length;
-    return { pelaOrbita, direto: nomes.length - pelaOrbita };
+    const total = Number.isFinite(noQuestionario) ? noQuestionario : nomes.length;
+    const pelaOrbita = Math.min(total, nomes.filter(n => RE_NOME_ORBITA.test(n)).length);
+    return { pelaOrbita, direto: Math.max(0, total - pelaOrbita) };
 }
 // resposta do POST da importação
 function lerResultadoImportacao(html) {

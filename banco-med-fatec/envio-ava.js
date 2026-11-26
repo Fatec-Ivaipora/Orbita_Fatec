@@ -28,7 +28,7 @@ const SITUACAO = {
 };
 // prova com questões postas direto no AVA (fora do Órbita) — 26/11/2026
 const temNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0);
-const diretoNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.direto > 0);
+const diretoNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0 && p.ava.quadro.direto > 0);
 const FILTROS = [
   ['direto', 'Direto no AVA', diretoNoAva],
   ['acao', 'Precisa de atenção', p => ['conferir', 'erro'].includes(p.situacao)],
@@ -96,7 +96,7 @@ const fmt = (n) => (n === null || n === undefined ? '–' : String(n).replace('.
 function proximoPasso(p) {
   const q = (p.ava && p.ava.quadro) || null;
   const esperado = p.qtdProva || p.total;
-  if (q && !q.erro && q.direto > 0) {
+  if (q && !q.erro && q.noQuestionario > 0 && q.direto > 0) {
     return { tom: 'atencao', txt: q.direto === q.noQuestionario
       ? `<b>Montada direto no AVA</b> (${q.direto} questões fora do Órbita). Traga para o Órbita para validar.`
       : `<b>${q.direto} questão(ões) postas direto no AVA</b>, fora do Órbita. Traga para validar.`,
