@@ -15,7 +15,7 @@ app.use(compression());
 const ALLOWED_ORIGINS = [
     'https://orbita-fatecivp.web.app',       // Firebase Hosting (produção)
     'https://orbita-fatecivp.firebaseapp.com', // Firebase Hosting (alternativo)
-    'https://orbita-fatec-ti.vercel.app',     // Vercel (produção)
+    'https://orbita-fatec-ti.vercel.app',     // Vercel (produção, antigo)
     'http://localhost:3000',                  // Desenvolvimento local (backend)
     'http://127.0.0.1:3000',                  // Desenvolvimento local (backend)
 ];
@@ -26,7 +26,12 @@ const corsOptions = {
         // E permite qualquer porta no localhost/127.0.0.1 para desenvolvimento local
         const isLocalhost = origin && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
         const isVercelSubdomain = origin && /^https:\/\/.*\.vercel\.app$/.test(origin);
-        if (!origin || ALLOWED_ORIGINS.includes(origin) || isLocalhost || isVercelSubdomain) {
+        // Migração pro Coolify (26/11/2026): enquanto não tem domínio
+        // próprio, cada app sobe num link tipo <uuid>.<ip-do-servidor>.sslip.io
+        // — libera só os domínios desse servidor específico da migração, não
+        // qualquer sslip.io (que é um serviço público, sem dono verificado).
+        const isCoolifyMigracao = origin && /^https:\/\/[a-z0-9]+\.177\.104\.189\.118\.sslip\.io$/.test(origin);
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || isLocalhost || isVercelSubdomain || isCoolifyMigracao) {
             callback(null, true);
         } else {
             callback(new Error(`CORS: Origem não autorizada — ${origin}`));
@@ -95,6 +100,7 @@ const rotasAutomacaoAva = require('../src/rotas/automacao-ava');
 const rotasEadAulas = require('../src/rotas/ead-aulas');
 const rotasLevantamentoEad = require('../src/rotas/levantamento-ead');
 const rotasFinanceiroMedicina = require('../src/rotas/financeiro-medicina');
+const rotasCustosTi = require('../src/rotas/custos-ti');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
@@ -137,6 +143,7 @@ app.use('/api/ead-aulas', rotasEadAulas);
 app.use('/api/levantamento-ead', rotasLevantamentoEad);
 app.use('/api/financeiro-medicina', rotasFinanceiroMedicina);
 app.use('/api/calendario-academico', rotasCalendarioAcademico);
+app.use('/api/custos-ti', rotasCustosTi);
 
 // Exportação obrigatória para o Vercel Serverless
 

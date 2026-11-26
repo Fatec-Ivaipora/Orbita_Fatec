@@ -99,21 +99,20 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
-### [2026-11-26] Portfólio MED: aceita outros formatos além de PDF
-- Autor: Claude Code (a pedido do usuário, para o João)
-- Branch: feat/portfolio-outros-formatos
+### [2026-11-26] Banco MED: provas das turmas de Adaptação e Dependência
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-prova-adaptacao
 - Arquivos alterados:
-  - `medicina/portfolio/app.js` (v=6): `lerArquivo` é uma leitura só para o ZIP, para o "Buscar entregas do AVA" e para "Abrir o arquivo do AVA". Lê:
-    - PDF;
-    - Word (.docx), LibreOffice (.odt) e PowerPoint (.pptx e .odp), pelo XML de dentro, com o JSZip que já estava carregado;
-    - .txt, .rtf e .html;
-    - imagem (mostra, sem texto);
-    - o .doc antigo fica para baixar, com o aviso de pedir .docx ou PDF.
+  - `src/rotas/banco-med-avaliacoes.js`: `listaDisciplinas(semestre, { comTurmasEspeciais })`. Nas provas do Banco MED, a disciplina que tem turma regular e também turma "ADP - MEDICINA" ou "DP - MEDICINA" no Edubox ganha uma disciplina à parte:
+    - nome "… · ADAPTAÇÃO" / "… · DEPENDÊNCIA", chave "…-adp" / "…-dp";
+    - mesma categoria do banco de questões;
+    - só os professores daquela turma veem;
+    - mesmas provas da turma regular (1º e 2º bimestre, 1ª e 2ª chamada, exame).
 
-    O leitor mostra o texto do documento e a imagem na aba "Arquivo". Os avisos passam a ser "sem texto (escaneado ou foto?)" e "arquivo sem leitura".
-  - `medicina/portfolio/portfolio.css` (v=7), `tutorial.js`, `index.html`.
+    Os outros módulos (Aplicação de Provas, OSCE, categorias) continuam com a lista de antes. O plano de ensino é buscado pelo nome sem o sufixo.
+  - `src/utils/ava-banco-importar.js` (`destino`): a prova "· ADAPTAÇÃO" vai para o curso "ADP - MEDICINA - semestre - DISCIPLINA" e a "· DEPENDÊNCIA" para "DP - …". Sem o curso, a mensagem diz qual falta.
 - Tipo: Melhoria
-- Motivo: alunos entregam o portfólio em Word e em outros formatos. Antes só o PDF tinha texto, leitura na tela e comparação entre portfólios. Tudo continua no navegador, sem serviço externo (LGPD).
+- Motivo: o prof. Rodrigo Oliveira (titular de Oncogênese na ADP) não tinha onde montar a prova da adaptação. Em 2026.2 isso vale para Oncogênese, Patologia Clínica I e MBE II (ADP). As disciplinas que só têm ADP/DP (Habilidades Clínicas I, Sistemas Morfofisiológicos I e III) já apareciam como disciplina normal.
 - Como reverter: reverter o commit.
 
 ### [2026-11-26] Aplicação de Provas MED: nota do Edubox no padrão da graduação (escala 10 = 100%, 1 casa)
@@ -131,6 +130,22 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Tipo: Correção
 - Motivo: o arquivo da MED saía com nota inteira na escala do questionário (10, 50, 70, 80 ou 100, conforme a prova). O Edubox usa 10 = 100% e recusa nota acima de 10. A graduação já foi corrigida hoje cedo (a073c32, 348606e).
 - Como reverter: reverter o commit.
+
+### [2026-11-26] Novo módulo: Custos de Nuvem (Gestão de T.I.)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feature/custos-ti
+- Arquivos criados: `ti/custos/{index.html, app.js, custos.css}`, `src/rotas/custos-ti.js`, `src/utils/custos-gcp.js`, `src/utils/custos-digitalocean.js`.
+- Arquivos alterados: `api/index.js` (rota montada), `core/permissions.js` (módulo `custos-ti`, categoria `ti`, listas de `adm_l1`/`adm_l2`/`ti`), `src/middlewares/auth.js` (níveis padrão + instrumentação de uso, ver abaixo), `.env_exemplo` (nomes das variáveis novas, sem valor real).
+- Tipo: Novo módulo
+- Motivo: o gasto do Firebase subiu e o usuário precisa separar o que é uso humano normal do Órbita do que é o robô de automação da ODTech (cargo `robo`, mexe em Matrículas) chamando o sistema, além de acompanhar o custo do SIGMA (mesma conta de faturamento do Google) e do servidor do relay na DigitalOcean — hoje isso é olhado manualmente, sem histórico.
+- Impacto:
+  - **Instrumentação nova** (`src/middlewares/auth.js`, função `registrarUso`, chamada no fim do `verifyToken` antes do `next()`): toda requisição autenticada passa a incrementar `custos_ti_uso/{AAAA-MM-DD}` (`total`, `porOrigem.{robo|humano}`, `porModulo.<1º segmento da URL>`), via `FieldValue.increment`, sem `await` e com erro sempre engolido (nunca atrasa nem derruba a requisição real). Não existia nenhuma contagem de uso no sistema antes disso.
+  - **Custo do Google Cloud** (Órbita + SIGMA): `src/utils/custos-gcp.js` consulta o BigQuery Billing Export via API REST (autenticação com `google-auth-library`, já dependência transitiva do `firebase-admin` — não precisou instalar nada novo). **Precisa ser configurado no Console do Google Cloud antes de funcionar** (Billing → Billing export → BigQuery, mais uma service account nova só de leitura — não reaproveita a chave de admin do Firebase). Sem isso configurado, devolve `{ configurado: false }` e a tela mostra aviso, em vez de erro.
+  - **Custo da DigitalOcean**: `src/utils/custos-digitalocean.js` chama a API de billing deles (`/v2/customers/my/balance`, `/v2/customers/my/billing_history`) com um token (escopo Billing, só leitura) em `DIGITALOCEAN_API_TOKEN`. Mesmo fallback gracioso sem o token configurado.
+  - **Tela** (`ti/custos/`): cards de resumo (Órbita, SIGMA, DigitalOcean, total, com variação vs. mês anterior), gráfico de linha (custo diário por projeto), gráfico de barra empilhada (uso robô x humano) e gráfico por categoria de serviço do GCP — Chart.js 4.4.4, mesmo padrão já usado em `cpa/` e `financeiro/licitacao/`. Acesso: ADM N1, ADM N2 e cargo TI (nível 3 por padrão; depende também de `config/permissions` no Firestore, como qualquer módulo novo).
+- Como testar: sem as credenciais do GCP/DigitalOcean configuradas, abrir Gestão de T.I. → Custos de Nuvem como ADM N1/TI deve mostrar os avisos de "configuração pendente", não erro 500; o gráfico de uso robô x humano já funciona sem nenhuma configuração extra (testado localmente: `GET /api/custos-ti/resumo` e `/uso` sem token respondem 401, não 404/500; com o módulo HTML acessível em `/ti/custos/index.html`). Depois de configurar o BigQuery export e o token da DigitalOcean, conferir que os valores batem com o Console do Google Cloud e o painel da DigitalOcean.
+- Como reverter: tirar o módulo de `core/permissions.js` e a rota de `api/index.js`; tirar a chamada a `registrarUso` de `src/middlewares/auth.js` (a função pode ficar, só não é mais chamada); a coleção `custos_ti_uso` pode ser apagada.
+- **Pendente (fora do código, console do usuário):** ligar o BigQuery Billing Export no Google Cloud Console + criar a service account de leitura; gerar o token de API (Billing, read-only) na DigitalOcean. Até lá, só o gráfico de uso robô x humano funciona de verdade.
 
 ### [2026-11-26] Envio ao AVA: botão "Colocar no questionário"
 - Autor: Claude Code (a pedido do usuário)

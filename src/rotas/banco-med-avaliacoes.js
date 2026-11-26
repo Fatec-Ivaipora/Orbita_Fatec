@@ -39,7 +39,7 @@ async function perfilAv(req) {
     const snap = await db.collection('users').doc(req.user.uid).get();
     const u = snap.exists ? snap.data() : {};
     const nome = String(u.nomeEdubox || u.name || u.nome || req.user.name || '').replace(/\s+/g, ' ').trim();
-    const { disciplinas } = await listaDisciplinas(semestreAtualAv());
+    const { disciplinas } = await listaDisciplinas(semestreAtualAv(), { comTurmasEspeciais: true });
     const minhas = nome ? disciplinas.filter(d => d.professores.some(x => normNome(x) === normNome(nome))) : [];
     const crits = await Promise.all(minhas.map(d => lerCriterios(d.chave).catch(() => null)));
     const titulares = new Set(minhas.filter((d, i) => {
@@ -128,15 +128,32 @@ async function usuariosDemo() {
     }).filter(u => u.nome && u.disciplina) };
     return demoCache.lista;
 }
-async function listaDisciplinas(semestre) {
+// Turmas de ADAPTAÇÃO e DEPENDÊNCIA (26/11/2026): no Edubox o diário vem com turma "ADP - MEDICINA" / "DP - MEDICINA".
+// Quando a disciplina também tem turma regular (ex.: Oncogênese — 4º período e ADP), a turma ADP/DP tem as MESMAS
+// provas (1º/2º bimestre, 1ª/2ª chamada, exame), montadas pelos professores DELA e enviadas ao curso ADP/DP do AVA.
+// Com { comTurmasEspeciais: true } (só nas provas do Banco MED) ela vira uma disciplina à parte:
+//   nome "ONCOGÊNESE E TOXICOLOGIA · ADAPTAÇÃO", chave "oncogenese-e-toxicologia-adp", mesma categoria (banco de questões).
+// Disciplina que só existe como ADP/DP no semestre (ex.: Habilidades Clínicas I) continua como antes, sem sufixo.
+const turmaEspecialDo = (turma) => { const m = /^\s*(A?DP)\b/i.exec(String(turma || '')); return m ? m[1].toLowerCase() : null; };
+const ROTULO_TURMA_ESPECIAL = { adp: 'ADAPTAÇÃO', dp: 'DEPENDÊNCIA' };
+const SUFIXO_TURMA_ESPECIAL = /\s*·\s*(ADAPTAÇÃO|DEPENDÊNCIA)$/i;
+const nomeBaseDisciplina = (nome) => String(nome || '').replace(SUFIXO_TURMA_ESPECIAL, '');
+async function listaDisciplinas(semestre, { comTurmasEspeciais = false } = {}) {
     const fonte = await semestreComDados(semestre);
     const [diarios, cats] = await Promise.all([diariosMed(fonte), categorias()]);
+    const comRegular = new Set(diarios.filter(d => !turmaEspecialDo(d.turma)).map(d => normNome(d.disciplina)));
     const porNome = new Map();
     diarios.forEach(d => {
-        const k = normNome(d.disciplina);
+        const base = normNome(d.disciplina);
+        const esp = comTurmasEspeciais && comRegular.has(base) ? turmaEspecialDo(d.turma) : null;
+        const k = esp ? `${base}|${esp}` : base;
         if (!porNome.has(k)) {
-            const cat = cats.find(c => normNome(c.nome) === k);
-            porNome.set(k, { chave: slug(d.disciplina), nome: d.disciplina.replace(/\s+/g, ' '), sigla: d.sigla, periodo: cat ? cat.periodo : d.periodo, categoriaId: cat ? cat.id : null, professores: new Set(), titulares: new Set(), coddtus: new Set() });
+            const cat = cats.find(c => normNome(c.nome) === base);
+            porNome.set(k, {
+                chave: slug(d.disciplina) + (esp ? `-${esp}` : ''), nome: d.disciplina.replace(/\s+/g, ' ') + (esp ? ` · ${ROTULO_TURMA_ESPECIAL[esp]}` : ''),
+                ...(esp ? { turmaEspecial: esp } : {}),
+                sigla: d.sigla, periodo: cat ? cat.periodo : d.periodo, categoriaId: cat ? cat.id : null, professores: new Set(), titulares: new Set(), coddtus: new Set()
+            });
         }
         const x = porNome.get(k);
         x.professores.add(titulo(d.nome).replace(/\s+/g, ' '));
@@ -185,7 +202,7 @@ async function planoDaDisciplina(semestre, nomeDisciplina) {
     const fonte = await semestreComDados(semestre);
     const r = await planosMed(fonte);
     const nomeCampo = Object.fromEntries((r.campos || []).map(c => [c.codpef, String(c.nome || '').trim()]));
-    const k = normNome(nomeDisciplina);
+    const k = normNome(nomeBaseDisciplina(nomeDisciplina));
     const diarios = (r.diarios || []).filter(d => normNome(d.disciplina) === k);
     if (!diarios.length) return { semestreFonte: fonte, encontrado: false, unidades: [], objetivos: [], referencias: [] };
     // diário com o plano mais completo (mais conteúdos + campos preenchidos)
@@ -402,7 +419,7 @@ router.get('/criterios/:chave', async (req, res) => {
     try {
         exigeDisc(req, req.params.chave);
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : '2026.2';
-        const [{ disciplinas }, crit] = await Promise.all([listaDisciplinas(semestre), lerCriterios(req.params.chave)]);
+        const [{ disciplinas }, crit] = await Promise.all([listaDisciplinas(semestre, { comTurmasEspeciais: true }), lerCriterios(req.params.chave)]);
         const d = disciplinas.find(x => x.chave === req.params.chave);
         const nome = d ? d.nome : (crit && crit.disciplina);
         if (!nome) return res.status(404).json({ error: 'Disciplina não encontrada.' });
@@ -418,7 +435,7 @@ router.put('/criterios/:chave', async (req, res) => {
     try {
         exigeEditorAv(req, 'definem os critérios. O titular divide as questões em "Divisão das questões"');
         const semestre = SEMESTRE.test(req.body.semestre || '') ? req.body.semestre : '2026.2';
-        const { disciplinas } = await listaDisciplinas(semestre);
+        const { disciplinas } = await listaDisciplinas(semestre, { comTurmasEspeciais: true });
         const d = disciplinas.find(x => x.chave === req.params.chave);
         const c = limparCriterios(req.body);
         const ref = db.collection(COL_CRIT).doc(req.params.chave);
@@ -434,7 +451,7 @@ router.get('/disciplinas', async (req, res) => {
     try {
         const semestre = SEMESTRE.test(req.query.semestre || '') ? req.query.semestre : null;
         if (!semestre) return res.status(400).json({ error: 'Informe o semestre.' });
-        const [l, crits] = await Promise.all([listaDisciplinas(semestre), todosCriterios()]);
+        const [l, crits] = await Promise.all([listaDisciplinas(semestre, { comTurmasEspeciais: true }), todosCriterios()]);
         res.json({ ...l, disciplinas: l.disciplinas.filter(d => !req.prof || req.prof.chaves.has(d.chave)).map(d => { const c = crits.get(d.chave); return { ...d, criteriosDefinidos: !!(c && c.definidoEm), qtdQuestoes: (c && c.qtdQuestoes) || null, cotas: c && c.porProfessor ? Object.keys(c.porProfessor).length : 0 }; }) });
     } catch (e) { erro(res, e); }
 });
@@ -457,7 +474,7 @@ router.get('/', async (req, res) => {
 const chaveEnvio = (nome) => normNome(nome).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80);
 async function progressoDisciplina(chave, semestre) {
         const [{ disciplinas }, crit, snap] = await Promise.all([
-            listaDisciplinas(semestre), lerCriterios(chave),
+            listaDisciplinas(semestre, { comTurmasEspeciais: true }), lerCriterios(chave),
             db.collection(COL_AV).where('chave', '==', chave).get()
         ]);
         const d = disciplinas.find(x => x.chave === chave);
@@ -511,7 +528,7 @@ router.post('/', async (req, res) => {
         const bimestre = exame ? 0 : parseInt(req.body.bimestre, 10), chamada = exame ? 0 : parseInt(req.body.chamada, 10);
         if (!SEMESTRE.test(semestre || '')) return res.status(400).json({ error: 'Informe o semestre.' });
         if (!exame && (![1, 2].includes(bimestre) || ![1, 2].includes(chamada))) return res.status(400).json({ error: 'Escolha o bimestre e a chamada.' });
-        const { disciplinas } = await listaDisciplinas(semestre);
+        const { disciplinas } = await listaDisciplinas(semestre, { comTurmasEspeciais: true });
         const d = disciplinas.find(x => x.chave === chave);
         if (!d) return res.status(400).json({ error: 'Escolha a disciplina.' });
         exigeDisc(req, d.chave);
@@ -613,7 +630,7 @@ router.get('/:id', async (req, res) => {
         const [todasQ, planoEdubox, discs, crit] = await Promise.all([
             lerQuestoes(av.questoesIds),
             planoDaDisciplina(av.semestre, av.disciplina).catch(e => ({ erro: e.message, unidades: [], objetivos: [], referencias: [] })),
-            listaDisciplinas(av.semestre).catch(() => ({ disciplinas: [] })),
+            listaDisciplinas(av.semestre, { comTurmasEspeciais: true }).catch(() => ({ disciplinas: [] })),
             lerCriterios(av.chave)
         ]);
         const questoes = visiveis(req, av, todasQ);
@@ -1298,6 +1315,6 @@ router.get('/:id/modelo', async (req, res) => {
     } catch (e) { erro(res, e); }
 });
 
-router._interno = { USOS_PROVA, usoDoTexto, destinoDoTexto, pastaProva, usoDaAvaliacao, chaveEnvio, progressoDisciplina, lerCriterios, limparCriterios, COL_CRIT, montarModeloDocx, enviarDocx, planoDaDisciplina, listaDisciplinas, itens, referencias, lerQuestoesDeLinhas, questaoDoBody, confirmarImagens, comLinks, linkEnvioImagem, resumoComImagens, tokens, normNome, bucket };
+router._interno = { nomeBaseDisciplina, turmaEspecialDo, USOS_PROVA, usoDoTexto, destinoDoTexto, pastaProva, usoDaAvaliacao, chaveEnvio, progressoDisciplina, lerCriterios, limparCriterios, COL_CRIT, montarModeloDocx, enviarDocx, planoDaDisciplina, listaDisciplinas, itens, referencias, lerQuestoesDeLinhas, questaoDoBody, confirmarImagens, comLinks, linkEnvioImagem, resumoComImagens, tokens, normNome, bucket };
 router._ptCorrigir = { questaoCorrigidaPt, corrigirHtmlPt, mudancasPt, correcaoVisivel };
 module.exports = router;

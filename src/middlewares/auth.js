@@ -45,6 +45,27 @@ async function senhaTrocadaDepoisDaMarcacao(uid, userData) {
     }
 }
 
+// Custos de Nuvem (23/11/2026): conta quantas requisições autenticadas cada
+// dia recebe, separando o robô da ODTech do resto (humano), e por módulo —
+// não existia nenhuma contagem de uso no sistema antes disso. Não tem
+// `await` de propósito: não pode atrasar nem derrubar a requisição de
+// verdade por causa disso; erro é sempre engolido.
+function registrarUso(req) {
+    try {
+        const dia = new Date().toISOString().slice(0, 10);
+        const origem = req.user.role === 'robo' ? 'robo' : 'humano';
+        const modulo = req.originalUrl.split('?')[0].split('/')[2] || 'outro'; // /api/<modulo>/...
+        const { db, admin } = require('../firebase');
+        // Chaves em notação de ponto: evita que o merge troque o mapa
+        // porOrigem/porModulo inteiro em vez de só o campo da origem/módulo.
+        db.collection('custos_ti_uso').doc(dia).set({
+            total: admin.firestore.FieldValue.increment(1),
+            [`porOrigem.${origem}`]: admin.firestore.FieldValue.increment(1),
+            [`porModulo.${modulo}`]: admin.firestore.FieldValue.increment(1)
+        }, { merge: true }).catch(() => {});
+    } catch (e) { /* nunca derruba a requisição por causa disso */ }
+}
+
 // Nível de acesso normalizado com retrocompatibilidade:
 // inteiro (1/2/3) ou formato legado { view, execute }
 const getAccessLevel = (perm) => {
@@ -167,6 +188,7 @@ const verifyToken = async (req, res, next) => {
             });
         }
 
+        registrarUso(req);
         next();
     } catch (error) {
         console.error('Erro ao buscar cargo do usuário no Firestore:', error);
@@ -273,12 +295,14 @@ const requireModulePermission = (moduleName) => {
                 'trilha-ead': 3,
                 'plano-acao': 3,
                 // Formulários (12/11/2026): Direção (ADM N1) e a assistente da Direção (ADM N2)
-                formularios: 3
+                formularios: 3,
+                'custos-ti': 3
             },
             ti: {
                 'automacao-ava': 3,
                 'ead-aulas': 3,
                 'levantamento-ead': 2,
+                'custos-ti': 3,
                 emprestimo: 3,
                 usuarios: 1,
                 ferida: 1,
