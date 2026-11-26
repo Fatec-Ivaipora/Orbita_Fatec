@@ -99,6 +99,11 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Correção de Provas: DISPENSA não recalculava a nota (corrigido)
+- **Problema (relatado pela coordenação de Med. Veterinária):** a dispensa era gravada, mas a nota do aluno não mudava. O `resultado()` do servidor devolvia um campo `dispensadas` (lista) que, espalhado por cima da leitura (`{ ...l, ...resultado }`), apagava o objeto `l.dispensadas`; a tela então não reconhecia a dispensa.
+- **Correção:** o campo do resultado passou a se chamar `discDispensadas` (planilha atualizada). E "Salvar respostas"/reler a folha agora mantêm a dispensa (antes apagavam, como já não acontecia com "consideradas").
+- **Teste:** só leitura, com as 2 dispensas reais do simulado do 3º período de Med. Vet.: 12/40 → 12/34 (nota 0,6 → 0,7) e 30/40 → 27/34 (1,5 → 1,6).
+
 ### [2026-11-26] Aplicação de Provas: visual novo, Resultados do AVA no molde da Correção de Provas, anular questão e arquivo para o Edubox
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/ava-resultados-dp-adp
