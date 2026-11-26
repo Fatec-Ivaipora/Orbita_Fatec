@@ -728,7 +728,9 @@ router.put('/:id/questoes/:qid', async (req, res) => {
         await ref.update({
             ...q, elaboradoPor: q.professorNome || antes.elaboradoPor || quem(req),
             tituloBusca: q.titulo.toLowerCase(), tituloBuscaTokens: tokens(q.titulo, av.disciplina),
-            padronizadaEm: q.padrao.ok ? agora() : null, padronizadaPor: q.padrao.ok ? quem(req) : null, updatedAt: agora()
+            padronizadaEm: q.padrao.ok ? agora() : null, padronizadaPor: q.padrao.ok ? quem(req) : null, updatedAt: agora(),
+            // veio do AVA (Trazer do AVA): a alteração fica esperando o "Levar alterações para o AVA" (26/11/2026)
+            ...(antes.avaOrigem && antes.avaOrigem.id ? { avaPendente: true, avaPendenteEm: agora(), avaPendentePor: quem(req) } : {})
         });
         // gabarito mudou numa questão já usada na Correção de Provas → mesma propagação do PUT /questoes/:id
         let avs = 0;
@@ -859,6 +861,60 @@ router.post('/:id/importar/repetidas', async (req, res) => {
     } catch (e) { erro(res, e); }
 });
 
+// ---------- trazer do AVA para validar (26/11/2026) ----------
+// Prova que o professor montou direto no AVA, sem passar pelo Órbita. O pedido acorda o agente do droplet
+// (config/ava_banco_sync.pedidoEm, escutado ao vivo); ele exporta o banco do questionário em Moodle-XML e guarda
+// em banco-med/ava-trazer/<id>.xml. A tela baixa pelo link assinado, mostra a prévia e importa pelo /importar.
+router.post('/:id/ava-trazer', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        exigeRascunho(av);
+        const agoraIso = agora();
+        await db.collection(COL_AV).doc(av.id).set({ avaTrazer: { status: 'pedido', pedidoEm: agoraIso, pedidoPor: quem(req) } }, { merge: true });
+        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: agoraIso, pedidoPorNome: quem(req) }, { merge: true });
+        res.json({ message: 'Pedido enviado: o Órbita busca as questões no AVA em instantes.' });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.get('/:id/ava-trazer', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        const t = av.avaTrazer || null;
+        let url = null;
+        if (t && t.status === 'pronto' && t.arquivo && t.arquivo.startsWith('banco-med/ava-trazer/')) {
+            [url] = await bucket().file(t.arquivo).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 15 * 60000 });
+        }
+        res.json({ ...(t || { status: null }), url });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// ---------- levar para o AVA as alterações das questões trazidas de lá (26/11/2026) ----------
+// Questão com avaOrigem alterada no Órbita fica avaPendente. O pedido acorda o agente, que abre o editor de cada uma
+// no AVA, troca enunciado, alternativas, correta e feedback (mantém as imagens que já estavam lá) e salva. O AVA
+// guarda como versão nova da questão: quem já fez a prova continua com a versão antiga.
+router.post('/:id/ava-levar', async (req, res) => {
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        const pend = (await lerQuestoes(av.questoesIds || [])).filter(q => q.avaPendente && q.avaOrigem && q.avaOrigem.id);
+        if (!pend.length) return res.status(400).json({ error: 'Nenhuma questão alterada esperando ir para o AVA.' });
+        const agoraIso = agora();
+        await db.collection(COL_AV).doc(av.id).set({ avaLevar: { status: 'pedido', pedidoEm: agoraIso, pedidoPor: quem(req), total: pend.length } }, { merge: true });
+        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: agoraIso, pedidoPorNome: quem(req) }, { merge: true });
+        res.json({ message: `Pedido enviado: ${pend.length} questão(ões) vão ser alteradas no AVA em instantes.`, total: pend.length });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.get('/:id/ava-levar', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const av = await lerAvaliacao(req.params.id);
+        exigeDisc(req, av.chave);
+        res.json(av.avaLevar || { status: null });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
 // importar de Word / PDF / texto colado → só a PRÉVIA (nada é salvo aqui)
 router.post('/:id/importar/analisar', async (req, res) => {
     try {
@@ -952,6 +1008,8 @@ router.post('/:id/importar', async (req, res) => {
             if (naProva) ids.push(ref.id); else { aMais[rotA] = (aMais[rotA] || 0) + 1; }
             batch.set(ref, {
                 ...q, imagens: imagensPorQuestao[ix], ...(naProva ? { status: 'rascunho_avaliacao', avaliacaoId: av.id } : { status: 'publicada', reservaDe: av.id }), importada: true,
+                // Trazer do AVA (26/11/2026): questão que já existe no AVA — o "Levar alterações para o AVA" edita esta
+                ...(Number(x.avaId) > 0 ? { avaOrigem: { id: Number(x.avaId), cmid: Number(x.avaCmid) || null, nome: String(x.nomeAva || '').slice(0, 300) } } : {}),
                 categoriaId: av.categoriaId, periodo: av.periodo, semestre: av.semestre, bimestre: naProva ? av.bimestre : bimQ, chamada: av.chamada, sigla: av.sigla,
                 areaEnamed: (cat && cat.areaEnamedPadrao) || classificarAreaEnamed(q.titulo, q.enunciadoHtml, ''),
                 tituloBusca: q.titulo.toLowerCase(), tituloBuscaTokens: tokens(q.titulo, av.disciplina),
@@ -1042,6 +1100,8 @@ function correcaoVisivel(q) {
     if (k.has('fb')) f.justificativa = upd.justificativa;
     if (k.has('ref')) f.fonte = upd.fonte;
     f.padrao = Padrao.avaliarQuestao({ ...q, ...f });
+    // veio do AVA: a correção também precisa ser levada para lá (26/11/2026)
+    if (q.avaOrigem && q.avaOrigem.id) { f.avaPendente = true; f.avaPendenteEm = new Date().toISOString(); }
     return { upd: f, campos };
 }
 router.post('/:id/corrigir-pt/previa', async (req, res) => {

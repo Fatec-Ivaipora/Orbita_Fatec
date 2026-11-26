@@ -654,3 +654,16 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .ea-quadro-abre, .ea-quadro-lido { color: var(--av-tinta-2); font-size: 0.8rem; }
 .ea-quadro-aviso { display: flex; gap: 0.4rem; align-items: flex-start; font-weight: 600; }
 .ea-quadro .bmf-icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 0.15rem; }
+
+/* Trazer do AVA para validar (26/11/2026) */
+.av-trazer-ava { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; margin: 0.4rem 0 0.6rem; padding: 0.8rem 0.95rem; background: #E8F2FC; border: 1px solid #B8D2EE; border-radius: 8px; }
+.av-trazer-ava > div { flex: 1 1 320px; display: grid; gap: 0.2rem; }
+.av-trazer-ava b { color: #004F9F; }
+.av-trazer-ava .av-nota { margin: 0; }
+.av-trazer-estado { background: #F6F8FB; border: 1px dashed #B8D2EE; border-radius: 8px; padding: 0.8rem 1rem; }
+.av-ava-editar { margin: 0.2rem 0 0.4rem; font-size: 0.85rem; }
+.av-ava-editar a { color: #004F9F; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.av-ava-editar .av-nota { margin-left: 0.4rem; }
+.av-tag-ava { background: #E8F2FC; color: #004F9F; border: 1px solid #B8D2EE; }
+.av-selo-ava-pend { background: #FDF0DD; color: #7A4706; border: 1px solid #F0D3A4; }
+.av-ava-link { font-size: 0.8rem; font-weight: 700; color: #004F9F; text-decoration: underline; text-underline-offset: 3px; margin-left: 0.25rem; white-space: nowrap; }

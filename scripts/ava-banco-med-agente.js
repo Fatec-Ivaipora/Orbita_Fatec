@@ -25,7 +25,7 @@ require('dotenv').config({ quiet: true });
 const fs = require('fs');
 const path = require('path');
 const { db, admin } = require(path.join(__dirname, '..', 'src', 'firebase'));
-const { situacaoDoSemestre, semestreAtual, publicarNoBanco, COL_AV } = require(path.join(__dirname, '..', 'src', 'utils', 'banco-med-ava-fila'));
+const { situacaoDoSemestre, situacaoDaAvaliacao, semestreAtual, publicarNoBanco, COL_AV } = require(path.join(__dirname, '..', 'src', 'utils', 'banco-med-ava-fila'));
 const { SessaoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-sessao'));
 const { ImportadorBancoAva } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-banco-importar'));
 const { questionarioDaAplicacao, lerResultados, fechou: fechouQuiz } = require(path.join(__dirname, '..', 'src', 'utils', 'ava-resultados'));
@@ -109,6 +109,74 @@ async function lerResultadoDaProva(imp, p) {
     } catch (e) { return { ...base, ...ligado, status: e.semNota ? 'sem_nota' : 'erro', erro: e.message }; }
 }
 
+// ---------- trazer do AVA para validar (26/11/2026) ----------
+// Prova que o professor montou direto no AVA, sem passar pelo Órbita: o Banco MED pede (avaliacao.avaTrazer.status
+// = 'pedido'), o agente exporta o banco do questionário em Moodle-XML, guarda no Storage e lista o nome das questões
+// que estão na prova. A tela converte e importa na avaliação para a coordenação validar (Conferência CADAM).
+const BUCKET = process.env.FIREBASE_STORAGE_BUCKET || 'orbita-fatecivp.firebasestorage.app';
+async function trazerAFazer() {
+    const snap = await db.collection(COL_AV).where('avaTrazer.status', '==', 'pedido').get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function trazerDoAva(imp, av, simular) {
+    const ref = db.collection(COL_AV).doc(av.id);
+    try {
+        const sit = await situacaoDaAvaliacao(av);
+        const d = await imp.destino(sit);
+        if (d.erro) throw new Error(d.erro);
+        const naProva = await imp.questoesDaProva(d.cmid);
+        const xml = await imp.exportarXml(d.cmid);
+        const noBanco = (xml.match(/<question type="(?!category)/g) || []).length;
+        if (simular) return `simulação: ${naProva.length} na prova, ${noBanco} no banco [${d.curso} › ${d.quiz}]`;
+        const caminho = `banco-med/ava-trazer/${av.id}.xml`;
+        await admin.storage().bucket(BUCKET).file(caminho).save(xml, { contentType: 'application/xml; charset=utf-8', resumable: false });
+        await ref.update({
+            'avaTrazer.status': 'pronto', 'avaTrazer.arquivo': caminho, 'avaTrazer.questoesNaProva': naProva.slice(0, 200),
+            'avaTrazer.naProva': naProva.length, 'avaTrazer.noBanco': noBanco, 'avaTrazer.curso': d.curso, 'avaTrazer.quiz': d.quiz,
+            'avaTrazer.cmid': d.cmid, 'avaTrazer.lidoEm': new Date().toISOString(), 'avaTrazer.msg': ''
+        });
+        return `${naProva.length} questão(ões) na prova, ${noBanco} no banco [${d.curso} › ${d.quiz}]`;
+    } catch (e) {
+        if (!simular) await ref.update({ 'avaTrazer.status': 'erro', 'avaTrazer.msg': e.message, 'avaTrazer.lidoEm': new Date().toISOString() });
+        throw e;
+    }
+}
+
+// ---------- levar para o AVA as alterações das questões trazidas de lá (26/11/2026) ----------
+// Pedido em avaliacao.avaLevar.status = 'pedido'. Para cada questão da prova com avaPendente (alterada no Órbita),
+// abre o editor da questão no AVA e troca enunciado, alternativas, correta e feedback (justificativa + FONTE, como o
+// XML do Órbita). O AVA guarda como versão nova; quem já fez a prova continua com a versão antiga.
+const COL_QUESTOES = 'banco_med_questoes';
+const escXml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+async function levarAFazer() {
+    const snap = await db.collection(COL_AV).where('avaLevar.status', '==', 'pedido').get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function levarParaAva(imp, av, simular) {
+    const ref = db.collection(COL_AV).doc(av.id);
+    const docs = await Promise.all((av.questoesIds || []).map(id => db.collection(COL_QUESTOES).doc(id).get()));
+    const qs = docs.filter(s => s.exists).map(s => ({ id: s.id, ...s.data() })).filter(q => q.avaPendente && q.avaOrigem && q.avaOrigem.id);
+    const erros = [];
+    let levadas = 0;
+    for (const q of qs) {
+        const cmid = q.avaOrigem.cmid || (av.avaTrazer || {}).cmid;
+        try {
+            if (!cmid) throw new Error('sem o questionário de origem no AVA');
+            const feedbackHtml = [q.justificativa, q.fonte ? `<p><em>FONTE: ${escXml(q.fonte)}</em></p>` : ''].filter(Boolean).join('\n');
+            if (!simular) {
+                await imp.editarQuestao(cmid, q.avaOrigem.id, { enunciadoHtml: q.enunciadoHtml || '', alternativas: q.alternativas || [], feedbackHtml });
+                await db.collection(COL_QUESTOES).doc(q.id).update({ avaPendente: false, avaLevadaEm: new Date().toISOString(), avaLevadaErro: null });
+            }
+            levadas++;
+        } catch (e) {
+            erros.push({ questao: q.avaOrigem.nome || q.id, erro: e.message });
+            if (!simular) await db.collection(COL_QUESTOES).doc(q.id).update({ avaLevadaErro: e.message, avaLevadaErroEm: new Date().toISOString() });
+        }
+    }
+    if (!simular) await ref.update({ 'avaLevar.status': erros.length && !levadas ? 'erro' : 'pronto', 'avaLevar.levadas': levadas, 'avaLevar.erros': erros.slice(0, 50), 'avaLevar.em': new Date().toISOString() });
+    return `${levadas} de ${qs.length} levada(s) ao AVA${erros.length ? `; ${erros.length} com erro` : ''}`;
+}
+
 async function rodada(origem) {
     const inicio = Date.now();
     const simular = !!args.simular, teste = args['teste-cmid'] || null;
@@ -123,13 +191,24 @@ async function rodada(origem) {
     const velho = (s) => { const q = s.ava && s.ava.quadro; return !q || !q.lidoEm || Date.now() - new Date(q.lidoEm).getTime() > QUADRO_MS; };
     const quadros = args['so-resultados'] ? [] : todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
     const resultados = args.so ? [] : await resultadosAFazer(origem);
-    resumo.resultados = 0;
-    if (!fila.length && !quadros.length && !resultados.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
-    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas, ${quadros.length} para atualizar os números, ${resultados.length} resultado(s) para ler${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
+    const trazer = (args.so || teste) ? [] : await trazerAFazer();
+    const levar = (args.so || teste) ? [] : await levarAFazer();
+    resumo.resultados = 0; resumo.trazidas = 0; resumo.levadas = 0;
+    if (!fila.length && !quadros.length && !resultados.length && !trazer.length && !levar.length) { log(`Nada novo para o AVA (${origem}).`); return { resumo, segundos: 0 }; }
+    log(`Rodada (${origem}): ${fila.length} prova(s) com questões prontas, ${quadros.length} para atualizar os números, ${resultados.length} resultado(s) para ler, ${trazer.length} para trazer do AVA, ${levar.length} com alterações para levar${simular ? ' — SIMULAÇÃO' : ''}${teste ? ` — TESTE no questionário ${teste}` : ''}.`);
 
     const sessao = new SessaoAva();
     await sessao.entrar();
     const imp = new ImportadorBancoAva(sessao);
+    // primeiro o "Trazer do AVA para validar": tem alguém esperando na tela
+    for (const av of trazer) {
+        try { const msg = await trazerDoAva(imp, av, simular); resumo.trazidas++; log(`  trazer    ${av.disciplina} · ${av.id} — ${msg}`); }
+        catch (e) { log(`  trazer    ${av.disciplina} · ${av.id} — erro: ${e.message}`); }
+    }
+    for (const av of levar) {
+        try { const msg = await levarParaAva(imp, av, simular); resumo.levadas++; log(`  levar     ${av.disciplina} · ${av.id} — ${msg}`); }
+        catch (e) { log(`  levar     ${av.disciplina} · ${av.id} — erro: ${e.message}`); if (!simular) await db.collection(COL_AV).doc(av.id).update({ 'avaLevar.status': 'erro', 'avaLevar.erros': [{ questao: '', erro: e.message }], 'avaLevar.em': new Date().toISOString() }).catch(() => {}); }
+    }
     for (const sit of fila) {
         const av = { id: sit.id, ...avs.get(sit.id) };
         let r;

@@ -99,6 +99,36 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Banco MED: trazer do AVA a prova que o professor montou direto lá, para validar
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-trazer-do-ava
+- Arquivos alterados:
+  - `banco-med-fatec/avaliacoes.js` (v=50):
+    - na janela de importação da prova, bloco "A prova já está no AVA?" com o botão **Trazer do AVA**;
+    - o botão pede a leitura e acompanha por até 4 min;
+    - o XML vira a mesma prévia do Word (caso, alternativas, gabarito, feedback e imagens) e entra pelo `/importar`;
+    - cada questão tem o link **Editar no AVA**, que abre o editor da questão no AVA.
+  - `banco-med-fatec/avaliacoes.css` (v=34), `banco-med-fatec/app.js` e `index.html` (app.js v=83).
+  - `src/rotas/banco-med-avaliacoes.js`:
+    - `POST /:id/ava-trazer` grava `avaTrazer.status='pedido'` e acorda o agente (`config/ava_banco_sync.pedidoEm`);
+    - `GET /:id/ava-trazer` mostra o andamento e o link assinado do arquivo.
+  - `src/utils/ava-banco-importar.js`:
+    - `exportarXml(cmid)` usa a exportação do banco do questionário, categoria "Topo", que leva todas as pastas;
+    - `questoesDaProva(cmid)` lê `[{ nome, id }]` das questões que estão na prova (edit.php).
+  - `scripts/ava-banco-med-agente.js`: atende os pedidos primeiro na rodada, guarda o XML em `banco-med/ava-trazer/<avaliação>.xml` (Storage) e grava `avaTrazer` (pronto/erro, questões da prova, curso, questionário).
+- Tipo: Funcionalidade
+- Motivo: validar pela Conferência CADAM as provas que o professor montou direto no AVA, sem passar pelo Órbita. Nada é alterado no AVA. As questões do banco do questionário que não estão na prova ficam de fora (ex.: "QUESTAO PARA APAGAR PROFESSORES" na Saúde Mental). Testado com a Saúde Mental T1: 50 de 50 convertidas, com gabarito, 4 alternativas, feedback e o link de edição.
+- Pré-requisito no AVA (feito pelo usuário em 26/11): papel "Integração Órbita (Medicina)" com `moodle/question:viewall` e `moodle/question:exportall`.
+- Depois do merge, no droplet: `git pull` + `npm ci` em /opt/orbita-sync e `systemctl restart orbita-ava-banco-agente`.
+- **Levar alterações para o AVA** (mesmo dia):
+  - a questão importada guarda `avaOrigem { id, cmid, nome }`;
+  - editar no Órbita (ou "Corrigir português") marca `avaPendente`;
+  - na prova aparece o botão "Levar alterações para o AVA (N)", que chama `POST/GET /:id/ava-levar`;
+  - o agente abre o editor de cada questão no AVA (`ImportadorBancoAva.editarQuestao`), reenvia o formulário inteiro como veio e troca só enunciado, alternativas, correta e feedback (justificativa + FONTE). As imagens que já estavam no AVA ficam. Conferido: o leitor do formulário monta os mesmos 82 campos que o navegador;
+  - o AVA guarda versão nova da questão: quem já fez a prova continua com a versão antiga;
+  - imagem nova colocada no Órbita não vai (só pelo "Editar no AVA");
+  - a questão mostra "Veio do AVA", "Alterada: falta levar ao AVA" e o link "Editar no AVA".
+- Como reverter: reverter o commit. Os arquivos em `banco-med/ava-trazer/` podem ser apagados.
 ### [2026-11-26] Correção de Provas: DISPENSA não recalculava a nota (corrigido)
 - **Problema (relatado pela coordenação de Med. Veterinária):** a dispensa era gravada, mas a nota do aluno não mudava. O `resultado()` do servidor devolvia um campo `dispensadas` (lista) que, espalhado por cima da leitura (`{ ...l, ...resultado }`), apagava o objeto `l.dispensadas`; a tela então não reconhecia a dispensa.
 - **Correção:** o campo do resultado passou a se chamar `discDispensadas` (planilha atualizada). E "Salvar respostas"/reler a folha agora mantêm a dispensa (antes apagavam, como já não acontecia com "consideradas").
