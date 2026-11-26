@@ -141,9 +141,15 @@ class ImportadorBancoAva {
         // envio de questões vai para o curso da turma T.n (as de DP/ADP têm o mesmo nome de disciplina). Sem turma
         // regular no semestre — Habilidades Clínicas I em 2026.2 só existe como "ADP - MEDICINA - 2026.2 - …" — usa o
         // único curso DP/ADP da disciplina (26/11/2026).
-        const daDisc = (await this.cursosDo(sit.semestre)).filter(c => c.disc === norm(sit.disciplina));
-        let cursos = daDisc.filter(c => /^T\d+$/.test(c.turma));
-        if (!cursos.length) cursos = daDisc.filter(c => !/^T\d+$/.test(c.turma));
+        // prova da turma de ADAPTAÇÃO/DEPENDÊNCIA (26/11/2026): "ONCOGÊNESE E TOXICOLOGIA · ADAPTAÇÃO" vai só para o
+        // curso "ADP - MEDICINA - semestre - ONCOGÊNESE E TOXICOLOGIA" (DEPENDÊNCIA → "DP - …")
+        const esp = (String(sit.disciplina || '').match(/·\s*(ADAPTAÇÃO|DEPENDÊNCIA)\s*$/i) || [])[1];
+        const turmaEsp = esp ? (/ADAPTA/i.test(esp) ? 'ADP' : 'DP') : null;
+        const nomeBase = String(sit.disciplina || '').replace(/\s*·\s*(ADAPTAÇÃO|DEPENDÊNCIA)\s*$/i, '');
+        const daDisc = (await this.cursosDo(sit.semestre)).filter(c => c.disc === norm(nomeBase));
+        let cursos = turmaEsp ? daDisc.filter(c => norm(c.turma).split(' ')[0] === turmaEsp) : daDisc.filter(c => /^T\d+$/.test(c.turma));
+        if (!cursos.length && !turmaEsp) cursos = daDisc.filter(c => !/^T\d+$/.test(c.turma));
+        if (!cursos.length && turmaEsp) return { erro: `não há curso "${turmaEsp} - MEDICINA - ${sit.semestre} - ${nomeBase}" no AVA` };
         if (cursos.length !== 1) return { erro: cursos.length ? `mais de um curso no AVA com esse nome (${cursos.map(c => c.nome).join(' / ')})` : `a disciplina ${sit.disciplina} não tem curso no AVA em ${sit.semestre} (nem de turma, nem de DP/adaptação)` };
         const curso = cursos[0];
         const qs = (await this.questionariosDoCurso(curso.id)).filter(q => questionarioDaProva(sit, q.nome));

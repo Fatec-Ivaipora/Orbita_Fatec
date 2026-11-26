@@ -99,6 +99,22 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Banco MED: provas das turmas de Adaptação e Dependência
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-prova-adaptacao
+- Arquivos alterados:
+  - `src/rotas/banco-med-avaliacoes.js`: `listaDisciplinas(semestre, { comTurmasEspeciais })`. Nas provas do Banco MED, a disciplina que tem turma regular e também turma "ADP - MEDICINA" ou "DP - MEDICINA" no Edubox ganha uma disciplina à parte:
+    - nome "… · ADAPTAÇÃO" / "… · DEPENDÊNCIA", chave "…-adp" / "…-dp";
+    - mesma categoria do banco de questões;
+    - só os professores daquela turma veem;
+    - mesmas provas da turma regular (1º e 2º bimestre, 1ª e 2ª chamada, exame).
+
+    Os outros módulos (Aplicação de Provas, OSCE, categorias) continuam com a lista de antes. O plano de ensino é buscado pelo nome sem o sufixo.
+  - `src/utils/ava-banco-importar.js` (`destino`): a prova "· ADAPTAÇÃO" vai para o curso "ADP - MEDICINA - semestre - DISCIPLINA" e a "· DEPENDÊNCIA" para "DP - …". Sem o curso, a mensagem diz qual falta.
+- Tipo: Melhoria
+- Motivo: o prof. Rodrigo Oliveira (titular de Oncogênese na ADP) não tinha onde montar a prova da adaptação. Em 2026.2 isso vale para Oncogênese, Patologia Clínica I e MBE II (ADP). As disciplinas que só têm ADP/DP (Habilidades Clínicas I, Sistemas Morfofisiológicos I e III) já apareciam como disciplina normal.
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Aplicação de Provas MED: nota do Edubox no padrão da graduação (escala 10 = 100%, 1 casa)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/med-edubox-escala
