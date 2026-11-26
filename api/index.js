@@ -95,6 +95,7 @@ const rotasAutomacaoAva = require('../src/rotas/automacao-ava');
 const rotasEadAulas = require('../src/rotas/ead-aulas');
 const rotasLevantamentoEad = require('../src/rotas/levantamento-ead');
 const rotasFinanceiroMedicina = require('../src/rotas/financeiro-medicina');
+const rotasCustosTi = require('../src/rotas/custos-ti');
 
 app.use('/api/emprestimos', rotasEmprestimo);
 app.use('/api/usuarios', rotasUsuarios);
@@ -137,6 +138,7 @@ app.use('/api/ead-aulas', rotasEadAulas);
 app.use('/api/levantamento-ead', rotasLevantamentoEad);
 app.use('/api/financeiro-medicina', rotasFinanceiroMedicina);
 app.use('/api/calendario-academico', rotasCalendarioAcademico);
+app.use('/api/custos-ti', rotasCustosTi);
 
 // Exportação obrigatória para o Vercel Serverless
 
