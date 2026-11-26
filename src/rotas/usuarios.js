@@ -203,6 +203,37 @@ router.put('/:uid/permissoes', verifyToken, requireAdmL1, async (req, res) => {
 });
 
 // PUT /api/usuarios/:uid/status
+// PUT /api/usuarios/:uid/email { email } — troca o e-mail de login (26/11/2026). Só ADM (N1 e N2); conta ADM N1 só
+// o ADM N1 troca. Muda no Firebase Auth (o login) e no cadastro (users), guardando o e-mail anterior. Serve para
+// quem perdeu o acesso ao e-mail antigo: depois de trocar, o "Redefinir Senha" manda o link para o e-mail novo.
+router.put('/:uid/email', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
+    try {
+        if (!['adm_l1', 'adm_l2'].includes(req.user.role)) return res.status(403).json({ error: 'Só o Administrador troca o e-mail de um usuário.' });
+        if (req.user.role !== 'adm_l1' && await alvoEhAdmL1(req.params.uid)) {
+            return res.status(403).json({ error: 'Apenas o Administrador N1 pode alterar uma conta ADM N1.' });
+        }
+        const email = String((req.body || {}).email || '').trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 200) return res.status(400).json({ error: 'Informe um e-mail válido.' });
+        const ref = db.collection('users').doc(req.params.uid);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ error: 'Usuário não encontrado.' });
+        const atual = await auth.getUser(req.params.uid);
+        if ((atual.email || '').toLowerCase() === email) return res.status(400).json({ error: 'Esse já é o e-mail do usuário.' });
+        const dono = await auth.getUserByEmail(email).catch(() => null);
+        if (dono && dono.uid !== req.params.uid) return res.status(409).json({ error: 'Esse e-mail já é usado por outra conta do Órbita.' });
+
+        await auth.updateUser(req.params.uid, { email, emailVerified: false });
+        await ref.update({
+            email, emailAnterior: atual.email || snap.data().email || null,
+            emailAlteradoEm: new Date().toISOString(), emailAlteradoPor: req.user.name || req.user.email || req.user.uid
+        });
+        if (verifyToken.limparCacheUsuario) verifyToken.limparCacheUsuario(req.params.uid);
+        res.json({ message: `E-mail alterado para ${email}. O login passa a ser com ele.`, email });
+    } catch (err) {
+        res.status(err.code === 'auth/email-already-exists' ? 409 : 500).json({ error: err.code === 'auth/email-already-exists' ? 'Esse e-mail já é usado por outra conta do Órbita.' : err.message });
+    }
+});
+
 router.put('/:uid/status', verifyToken, verifyToken.requireModulePermission('usuarios'), async (req, res) => {
     try {
         const { ativo } = req.body;

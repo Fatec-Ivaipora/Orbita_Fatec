@@ -616,6 +616,7 @@ function setupModals() {
   document.getElementById('btn-cancelar-editar').addEventListener('click', () => fecharModal('modal-editar'));
   document.getElementById('btn-salvar-role').addEventListener('click',     salvarRole);
   document.getElementById('btn-send-reset').addEventListener('click',      enviarResetSenha);
+  document.getElementById('btn-trocar-email').addEventListener('click',     trocarEmail);
 
   // Toggle Status Ativo
   document.getElementById('edit-status-ativo').addEventListener('change', async (e) => {
@@ -715,6 +716,11 @@ function abrirModalEditar(uid, name, role, email) {
   // Set status
   const isAtivo = user.ativo !== false;
   document.getElementById('edit-status-ativo').checked = isAtivo;
+
+  // Trocar e-mail: só ADM (o servidor confere de novo)
+  const podeTrocarEmail = ['adm_l1', 'adm_l2'].includes(currentRole) && !(role === 'adm_l1' && currentRole !== 'adm_l1');
+  document.getElementById('bloco-trocar-email').hidden = !podeTrocarEmail;
+  document.getElementById('edit-novo-email').value = '';
 
   abrirModal('modal-editar');
 }
@@ -1083,6 +1089,32 @@ async function salvarRole() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Salvar Nível';
+  }
+}
+
+// ================================================================
+//  TROCAR E-MAIL DE LOGIN (26/11/2026) — só ADM
+// ================================================================
+async function trocarEmail() {
+  const uid = document.getElementById('edit-uid').value;
+  const novo = document.getElementById('edit-novo-email').value.trim().toLowerCase();
+  const antigo = document.getElementById('edit-email').value;
+  if (!uid) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(novo)) { showToast('❌ Digite um e-mail válido.', 'error'); return; }
+  if (!confirm(`Trocar o e-mail de login de\n${antigo}\npara\n${novo}?\n\nA pessoa passa a entrar com o e-mail novo (a senha continua a mesma).`)) return;
+  const btn = document.getElementById('btn-trocar-email');
+  btn.disabled = true;
+  try {
+    const r = await apiFetch(`/usuarios/${uid}/email`, { method: 'PUT', body: JSON.stringify({ email: novo }) });
+    document.getElementById('edit-email').value = r.email;
+    const u = allUsers.find(x => x.uid === uid);
+    if (u) { u.email = r.email; document.getElementById('edit-user-name').textContent = `${u.name || ''} (${r.email})`; renderUsers(allUsers); }
+    document.getElementById('edit-novo-email').value = '';
+    showToast(`✅ ${r.message} Se a pessoa não sabe a senha, clique em "Enviar E-mail".`, 'success');
+  } catch (err) {
+    showToast(`❌ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
   }
 }
 

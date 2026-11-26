@@ -99,6 +99,19 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Usuários: ADM troca o e-mail de login
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/usuarios-trocar-email
+- Arquivos alterados:
+  - `src/rotas/usuarios.js`: `PUT /api/usuarios/:uid/email`.
+    - Só ADM N1/N2; conta ADM N1 só o ADM N1 troca.
+    - Recusa e-mail inválido, o mesmo e-mail ou um já usado por outra conta.
+    - Troca no Firebase Auth (login) e em `users`, com `emailAnterior`, `emailAlteradoEm` e `emailAlteradoPor`.
+  - `usuarios/index.html` (app.js v=10), `usuarios/app.js`: em Editar usuário → Segurança da Conta, "Trocar E-mail de Login". Pede confirmação; depois, o "Enviar E-mail" (redefinir senha) já vai para o e-mail novo.
+- Tipo: Melhoria
+- Motivo: hoje só dava para mandar o link de redefinição de senha. Quem perdeu o acesso ao e-mail ficava sem saída, e a troca era feita por script.
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Portfólio MED: valor do portfólio na disciplina (3,0) e arquivo para o Edubox
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/portfolio-valor-disciplina
