@@ -99,6 +99,33 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Portfólio MED: nota de corte do Órbita, sugestão para o professor confirmar, análise da nota e distribuição
+- Autor: Claude Code (a pedido do usuário e do João)
+- Branch: feat/portfolio-sugestao
+- Arquivos alterados:
+  - `medicina/portfolio/sugestao.js` (novo, usado na tela e no servidor): regra fixa, sem IA e sem serviço externo, que lê o texto e pré-marca a matriz com o trecho de evidência:
+    - C1: contexto + reflexão em 1ª pessoa;
+    - C2: análise, necessidades e ações;
+    - C3: palavras-chave de cada objetivo da turma;
+    - C4: estrutura, frases longas e erros comuns.
+
+    O mesmo texto dá sempre o mesmo resultado.
+  - `src/rotas/portfolio-med.js`:
+    - **nota de corte** (`entrega.referencia`) calculada no servidor ao importar; as entregas antigas ganham a nota ao abrir a atividade;
+    - ao salvar, `divergeDaReferencia` quando a soma do professor fica 2 pontos ou mais longe;
+    - **distribuição** `PUT /atividades/:id/distribuir` (dividir igualmente ou escolher à mão) com `entrega.corretorUid`;
+    - os professores **continuam barrados** (`PROFESSOR_LIBERADO = false`), a pedido do usuário. Quando liberar, cada professor vê, abre o arquivo e corrige só os portfólios distribuídos para ele;
+    - importar, criar atividade e distribuir continuam só com a coordenação.
+  - `medicina/portfolio/app.js` (v=7), `portfolio.css` (v=8), `index.html`:
+    - faixa "Nota de corte do Órbita", com o valor convertido para o AVA (ex.: 3,0);
+    - a sugestão já vem marcada na correção que nunca foi salva; botão "Refazer sugestão pelo texto";
+    - botão **"Análise da nota"**, para imprimir quando o aluno questionar: corte × professor, critério a critério;
+    - colunas Corte, Nota e "diverge" nas Entregas e no Resumo (e na planilha);
+    - diálogo **"Distribuir para os professores"**.
+- Tipo: Melhoria
+- Motivo: o mesmo trabalho recebia notas muito diferentes de professores diferentes. A coordenação quer uma nota de corte comum, com o professor analisando e dando a nota dele, e uma análise quando o aluno questionar. Não há API paga e a LGPD não permite mandar o texto para fora, por isso a regra é fixa e roda no Órbita. Os portfólios vão para alguns professores, divididos igualmente ou escolhidos pela coordenação (prof. Ana Beatriz).
+- Como reverter: reverter o commit. Para liberar aos professores no futuro: `PROFESSOR_LIBERADO = true` e `portfolio-med` no professor_medicina (`core/permissions.js` e padrão de `src/middlewares/auth.js`).
+
 ### [2026-11-26] Banco MED: provas das turmas de Adaptação e Dependência
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/banco-med-prova-adaptacao

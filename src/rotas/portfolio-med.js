@@ -22,6 +22,25 @@ const router = express.Router();
 const { db, admin } = require('../firebase');
 const verifyToken = require('../middlewares/auth');
 const Matriz = require('../../medicina/portfolio/matriz.js');
+// NOTA DE REFERÊNCIA (26/11/2026): a mesma regra fixa da sugestão da tela (medicina/portfolio/sugestao.js) calculada
+// AQUI, no servidor, a partir do texto do portfólio — o mesmo trabalho tem sempre a mesma referência, seja quem for
+// o professor. É a "nota de corte" comum: a nota do professor que se afasta 2 pontos ou mais fica marcada para a
+// coordenação, e a "Análise da nota" (recurso do aluno) mostra critério a critério referência × professor.
+const Sugestao = require('../../medicina/portfolio/sugestao.js');
+const DIVERGENCIA = 2;
+function referenciaDe(texto, turma) {
+    const objs = turma.objetivos || [];
+    const s = Sugestao.sugerir(texto || '', objs);
+    const r = Matriz.calcular({ c1: s.c1, c2: s.c2, c3: s.c3, c4: s.c4 }, objs.length);
+    const niv = (id) => r.criterios[id].nivel || null;
+    return {
+        nota: r.soma, versao: Sugestao.VERSAO, matrizVersao: Matriz.VERSAO, em: new Date().toISOString(), semTexto: !!s.semTexto,
+        niveis: { c1: niv('c1'), c2: niv('c2'), c3: niv('c3'), c4: niv('c4') },
+        pts: { c1: r.criterios.c1.pts, c2: r.criterios.c2.pts, c3: r.criterios.c3.pts, c4: r.criterios.c4.pts },
+        c2: { analise: s.c2.analise, necessidades: s.c2.necessidades, acoes: s.c2.acoes }, c3: { objetivos: s.c3.objetivos },
+        evidencias: { c1: s.c1.justificativa, c2: s.c2.justificativa, c3: s.c3.justificativa, c4: s.c4.justificativa }
+    };
+}
 const { turmasPadrao } = require('../utils/portfolio-med-padrao');
 const { analisar } = require('../utils/portfolio-similaridade');
 
@@ -40,7 +59,11 @@ const ehProfessorMed = (u) => u.role === 'professor_medicina' || u.professorMedi
 // secretária acadêmica — e a responsável CADAM). Professor fica barrado aqui mesmo que alguém dê nível na Gerência
 // de Acessos. Para liberar aos professores corretores: trocar para true e devolver "portfolio-med" ao
 // professor_medicina em core/permissions.js e no padrão de src/middlewares/auth.js.
+// 26/11/2026: continua FALSE (o usuário pediu para não liberar aos professores ainda). Já está pronto para quando
+// liberar: a coordenação importa e DISTRIBUI os portfólios, e cada professor corretor vê e corrige só os que foram
+// distribuídos para ele (entrega.corretorUid), com a nota de corte do Órbita como ponto de partida.
 const PROFESSOR_LIBERADO = false;
+const minhaEntrega = (user, e) => podeEditar(user) || (!!e.corretorUid && e.corretorUid === user.uid);
 router.use(verifyToken, (req, res, next) => {
     if (podeEditar(req.user)) return next();
     if (!PROFESSOR_LIBERADO) return res.status(403).json({ error: 'O Portfólio Reflexivo ainda está liberado só para a coordenação de Medicina.' });
@@ -176,6 +199,7 @@ router.post('/turmas/:semestre/copiar', async (req, res) => {
 router.post('/atividades', async (req, res) => {
     try {
         const b = req.body || {};
+        if (!podeEditar(req.user)) throw falha(403, 'Só a coordenação cria atividades.');
         const turma = await lerTurma(txt(b.turmaId, 40));
         exigeTurma(req.user, turma);
         const titulo = txt(b.titulo, 120);
@@ -219,15 +243,22 @@ router.get('/atividades/:id', async (req, res) => {
     try {
         const { atividade, turma } = await lerAtividade(req, req.params.id);
         const snap = await db.collection(COL_ENT).where('atividadeId', '==', atividade.id).get();
-        const entregas = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.nome.localeCompare(b.nome));
-        res.json({ atividade, turma, entregas, editor: podeEditar(req.user) });
+        const entregas = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => minhaEntrega(req.user, e)).sort((a, b) => a.nome.localeCompare(b.nome));
+        const semRef = entregas.filter(e => !e.referencia || e.referencia.versao !== Sugestao.VERSAO);
+        for (const e of semRef) {
+            const t = await db.collection(COL_TXT).doc(e.id).get();
+            e.referencia = referenciaDe(t.exists ? t.data().texto : '', turma);
+            await db.collection(COL_ENT).doc(e.id).update({ referencia: e.referencia });
+        }
+        res.json({ atividade, turma, entregas, editor: podeEditar(req.user), divergencia: DIVERGENCIA });
     } catch (e) { erro(res, e); }
 });
 
 // uma entrega por chamada (o texto de um portfólio pode ter centenas de KB)
 router.post('/atividades/:id/entregas', async (req, res) => {
     try {
-        const { atividade } = await lerAtividade(req, req.params.id);
+        if (!podeEditar(req.user)) throw falha(403, 'Só a coordenação importa os portfólios.');
+        const { atividade, turma: turmaDaAtividade } = await lerAtividade(req, req.params.id);
         const b = req.body || {};
         const participante = txt(b.participante, 20);
         if (!/^u?\d+$/.test(participante)) throw falha(400, 'Arquivo sem o número do participante do AVA — use o ZIP de "Baixar todas as submissões".');
@@ -245,6 +276,7 @@ router.post('/atividades/:id/entregas', async (req, res) => {
             naoPdf: lista(b.naoPdf, 255, 20),
             importadoEm: agora(), importadoPor: quem(req)
         };
+        meta.referencia = referenciaDe(texto, turmaDaAtividade);
         // veio do AVA pela integração (participante "u<id do aluno no AVA>"): guarda o aluno e os arquivos (o PDF abre pelo proxy)
         if (participante.startsWith('u')) {
             meta.avaUserId = parseInt(participante.slice(1), 10);
@@ -272,6 +304,7 @@ async function lerEntrega(req, id) {
     const entrega = { id: s.id, ...s.data() };
     const turma = await lerTurma(entrega.turmaId);
     exigeTurma(req.user, turma);
+    if (!minhaEntrega(req.user, entrega)) throw falha(403, 'Este portfólio não foi distribuído para você.');
     return { entrega, turma };
 }
 
@@ -329,14 +362,55 @@ router.put('/entregas/:id/avaliacao', async (req, res) => {
             if (falta.length) return res.status(400).json({ error: 'Faltam itens para finalizar.', faltando: falta });
         }
         const status = finalizar ? 'finalizada' : 'rascunho';
-        const evento = { em: agora(), por: quem(req), acao: finalizar ? 'finalizou' : (entrega.status === 'finalizada' ? 'reabriu' : 'salvou'), nota: r.nota };
+        let ref = entrega.referencia;
+        if (!ref) { const t = await db.collection(COL_TXT).doc(entrega.id).get(); ref = referenciaDe(t.exists ? t.data().texto : '', turma); }
+        // compara a SOMA dos critérios (antes de atraso/plágio): a referência não sabe de condição especial
+        const diverge = !!(ref && !ref.semTexto && Math.abs(r.soma - ref.nota) >= DIVERGENCIA);
+        const evento = { em: agora(), por: quem(req), acao: finalizar ? 'finalizou' : (entrega.status === 'finalizada' ? 'reabriu' : 'salvou'), nota: r.nota, referencia: ref ? ref.nota : null };
         await db.collection(COL_ENT).doc(entrega.id).update({
-            avaliacao: av, resultado: r, status, matrizVersao: Matriz.VERSAO,
+            avaliacao: av, resultado: r, status, matrizVersao: Matriz.VERSAO, referencia: ref, divergeDaReferencia: diverge,
             corrigidoPor: quem(req), corrigidoPorUid: req.user.uid, corrigidoEm: agora(),
             alteradoAposCorrecao: false,
             historico: admin.firestore.FieldValue.arrayUnion(evento)
         });
-        res.json({ id: entrega.id, status, resultado: r });
+        res.json({ id: entrega.id, status, resultado: r, referencia: ref, divergeDaReferencia: diverge });
+    } catch (e) { erro(res, e); }
+});
+
+// Distribuição (26/11/2026): a coordenação (ex.: prof. Ana Beatriz) manda cada portfólio para um professor corretor
+// da turma. { modo: 'igual' } divide os que ainda estão sem professor, equilibrando com o que cada um já tem;
+// { atribuicoes: { <entregaId>: <uid> | '' } } grava a escolha feita à mão ('' tira o professor).
+router.put('/atividades/:id/distribuir', async (req, res) => {
+    try {
+        if (!podeEditar(req.user)) throw falha(403, 'Só a coordenação distribui os portfólios.');
+        const { atividade, turma } = await lerAtividade(req, req.params.id);
+        const profs = (turma.professores || []).filter(p => p && p.uid);
+        if (!profs.length) throw falha(400, 'Cadastre os professores corretores da turma (Configurar turma) antes de distribuir.');
+        const porUid = new Map(profs.map(p => [p.uid, p]));
+        const snap = await db.collection(COL_ENT).where('atividadeId', '==', atividade.id).get();
+        const ents = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.nome.localeCompare(b.nome));
+        const b = req.body || {};
+        const novo = new Map();
+        if (b.modo === 'igual') {
+            const carga = new Map(profs.map(p => [p.uid, ents.filter(e => e.corretorUid === p.uid).length]));
+            ents.filter(e => !e.corretorUid || !porUid.has(e.corretorUid)).forEach(e => {
+                const uid = [...carga.entries()].sort((x, y) => x[1] - y[1] || porUid.get(x[0]).nome.localeCompare(porUid.get(y[0]).nome))[0][0];
+                novo.set(e.id, uid); carga.set(uid, carga.get(uid) + 1);
+            });
+        } else if (b.atribuicoes && typeof b.atribuicoes === 'object') {
+            Object.entries(b.atribuicoes).forEach(([id, uid]) => {
+                const e = ents.find(x => x.id === id);
+                if (e && (uid === '' || porUid.has(uid)) && (e.corretorUid || '') !== uid) novo.set(id, uid);
+            });
+        } else throw falha(400, 'Nada para distribuir.');
+        const quando = agora(), porQuem = quem(req);
+        for (let i = 0; i < novo.size; i += 400) {
+            const lote = db.batch();
+            [...novo.entries()].slice(i, i + 400).forEach(([id, uid]) => lote.update(db.collection(COL_ENT).doc(id),
+                { corretorUid: uid || null, corretorNome: uid ? porUid.get(uid).nome : null, distribuidoEm: quando, distribuidoPor: porQuem }));
+            await lote.commit();
+        }
+        res.json({ message: novo.size ? `${novo.size} portfólio(s) distribuído(s).` : 'Nada mudou: todos já tinham professor.', alterados: novo.size });
     } catch (e) { erro(res, e); }
 });
 
@@ -349,7 +423,12 @@ router.get('/atividades/:id/similaridade', async (req, res) => {
         ]);
         const nomes = new Map(ents.docs.map(d => [d.id, d.data().nome]));
         const docs = txts.docs.filter(d => nomes.has(d.id)).map(d => ({ id: d.id, nome: nomes.get(d.id), texto: d.data().texto || '' }));
-        res.json({ total: ents.size, ...analisar(docs) });
+        const r = analisar(docs);
+        if (!podeEditar(req.user)) {
+            const meus = new Set(ents.docs.filter(d => d.data().corretorUid === req.user.uid).map(d => d.id));
+            r.pares = r.pares.filter(p => meus.has(p.a) || meus.has(p.b));
+        }
+        res.json({ total: ents.size, ...r });
     } catch (e) { erro(res, e); }
 });
 
@@ -431,9 +510,13 @@ router.get('/atividades/:id/ava/entregas', async (req, res) => {
 // GET /atividades/:id/ava/arquivo?c=/webservice/pluginfile.php/... — o PDF do aluno passa pelo Órbita (o token não sai do servidor)
 router.get('/atividades/:id/ava/arquivo', async (req, res) => {
     try {
-        exigeEditor(req);
-        await lerAtividade(req, req.params.id);
-        const { tipo, bytes } = await ava.baixarArquivo(String(req.query.c || ''));
+        const { atividade } = await lerAtividade(req, req.params.id);
+        const caminho = String(req.query.c || '');
+        if (!podeEditar(req.user)) {
+            const snap = await db.collection(COL_ENT).where('atividadeId', '==', atividade.id).where('corretorUid', '==', req.user.uid).get();
+            if (!snap.docs.some(d => (d.data().avaArquivos || []).some(a => a.caminho === caminho))) throw falha(403, 'Este arquivo não é de um portfólio distribuído para você.');
+        }
+        const { tipo, bytes } = await ava.baixarArquivo(caminho);
         res.set('Content-Type', tipo);
         res.set('Cache-Control', 'private, no-store');
         res.send(bytes);
