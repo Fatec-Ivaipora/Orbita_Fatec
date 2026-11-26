@@ -99,6 +99,18 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Envio ao AVA: disciplina só com curso de adaptação/DP e contagem de questionário vazio
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/ava-contagem-e-curso-adp
+- Arquivos alterados:
+  - `src/utils/ava-banco-importar.js` (`destino`): o envio procura primeiro o curso da turma regular (T.n). Se a disciplina não tem turma regular no semestre, usa o único curso DP/ADP dela. Exemplo: Habilidades Clínicas I em 2026.2 só existe como "ADP - MEDICINA - 2026.2 - HABILIDADES CLÍNICAS I". Antes o envio parava com "não há curso 2026.2 - T.n - … - HABILIDADES CLÍNICAS I". A mensagem de erro agora diz claramente que a disciplina não tem curso no AVA.
+  - `src/utils/ava-sessao.js` (`origemDasQuestoes`): a contagem "pelo Órbita × direto" usa o número de questões do questionário. Questionário vazio aparecia como "0 questões = 0 Órbita + 1 direto".
+  - `banco-med-fatec/envio-ava.js` (v=5): questionário vazio não entra no filtro "Direto no AVA". `app.js` e `index.html` (app.js v=85).
+- Tipo: Correção
+- Motivo: primeira contagem (26/11, 11:23): 19 provas apareciam como "direto no AVA", 9 delas eram questionários vazios. As 10 de verdade: Habilidades Cirúrgicas I, Habilidades Clínicas II, Interações Terapêuticas I (1ª e 2ª ch), Oncogênese, Patologia Clínica I (27 de 40), Patologia Clínica II (1º bim; 2º bim 1ª ch com 3 e 2ª ch com 2) e Saúde da Criança e do Adolescente I.
+- Depois do merge, no droplet: `git pull` + `npm ci` e `systemctl restart orbita-ava-banco-agente`.
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Banco MED › Envio ao AVA: quem colocou as questões (Órbita × direto no AVA) e cartão mais fácil de ler
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/banco-med-origem-ava
