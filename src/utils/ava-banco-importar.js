@@ -22,9 +22,16 @@ function lerQuestoesDoBanco(html) {
     for (const linha of String(html).split(/<tr\b/).slice(1)) {
         const id = (linha.match(/name="q(\d+)"/) || [])[1];
         if (!id || vistos.has(id)) continue;
-        const nome = (linha.match(/<span[^>]*class="[^"]*\bquestionname\b[^"]*"[^>]*>([\s\S]*?)<\/span>/) || linha.match(/<label[^>]*for="checkq\d+"[^>]*>([\s\S]*?)<\/label>/) || [])[1];
+        // Open LMS (26/11/2026): o nome inteiro fica no data-value do "inplaceeditable" (data-itemtype="questionname");
+        // o 1º <label for="checkq…"> é o "Selecionar" escondido (accesshide), não o nome
+        const tag = (linha.match(/<[^>]*data-itemtype="questionname"[^>]*>/) || [])[0];
+        let nome = tag ? decodificarHtml(atributo(tag, 'data-value') || '') : '';
+        if (!nome) {
+            const rot = (linha.match(/<label(?![^>]*accesshide)[^>]*for="checkq\d+"[^>]*>([\s\S]*?)<\/label>/) || [])[1];
+            nome = rot ? semTags(rot).replace(/\s+/g, ' ').trim() : '';
+        }
         vistos.add(id);
-        out.push({ id: Number(id), nome: nome ? semTags(nome).replace(/\s+/g, ' ').trim() : '' });
+        out.push({ id: Number(id), nome: nome.replace(/\s+/g, ' ').trim() });
     }
     return out;
 }
