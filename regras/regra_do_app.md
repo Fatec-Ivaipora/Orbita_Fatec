@@ -286,6 +286,18 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como testar: abrir Matrículas › 2027.1 e sincronizar com o Edubox; a aba "Esperando confirmação" não tem mais "Rematrícula Assinada ↔ Não Assinou", e elas aparecem em "Resolvidas" por "Edubox (automático)".
 - Como reverter: em `aplicaSozinha()` tirar a linha da `REMATRICULA` (as já aplicadas ficam aplicadas; voltar o status à mão no cadastro, se for o caso).
 
+### [2026-11-23] Banco MED: Word do professor com o texto na mesma linha do rótulo volta a carregar
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/banco-med-word-tolerante
+- Arquivos alterados:
+  - `banco-med-fatec/ler-word.js`: o leitor do modelo aceita os erros mais comuns dos professores. (1) Texto na mesma linha do rótulo: "Enunciado: (caso…)", "Feedback da Questão: …", "Referência Bibliográfica: …" (também "Feedback:", "Justificativa:", "Referências:"). O rótulo abre a seção e o resto da linha vira o 1º parágrafo dela, sem levar o rótulo (nem o negrito vazio) para o texto. (2) Rótulo sobrando colado: "Objetivo:Enunciado: …". (3) Linha "Gabarito: B" / "Resposta: B" vale como correta quando nenhuma alternativa está pintada de amarelo. O arquivo passa a ser reconhecido como modelo também quando só tem "Enunciado:" com texto. (4) Pergunta no fim do parágrafo do caso, sem linha própria: a última frase que termina em "?" ou ":" vira a pergunta. Cada questão guarda `ajustes`, e a lista traz `ajustadas`/`tiposDeAjuste`.
+  - `banco-med-fatec/avaliacoes.js`: a prévia avisa quantas questões o Órbita ajustou sozinho e o que foi ajustado, e lembra o professor de deixar os rótulos sozinhos na linha no próximo arquivo.
+  - `banco-med-fatec/index.html`: `ler-word.js?v=8`, `app.js?v=80`; `banco-med-fatec/app.js`: `avaliacoes.js?v=47`.
+- Tipo: Correção
+- Motivo: Saúde Mental (2026.2, 2º bimestre): o Word com 12 questões do ENAMED tinha "Enunciado:", "Feedback da Questão:" e "Referência Bibliográfica:" com o texto na mesma linha. Como nenhuma linha era só "Enunciado", o Órbita não reconhecia o modelo, caía no leitor genérico e as questões não carregavam, sem dizer o motivo. Com a correção, as 12 carregam com caso, pergunta, 4 alternativas, gabarito, feedback, referência e objetivo. Em 24/11 o mesmo professor mandou 50 questões misturando os três jeitos (texto na linha, rótulo sozinho e pergunta colada no caso): no ar entravam completas só 3 de 50; com a correção, 50 de 50.
+- Como testar: importar na aba Avaliações um Word com "Enunciado: texto…" na mesma linha e conferir na prévia o caso, a pergunta, as alternativas e o feedback; testar também uma questão sem amarelo com a linha "Gabarito: C".
+- Como reverter: reverter o commit.
+
 ### [2026-11-23] Segurança: correção do fix anterior do Vercel — regras/*.md continuava 200
 - Autor: Claude Code (a pedido do usuário, corrigindo a entrada anterior "Vercel para de servir regras/, scripts/ e arquivos de configuração")
 - Branch: fix/vercel-routes-404-de-verdade

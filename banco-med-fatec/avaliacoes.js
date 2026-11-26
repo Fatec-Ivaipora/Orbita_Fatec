@@ -1002,7 +1002,11 @@ async function lerImportacao() {
       const comProb = (doModelo && doModelo.comProblema) || [];
       const avisoProb = comProb.length ? `Atenção: ${comProb.length === 1 ? 'a questão' : 'as questões'} ${comProb.join(', ')} do arquivo não ${comProb.length === 1 ? 'foi lida' : 'foram lidas'} direito (veja o aviso vermelho em cada uma). ${comProb.length === 1 ? 'Ela vem desmarcada' : 'Elas vêm desmarcadas'}: corrija o Word e leia de novo, ou marque "Importar esta questão" para subir mesmo assim e acertar na edição.` : '';
       if (avisoProb) toast(avisoProb, 'aviso');
-      if (doModelo && doModelo.length) { previaImport = doModelo; mostrarPrevia([avisoProb, await repetidasWord()].filter(Boolean).join(' ')); return; }
+      // o que o Órbita acertou sozinho no Word do professor (24/11/2026): texto na linha do rótulo, rótulo sobrando,
+      // pergunta colada no caso, correta pela linha "Gabarito:". Só avisa; a questão entra normal.
+      const ajust = (doModelo && doModelo.ajustadas) || [];
+      const avisoAjuste = ajust.length ? `O Órbita ajustou sozinho ${ajust.length === 1 ? '1 questão' : `${ajust.length} questões`} fora do modelo (${doModelo.tiposDeAjuste.join('; ')}). Confira na prévia. No próximo arquivo, deixe "Enunciado", "Feedback da Questão" e "Referência Bibliográfica" sozinhos na linha, com o texto embaixo.` : '';
+      if (doModelo && doModelo.length) { previaImport = doModelo; mostrarPrevia([avisoProb, avisoAjuste, await repetidasWord()].filter(Boolean).join(' ')); return; }
       const itens = await window.LerWord.ler(arq);
       previaImport = P.lerQuestoesDeLinhas(itens);
       if (!previaImport.length) throw new Error('Não encontrei questões objetivas. As questões precisam estar numeradas ("Questão 1", "1.", "2)") com as alternativas a), b), c)...');
