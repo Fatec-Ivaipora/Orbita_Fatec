@@ -375,8 +375,9 @@ router.post('/avaliacoes', verifyToken, checkPermission, async (req, res) => {
             if (usado.empty) codigo = n;
         }
         if (!codigo) return res.status(500).json({ error: 'Não foi possível gerar o código da avaliação. Tente de novo.' });
-        if (Number(req.body.valorTotal) > valorMax(req.body.tipo)) return res.status(400).json({ error: erroValor(req.body.tipo) });
-        const valorTotal = Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
+        if (req.body.tipo !== 'simulado' && Number(req.body.valorTotal) > valorMax(req.body.tipo)) return res.status(400).json({ error: erroValor(req.body.tipo) });
+        // Simulado vale sempre 2,0, em todos os cursos (26/11/2026).
+        const valorTotal = req.body.tipo === 'simulado' ? VALOR_MAX.simulado : Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
         const dado = {
             nome, codigo, data: /^\d{4}-\d{2}-\d{2}$/.test(req.body.data || '') ? req.body.data : null,
             nAlt, questoes: limparQuestoes(req.body.questoes), questaoIds: idsDoBanco(limparQuestoes(req.body.questoes)), valorTotal,
@@ -430,8 +431,12 @@ router.put('/avaliacoes/:id', verifyToken, checkPermission, async (req, res) => 
         if (req.body.aceitarDupla !== undefined) mud.aceitarDupla = !!req.body.aceitarDupla;
         const tipoFinal = mud.tipo || av.tipo;
         const valorFinal = req.body.valorTotal !== undefined ? Number(req.body.valorTotal) : Number(av.valorTotal);
-        if (valorFinal > valorMax(tipoFinal)) return res.status(400).json({ error: erroValor(tipoFinal) });
-        if (req.body.valorTotal !== undefined) mud.valorTotal = Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
+        // Simulado vale sempre 2,0, em todos os cursos (26/11/2026) — grava 2,0 mesmo que venha outro valor.
+        if (tipoFinal === 'simulado') mud.valorTotal = VALOR_MAX.simulado;
+        else {
+            if (valorFinal > valorMax(tipoFinal)) return res.status(400).json({ error: erroValor(tipoFinal) });
+            if (req.body.valorTotal !== undefined) mud.valorTotal = Number(req.body.valorTotal) > 0 ? Number(req.body.valorTotal) : null;
+        }
         if (req.body.questoes !== undefined) {
             // o número de questões não muda depois de criada: as folhas já foram impressas com essa quantidade
             if (!Array.isArray(req.body.questoes) || req.body.questoes.length !== av.questoes.length) return res.status(400).json({ error: 'O número de questões não pode mudar depois de criada (as folhas já saíram com essa quantidade).' });

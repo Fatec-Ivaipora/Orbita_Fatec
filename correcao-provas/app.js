@@ -265,7 +265,8 @@ function blocoIdent() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome da avaliação <small>(opcional — se ficar vazio, usa o tipo e a disciplina)</small><input id="f-nome" maxlength="120" value="${esc(f.nome)}" placeholder="${esc(nomeAuto({ ...f, tipo: dpFixo ? 'dp' : f.tipo, disciplina: dpFixo && f.dp ? f.dp.nome : f.disciplina }))}"></label>
       <label class="cp-campo">Data da aplicação <input type="date" id="f-data" value="${esc(f.data)}"></label>
-      <label class="cp-campo">Valor da prova <small>(até ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')} — escala do Edubox, 10 = 100%)</small><input type="number" id="f-valor" min="0" max="${valorMax(dpFixo ? 'dp' : f.tipo)}" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')}"></label>
+      ${f.tipo === 'simulado' && !dpFixo ? `<label class="cp-campo">Valor da prova <small>(simulado vale sempre 2,0)</small><input type="number" id="f-valor" value="2" disabled></label>`
+        : `<label class="cp-campo">Valor da prova <small>(até ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')} — escala do Edubox, 10 = 100%)</small><input type="number" id="f-valor" min="0" max="${valorMax(dpFixo ? 'dp' : f.tipo)}" step="0.1" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(dpFixo ? 'dp' : f.tipo)).replace('.', ',')}"></label>`}
     </div>
   </section>`;
 }
@@ -417,7 +418,7 @@ async function salvarNova(btn) {
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
     const r = await apiFetch('/correcao/avaliacoes', { method: 'POST', body: JSON.stringify({
-      nome: f.nome, tipo, bimestre: f.bimestre || null, disciplina, professor: prof, data: f.data, valorTotal: f.valorTotal ? Number(String(f.valorTotal).replace(',', '.')) : null,
+      nome: f.nome, tipo, bimestre: f.bimestre || null, disciplina, professor: prof, data: f.data, valorTotal: tipo === 'simulado' ? 2 : f.valorTotal ? Number(String(f.valorTotal).replace(',', '.')) : null,
       turmas: f.modo === 'dp' ? [] : [...f.turmasSel], dp: f.modo === 'dp' ? f.dp : null, nAlt: f.nAlt, questoes: f.questoes, origem: f.origem === 'banco' ? 'manual' : f.origem, provaId: f.provaId
     }) });
     toast('Avaliação criada. Agora imprima as folhas.');
@@ -636,7 +637,8 @@ function abaGabarito() {
     <div class="cp-campos">
       <label class="cp-campo cp-campo-grande">Nome <input id="g-nome" value="${esc(f.nome)}" ${ed ? '' : 'disabled'}></label>
       <label class="cp-campo">Data <input type="date" id="g-data" value="${esc(f.data)}" ${ed ? '' : 'disabled'}></label>
-      <label class="cp-campo">Valor <small>(até ${String(valorMax(f.tipo)).replace('.', ',')})</small><input type="number" id="g-valor" step="0.1" min="0" max="${valorMax(f.tipo)}" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(f.tipo)).replace('.', ',')}" ${ed ? '' : 'disabled'}></label>
+      ${f.tipo === 'simulado' ? `<label class="cp-campo">Valor <small>(simulado: sempre 2,0)</small><input type="number" id="g-valor" value="2" disabled></label>`
+        : `<label class="cp-campo">Valor <small>(até ${String(valorMax(f.tipo)).replace('.', ',')})</small><input type="number" id="g-valor" step="0.1" min="0" max="${valorMax(f.tipo)}" value="${esc(f.valorTotal)}" placeholder="Ex.: ${String(valorMax(f.tipo)).replace('.', ',')}" ${ed ? '' : 'disabled'}></label>`}
     </div>
     <div class="cp-campos">
       <label class="cp-campo">Tipo <select id="g-tipo" ${ed ? '' : 'disabled'}>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${f.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -662,8 +664,8 @@ async function salvarGabarito(btn) {
   aplicarFaixas();
   btn.disabled = true;
   try {
-    await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}`, { method: 'PUT', body: JSON.stringify({ nome: form.nome, tipo: form.tipo, bimestre: form.bimestre || null, disciplina: form.disciplina, aceitarDupla: form.aceitarDupla, data: form.data, valorTotal: form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes }) });
-    av = { ...av, nome: form.nome, aceitarDupla: form.aceitarDupla, tipo: form.tipo, bimestre: form.bimestre ? Number(form.bimestre) : null, disciplina: form.disciplina, data: form.data || null, valorTotal: form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes.map(q => ({ ...q })) };
+    await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}`, { method: 'PUT', body: JSON.stringify({ nome: form.nome, tipo: form.tipo, bimestre: form.bimestre || null, disciplina: form.disciplina, aceitarDupla: form.aceitarDupla, data: form.data, valorTotal: form.tipo === 'simulado' ? 2 : form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes }) });
+    av = { ...av, nome: form.nome, aceitarDupla: form.aceitarDupla, tipo: form.tipo, bimestre: form.bimestre ? Number(form.bimestre) : null, disciplina: form.disciplina, data: form.data || null, valorTotal: form.tipo === 'simulado' ? 2 : form.valorTotal ? Number(String(form.valorTotal).replace(',', '.')) : null, questoes: form.questoes.map(q => ({ ...q })) };
     toast('Gabarito salvo. Os resultados foram recalculados.'); avaliacoes = null; renderAvaliacao();
   } catch (err) { toast(err.message, 'erro'); btn.disabled = false; }
 }

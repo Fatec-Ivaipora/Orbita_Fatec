@@ -99,9 +99,10 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
-### [2026-11-26] Correção de Provas: nota com 1 casa na escala do Edubox (corrige o arredondamento para inteiro) e teto do Valor por tipo (simulado 2,0; bimestral 5,0)
+### [2026-11-26] Correção de Provas: nota com 1 casa na escala do Edubox (corrige o arredondamento para inteiro) e Valor por tipo (simulado fixo 2,0; bimestral até 5,0)
 - **Por quê:** no Edubox 10 = 100% e ele recusa nota acima de 10; o simulado vale 2,0. O arredondamento para inteiro (entrada logo abaixo) estava errado para essa escala (1,55 viraria 2). A importação de notas da Fisio deu "Nota inválida" porque os simulados estavam com Valor 20 (deveria ser 2).
 - **O que mudou:** nota = acertos ÷ questões × valor da prova, com **1 casa, meio pra cima** (2,44 → 2,4; 2,45 → 2,5) — tela, planilha e arquivo do Edubox. **Teto do Valor da prova por tipo:** simulado até **2,0**, prova bimestral até **5,0**, demais tipos até 10 (máximo do Edubox). A tela mostra o teto no campo e o servidor recusa acima dele (POST/PUT de avaliação; no PUT vale o tipo e o valor finais). A tela do arquivo do Edubox avisa se uma avaliação antiga estiver acima do teto.
+- **Simulado vale sempre 2,0 (todos os cursos):** no simulado o campo Valor vem travado em 2,0 e o servidor grava 2,0 mesmo que chegue outro valor (POST e PUT). Os simulados já criados com valor diferente (20, 50 ou vazio) foram acertados para 2,0 no Firestore em 26/11/2026.
 - **Onde:** `resultado()` + `VALOR_MAX`/`valorMax()` em `src/rotas/correcao-provas.js`; `arredNota()` e campos de valor em `correcao-provas/app.js?v=21`.
 
 ### [2026-11-26] Correção de Provas: "Respostas a conferir" leva até o aluno + DISPENSA de disciplina por aluno
