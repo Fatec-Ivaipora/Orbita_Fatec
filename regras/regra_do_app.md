@@ -99,6 +99,23 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Portfólio MED: aceita outros formatos além de PDF
+- Autor: Claude Code (a pedido do usuário, para o João)
+- Branch: feat/portfolio-outros-formatos
+- Arquivos alterados:
+  - `medicina/portfolio/app.js` (v=6): `lerArquivo` é uma leitura só para o ZIP, para o "Buscar entregas do AVA" e para "Abrir o arquivo do AVA". Lê:
+    - PDF;
+    - Word (.docx), LibreOffice (.odt) e PowerPoint (.pptx e .odp), pelo XML de dentro, com o JSZip que já estava carregado;
+    - .txt, .rtf e .html;
+    - imagem (mostra, sem texto);
+    - o .doc antigo fica para baixar, com o aviso de pedir .docx ou PDF.
+
+    O leitor mostra o texto do documento e a imagem na aba "Arquivo". Os avisos passam a ser "sem texto (escaneado ou foto?)" e "arquivo sem leitura".
+  - `medicina/portfolio/portfolio.css` (v=7), `tutorial.js`, `index.html`.
+- Tipo: Melhoria
+- Motivo: alunos entregam o portfólio em Word e em outros formatos. Antes só o PDF tinha texto, leitura na tela e comparação entre portfólios. Tudo continua no navegador, sem serviço externo (LGPD).
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Aplicação de Provas MED: nota do Edubox no padrão da graduação (escala 10 = 100%, 1 casa)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/med-edubox-escala

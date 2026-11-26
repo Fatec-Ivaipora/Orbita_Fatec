@@ -29,13 +29,14 @@ const PROFESSOR = `
     <li><div><h3>Criar a atividade</h3>
       <p>No card da sua turma, clique em <b>+ Atividade</b> e dê um nome, por exemplo "Portfólio 1". Se ela já existe, é só abrir.</p></div></li>
     <li><div><h3>Baixar as entregas no AVA</h3>
-      <p>No AVA, abra a Tarefa do portfólio → ${cam('Ver todos os envios')} → ${cam('Ação de avaliação')} → <b>Baixar todas as tarefas enviadas</b>. Vem um arquivo .zip com os PDFs de todos os alunos.</p></div></li>
+      <p>No AVA, abra a Tarefa do portfólio → ${cam('Ver todos os envios')} → ${cam('Ação de avaliação')} → <b>Baixar todas as tarefas enviadas</b>. Vem um arquivo .zip com os trabalhos de todos os alunos.</p></div></li>
     <li><div><h3>Importar o ZIP no Órbita</h3>
       <p>Na atividade, clique em <b>Importar ZIP do AVA</b> e escolha o arquivo. Não precisa descompactar. O Órbita reconhece cada aluno pelo nome e pelo número de participante do AVA.</p>
-      <ul><li>"PDF sem texto" indica que o arquivo provavelmente foi escaneado como imagem. Corrija pelo PDF.</li>
-        <li>"Arquivo não PDF" indica que o aluno mandou outro formato. Isso vale como observação de conformidade.</li></ul></div></li>
+      <ul><li>O Órbita lê <b>PDF, Word (.docx), LibreOffice (.odt), PowerPoint (.pptx e .odp), .txt e .rtf</b>. Foto do trabalho (.jpg, .png) aparece na tela, mas sem texto.</li>
+        <li>"Sem texto" indica que o arquivo foi escaneado ou é uma foto. Corrija pelo arquivo original.</li>
+        <li>"Arquivo sem leitura" indica um formato que o Órbita não abre (por exemplo, o .doc antigo). Baixe para abrir e, se for o caso, peça ao aluno em .docx ou PDF.</li></ul></div></li>
     <li><div><h3>Corrigir pela matriz</h3>
-      <p>Clique no aluno. O PDF fica à esquerda e a matriz à direita. Em cada critério:</p>
+      <p>Clique no aluno. O trabalho fica à esquerda e a matriz à direita. Em cada critério:</p>
       <ul><li><b>C1 e C4:</b> escolha o nível. Cada opção mostra o descritor e quando aplicar.</li>
         <li><b>C2:</b> marque se a análise é consistente, superficial ou ausente, e se o texto identifica necessidades e propõe ações. O nível sai dessas marcações.</li>
         <li><b>C3:</b> marque os objetivos da turma que o portfólio menciona, discute e atinge. O nível sai da proporção.</li>
