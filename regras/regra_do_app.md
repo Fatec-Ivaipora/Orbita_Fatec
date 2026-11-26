@@ -99,6 +99,28 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Banco MED: aviso de prova montada nos dois lugares (Órbita e por fora no AVA)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/ava-prova-nos-dois-lugares
+- Arquivos alterados:
+  - `banco-med-fatec/envio-ava.js` (v=7):
+    - o filtro **Nos dois lugares** vem primeiro: provas com questões no Órbita e, no questionário do AVA, questões com nome fora do padrão do Órbita;
+    - o cartão mostra em vermelho "Montada nos dois lugares", com os dois números e os professores;
+    - botão "Abrir e comparar com o AVA".
+  - `banco-med-fatec/avaliacoes.js` (v=52):
+    - faixa dentro da prova: "Prova montada nos dois lugares" ou "direto no AVA", com o número de questões postas por fora;
+    - no "Trazer do AVA", a prévia compara com o Órbita (`/importar/repetidas`): as que já existem vêm marcadas como repetidas e desmarcadas.
+  - `banco-med-fatec/avaliacoes.css` (v=37), `app.js`, `index.html` (app.js v=87).
+- Tipo: Melhoria
+- Motivo: professoras montaram a prova no Órbita e também por fora, direto no AVA. Em 26/11 eram 7 provas:
+  - Habilidades Cirúrgicas I;
+  - Interações Terapêuticas I, 1ª e 2ª chamada;
+  - Oncogênese;
+  - Patologia Clínica I;
+  - Patologia Clínica II, 1ª e 2ª chamada.
+  "Fora do padrão" pode ser a mesma questão subida antes do padrão de nome `[2ºB 1ªCH NN]`. Por isso a comparação é pelo texto, no "Trazer do AVA".
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] AVA: pedido por prova ("Enviar esta prova") em vez de conferir tudo a cada clique
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/ava-pedido-rapido

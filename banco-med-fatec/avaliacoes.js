@@ -246,6 +246,7 @@ function renderEditor() {
 
         ${atual.papel === 'adjunto' ? `<div class="av-faixa av-faixa-papel" role="note"><div>Você é <b>adjunto(a)</b> nesta disciplina: aqui aparecem só as <b>suas ${questoes.length}</b> ${questoes.length === 1 ? 'questão' : 'questões'} (a prova tem ${atual.totalNaProva} no total). O titular confere e finaliza a prova.</div></div>` : atual.papel === 'titular' ? '<div class="av-faixa av-faixa-papel" role="note"><div>Você é o <b>titular</b> desta disciplina: vê e edita as questões de todos os professores, organiza a ordem e finaliza a prova.</div></div>' : ''}
         ${atual.papel && atual.papel !== 'editor' ? envioNaProvaHtml(av, questoes) : ''}
+        ${avisoAvaPorFora(av, questoes, fin)}
         ${analise.pendencias.length && !fin ? `<div class="av-faixa av-faixa-aviso" role="status">${ic('alerta')}<ul>${analise.pendencias.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 
         <div class="av-prog" aria-label="${prontas} de ${questoes.length} questões no padrão">
@@ -287,6 +288,16 @@ function envioNaProvaHtml(av, questoes) {
   </section>`;
 }
 
+// Questões postas por fora no AVA (26/11/2026): o questionário desta prova tem questões com nome fora do padrão do
+// Órbita. Com questões também aqui, a prova está montada nos dois lugares — a coordenação compara pelo "Trazer do AVA".
+function avisoAvaPorFora(av, questoes, fin) {
+  const q = av.avaBanco && av.avaBanco.quadro;
+  if (!q || q.erro || !(q.noQuestionario > 0) || !(q.direto > 0)) return '';
+  const dois = questoes.length > 0;
+  return `<div class="av-faixa av-faixa-ava-fora" role="status">${ic('alerta')}<div><b>${dois ? 'Prova montada nos dois lugares.' : 'Prova montada direto no AVA.'}</b>
+    O questionário no AVA tem <b>${q.direto}</b> questão(ões) postas por fora do Órbita${dois ? ` e aqui há <b>${questoes.length}</b>` : ''} (conferido no AVA em ${new Date(q.lidoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}).
+    ${fin ? 'Reabra a prova para comparar.' : `Use <b>Importar → Trazer do AVA</b> para ${dois ? 'comparar: as que já existem aqui aparecem como repetidas' : 'trazer e validar'}.`}</div></div>`;
+}
 // Questão trazida do AVA (26/11/2026): de onde veio, se a alteração já foi levada de volta e o atalho para o editor do AVA
 function avaSelos(q) {
   const o = q.avaOrigem;
@@ -1089,7 +1100,11 @@ async function trazerDoAva() {
     itens.forEach(q => { q.avaCmid = r.cmid; q.avaEditar = q.avaId && r.cmid ? `${AVA_BASE}/question/bank/editquestion/question.php?cmid=${r.cmid}&id=${q.avaId}` : ''; });
     previaImport = itens;
     const fora = (r.noBanco || 0) - itens.length;
-    mostrarPrevia(`Vieram do AVA (${r.curso || ''} › ${r.quiz || ''}) as ${itens.length} questões que estão na prova${fora > 0 ? `; ${fora} que estão só no banco do questionário ficaram de fora` : ''}. Escolha o professor acima e clique em “Importar para a avaliação”. Para mudar uma questão, use “Editar no AVA”.`);
+    // compara com o que já existe no Órbita (prova montada nos dois lugares): as iguais vêm marcadas e desmarcadas
+    const rep = await repetidasWord();
+    mostrarPrevia([`Vieram do AVA (${r.curso || ''} › ${r.quiz || ''}) as ${itens.length} questões que estão na prova${fora > 0 ? `; ${fora} que estão só no banco do questionário ficaram de fora` : ''}.`,
+      rep ? `${rep} Elas já existem no Órbita e vêm desmarcadas: importe só as que faltam.` : (atual.questoes.length ? 'Nenhuma delas é igual às que já estão nesta prova no Órbita.' : ''),
+      'Escolha o professor acima e clique em “Importar para a avaliação”. Para mudar uma questão, use “Editar no AVA”.'].filter(Boolean).join(' '));
   } catch (e) { estado(esc(e.message)); toast(e.message, 'erro'); }
   finally { btn.disabled = false; btn.textContent = rot; }
 }
