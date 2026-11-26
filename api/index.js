@@ -52,6 +52,20 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// NOME SOCIAL EM TODO O ÓRBITA (26/11/2026, pedido do T.I: "tudo que sai informação dos alunos"). Toda resposta da
+// API passa por aqui: o nome de registro de quem tem nome social (config/nomes_sociais) vira o nome social — em
+// qualquer módulo, campo ou texto, inclusive dados antigos já gravados (ex.: avaliação criada antes do cadastro)
+// e nomes que vêm do AVA. Arquivo montado no servidor (Excel, PDF) troca na própria rota (nomeSocial.trocarNoTexto).
+const nomeSocialGeral = require('../src/utils/nome-social');
+app.use('/api', async (req, res, next) => {
+    try { await nomeSocialGeral.carregarNomesSociais(); } catch (e) { /* sem a lista, segue sem trocar */ }
+    const json = res.json.bind(res);
+    res.json = (corpo) => json(nomeSocialGeral.trocarNoObjeto(corpo));
+    const send = res.send.bind(res);
+    res.send = (corpo) => send(typeof corpo === 'string' ? nomeSocialGeral.trocarNoTexto(corpo) : corpo);
+    next();
+});
+
 
 
 // Rota de Teste para garantir que a API está no ar

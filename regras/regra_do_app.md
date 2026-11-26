@@ -99,6 +99,21 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Nome social em TODO o Órbita (folhas do simulado saíram com o nome de registro)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/folhas-nome-social
+- Arquivos alterados:
+  - `src/utils/nome-social.js`: `trocarNoTexto` / `trocarNoObjeto`. Trocam o nome de registro (completo) pelo nome social em qualquer texto ou campo, sem diferença de maiúscula, acento ou espaço. Nome parecido não troca.
+  - `api/index.js`: middleware em `/api`. Toda resposta (`res.json` e texto de `res.send`) passa pela troca. Vale para qualquer módulo, inclusive dados antigos gravados e nomes vindos do AVA.
+  - `src/rotas/correcao-provas.js` (`carregar`): a avaliação sai sempre com o nome social. Cobre o Excel montado no servidor e as folhas.
+- Dados (26/11):
+  - corrigidos os nomes gravados nas avaliações "Simulado Direito 4 período" (nº 127) e "SIMULADO" (nº 134), criadas em 03 e 05/11 com o nome de registro;
+  - backup em `CLAUDE\Backups\correcao_avaliacoes_nome_social_2026-11-26.json`;
+  - conferido: 0 nomes de registro em correcao_leituras, correcao_avaliacoes, med_resultados_ava, cad_turmas e cad_alunos.
+- Tipo: Correção (urgente)
+- Motivo: as folhas do simulado de 2 alunos com nome social saíram com o nome de registro. A avaliação guarda os nomes do dia em que é criada, e a troca só existia nos robôs do CADD e da Cobrança.
+- Como reverter: reverter o commit (não recomendado).
+
 ### [2026-11-26] Automação AVA / Levantamento EAD: "Estudos de Arquitetura e Urbanismo" não é EAD
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/ava-estudos-arq-nao-ead
