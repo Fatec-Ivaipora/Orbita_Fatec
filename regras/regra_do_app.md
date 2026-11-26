@@ -99,6 +99,19 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Envio ao AVA: botão "Colocar no questionário"
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/ava-colocar-no-questionario
+- Arquivos alterados:
+  - `src/utils/ava-banco-importar.js`: `colocarNoQuestionario`. Lê a pasta da prova no banco do questionário (`/question/edit.php`), pega só as questões com nome do Órbita (`[2ºB 1ªCH NN]` / `[EXAME NN]`) que ainda não estão no questionário e coloca na ordem do Órbita (`/mod/quiz/edit.php`, `add=1`, `q<id>=1`). Não tira nada nem mexe na nota máxima. Para se o questionário já foi feito por aluno.
+  - `scripts/ava-banco-med-agente.js`: pedido `colocar`. Teste no servidor: `node scripts/ava-banco-med-agente.js --colocar=<id> --simular`.
+  - `src/rotas/banco-med-avaliacoes.js`: `POST /envio-ava/colocar`.
+  - `src/utils/ava-pedidos.js`, `src/utils/banco-med-ava-fila.js` (`ava.colocar`), `src/utils/ava-sessao.js` (exporta `RE_NOME_ORBITA`).
+  - `banco-med-fatec/envio-ava.js` (v=8): botão "Colocar no questionário (N)" quando há questões do Órbita no banco da prova fora do questionário; "Colocando no questionário agora…" enquanto roda.
+- Tipo: Melhoria
+- Motivo: o "Enviar esta prova" só leva as questões ao banco do questionário. Colocar dentro do questionário era feito à mão no AVA, e a coordenação precisa que vá para o questionário. Fica num botão, e não automático, porque mexe na prova que o aluno vai fazer.
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Envio ao AVA: questão trazida do AVA nunca é enviada de novo
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/trazida-do-ava-nao-reenvia

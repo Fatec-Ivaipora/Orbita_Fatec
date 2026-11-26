@@ -280,6 +280,17 @@ async function pedidoEnvio(imp, id) {
     partes.push(q.erro ? `questionário: ${q.erro}` : `questionário com ${q.resumo.noQuestionario} questão(ões)`);
     return partes.join(' · ');
 }
+// "Colocar no questionário" (26/11/2026): só a prova pedida; depois relê o questionário para o quadro
+async function pedidoColocar(imp, id, simular = false) {
+    const av = await lerAv(id);
+    const sit = await situacaoDaAvaliacao(av);
+    const r = await imp.colocarNoQuestionario(sit, { simular });
+    if (!simular) {
+        await db.collection(COL_AV).doc(id).update({ 'avaBanco.colocar': { status: r.status, msg: String(r.msg || '').slice(0, 300), colocadas: r.colocadas || 0, em: r.em } });
+        await gravarQuadro(sit, await imp.resumoDaProva(sit));
+    }
+    return `${r.status}: ${r.msg}`;
+}
 async function pedidoResultados(imp, provaId) {
     let provas;
     if (provaId) {
@@ -307,6 +318,7 @@ async function atenderPedidos() {
                 else if (p.tipo === 'resultados') msg = await pedidoResultados(imp, p.alvo);
                 else if (p.tipo === 'trazer') msg = await trazerDoAva(imp, await lerAv(p.alvo), false);
                 else if (p.tipo === 'levar') msg = await levarParaAva(imp, await lerAv(p.alvo), false);
+                else if (p.tipo === 'colocar') msg = await pedidoColocar(imp, p.alvo);
                 else throw new Error(`pedido desconhecido (${p.tipo})`);
             } catch (e) { ok = false; msg = e.message; }
             await p.ref.update({ status: ok ? 'feito' : 'erro', msg: String(msg || '').slice(0, 500), fim: new Date().toISOString() });
@@ -358,6 +370,14 @@ async function pulso() {
 }
 
 async function iniciar() {
+    // teste pelo servidor: node scripts/ava-banco-med-agente.js --colocar=<id da avaliação> [--simular]
+    if (args.colocar) {
+        try {
+            const sessao = new SessaoAva(); await sessao.entrar();
+            log(`colocar ${args.colocar}${args.simular ? ' (SIMULAÇÃO)' : ''} — ${await pedidoColocar(new ImportadorBancoAva(sessao), String(args.colocar), !!args.simular)}`);
+        } catch (e) { log(`ERRO: ${e.message}`); process.exitCode = 1; }
+        process.exit();
+    }
     if (args['uma-vez']) {
         try { await rodada('manual'); } catch (e) { log(`ERRO: ${e.message}`); process.exitCode = 1; }
         process.exit();

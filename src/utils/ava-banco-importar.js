@@ -10,10 +10,28 @@
 //   4. sobe o XML (só as questões novas, com imagens) e importa com "categoria do arquivo";
 //   5. reconta a pasta.
 // ==========================================================================
-const { lerCursos, lerQuestionarios, lerFormImportacao, lerResumoQuestionario, lerResultadoImportacao, semTags } = require('./ava-sessao');
+const { lerCursos, lerQuestionarios, lerFormImportacao, lerResumoQuestionario, lerResultadoImportacao, semTags, RE_NOME_ORBITA } = require('./ava-sessao');
 const { montarXmlDaAvaliacao } = require('./banco-med-xml-ava');
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+
+// ---------- colocar dentro do questionário — 26/11/2026 ----------
+// /question/edit.php (lista do banco) → [{ id, nome }]: cada linha tem a caixinha name="q<id>"
+function lerQuestoesDoBanco(html) {
+    const out = [], vistos = new Set();
+    for (const linha of String(html).split(/<tr\b/).slice(1)) {
+        const id = (linha.match(/name="q(\d+)"/) || [])[1];
+        if (!id || vistos.has(id)) continue;
+        const nome = (linha.match(/<span[^>]*class="[^"]*\bquestionname\b[^"]*"[^>]*>([\s\S]*?)<\/span>/) || linha.match(/<label[^>]*for="checkq\d+"[^>]*>([\s\S]*?)<\/label>/) || [])[1];
+        vistos.add(id);
+        out.push({ id: Number(id), nome: nome ? semTags(nome).replace(/\s+/g, ' ').trim() : '' });
+    }
+    return out;
+}
+// questionário já feito por aluno: o AVA não deixa pôr nem tirar questão ("Tentativas: N" no edit.php)
+const temTentativas = (html) => /(?:Tentativas|Attempts)\s*:\s*[1-9]/i.test(semTags(String(html)));
+// "[2ºB 1ªCH 07] Prof. …" → 7 (ordem da prova no Órbita)
+const numeroOrbita = (nome) => Number((String(nome).match(/(\d+)\s*\]/) || [])[1]) || 9999;
 
 // ---------- formulário do AVA (editor de questão) — 26/11/2026 ----------
 const escHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -233,6 +251,50 @@ class ImportadorBancoAva {
         const naPasta = (await this.lerBanco(d.cmid, pasta)).naPasta;
         const resumo = lerResumoQuestionario((await this.s.req(`/mod/quiz/edit.php?cmid=${d.cmid}`)).texto);
         return { curso: d.curso, cursoId: d.cursoId, cmid: d.cmid, quiz: d.quiz, naPasta, resumo };
+    }
+
+    pastaDa(sit) {
+        return [sit.disciplina, sit.semestre, ...(sit.tipo === 'exame' ? ['Exame semestral'] : [`${sit.bimestre}º Bimestre`, `${sit.chamada}ª chamada`])];
+    }
+    // questões que estão na pasta da prova no banco do questionário → [{ id, nome }]
+    async questoesDaPasta(cmid, pasta) {
+        const { form } = await this.lerBanco(cmid, pasta);
+        const alvo = pasta.map(norm).join('/');
+        const cat = form.categorias.find(c => c.caminho.map(norm).join('/') === alvo);
+        if (!cat || !cat.qtd) return [];
+        const { texto } = await this.s.req(`/question/edit.php?cmid=${cmid}&cat=${encodeURIComponent(cat.valor)}&qpage=0&qperpage=1000&recurse=0&showhidden=0`);
+        const lista = lerQuestoesDoBanco(texto);
+        if (!lista.length) throw new Error(`a pasta da prova tem ${cat.qtd} questão(ões), mas não consegui ler a lista do banco (falta moodle/question:viewall?)`);
+        return lista;
+    }
+
+    // "Colocar no questionário" (26/11/2026): põe DENTRO do questionário as questões do Órbita que estão na pasta da
+    // prova e ainda não estão nele, na ordem do Órbita. Só as com nome do Órbita ([2ºB 1ªCH NN] / [EXAME NN]);
+    // não tira nada do questionário e não mexe em nota máxima. Questionário já feito por aluno: não mexe.
+    async colocarNoQuestionario(sit, { simular = false } = {}) {
+        const em = new Date().toISOString();
+        const d = await this.destino(sit, null);
+        if (d.erro) return { em, status: 'conferir', msg: d.erro };
+        const r = { em, curso: d.curso, cursoId: d.cursoId, cmid: d.cmid, quiz: d.quiz };
+        const naPasta = (await this.questoesDaPasta(d.cmid, this.pastaDa(sit)))
+            .filter(q => RE_NOME_ORBITA.test(q.nome)).sort((a, b) => numeroOrbita(a.nome) - numeroOrbita(b.nome));
+        if (!naPasta.length) return { ...r, status: 'conferir', colocadas: 0, msg: 'a pasta da prova no banco do questionário não tem questões do Órbita: envie a prova antes' };
+        const edit = (await this.s.req(`/mod/quiz/edit.php?cmid=${d.cmid}`)).texto;
+        if (temTentativas(edit)) return { ...r, status: 'conferir', colocadas: 0, msg: 'o questionário já foi feito por aluno: o AVA não deixa colocar questões' };
+        const antes = await this.questoesDaProva(d.cmid);
+        const ids = new Set(antes.map(q => q.id)), nomes = new Set(antes.map(q => norm(q.nome)));
+        const faltam = naPasta.filter(q => !ids.has(q.id) && !nomes.has(norm(q.nome)));
+        if (!faltam.length) return { ...r, status: 'ok', colocadas: 0, msg: `o questionário já tem as ${naPasta.length} questões da pasta` };
+        if (simular) return { ...r, status: 'simulado', colocadas: 0, msg: `colocaria ${faltam.length} questão(ões) no questionário (${antes.length} já estão)` };
+        // mesmo envio do botão "Adicionar as questões selecionadas ao questionário" do banco (mod/quiz/edit.php, add=1, q<id>=1)
+        const corpo = new URLSearchParams({ cmid: String(d.cmid), sesskey: this.s.sesskey, add: '1', addonpage: '0' });
+        faltam.forEach(q => corpo.append(`q${q.id}`, '1'));
+        await this.s.req('/mod/quiz/edit.php', { method: 'POST', body: corpo.toString() });
+        const depois = await this.questoesDaProva(d.cmid);
+        const idsD = new Set(depois.map(q => q.id)), nomesD = new Set(depois.map(q => norm(q.nome)));
+        const foram = faltam.filter(q => idsD.has(q.id) || nomesD.has(norm(q.nome))).length;
+        if (foram === faltam.length) return { ...r, status: 'ok', colocadas: foram, msg: `${foram} questão(ões) colocada(s) no questionário (agora com ${depois.length})` };
+        return { ...r, status: 'conferir', colocadas: foram, msg: `coloquei ${foram} de ${faltam.length}: confira o questionário no AVA` };
     }
 
     // sit: situação da avaliação (fila); av: documento da avaliação. simular: só confere, não importa.

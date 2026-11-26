@@ -3,7 +3,7 @@
 // Cada botão do Órbita ("Enviar esta prova", "Ler de novo no AVA", "Trazer do AVA", "Levar alterações", "Conferir
 // todas") grava um pedido em ava_pedidos e acorda o agente do droplet (config/ava_banco_sync.pedidoEm, escutado ao
 // vivo). O agente (scripts/ava-banco-med-agente.js) atende só o que foi pedido, um por um, e marca feito/erro.
-// tipo: 'envio' | 'resultados' | 'trazer' | 'levar' | 'tudo'; alvo: id da avaliação (Banco MED) ou da prova
+// tipo: 'envio' | 'colocar' | 'resultados' | 'trazer' | 'levar' | 'tudo'; alvo: id da avaliação (Banco MED) ou da prova
 // (Aplicação de Provas); sem alvo em 'resultados' = todas as provas já aplicadas.
 // ==========================================================================
 const { db } = require('../firebase');

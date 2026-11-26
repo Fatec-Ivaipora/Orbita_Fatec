@@ -121,6 +121,9 @@ function proximoPasso(p) {
   if (['conferir', 'erro'].includes(p.situacao)) return { tom: 'erro', txt: `<b>O envio parou:</b> ${esc(p.ava.msg || (q && q.erro) || 'confira no AVA')}` };
   if (q && q.erro) return { tom: 'erro', txt: `<b>Não achei no AVA:</b> ${esc(q.erro)}` };
   if (p.situacao === 'pronta') return { tom: 'acao', txt: `<b>${p.prontas.length} questão(ões) prontas.</b> O envio automático leva sozinho; se estiver fora do ar, baixe e importe.` };
+  const col = p.ava && p.ava.colocar;
+  if (col && col.status === 'conferir' && faltaNoQuestionario(p)) return { tom: 'erro', txt: `<b>Não consegui colocar no questionário:</b> ${esc(col.msg)}` };
+  if (faltaNoQuestionario(p)) return { tom: 'acao', txt: `<b>${faltaNoQuestionario(p)} questão(ões) estão no banco da prova, mas fora do questionário.</b> Clique em <b>Colocar no questionário</b>: o Órbita põe só as desta prova, na ordem, e não tira nada do que já está lá.` };
   if (p.total && q && q.noQuestionario !== esperado) return { tom: 'atencao', txt: q.noQuestionario ? `<b>O questionário tem ${q.noQuestionario} e a prova tem ${esperado}.</b> Confira as questões dentro do questionário no AVA.` : '<b>As questões ainda não foram colocadas dentro do questionário</b> (estão só no banco).' };
   if (q && q.noQuestionario && q.somaNotas !== q.notaMaxima) return { tom: 'atencao', txt: `<b>A soma das notas (${fmt(q.somaNotas)}) é diferente da nota máxima (${fmt(q.notaMaxima)}).</b> Ajuste no questionário do AVA.` };
   if (p.situacao === 'aguardando') {
@@ -132,9 +135,9 @@ function proximoPasso(p) {
 }
 // pedido aberto desta prova (envio, trazer ou levar): mostra "na fila" / "conferindo agora" no lugar dos botões
 function pedidoDaProva(p) {
-  const ped = ((dados && dados.agente && dados.agente.pedidos) || []).find(x => x.alvo === p.id && ['envio', 'trazer', 'levar'].includes(x.tipo));
+  const ped = ((dados && dados.agente && dados.agente.pedidos) || []).find(x => x.alvo === p.id && ['envio', 'colocar', 'trazer', 'levar'].includes(x.tipo));
   if (!ped) return '';
-  const oque = { envio: 'Enviando esta prova', trazer: 'Trazendo do AVA', levar: 'Levando alterações' }[ped.tipo];
+  const oque = { envio: 'Enviando esta prova', colocar: 'Colocando no questionário', trazer: 'Trazendo do AVA', levar: 'Levando alterações' }[ped.tipo];
   return ped.status === 'rodando'
     ? `<span class="ea-pedido ea-pedido-ativo"><span class="av-spin"></span>${oque} agora…</span>`
     : `<span class="ea-pedido">Na fila desde ${dataHora(ped.em).slice(-5)} — ${oque.toLowerCase()}</span>`;
@@ -143,6 +146,17 @@ function pedidoDaProva(p) {
 function botaoEnviar(p) {
   const n = p.prontas.length;
   return `<button type="button" class="btn ${n ? 'btn-primary' : 'btn-secondary'} av-btn" data-ea-enviar-prova="${esc(p.id)}" title="Só esta prova: ${n ? 'manda as questões prontas e ' : ''}confere o questionário no AVA">${ic('importar')}${n ? `Enviar esta prova (${n})` : 'Conferir no AVA'}</button>`;
+}
+// "Colocar no questionário" (26/11/2026): há questões do Órbita na pasta da prova que ainda não estão no questionário
+function faltaNoQuestionario(p) {
+  const q = (p.ava && p.ava.quadro) || null;
+  if (!q || q.erro || !(q.naPasta > 0)) return 0;
+  const noQuiz = Number.isFinite(q.pelaOrbita) ? q.pelaOrbita : (q.noQuestionario || 0);
+  return Math.max(0, q.naPasta - noQuiz);
+}
+function botaoColocar(p) {
+  const n = faltaNoQuestionario(p);
+  return n ? `<button type="button" class="btn btn-primary av-btn" data-ea-colocar="${esc(p.id)}" title="Põe dentro do questionário as questões do Órbita que já estão no banco desta prova">${ic('ok')}Colocar no questionário (${n})</button>` : '';
 }
 function provaHtml(p) {
   const s = SITUACAO[p.situacao] || SITUACAO.aguardando;
@@ -167,7 +181,7 @@ function provaHtml(p) {
       ${numero('No questionário do AVA', q && !q.erro ? `${q.noQuestionario}` : '–', q && !q.erro ? `nota máx. ${fmt(q.notaMaxima)}` : 'não lido')}
       ${temOrigem ? numero('Quem colocou', `${q.pelaOrbita || 0} <i>Órbita</i> · ${q.direto} <i>direto</i>`, '', q.direto ? 'ea-n-alerta' : '') : ''}
     </div>
-    <div class="ea-passo"><p>${passo.txt}</p><div class="ea-passo-acoes">${pedidoDaProva(p) || `${passo.botao || ''}${botaoEnviar(p)}${acoes}`}</div></div>
+    <div class="ea-passo"><p>${passo.txt}</p><div class="ea-passo-acoes">${pedidoDaProva(p) || `${passo.botao || ''}${botaoColocar(p)}${botaoEnviar(p)}${acoes}`}</div></div>
     <details class="ea-det"><summary>Ver detalhes</summary>
       ${p.ava.quiz ? `<p><b>No AVA:</b> ${esc(p.ava.curso)} › ${esc(p.ava.quiz)}</p>` : ''}
       ${q && !q.erro ? `<p>Soma das notas ${fmt(q.somaNotas)} · nota máxima ${fmt(q.notaMaxima)}${q.naPasta !== null && q.naPasta !== undefined ? ` · ${q.naPasta} na pasta do banco` : ''}</p>${q.abertura ? `<p>${esc(q.abertura)}</p>` : ''}<p class="ea-quadro-lido">Lido no AVA em ${dataHora(q.lidoEm)}</p>` : ''}
@@ -234,6 +248,12 @@ export function iniciarEnvioAva(opcoes) {
     if (b.dataset.eaConfirmar) { confirmando = b.dataset.eaConfirmar; render(); return; }
     if (b.dataset.eaBaixar) { await baixarArquivo(b.dataset.eaBaixar, b); return; }
     if (b.dataset.eaTrazer) { await abrirProvaParaTrazer(b.dataset.eaTrazer); return; }
+    if (b.dataset.eaColocar) {
+      b.disabled = true;
+      try { const r = await api(`${BASE}/colocar`, { method: 'POST', body: JSON.stringify({ id: b.dataset.eaColocar }) }); toast(r.message); await carregar(); }
+      catch (e) { toast(e.message, 'erro'); b.disabled = false; }
+      return;
+    }
     if (b.dataset.eaEnviarProva) {
       b.disabled = true;
       try { const r = await api(`${BASE}/agora`, { method: 'POST', body: JSON.stringify({ id: b.dataset.eaEnviarProva }) }); toast(r.message); await carregar(); }

@@ -87,7 +87,7 @@ async function situacaoDaAvaliacao(av, critCache = new Map()) {
         id: av.id, chave: av.chave, disciplina: av.disciplina, sigla: av.sigla || '', semestre: av.semestre, tipo: av.tipo || '',
         bimestre: av.bimestre || 0, chamada: av.chamada || 0, prova: rotuloProva(av), status: av.status,
         total: questoes.length, qtdProva: crit.qtdQuestoes || null, jaNoAva: jaNoAva.length, prontas, situacao, professores,
-        ava: { status: ab.status || null, msg: ab.msg || '', em: ab.em || null, curso: ab.curso || '', cursoId: ab.cursoId || null, quiz: ab.quiz || '', cmid: ab.cmid || null, por: ab.por || '', quadro: ab.quadro || null }
+        ava: { status: ab.status || null, msg: ab.msg || '', em: ab.em || null, curso: ab.curso || '', cursoId: ab.cursoId || null, quiz: ab.quiz || '', cmid: ab.cmid || null, por: ab.por || '', quadro: ab.quadro || null, colocar: ab.colocar || null }
     };
 }
 
