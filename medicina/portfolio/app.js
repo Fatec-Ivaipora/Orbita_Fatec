@@ -744,7 +744,13 @@ function aplicarSugestao() {
 }
 const NOME_NIVEL_CURTO = { O: 'Ótimo', B: 'Bom', DM: 'Deve melhorar', I: 'Insuficiente' };
 // o portfólio vale o que a Tarefa do AVA vale (ex.: 3,0): a nota da matriz (0 a 10) × valor ÷ 10, igual ao lançamento
-const noAva = (nota) => { const max = ativ.atividade.ava && Number(ativ.atividade.ava.notaMax); return max ? ` <small style="display:inline">(= ${fmt(Math.round(nota * max / 10 * 100) / 100)} de ${fmt(max)} no AVA)</small>` : ''; };
+// Valor do portfólio na disciplina (26/11/2026): a matriz vai de 0 a 10 (igual ao AVA, onde a Tarefa vale 10), mas na
+// disciplina o portfólio vale 3,0 (padrão do SCIC; a coordenação pode mudar por atividade). Nota na disciplina =
+// nota da matriz × valor ÷ 10, com 1 casa e meio pra cima (8,0 → 2,4; 7,5 → 2,3 — 2,25 sobe).
+const VALOR_PADRAO = 3;
+const valorDisc = () => Number(ativ.atividade.valorDisciplina) || VALOR_PADRAO;
+const naDisciplina = (nota) => (nota == null ? null : Math.round(Number(nota) * valorDisc() / 10 * 10 + 1e-9) / 10);
+const noAva = (nota) => (nota == null ? '' : ` <small style="display:inline">(= ${fmt(naDisciplina(nota))} de ${fmt(valorDisc())} na disciplina)</small>`);
 function faixaReferencia() {
   const ref = corr.entrega.referencia;
   if (!ref) return '';
@@ -1127,8 +1133,10 @@ async function renderResumo() {
   const fin = linhas.filter(l => l.e.status === 'finalizada').length;
   box.innerHTML = `
     <div class="pf-barra">
-      <span class="pf-meta">${fin} de ${linhas.length} finalizadas. Só as finalizadas vão para o AVA.</span>
+      <span class="pf-meta">${fin} de ${linhas.length} finalizadas. Só as finalizadas vão para o AVA (0 a 10).
+        O portfólio vale <b>${fmt(valorDisc())}</b> na disciplina${ativ.editor ? ' · <button type="button" class="pf-link" data-acao="valor-disc">mudar</button>' : ''}.</span>
       <div class="pf-acoes">
+        <button type="button" class="pf-btn pf-btn-pri" data-acao="edubox" title="Nome;Nota com a nota já convertida para o valor do portfólio na disciplina">Arquivo para o Edubox</button>
         <button type="button" class="pf-btn" data-acao="imprimir">Imprimir relatório da turma</button>
         <button type="button" class="pf-btn" data-acao="csv">Baixar planilha (Excel)</button>
         ${ativ.editor && ativ.atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-notas">Lançar notas no AVA</button>' : ''}
@@ -1141,10 +1149,11 @@ async function renderResumo() {
       <li>No AVA → <b>Ação de avaliação</b> → <b>Enviar planilha de avaliação</b>, envie o arquivo preenchido e confira a prévia antes de confirmar.</li>
     </ol></details>
     <div class="pf-tab-wrap"><table class="pf-tab">
-      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num">Nota</th><th class="num" title="Nota de referência do Órbita: mesma regra para todos os professores">Referência</th><th>Similaridade</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num">Nota (0 a 10)</th><th class="num" title="Nota da matriz × valor do portfólio ÷ 10, com 1 casa">Na disciplina (${fmt(valorDisc())})</th><th class="num" title="Nota de corte: a mesma para o trabalho, seja quem for o professor">Corte</th><th>Similaridade</th><th>Situação</th></tr></thead>
       <tbody>${linhas.map(l => `<tr data-acao="corrigir" data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(l.e.nome)}</td>
         <td class="num">${fmt(l.c1)}</td><td class="num">${fmt(l.c2)}</td><td class="num">${fmt(l.c3)}</td><td class="num">${fmt(l.c4)}</td>
         <td class="num"><b>${l.r ? fmt(l.r.nota) : '—'}</b>${l.r && l.r.penalidade !== 'nenhuma' ? ` <small>(× ${String(l.r.fator).replace('.', ',')})</small>` : ''}</td>
+        <td class="num">${l.r && l.e.status === 'finalizada' ? `<b>${fmt(naDisciplina(l.r.nota))}</b>` : '—'}</td>
         <td class="num">${l.e.referencia ? fmt(l.e.referencia.nota) : '—'}${l.e.divergeDaReferencia && l.e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="A nota do professor ficou 2 pontos ou mais longe da referência">diverge</span>' : ''}</td>
         <td>${l.alerta ? '<span class="pf-av pf-av-crit">Sim</span>' : 'Não'}</td>
         <td><span class="pf-st pf-st-${esc(l.e.status)}">${STATUS[l.e.status]}</span></td></tr>`).join('')}</tbody>
@@ -1159,10 +1168,35 @@ function baixar(conteudo, nome, tipo) {
 }
 function baixarCsvResumo() {
   const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-  const cab = ['Estudante', 'Participante', 'C1', 'C2', 'C3', 'C4', 'Soma', 'Condição especial', 'Nota', 'Referência', 'Diverge', 'Similaridade', 'Situação', 'Corrigido por'];
+  const cab = ['Estudante', 'Participante', 'C1', 'C2', 'C3', 'C4', 'Soma', 'Condição especial', 'Nota (0 a 10)', `Na disciplina (${fmt(valorDisc())})`, 'Nota de corte', 'Diverge', 'Similaridade', 'Situação', 'Corrigido por'];
   const linhas = linhasResumo().map(l => [l.e.nome, l.e.participante, fmt(l.c1), fmt(l.c2), fmt(l.c3), fmt(l.c4), l.r ? fmt(l.r.soma) : '', l.r ? M.PENALIDADES[l.r.penalidade].rotulo : '',
-    l.r ? fmt(l.r.nota) : '', l.e.referencia ? fmt(l.e.referencia.nota) : '', l.e.divergeDaReferencia ? 'Sim' : '', l.alerta ? 'Sim' : 'Não', STATUS[l.e.status], l.e.corrigidoPor || '']);
+    l.r ? fmt(l.r.nota) : '', l.r && l.e.status === 'finalizada' ? fmt(naDisciplina(l.r.nota)) : '', l.e.referencia ? fmt(l.e.referencia.nota) : '', l.e.divergeDaReferencia ? 'Sim' : '', l.alerta ? 'Sim' : 'Não', STATUS[l.e.status], l.e.corrigidoPor || '']);
   baixar('﻿' + [cab, ...linhas].map(r => r.map(q).join(';')).join('\r\n'), nomeArquivo(`portfolio_${ativ.turma.turma}_${ativ.atividade.titulo}.csv`), 'text/csv;charset=utf-8');
+}
+
+// Arquivo para o Edubox (26/11/2026): Nome;Nota, só as correções finalizadas, com a nota já no valor do portfólio na
+// disciplina (ex.: 3,0) — mesmo modelo da Correção de Provas e da Trilha EAD (UTF-8 com BOM, ponto e 1 casa).
+function baixarEdubox() {
+  const fin = linhasResumo().filter(l => l.e.status === 'finalizada' && l.r).sort((a, b) => a.e.nome.localeCompare(b.e.nome, 'pt-BR'));
+  if (!fin.length) { toast('Nenhuma correção finalizada nesta atividade ainda.', 'erro'); return; }
+  const linhas = ['Nome;Nota', ...fin.map(l => `${String(l.e.nome).replace(/;/g, ' ')};${naDisciplina(l.r.nota).toFixed(1)}`)];
+  baixar('\ufeff' + linhas.join('\r\n') + '\r\n', nomeArquivo(`Edubox_portfolio_${ativ.turma.turma}_${ativ.atividade.titulo}.csv`), 'text/csv;charset=utf-8');
+  const falta = linhasResumo().length - fin.length;
+  toast(`Arquivo com ${fin.length} aluno(s), nota de 0 a ${fmt(valorDisc())}.${falta ? ` ${falta} ainda não finalizado(s) ficaram de fora.` : ''}`);
+}
+function dlgValorDisciplina() {
+  const d = dialogo(`<form method="dialog" class="pf-form">
+    <h2>Quanto o portfólio vale na disciplina</h2>
+    <p class="pf-dica">A correção continua de 0 a 10 (é o que vai para o AVA). Na disciplina, a nota é convertida: nota × valor ÷ 10, com 1 casa. Ex.: valendo 3,0, um 8,0 vira 2,4.</p>
+    <label>Valor (até 10)<input name="valor" type="number" min="0.1" max="10" step="0.1" value="${valorDisc()}" required></label>
+    <div class="pf-dlg-acoes"><button type="button" class="pf-btn" data-fechar>Cancelar</button><button class="pf-btn pf-btn-pri">Salvar</button></div></form>`);
+  d.querySelector('form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try {
+      const r = await post(`${BASE}/atividades/${encodeURIComponent(ativ.atividade.id)}/valor`, { valor: ev.target.valor.value }, 'PUT');
+      ativ.atividade.valorDisciplina = r.valor; toast(r.message); d.close(); renderAba();
+    } catch (e) { toast(e.message, 'erro'); }
+  });
 }
 
 // CSV do Moodle (vírgula, aspas duplas)
@@ -1330,6 +1364,8 @@ function ligarEventos() {
     else if (a === 'ajuda') abrirAjuda();
     else if (a === 'sair-ajuda') sairAjuda();
     else if (a === 'csv') baixarCsvResumo();
+    else if (a === 'edubox') baixarEdubox();
+    else if (a === 'valor-disc') dlgValorDisciplina();
     else if (a === 'planilha-ava') el('pf-planilha').click();
     else if (a === 'imprimir') imprimirRelatorio();
   });
