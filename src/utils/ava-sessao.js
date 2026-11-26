@@ -151,4 +151,4 @@ function lerResultadoImportacao(html) {
     return { erro: erro ? semTags(erro).slice(0, 400) : null, importando: n ? Number(n) : null };
 }
 
-module.exports = { SessaoAva, lerCursos, lerQuestionarios, lerFormImportacao, contarQuestoesNoQuestionario, lerResumoQuestionario, lerResultadoImportacao, semTags };
+module.exports = { SessaoAva, lerCursos, lerQuestionarios, lerFormImportacao, contarQuestoesNoQuestionario, lerResumoQuestionario, lerResultadoImportacao, semTags, RE_NOME_ORBITA };

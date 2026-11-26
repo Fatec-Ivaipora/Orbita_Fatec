@@ -553,6 +553,18 @@ router.post('/envio-ava/agora', async (req, res) => {
             : 'Pedido enviado: o Órbita confere todas as provas no AVA. Pode levar de 5 a 15 minutos.' });
     } catch (e) { erro(res, e); }
 });
+// "Colocar no questionário" (26/11/2026): o agente põe dentro do questionário as questões do Órbita que já estão
+// na pasta da prova no banco do AVA e ainda não estão nele
+router.post('/envio-ava/colocar', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'colocam as questões no questionário do AVA');
+        const id = req.body && req.body.id ? String(req.body.id) : '';
+        if (!id) return res.status(400).json({ error: 'Informe a prova.' });
+        await lerAvaliacao(id);
+        const p = await pedirAoAgente({ tipo: 'colocar', alvo: id, por: quem(req) });
+        res.json({ ...p, message: p.jaNaFila ? 'Esta prova já está na fila do AVA.' : `Pedido enviado: o Órbita coloca as questões dentro do questionário${p.naFrente ? ` (${p.naFrente} pedido(s) na frente)` : ''}.` });
+    } catch (e) { erro(res, e); }
+});
 // dados para montar no navegador o XML só do que está pronto (igual ao /exportar; GIF grande não passa pelo servidor)
 router.get('/envio-ava/:id/exportar', async (req, res) => {
     try {
