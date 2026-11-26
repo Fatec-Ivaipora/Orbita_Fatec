@@ -99,6 +99,12 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Correção de Provas: "Respostas a conferir" leva até o aluno + DISPENSA de disciplina por aluno
+- **Respostas a conferir:** o card do topo (questões com duas marcações) não dizia onde estavam. Agora, quando há alguma, o card é clicável ("ver onde →"): abre a aba Alunos filtrada só em quem tem resposta a conferir, já com o primeiro aluno aberto e rolado até ele; cada aluno mostra o selo "a conferir: questão N". Faixa no topo com "Mostrar todos" para tirar o filtro.
+- **DISPENSA:** aluno que dispensou disciplina faz no simulado só as que precisa. Ao abrir o aluno (prova com 2+ disciplinas e folha já lida/lançada), aparece "Dispensa de disciplina" com um botão DISPENSA por disciplina. Marcando, as questões dela saem do cálculo e só a nota DESTE aluno é recalculada (acertos ÷ questões que ele fez × valor da prova). Fica registrado quem marcou e quando; "desfazer" volta ao normal. Não dá para dispensar todas as disciplinas.
+- **Onde aparece:** questões dispensadas ficam riscadas/apagadas nas respostas do aluno, saem de "Questões que não contaram", de "Respostas a conferir" e das estatísticas das abas Questões e Disciplinas. Planilha: coluna da disciplina com "DISPENSA", coluna "Disciplinas dispensadas", "Questões" passa a ser o total que o aluno fez. O arquivo para o Edubox usa a nota recalculada.
+- **Onde:** rota nova `PUT /api/correcao/avaliacoes/:id/leituras/:i/dispensa` { disciplina, dispensa } e campo `dispensadas` { [disciplina]: { por, em } } na leitura (`correcao_leituras`); `resultado()` no backend e no front ignora as questões dispensadas. Front `correcao-provas/app.js?v=20`, `correcao.css?v=17`.
+
 ### [2026-11-26] Correção de Provas: nota arredondada para inteiro (meio pra cima)
 - **O que mudou:** a nota (acertos ÷ questões × valor da prova) agora é arredondada para número inteiro, com 0,5 subindo: 24,4 → 24; 24,5 → 25. Antes aparecia com 2 casas na tela e na planilha (ex.: 6,67) e com 1 casa no arquivo do Edubox. Agora tela, planilha (Excel) e arquivo para o Edubox mostram a mesma nota.
 - **Onde:** `resultado()` em `src/rotas/correcao-provas.js` (backend, usado na planilha) e `arredNota()` / `resultado()` / `notaEdubox()` em `correcao-provas/app.js` (tela e arquivo do Edubox; `?v=18`). Soma de 1e-9 antes do `Math.round` para um 24,5 que sai da divisão como 24,4999… não descer.

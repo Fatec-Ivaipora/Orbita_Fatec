@@ -25,6 +25,10 @@ let view = 'lista';
 let avaliacoes = null, turmas = null, provasBanco = null;
 let av = null, leituras = {}, podeEditarAv = false;   // avaliação aberta
 let aba = 'alunos', filtroTurma = '', busca = '', abertoAluno = null;
+// soConferir (26/11/2026): clicou em "Respostas a conferir" → a aba Alunos mostra só quem tem duas marcações.
+let soConferir = false;
+// Questões (índices) com duas marcações na folha do aluno — é o que o card "Respostas a conferir" conta.
+const aConferir = (l) => (l && l.respostas ? l.respostas.reduce((s, x, i) => (x === '*' && !dispensou(l, i) ? s.concat(i) : s), []) : []);
 let form = null;                                      // nova avaliação / editar gabarito
 
 const $ = (id) => document.getElementById(id);
@@ -429,19 +433,23 @@ function certaNaFolha(l, i) {
 }
 // Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. Igual ao backend.
 const arredNota = (v) => Math.round(v + 1e-9);
+// Questão de disciplina que o coordenador marcou DISPENSA para este aluno (sai do cálculo da nota dele).
+const dispensou = (l, i) => !!(l && l.dispensadas && av.questoes[i].d && l.dispensadas[av.questoes[i].d]);
 function resultado(l) {
-  const porDisc = {}; let acertos = 0;
+  const porDisc = {}; let acertos = 0, total = 0;
   av.questoes.forEach((q, i) => {
+    if (dispensou(l, i)) return;
+    total++;
     const ok = certaNaFolha(l, i); if (ok) acertos++;
     const x = (porDisc[q.d || ''] = porDisc[q.d || ''] || { acertos: 0, total: 0 }); x.total++; if (ok) x.acertos++;
   });
-  return { acertos, total: av.questoes.length, nota: av.valorTotal ? arredNota(acertos / av.questoes.length * av.valorTotal) : null, porDisc };
+  return { acertos, total, nota: av.valorTotal && total ? arredNota(acertos / total * av.valorTotal) : null, porDisc };
 }
 
 // ---------- AVALIAÇÃO ----------
 async function abrirAvaliacao(id) {
   view = 'av';
-  if (!av || av.id !== id) { av = null; abertoAluno = null; filtroTurma = ''; busca = ''; aba = 'alunos'; }
+  if (!av || av.id !== id) { av = null; abertoAluno = null; filtroTurma = ''; busca = ''; aba = 'alunos'; soConferir = false; }
   $('tela').innerHTML = cabecalho('Avaliação', '', '', true) + '<div class="card cp-vazio">Carregando…</div>';
   try {
     const r = await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(id)}`);
@@ -456,6 +464,7 @@ function renderAvaliacao() {
   const media = res.length ? res.reduce((s, r) => s + r.acertos, 0) / res.length : null;
   const n = av.questoes.length;
   const semGab = av.questoes.filter(q => !q.g).length;
+  const nConf = lidas.reduce((s, a) => s + aConferir(leituras[a.i]).length, 0);
   const kpi = (cls, rot, val, dica) => `<div class="kpi-card ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-hint">${dica}</div></div>`;
   const acoes = `
     <button type="button" class="btn-primary" data-ler="1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Ler folhas</button>
@@ -471,7 +480,8 @@ function renderAvaliacao() {
       ${kpi('kpi-azul', 'Folhas corrigidas', `${lidas.length} de ${av.alunos.length}`, av.alunos.length ? `${pct(lidas.length / av.alunos.length)} da turma` : '')}
       ${kpi('kpi-verde', 'Média de acertos', media === null ? '–' : `${media.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} de ${n}`, media === null ? 'nenhuma folha lida ainda' : `${pct(media / n)} de acerto`)}
       ${kpi('kpi-sem', 'Maior e menor', res.length ? `${Math.max(...res.map(r => r.acertos))} · ${Math.min(...res.map(r => r.acertos))}` : '–', 'acertos entre as folhas lidas')}
-      ${kpi('kpi-perda', 'Respostas a conferir', lidas.reduce((s, a) => s + leituras[a.i].respostas.filter(x => x === '*').length, 0), 'questões com duas marcações')}
+      ${nConf ? `<button type="button" class="kpi-card kpi-perda cp-kpi-acao" data-conferir="1" title="Mostrar os alunos com resposta a conferir"><div class="kpi-label">Respostas a conferir</div><div class="kpi-value">${nConf}</div><div class="kpi-hint">duas marcações · <span class="cp-kpi-link">ver onde →</span></div></button>`
+        : kpi('kpi-perda', 'Respostas a conferir', 0, 'questões com duas marcações')}
     </div>
     <div class="abas cp-abas" role="tablist">
       ${[['alunos', 'Alunos'], ['questoes', 'Questões'], ['disciplinas', 'Disciplinas'], ['gabarito', 'Gabarito']].map(([k, v]) => `<button type="button" class="aba ${aba === k ? 'ativa' : ''}" data-aba="${k}" role="tab" aria-selected="${aba === k}">${v}</button>`).join('')}
@@ -489,7 +499,7 @@ function celulaResp(q, r, i, editavel, l = null) {
   const dupla = l && (l.duplas || {})[i];
   const conta = l ? certaNaFolha(l, i) : acertou(g, r);
   const cons = l && l.consideradas && l.consideradas[i];
-  const cls = cons ? 'certo considerada' : conta ? 'certo' : r === '*' ? 'dupla' : !r ? 'branco' : 'errado';
+  const cls = (l && dispensou(l, i) ? 'dispensa ' : '') + (cons ? 'certo considerada' : conta ? 'certo' : r === '*' ? 'dupla' : !r ? 'branco' : 'errado');
   if (!editavel) return `<span class="cp-resp ${cls}" title="Questão ${i + 1}: ${r === '*' ? `duas marcações${dupla ? ` (${dupla.split('').join(' e ')})` : ''}` : r || 'em branco'} · certa: ${g === 'X' ? 'anulada' : g || '—'}${cons ? ' · considerada certa pelo coordenador' : ''}"><i>${i + 1}</i>${r === '*' ? (dupla ? dupla.split('').join('+') : '⁑') : r || '–'}</span>`;
   return `<label class="cp-resp ${cls}"><i>${i + 1}</i><select data-edq="${i}" aria-label="Resposta da questão ${i + 1}">${['', ...LETRAS.slice(0, av.nAlt).split(''), '*'].map(x => `<option value="${x}" ${x === (r || '') ? 'selected' : ''}>${x === '' ? '–' : x === '*' ? '⁑' : x}</option>`).join('')}</select></label>`;
 }
@@ -500,7 +510,7 @@ function blocoNaoContaram(a, l) {
   av.questoes.forEach((q, i) => {
     const r = l.respostas[i], cons = l.consideradas && l.consideradas[i];
     if (cons) { feitas.push(`<li><b>${i + 1}</b> considerada certa por ${esc(cons.por || '—')} em ${new Date(cons.em).toLocaleDateString('pt-BR')} <button type="button" class="cp-link perigo" data-considerar="${a.i}|${i}|0">desfazer</button></li>`); return; }
-    if (q.g === 'X' || certaNaFolha(l, i)) return;
+    if (q.g === 'X' || dispensou(l, i) || certaNaFolha(l, i)) return;
     const certa = q.g ? `a certa é ${q.g.split('').join(' ou ')}` : 'questão ainda sem gabarito';
     const dupla = (l.duplas || {})[i];
     const motivo = r === '*' ? `marcou ${dupla ? dupla.split('').join(' e ') : 'mais de uma'}${dupla && q.g && [...dupla].some(x => q.g.includes(x)) ? ' (uma delas é a certa)' : ''}` : !r ? 'em branco' : `marcou ${r}`;
@@ -513,6 +523,30 @@ function blocoNaoContaram(a, l) {
     ${feitas.length ? `<div><b>Consideradas certas pelo coordenador</b><ul>${feitas.join('')}</ul></div>` : ''}
   </div>`;
 }
+// DISPENSA por disciplina (26/11/2026): aluno que dispensou a disciplina faz só as que precisa no simulado.
+// O coordenador marca aqui e a nota DESTE aluno é recalculada só com as outras disciplinas.
+const discsAv = () => [...new Set(av.questoes.map(q => q.d || ''))].filter(Boolean);
+function blocoDispensa(a, l) {
+  const ds = discsAv();
+  if (ds.length < 2) return '';
+  if (!l) return '<div class="cp-dispensa"><b>Dispensa de disciplina</b> <small>— lance ou leia a folha deste aluno para poder marcar DISPENSA.</small></div>';
+  return `<div class="cp-dispensa"><b>Dispensa de disciplina</b> <small>— se o aluno dispensou, marque DISPENSA: as questões dela saem e a nota dele é recalculada só com as outras</small>
+    <ul>${ds.map((d, k) => {
+      const x = (l.dispensadas || {})[d];
+      const qs = av.questoes.map((q, i) => (q.d === d ? i + 1 : 0)).filter(Boolean);
+      const faixa = qs.length > 1 && qs[qs.length - 1] - qs[0] === qs.length - 1 ? `questões ${qs[0]} a ${qs[qs.length - 1]}` : `${qs.length > 1 ? 'questões' : 'questão'} ${qs.join(', ')}`;
+      return `<li class="${x ? 'dispensada' : ''}"><span><b>${esc(d)}</b> <small>${faixa}</small>${x ? ` <span class="cp-disp-tag">DISPENSA</span> <small>por ${esc(x.por || '—')} em ${new Date(x.em).toLocaleDateString('pt-BR')}</small>` : ''}</span>
+        ${x ? `<button type="button" class="cp-link perigo" data-dispensa="${a.i}|${k}|0">desfazer</button>` : `<button type="button" class="cp-link" data-dispensa="${a.i}|${k}|1">DISPENSA</button>`}</li>`;
+    }).join('')}</ul></div>`;
+}
+async function dispensar(i, k, on) {
+  const d = discsAv()[k];
+  if (!d) return;
+  try {
+    const r = await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}/leituras/${i}/dispensa`, { method: 'PUT', body: JSON.stringify({ disciplina: d, dispensa: on }) });
+    leituras[i] = r.leitura; toast(r.message); renderAvaliacao();
+  } catch (err) { toast(err.message, 'erro'); }
+}
 async function considerar(i, k, certa) {
   try {
     const r = await apiFetch(`/correcao/avaliacoes/${encodeURIComponent(av.id)}/leituras/${i}/considerar`, { method: 'PUT', body: JSON.stringify({ questao: k, certa }) });
@@ -521,8 +555,8 @@ async function considerar(i, k, certa) {
 }
 function abaAlunos() {
   const ts = av.turmas;
-  const lista = av.alunos.filter(a => (!filtroTurma || a.turmaId === filtroTurma) && (!busca || a.nome.toLowerCase().includes(busca.toLowerCase())));
-  return `<div class="cp-filtros">
+  const lista = av.alunos.filter(a => (!filtroTurma || a.turmaId === filtroTurma) && (!busca || a.nome.toLowerCase().includes(busca.toLowerCase())) && (!soConferir || aConferir(leituras[a.i]).length));
+  return `${soConferir ? `<div class="cp-conf-faixa"><span>Mostrando só ${plural(lista.length, 'aluno', 'alunos')} com resposta a conferir (duas marcações). Abra o aluno: a questão aparece em laranja, e dá para corrigir a resposta ou considerar certa.</span><button type="button" class="cp-link" data-conferir="0">Mostrar todos</button></div>` : ''}<div class="cp-filtros">
       ${ts.length > 1 ? `<select id="fl-turma" aria-label="Turma"><option value="">Todas as turmas</option>${ts.map(t => `<option value="${esc(t.id)}" ${filtroTurma === t.id ? 'selected' : ''}>${esc(nomeTurma(t))}</option>`).join('')}</select>` : ''}
       <input id="fl-busca" type="search" placeholder="Buscar aluno" value="${esc(busca)}" aria-label="Buscar aluno">
       <button type="button" class="btn-secondary" data-add-aluno="1">+ Adicionar aluno</button>
@@ -530,13 +564,15 @@ function abaAlunos() {
     <div class="cp-alunos">${lista.map(a => {
       const l = leituras[a.i], r = l ? resultado(l) : null;
       const aberto = abertoAluno === a.i;
-      return `<article class="cp-aluno ${l ? 'lido' : ''}">
+      const conf = aConferir(l);
+      return `<article class="cp-aluno ${l ? 'lido' : ''}${conf.length ? ' conferir' : ''}" id="cp-aluno-${a.i}">
         <button type="button" class="cp-aluno-cab" data-aluno="${a.i}" aria-expanded="${aberto}">
-          <span class="cp-aluno-nome">${esc(titulo(a.nome))}${a.extra ? ' <span class="cp-extra">adicionado</span>' : ''}<small>${esc(nomeTurma(turmaDe(a)))} · folha ${codigoLegivel(av.codigo, a.i)}</small></span>
+          <span class="cp-aluno-nome">${esc(titulo(a.nome))}${a.extra ? ' <span class="cp-extra">adicionado</span>' : ''}<small>${esc(nomeTurma(turmaDe(a)))} · folha ${codigoLegivel(av.codigo, a.i)}</small>${l && l.dispensadas && Object.keys(l.dispensadas).length ? `<span class="cp-disp-tag">dispensa: ${esc(Object.keys(l.dispensadas).join(', '))}</span>` : ''}${conf.length ? `<span class="cp-conf-badge">a conferir: ${conf.length > 1 ? 'questões' : 'questão'} ${conf.map(i => i + 1).join(', ')}</span>` : ''}</span>
           ${r ? `<span class="cp-nota"><b>${r.acertos}</b>/${r.total}${r.nota !== null ? `<small>nota ${r.nota.toLocaleString('pt-BR')}</small>` : `<small>${pct(r.acertos / r.total)}</small>`}</span>` : '<span class="cp-pend">sem folha lida</span>'}
         </button>
         ${aberto ? `<div class="cp-aluno-det">
           <div class="cp-resps">${av.questoes.map((q, i) => celulaResp(q, l ? l.respostas[i] : '', i, true, l)).join('')}</div>
+          ${blocoDispensa(a, l)}
           ${l ? blocoNaoContaram(a, l) : ''}
           ${r && Object.keys(r.porDisc).filter(Boolean).length > 1 ? `<div class="cp-pdisc">${Object.entries(r.porDisc).filter(([d]) => d).map(([d, x]) => `<span><b>${x.acertos}/${x.total}</b> ${esc(d)}</span>`).join('')}</div>` : ''}
           <div class="cp-aluno-pe">
@@ -552,16 +588,29 @@ function abaAlunos() {
       </article>`;
     }).join('') || '<div class="cp-vazio">Nenhum aluno encontrado.</div>'}</div>`;
 }
+// Card "Respostas a conferir" → aba Alunos filtrada em quem tem duas marcações, já com o primeiro aberto.
+function irParaConferir(ligar) {
+  soConferir = ligar; aba = 'alunos';
+  if (ligar) {
+    busca = ''; filtroTurma = '';
+    const prim = av.alunos.find(x => aConferir(leituras[x.i]).length);
+    abertoAluno = prim ? prim.i : null;
+  }
+  renderAvaliacao();
+  const alvo = (ligar && abertoAluno !== null && document.getElementById(`cp-aluno-${abertoAluno}`)) || $('aba-corpo');
+  if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function abaQuestoes() {
   const lidas = av.alunos.map(a => leituras[a.i]).filter(Boolean);
   if (!lidas.length) return '<div class="cp-vazio">Leia as folhas para ver o desempenho de cada questão.</div>';
   return `<p class="cp-dica">Questões em vermelho: menos da metade acertou — vale rever o enunciado ou o conteúdo.</p>
   <div class="cp-tab-wrap"><table class="data-table cp-tab"><thead><tr><th>Nº</th><th>Disciplina</th><th>Certa</th><th>Acertos</th><th>Como responderam</th></tr></thead><tbody>${av.questoes.map((q, i) => {
-    const cont = {}; lidas.forEach(l => { const r = l.respostas[i] || '–'; cont[r] = (cont[r] || 0) + 1; });
-    const ok = lidas.filter(l => certaNaFolha(l, i)).length, p = ok / lidas.length;
+    const fizeram = lidas.filter(l => !dispensou(l, i));
+    const cont = {}; fizeram.forEach(l => { const r = l.respostas[i] || '–'; cont[r] = (cont[r] || 0) + 1; });
+    const ok = fizeram.filter(l => certaNaFolha(l, i)).length, p = fizeram.length ? ok / fizeram.length : 0;
     const consid = lidas.filter(l => l.consideradas && l.consideradas[i]).length;
     return `<tr class="${p < 0.5 ? 'ruim' : ''}"><td class="num">${i + 1}</td><td>${esc(q.d || '—')}</td><td><b>${q.g === 'X' ? 'anulada' : esc(q.g || '—')}</b></td>
-      <td><div class="cp-barra"><span style="width:${p * 100}%"></span></div><small>${pct(p)} (${ok}/${lidas.length})${consid ? ` · ${consid} considerada${consid > 1 ? 's' : ''} pelo coordenador` : ''}</small></td>
+      <td><div class="cp-barra"><span style="width:${p * 100}%"></span></div><small>${pct(p)} (${ok}/${fizeram.length})${lidas.length - fizeram.length ? ` · ${lidas.length - fizeram.length} dispensa` : ''}${consid ? ` · ${consid} considerada${consid > 1 ? 's' : ''} pelo coordenador` : ''}</small></td>
       <td class="cp-dist">${[...LETRAS.slice(0, av.nAlt).split(''), '–', '*'].filter(x => cont[x]).map(x => `<span class="${q.g.includes(x) ? 'certa' : ''}">${x === '*' ? '⁑' : x} ${cont[x]}</span>`).join('')}</td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
@@ -572,7 +621,7 @@ function abaDisciplinas() {
   if (!discs.length) return '<div class="cp-vazio">Esta avaliação não tem disciplinas definidas. Dá para definir em <b>Gabarito</b>.</div>';
   return `<div class="cp-discs">${discs.map(f => {
     let ok = 0, tot = 0;
-    lidas.forEach(l => { for (let i = f.de - 1; i < f.ate; i++) { tot++; if (certaNaFolha(l, i)) ok++; } });
+    lidas.forEach(l => { for (let i = f.de - 1; i < f.ate; i++) { if (dispensou(l, i)) continue; tot++; if (certaNaFolha(l, i)) ok++; } });
     const p = tot ? ok / tot : 0;
     return `<div class="cp-disc"><div><b>${esc(f.nome)}</b><small>questões ${f.de === f.ate ? f.de : `${f.de} a ${f.ate}`}</small></div><div class="cp-barra ${p < 0.5 ? 'ruim' : ''}"><span style="width:${p * 100}%"></span></div><b class="cp-disc-p">${pct(p)}</b></div>`;
   }).join('')}</div>`;
@@ -661,7 +710,7 @@ function notaEdubox(a) {
   const l = leituras[a.i];
   if (!l || !av.valorTotal) return 0;
   const r = resultado(l);
-  return arredNota(r.acertos / r.total * Number(av.valorTotal));
+  return r.total ? arredNota(r.acertos / r.total * Number(av.valorTotal)) : 0;
 }
 function gruposEdubox() {
   const porTurma = new Map();
@@ -962,7 +1011,9 @@ function wireEventos() {
     if (t.closest('#f-salvar')) { salvarNova(t.closest('#f-salvar')); return; }
     // avaliação
     const a = t.closest('[data-aba]'); if (a) { aba = a.dataset.aba; renderAvaliacao(); return; }
+    const cf = t.closest('[data-conferir]'); if (cf) { irParaConferir(cf.dataset.conferir === '1'); return; }
     const al = t.closest('[data-aluno]'); if (al) { const i = Number(al.dataset.aluno); abertoAluno = abertoAluno === i ? null : i; $('aba-corpo').innerHTML = corpoAba(); return; }
+    const dz = t.closest('[data-dispensa]'); if (dz) { const [i, k, c] = dz.dataset.dispensa.split('|').map(Number); dispensar(i, k, !!c); return; }
     const cz = t.closest('[data-considerar]'); if (cz) { const [i, k, c] = cz.dataset.considerar.split('|').map(Number); considerar(i, k, !!c); return; }
     const sa = t.closest('[data-salvar-aluno]'); if (sa) { salvarAluno(Number(sa.dataset.salvarAluno), sa); return; }
     const ap = t.closest('[data-apagar]'); if (ap) { apagarLeitura(Number(ap.dataset.apagar)); return; }
