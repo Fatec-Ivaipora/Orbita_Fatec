@@ -67,7 +67,9 @@ function resultado(av, respostasOuLeitura) {
         x.total++; if (ok) x.acertos++;
     });
     const total = av.questoes.length;
-    const nota = av.valorTotal ? Math.round(acertos / total * av.valorTotal * 100) / 100 : null;
+    // Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. O 1e-9 evita
+    // que um 24,5 que sai da divisão como 24,4999999 desça pra 24.
+    const nota = av.valorTotal ? Math.round(acertos / total * av.valorTotal + 1e-9) : null;
     return { acertos, total, nota, porDisc };
 }
 

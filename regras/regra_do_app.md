@@ -99,6 +99,12 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Correção de Provas: nota arredondada para inteiro (meio pra cima)
+- **O que mudou:** a nota (acertos ÷ questões × valor da prova) agora é arredondada para número inteiro, com 0,5 subindo: 24,4 → 24; 24,5 → 25. Antes aparecia com 2 casas na tela e na planilha (ex.: 6,67) e com 1 casa no arquivo do Edubox. Agora tela, planilha (Excel) e arquivo para o Edubox mostram a mesma nota.
+- **Onde:** `resultado()` em `src/rotas/correcao-provas.js` (backend, usado na planilha) e `arredNota()` / `resultado()` / `notaEdubox()` em `correcao-provas/app.js` (tela e arquivo do Edubox; `?v=18`). Soma de 1e-9 antes do `Math.round` para um 24,5 que sai da divisão como 24,4999… não descer.
+- **Arquivo do Edubox:** o formato não mudou (`Nome;Nota`, ponto, 1 casa), só o valor, que passa a ser inteiro (ex.: `25.0`).
+- **Dados:** a nota não é gravada no Firestore, é calculada na hora; as avaliações existentes passam a mostrar a nota arredondada sem migração.
+
 ### [2026-11-25] Banco MED › Envio ao AVA: o professor termina no Órbita e um agente leva as questões para o banco do AVA; a secretaria acompanha
 - Autor: Claude Code (pedido do Suporte AVA)
 - **Novo processo.** Antes o professor baixava o XML das questões dele, importava no AVA e marcava "Subi no banco do AVA". Os professores estavam se confundindo. Agora:

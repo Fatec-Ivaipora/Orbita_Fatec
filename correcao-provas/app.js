@@ -427,13 +427,15 @@ function certaNaFolha(l, i) {
   if (acertou(q.g, resp)) return true;
   return !!(av.aceitarDupla && resp === '*' && q.g && q.g !== 'X' && [...String((l.duplas || {})[i] || '')].some(x => q.g.includes(x)));
 }
+// Nota arredondada para inteiro, meio pra cima (26/11/2026): 24,4 → 24; 24,5 → 25. Igual ao backend.
+const arredNota = (v) => Math.round(v + 1e-9);
 function resultado(l) {
   const porDisc = {}; let acertos = 0;
   av.questoes.forEach((q, i) => {
     const ok = certaNaFolha(l, i); if (ok) acertos++;
     const x = (porDisc[q.d || ''] = porDisc[q.d || ''] || { acertos: 0, total: 0 }); x.total++; if (ok) x.acertos++;
   });
-  return { acertos, total: av.questoes.length, nota: av.valorTotal ? Math.round(acertos / av.questoes.length * av.valorTotal * 100) / 100 : null, porDisc };
+  return { acertos, total: av.questoes.length, nota: av.valorTotal ? arredNota(acertos / av.questoes.length * av.valorTotal) : null, porDisc };
 }
 
 // ---------- AVALIAÇÃO ----------
@@ -651,7 +653,7 @@ async function baixarPlanilha(btn) {
 
 // ---------- ARQUIVO PARA O EDUBOX (04/11/2026) ----------
 // Mesmo modelo da Trilha EAD (docencia/trilha-ead): CSV UTF-8 com BOM, cabeçalho "Nome;Nota", uma
-// linha por aluno, nota com ponto e 1 casa (o Edubox guarda numeric(3,1)), UM ARQUIVO POR TURMA
+// linha por aluno, nota inteira (arredondada) escrita com ponto e 1 casa (o Edubox guarda numeric(3,1)), UM ARQUIVO POR TURMA
 // (= diário do Edubox; os alunos vêm do CADD, com o nome igual ao do Edubox), em ordem alfabética.
 // Quem não teve folha lida sai com 0 — avisado antes, como a Trilha faz com quem não fez nada no AVA.
 const SEM_TURMA = '__sem_turma__';
@@ -659,7 +661,7 @@ function notaEdubox(a) {
   const l = leituras[a.i];
   if (!l || !av.valorTotal) return 0;
   const r = resultado(l);
-  return Math.round(r.acertos / r.total * Number(av.valorTotal) * 10) / 10;
+  return arredNota(r.acertos / r.total * Number(av.valorTotal));
 }
 function gruposEdubox() {
   const porTurma = new Map();
@@ -687,7 +689,7 @@ function dialogoEdubox() {
     <p class="cp-dica">Uma linha por aluno: <b>Nome;Nota</b>, com ponto (ex.: 1.5). Mesmo modelo do arquivo da Trilha EAD. Um arquivo por turma (diário do Edubox), com os alunos da turma.</p>
     ${grupos.filter(g => g.turma).length > 1 ? `<div class="cp-aviso-banco">Esta prova foi aplicada a <b>${grupos.filter(g => g.turma).length} períodos juntos</b>. No Edubox cada período é um diário separado, então sai <b>um arquivo por período</b> — os alunos não se misturam. Importe cada arquivo no diário do período dele.</div>` : ''}
     ${semValor ? '<div class="cp-alerta">Esta avaliação está sem <b>Valor da prova</b>, então não há nota pra lançar. Preencha o Valor na aba <b>Gabarito</b> e volte aqui.</div>'
-      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), com 1 casa.</p>`}
+      : `<p class="cp-dica">Nota = acertos ÷ ${av.questoes.length} questões × ${String(av.valorTotal).replace('.', ',')} (valor da prova), arredondada para inteiro (24,4 → 24; 24,5 → 25).</p>`}
     <div class="cp-edubox-lista">
       ${grupos.map(g => {
         const sem = g.alunos.filter(a => !leituras[a.i]).length;
