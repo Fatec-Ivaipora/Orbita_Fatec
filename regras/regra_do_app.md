@@ -99,6 +99,20 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Portfólio MED: valor do portfólio na disciplina (3,0) e arquivo para o Edubox
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/portfolio-valor-disciplina
+- Arquivos alterados:
+  - `src/rotas/portfolio-med.js`: `PUT /atividades/:id/valor` (só coordenação, de 0,1 até 10) grava `atividade.valorDisciplina`.
+  - `medicina/portfolio/app.js` (v=9):
+    - valor padrão 3,0 (SCIC), que a coordenação pode mudar no Resumo;
+    - a faixa da correção mostra "= X de 3,0 na disciplina";
+    - o Resumo e a planilha ganham a coluna "Na disciplina";
+    - botão **Arquivo para o Edubox** (Nome;Nota, só finalizadas, ponto e 1 casa).
+- Tipo: Melhoria
+- Motivo: no AVA a Tarefa vale 10,0 (100%) e recebe a nota da matriz de 0 a 10. Na disciplina, o portfólio vale 3,0. Nota na disciplina = nota × valor ÷ 10, com 1 casa e meio para cima (8,0 → 2,4).
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Portfólio MED: nota de corte lida pelo Claude fica guardada
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/portfolio-nota-corte-claude

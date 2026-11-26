@@ -469,6 +469,19 @@ router.get('/ava/tarefas', async (req, res) => {
 });
 
 // PUT /atividades/:id/ava { cursoId, tarefaId } — liga a atividade à Tarefa do AVA
+// Valor do portfólio na disciplina (26/11/2026): a matriz dá 0 a 10 (e o AVA recebe 0 a 10), mas na nota da
+// disciplina o portfólio vale menos — no SCIC 2026.2, 3,0. Nota na disciplina = nota da matriz × valor ÷ 10, com 1 casa.
+router.put('/atividades/:id/valor', async (req, res) => {
+    try {
+        if (!podeEditar(req.user)) throw falha(403, 'Só a coordenação define quanto o portfólio vale.');
+        const { atividade } = await lerAtividade(req, req.params.id);
+        const valor = Math.round(Number(String((req.body || {}).valor).replace(',', '.')) * 10) / 10;
+        if (!(valor > 0) || valor > 10) throw falha(400, 'O valor do portfólio na disciplina vai de 0,1 até 10.');
+        await db.collection(COL_ATIV).doc(atividade.id).update({ valorDisciplina: valor, valorDisciplinaPor: quem(req), valorDisciplinaEm: agora() });
+        res.json({ valor, message: `O portfólio vale ${String(valor).replace('.', ',')} na disciplina.` });
+    } catch (e) { erro(res, e); }
+});
+
 router.put('/atividades/:id/ava', async (req, res) => {
     try {
         exigeEditor(req);
