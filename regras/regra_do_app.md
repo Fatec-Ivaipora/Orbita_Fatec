@@ -99,10 +99,10 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
-### [2026-11-26] Correção de Provas: nota com 1 casa na escala do Edubox (corrige o arredondamento para inteiro) e Valor da prova até 10
+### [2026-11-26] Correção de Provas: nota com 1 casa na escala do Edubox (corrige o arredondamento para inteiro) e teto do Valor por tipo (simulado 2,0; bimestral 5,0)
 - **Por quê:** no Edubox 10 = 100% e ele recusa nota acima de 10; o simulado vale 2,0. O arredondamento para inteiro (entrada logo abaixo) estava errado para essa escala (1,55 viraria 2). A importação de notas da Fisio deu "Nota inválida" porque os simulados estavam com Valor 20 (deveria ser 2).
-- **O que mudou:** nota = acertos ÷ questões × valor da prova, com **1 casa, meio pra cima** (2,44 → 2,4; 2,45 → 2,5) — tela, planilha e arquivo do Edubox. **Valor da prova vai até 10**: a tela limita e o servidor recusa acima disso (POST/PUT de avaliação), com a mensagem "simulado vale 2,0 — não 20". A tela do arquivo do Edubox avisa se uma avaliação antiga estiver com valor acima de 10.
-- **Onde:** `resultado()` + `VALOR_MAX` em `src/rotas/correcao-provas.js`; `arredNota()` e campos de valor em `correcao-provas/app.js?v=21`.
+- **O que mudou:** nota = acertos ÷ questões × valor da prova, com **1 casa, meio pra cima** (2,44 → 2,4; 2,45 → 2,5) — tela, planilha e arquivo do Edubox. **Teto do Valor da prova por tipo:** simulado até **2,0**, prova bimestral até **5,0**, demais tipos até 10 (máximo do Edubox). A tela mostra o teto no campo e o servidor recusa acima dele (POST/PUT de avaliação; no PUT vale o tipo e o valor finais). A tela do arquivo do Edubox avisa se uma avaliação antiga estiver acima do teto.
+- **Onde:** `resultado()` + `VALOR_MAX`/`valorMax()` em `src/rotas/correcao-provas.js`; `arredNota()` e campos de valor em `correcao-provas/app.js?v=21`.
 
 ### [2026-11-26] Correção de Provas: "Respostas a conferir" leva até o aluno + DISPENSA de disciplina por aluno
 - **Respostas a conferir:** o card do topo (questões com duas marcações) não dizia onde estavam. Agora, quando há alguma, o card é clicável ("ver onde →"): abre a aba Alunos filtrada só em quem tem resposta a conferir, já com o primeiro aluno aberto e rolado até ele; cada aluno mostra o selo "a conferir: questão N". Faixa no topo com "Mostrar todos" para tirar o filtro.
