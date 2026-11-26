@@ -99,6 +99,19 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Automação AVA / Levantamento EAD: "Estudos de Arquitetura e Urbanismo" não é EAD
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/ava-estudos-arq-nao-ead
+- Arquivos alterados:
+  - `src/rotas/automacao-ava.js`: lista `NAO_EAD` (por nome, sem acento e sem espaço duplo). A disciplina sai da lista de EAD do semestre e das salas a criar, mesmo marcada "A Distância" no Edubox.
+- Dados (26/11, fora do código):
+  - Levantamento EAD / Aulas EAD: apagado `ead_aulas_disc/2027.1__arquitetura-urbanismo__estudo-arquitetura-urbanismo__1`, sem gravação marcada;
+  - backup em `CLAUDE\Backups\ead_aulas_disc_estudos_arquitetura_2026-11-26.json`;
+  - registro da exclusão em `ead_aulas_alteracoes`, para o aviso do T.I.
+- Tipo: Correção
+- Motivo: no Edubox ela é "A Distância", mas tem 20 h de EAD e 60 h de extensão (códigos 6039 e 6712) e não é sala EAD.
+- Como reverter: reverter o commit; para voltar ao Levantamento, recriar pelo backup.
+
 ### [2026-11-26] Usuários: ADM troca o e-mail de login
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/usuarios-trocar-email
