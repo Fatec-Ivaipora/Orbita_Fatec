@@ -306,8 +306,8 @@ function renderAba() {
     <thead><tr><th>Estudante</th><th>Arquivo</th><th>Situação</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
     <tbody>${entregas.map(e => {
       const avisos = [];
-      if (e.semTexto) avisos.push('<span class="pf-av pf-av-crit">PDF sem texto (escaneado?)</span>');
-      if ((e.naoPdf || []).length) avisos.push('<span class="pf-av pf-av-alerta">arquivo não PDF</span>');
+      if (e.semTexto) avisos.push('<span class="pf-av pf-av-crit">sem texto (escaneado ou foto?)</span>');
+      if ((e.naoPdf || []).length) avisos.push('<span class="pf-av pf-av-alerta" title="Formato que o Órbita não lê (ex.: .doc antigo). Baixe para abrir.">arquivo sem leitura</span>');
       if (e.alteradoAposCorrecao) avisos.push('<span class="pf-av pf-av-alerta">reenviado após a correção</span>');
       if (comAlerta(e.id)) avisos.push('<span class="pf-av pf-av-crit">similaridade</span>');
       if (e.resultado && e.resultado.penalidade !== 'nenhuma') avisos.push(`<span class="pf-av">${esc(M.PENALIDADES[e.resultado.penalidade].rotulo)}</span>`);
@@ -344,6 +344,105 @@ async function textoDoPdf(bytes) {
   return { texto: partes.join('\n\n'), paginas: doc.numPages };
 }
 
+// ---------- outros formatos além de PDF (26/11/2026) ----------
+// Tudo no navegador, como o PDF (nada vai para serviço externo). Word/LibreOffice/PowerPoint são ZIP com XML dentro:
+// o JSZip (já carregado para o ZIP do AVA) abre e o texto sai dos parágrafos. Imagem: mostra, sem texto (não há OCR).
+// .doc antigo (binário) não é lido com segurança: fica para baixar, com o aviso de pedir .docx ou PDF.
+// → { tipo: 'pdf'|'documento'|'imagem'|'baixar', texto, paginas, visual: { nome, url, tipo, html } }
+const extensao = (nome) => (String(nome).toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
+const MIME_IMAGEM = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+const ZIP_ESCRITORIO = ['docx', 'odt', 'pptx', 'odp', 'docm', 'dotx', 'ott'];
+function desfazerEntidades(s) {
+  return String(s).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+// parágrafos de um XML do Office/LibreOffice: cada bloco do reBloco vira uma linha; o texto vem só das tags de texto
+function paragrafosXml(xml, reBloco, reTexto, trocas = []) {
+  const out = [];
+  for (let bloco of String(xml).match(reBloco) || []) {
+    trocas.forEach(([re, por]) => { bloco = bloco.replace(re, por); });
+    const t = (bloco.match(reTexto) || []).map(x => x.replace(/<[^>]+>/g, '')).join('');
+    out.push(desfazerEntidades(t).replace(/[ \t]+/g, ' ').trim());
+  }
+  return out;
+}
+async function textoDoEscritorio(ext, bytes) {
+  const zip = await window.JSZip.loadAsync(bytes);
+  const ler = async (n) => (zip.file(n) ? zip.file(n).async('string') : '');
+  if (['docx', 'docm', 'dotx'].includes(ext)) {
+    const xml = await ler('word/document.xml');
+    if (!xml) throw new Error('não achei o texto dentro do Word');
+    const ps = paragrafosXml(xml, /<w:p[\s>][\s\S]*?<\/w:p>/g, /<w:t[\s>][^<]*<\/w:t>|<w:t>[^<]*<\/w:t>|\u0001/g, [[/<w:tab\/>/g, '<w:t> </w:t>'], [/<w:br\/>/g, '\u0001']])
+      .map(p => p.replace(/\u0001/g, '\n'));
+    const pags = parseInt(((await ler('docProps/app.xml')).match(/<Pages>(\d+)<\/Pages>/) || [])[1], 10) || 0;
+    return { linhas: ps, paginas: pags };
+  }
+  if (ext === 'pptx') {
+    const slides = Object.keys(zip.files).map(n => [n, Number((n.match(/^ppt\/slides\/slide(\d+)\.xml$/) || [])[1])]).filter(([, k]) => k).sort((a, b) => a[1] - b[1]);
+    const linhas = [];
+    for (const [n, k] of slides) {
+      linhas.push(`[[p.${k}]]`);
+      linhas.push(...paragrafosXml(await ler(n), /<a:p>[\s\S]*?<\/a:p>/g, /<a:t>[^<]*<\/a:t>/g));
+    }
+    return { linhas, paginas: slides.length };
+  }
+  // ODT / ODP / OTT (LibreOffice): content.xml, parágrafos text:p e títulos text:h
+  const xml = await ler('content.xml');
+  if (!xml) throw new Error('não achei o texto dentro do arquivo do LibreOffice');
+  const corpo = xml.replace(/<text:s\/>|<text:s [^>]*\/>/g, ' ').replace(/<text:tab\/>/g, ' ').replace(/<text:line-break\/>/g, '\n');
+  const linhas = [];
+  let pag = 0;
+  for (const m of corpo.match(/<draw:page\b|<text:(p|h)\b[^>]*>[\s\S]*?<\/text:\1>|<text:(p|h)\b[^>]*\/>/g) || []) {
+    if (m.startsWith('<draw:page')) { pag++; linhas.push(`[[p.${pag}]]`); continue; }
+    linhas.push(desfazerEntidades(m.replace(/<[^>]+>/g, '')).replace(/[ \t]+/g, ' ').trim());
+  }
+  return { linhas, paginas: pag };
+}
+// tira os grupos de cabeçalho do RTF (fontes, cores, estilos, info), que têm chaves dentro de chaves
+function semCabecalhoRtf(s) {
+  let out = '', i = 0;
+  while (i < s.length) {
+    const m = /^\{\\(?:\*\\)?(fonttbl|colortbl|stylesheet|info|listtable|listoverridetable|generator|themedata|colorschememapping|latentstyles|datastore|xmlnstbl|rsidtbl|pgdsctbl)\b/.exec(s.slice(i, i + 40));
+    if (m) { let nivel = 0; do { if (s[i] === '{') nivel++; else if (s[i] === '}') nivel--; i++; } while (i < s.length && nivel > 0); continue; }
+    out += s[i++];
+  }
+  return out;
+}
+function textoDoRtf(s) {
+  return semCabecalhoRtf(s).replace(/\\par[d]?\b ?/g, '\n').replace(/\\'([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\u(-?\d+)\??/g, (_, n) => String.fromCharCode((Number(n) + 65536) % 65536))
+    .replace(/\{\\\*[^{}]*\}/g, '').replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '').replace(/[ \t]+/g, ' ').trim();
+}
+function textoSimples(bytes) {
+  const utf = new TextDecoder('utf-8').decode(bytes);
+  return utf.includes('\uFFFD') ? new TextDecoder('windows-1252').decode(bytes) : utf;
+}
+async function lerArquivo(nome, bytes, mime = '') {
+  const ext = extensao(nome);
+  const url = (tipo) => URL.createObjectURL(new Blob([bytes], { type: tipo || mime || 'application/octet-stream' }));
+  const documento = (linhas, paginas) => {
+    const texto = linhas.join('\n');
+    const html = linhas.map(l => (/^\[\[p\.\d+\]\]$/.test(l) ? `<div class="pf-pag">${esc(l.replace(/\[\[p\.(\d+)\]\]/, 'slide/página $1'))}</div>` : l ? `<p>${esc(l).replace(/\n/g, '<br>')}</p>` : '')).join('');
+    return { tipo: 'documento', texto, paginas, visual: { nome, url: url(), tipo: 'documento', html } };
+  };
+  if (ext === 'pdf' || /pdf/.test(mime)) {
+    const r = await textoDoPdf(bytes.slice());
+    return { tipo: 'pdf', texto: r.texto, paginas: r.paginas, visual: { nome, url: url('application/pdf'), tipo: 'pdf' } };
+  }
+  if (ZIP_ESCRITORIO.includes(ext)) { const r = await textoDoEscritorio(ext, bytes); return documento(r.linhas, r.paginas); }
+  if (['txt', 'md', 'csv'].includes(ext)) return documento(textoSimples(bytes).split(/\r?\n/), 0);
+  if (ext === 'rtf') return documento(textoDoRtf(textoSimples(bytes)).split('\n'), 0);
+  if (['html', 'htm'].includes(ext)) {
+    const d = new DOMParser().parseFromString(textoSimples(bytes), 'text/html');
+    return documento(String((d.body && (d.body.innerText || d.body.textContent)) || '').split(/\n+/), 0);
+  }
+  if (MIME_IMAGEM[ext] || /^image\//.test(mime)) return { tipo: 'imagem', texto: '', paginas: 1, visual: { nome, url: url(MIME_IMAGEM[ext] || mime), tipo: 'imagem' } };
+  return { tipo: 'baixar', texto: '', paginas: 0, visual: { nome, url: url(), tipo: 'baixar', motivo: ext === 'doc' ? 'Word antigo (.doc): peça ao aluno em .docx ou PDF' : '' } };
+}
+const motivoErro = (nome, e) => (/invalid pdf|missing pdf|unexpected end/i.test(e.message)
+  ? 'o PDF está incompleto ou corrompido no próprio arquivo (o envio pode ter sido interrompido). Peça ao aluno para enviar de novo.'
+  : /zip|central directory|end of data/i.test(e.message) ? `o arquivo ${extensao(nome).toUpperCase()} está corrompido. Peça ao aluno para enviar de novo.` : e.message);
+
 async function importarZip(arquivo) {
   if (!window.JSZip || !window.pdfjsLib) { toast('As bibliotecas de leitura ainda estão carregando. Tente de novo em alguns segundos.', 'erro'); return; }
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -376,22 +475,19 @@ async function importarZip(arquivo) {
     let paginas = 0;
     for (const it of g.itens) {
       arquivos.push(it.arquivo);
-      if (/\.pdf$/i.test(it.arquivo)) {
-        try {
-          const bytes = await it.ent.async('uint8array');
-          urls.push({ nome: it.arquivo, url: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) });
-          const r = await textoDoPdf(bytes.slice());
-          textos.push(r.texto); paginas += r.paginas;
-        } catch (e) { erros.push(`${g.nome}: ${it.arquivo} — PDF ilegível ou corrompido`); }
-      } else if (it.plugin === 'onlinetext' || /\.html?$/i.test(it.arquivo)) {
+      if (it.plugin === 'onlinetext') {
         const h = await it.ent.async('string');
         const d = new DOMParser().parseFromString(h, 'text/html');
         textos.push(d.body ? d.body.innerText || d.body.textContent : '');
-      } else {
-        naoPdf.push(it.arquivo);
-        const blob = await it.ent.async('blob');
-        urls.push({ nome: it.arquivo, url: URL.createObjectURL(blob), naoPdf: true });
+        continue;
       }
+      try {
+        const r = await lerArquivo(it.arquivo, await it.ent.async('uint8array'));
+        urls.push(r.visual);
+        if (r.texto) textos.push(r.texto);
+        paginas += r.paginas || 0;
+        if (r.tipo === 'baixar') naoPdf.push(it.arquivo);
+      } catch (e) { erros.push(`${g.nome}: ${it.arquivo} — ${motivoErro(it.arquivo, e)}`); }
     }
     const texto = textos.join('\n\n');
     try {
@@ -470,7 +566,7 @@ function dlgLigarAva() {
 
 // mesma leitura do ZIP, mas os arquivos vêm do AVA pelo Órbita
 async function buscarEntregasAva() {
-  if (!window.pdfjsLib) { toast('A biblioteca de leitura de PDF ainda está carregando. Tente de novo em alguns segundos.', 'erro'); return; }
+  if (!window.pdfjsLib || !window.JSZip) { toast('As bibliotecas de leitura ainda estão carregando. Tente de novo em alguns segundos.', 'erro'); return; }
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   const caixa = el('pf-import');
   caixa.hidden = false;
@@ -491,14 +587,14 @@ async function buscarEntregasAva() {
       arquivos.push(a.nome);
       try {
         const blob = await arquivoDoAva(a.caminho);
-        const ehPdf = /\.pdf$/i.test(a.nome) || /pdf/.test(a.tipo);
-        urls.push({ nome: a.nome, url: URL.createObjectURL(blob), naoPdf: !ehPdf });
-        if (ehPdf) { const t = await textoDoPdf(new Uint8Array(await blob.arrayBuffer())); textos.push(t.texto); paginas += t.paginas; }
-        else naoPdf.push(a.nome);
+        const r = await lerArquivo(a.nome, new Uint8Array(await blob.arrayBuffer()), a.tipo || blob.type);
+        urls.push(r.visual);
+        if (r.texto) textos.push(r.texto);
+        paginas += r.paginas || 0;
+        if (r.tipo === 'baixar') naoPdf.push(a.nome);
       } catch (e) {
         // pdf.js: "Invalid PDF structure" = arquivo cortado/corrompido já no AVA (ex.: envio interrompido)
-        const m = /invalid pdf|missing pdf|unexpected end/i.test(e.message) ? 'o PDF está incompleto ou corrompido no próprio AVA (o envio pode ter sido interrompido). Peça ao aluno para enviar de novo.' : e.message;
-        erros.push(`${it.nome}: ${a.nome} — ${m}`);
+        erros.push(`${it.nome}: ${a.nome} — ${motivoErro(a.nome, e)}`);
       }
     }
     const texto = textos.join('\n\n');
@@ -524,7 +620,8 @@ async function carregarPdfsAva(entrega) {
   const urls = [];
   for (const a of entrega.avaArquivos || []) {
     const blob = await arquivoDoAva(a.caminho);
-    urls.push({ nome: a.nome, url: URL.createObjectURL(blob), naoPdf: !/\.pdf$/i.test(a.nome) });
+    try { urls.push((await lerArquivo(a.nome, new Uint8Array(await blob.arrayBuffer()), blob.type)).visual); }
+    catch (e) { urls.push({ nome: a.nome, url: URL.createObjectURL(blob), tipo: 'baixar', motivo: motivoErro(a.nome, e) }); }
   }
   pdfs.set(chavePdf(entrega), urls);
 }
@@ -762,6 +859,8 @@ async function modoLeitura(url) {
   if (ov.requestFullscreen) ov.requestFullscreen().then(() => { if (!fechado) document.addEventListener('fullscreenchange', saiuTela); }).catch(() => {});
 }
 
+// entradas antigas da sessão não têm "tipo": só PDF ou "não PDF"
+const tipoDe = (a) => a.tipo || (a.naoPdf ? 'baixar' : 'pdf');
 function renderLeitor() {
   const box = el('pf-leitor');
   if (!box || !corr) return;
@@ -770,24 +869,29 @@ function renderLeitor() {
   box.dataset.modo = modo;
   const alterna = `<div class="pf-leitor-barra">
     <div class="pf-abas pf-abas-peq">
-      <button type="button" class="pf-aba ${modo === 'pdf' ? 'ativa' : ''}" data-leitor="pdf" ${arqs.length ? '' : 'disabled title="Abra o PDF do AVA ou importe o ZIP para ver o PDF"'}>PDF</button>
+      <button type="button" class="pf-aba ${modo === 'pdf' ? 'ativa' : ''}" data-leitor="pdf" ${arqs.length ? '' : 'disabled title="Abra o arquivo do AVA ou importe o ZIP para ver o arquivo"'}>Arquivo</button>
       <button type="button" class="pf-aba ${modo === 'texto' ? 'ativa' : ''}" data-leitor="texto">Texto extraído</button>
     </div>
-    ${modo === 'pdf' && arqs.some(a => !a.naoPdf) ? '<button type="button" class="pf-btn pf-btn-pri pf-btn-peq" data-acao="leitura" title="Uma página por vez na tela inteira. Setas mudam a página, Esc sai.">Ler em tela cheia</button>' : ''}
-    ${!arqs.length ? ((corr.entrega.avaArquivos || []).length ? '<button type="button" class="pf-btn pf-btn-peq" data-acao="ava-pdf">Abrir o PDF do AVA</button>' : '<button type="button" class="pf-btn pf-btn-peq" data-acao="importar">Carregar ZIP para ver o PDF</button>') : ''}
+    ${modo === 'pdf' && arqs.some(a => tipoDe(a) === 'pdf') ? '<button type="button" class="pf-btn pf-btn-pri pf-btn-peq" data-acao="leitura" title="Uma página por vez na tela inteira. Setas mudam a página, Esc sai.">Ler em tela cheia</button>' : ''}
+    ${!arqs.length ? ((corr.entrega.avaArquivos || []).length ? '<button type="button" class="pf-btn pf-btn-peq" data-acao="ava-pdf">Abrir o arquivo do AVA</button>' : '<button type="button" class="pf-btn pf-btn-peq" data-acao="importar">Carregar ZIP para ver o arquivo</button>') : ''}
   </div>`;
   if (modo === 'pdf' && arqs.length) {
-    box.innerHTML = alterna + arqs.map(a => a.naoPdf
-      ? `<p class="pf-aviso">Arquivo não PDF: <a href="${a.url}" download="${esc(a.nome)}">${esc(a.nome)}</a> (baixe para abrir).</p>`
+    box.innerHTML = alterna + arqs.map(a => {
+      const tipo = tipoDe(a);
+      const baixar = `<a href="${a.url}" download="${esc(a.nome)}">baixar o original</a>`;
       // sem a barra de miniaturas do leitor do navegador e com a página na largura do quadro (24/11/2026)
-      : `<iframe class="pf-pdf" src="${a.url}#pagemode=none&navpanes=0&view=FitH" title="${esc(a.nome)}"></iframe>`).join('');
+      if (tipo === 'pdf') return `<iframe class="pf-pdf" src="${a.url}#pagemode=none&navpanes=0&view=FitH" title="${esc(a.nome)}"></iframe>`;
+      if (tipo === 'imagem') return `<figure class="pf-img"><img src="${a.url}" alt="Trabalho enviado como imagem: ${esc(a.nome)}"><figcaption>${esc(a.nome)} · imagem (sem texto para a comparação) · ${baixar}</figcaption></figure>`;
+      if (tipo === 'documento') return `<div class="pf-doc"><p class="pf-doc-cab">${esc(a.nome)} · texto lido do arquivo (a formatação original pode ser diferente) · ${baixar}</p><article class="pf-texto">${a.html || ''}</article></div>`;
+      return `<p class="pf-aviso">Não consigo mostrar <b>${esc(a.nome)}</b> aqui${a.motivo ? ` (${esc(a.motivo)})` : ''}: <a href="${a.url}" download="${esc(a.nome)}">baixe para abrir</a>.</p>`;
+    }).join('');
     return;
   }
   if (corr.texto == null) { box.innerHTML = alterna + '<div class="pf-vazio">Carregando o texto…</div>'; return; }
   const t = corr.texto.trim();
   box.innerHTML = alterna + (t
     ? `<article class="pf-texto">${esc(t).split(/\[\[p\.(\d+)\]\]/).map((parte, k) => (k % 2 ? `<div class="pf-pag">página ${parte}</div>` : parte.replace(/\n/g, '<br>'))).join('')}</article>`
-    : '<p class="pf-aviso">Sem texto extraído (PDF escaneado como imagem, ou arquivo não PDF). Avalie pelo PDF original.</p>');
+    : '<p class="pf-aviso">Sem texto extraído (PDF escaneado, foto do trabalho ou arquivo que não dá para ler). Avalie pelo arquivo original, na aba Arquivo.</p>');
 }
 
 function lerForm() {
@@ -1071,11 +1175,11 @@ function ligarEventos() {
     else if (a === 'ava-ligar') dlgLigarAva();
     else if (a === 'ava-buscar') { b.disabled = true; try { await buscarEntregasAva(); } finally { b.disabled = false; } }
     else if (a === 'ava-notas') dlgLancarNotasAva();
-    else if (a === 'leitura') { const pdf = (pdfs.get(chavePdf(corr.entrega)) || []).find(x => !x.naoPdf); if (pdf) modoLeitura(pdf.url); }
+    else if (a === 'leitura') { const pdf = (pdfs.get(chavePdf(corr.entrega)) || []).find(x => tipoDe(x) === 'pdf'); if (pdf) modoLeitura(pdf.url); }
     else if (a === 'ava-pdf') {
       b.disabled = true; b.textContent = 'Abrindo…';
       try { await carregarPdfsAva(corr.entrega); el('pf-leitor').dataset.modo = 'pdf'; renderLeitor(); }
-      catch (err) { toast(err.message, 'erro'); b.disabled = false; b.textContent = 'Abrir o PDF do AVA'; }
+      catch (err) { toast(err.message, 'erro'); b.disabled = false; b.textContent = 'Abrir o arquivo do AVA'; }
     }
     else if (a === 'excluir-ativ') {
       if (!confirm(`Excluir "${ativ.atividade.titulo}" e TODAS as ${ativ.entregas.length} correções dela? Não dá para desfazer.`)) return;
