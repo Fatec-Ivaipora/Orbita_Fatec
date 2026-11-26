@@ -6,13 +6,14 @@
 //  baixa o arquivo do que está pronto (se precisar importar à mão) e registra "já está no AVA".
 //  Rotas: src/rotas/banco-med-avaliacoes.js (/envio-ava). Regra da fila: src/utils/banco-med-ava-fila.js
 // ================================================================
-import { prepararParaXml, toast, ic } from "./avaliacoes.js?v=48";
+import { prepararParaXml, toast, ic, abrirProvaParaTrazer } from "./avaliacoes.js?v=51";
 
 const BASE = '/banco-med-fatec/avaliacoes/envio-ava';
 let api, esc;
 let dados = null;
 let filtro = 'acao';
 let carregando = false;
+let jaEscolheu = false; // a pessoa já clicou num filtro
 let confirmando = null; // id da prova com "Já está no AVA" aberto para confirmar
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -25,12 +26,16 @@ const SITUACAO = {
   aguardando: { rotulo: 'Aguardando professor', cls: 'ea-s-espera' },
   vazia: { rotulo: 'Sem questões', cls: 'ea-s-espera' }
 };
+// prova com questões postas direto no AVA (fora do Órbita) — 26/11/2026
+const temNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0);
+const diretoNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.direto > 0);
 const FILTROS = [
+  ['direto', 'Direto no AVA', diretoNoAva],
   ['acao', 'Precisa de atenção', p => ['conferir', 'erro'].includes(p.situacao)],
   ['pronta', 'Prontas', p => p.situacao === 'pronta'],
   ['aguardando', 'Aguardando professor', p => p.situacao === 'aguardando'],
   ['no_ava', 'No AVA', p => p.situacao === 'no_ava'],
-  ['todas', 'Todas', p => p.situacao !== 'vazia']
+  ['todas', 'Todas', p => p.situacao !== 'vazia' || temNoAva(p)]
 ];
 
 export function configurarEnvioAva(opcoes) { ({ apiFetch: api, esc } = opcoes); }
@@ -46,8 +51,11 @@ async function carregar() {
   carregando = true;
   try {
     dados = await api(BASE);
-    // começa no filtro que tem algo; sem pendência, mostra as prontas
-    if (filtro === 'acao' && !dados.provas.some(FILTROS[0][2])) filtro = dados.provas.some(FILTROS[1][2]) ? 'pronta' : 'todas';
+    // começa no primeiro filtro que tem prova (26/11/2026: antes abria em "Prontas" vazio)
+    if (!jaEscolheu) {
+      const visiveis = dados.provas.filter(p => p.situacao !== 'vazia' || temNoAva(p));
+      filtro = (['direto', 'acao', 'pronta', 'aguardando'].find(k => visiveis.some(FILTROS.find(f => f[0] === k)[2]))) || 'todas';
+    }
     render();
   } catch (e) {
     $('#bmf-view-envio-ava').innerHTML = `<p class="av-vazio">Não consegui carregar o envio ao AVA: ${esc(e.message)}</p>`;
@@ -81,57 +89,69 @@ function professorHtml(p) {
 // O questionário no AVA, lido pelo agente (25/11/2026): a Joyce decide pelo Órbita sem abrir o AVA.
 // Avisa quando o questionário tem quantidade diferente da prova do Órbita ou quando a soma das notas não fecha a nota máxima.
 const fmt = (n) => (n === null || n === undefined ? '–' : String(n).replace('.', ','));
-function quadroHtml(p) {
-  const q = p.ava && p.ava.quadro;
-  if (!q) return '';
-  if (q.erro) return `<p class="ea-quadro ea-quadro-alerta">${ic('alerta')}<span>No AVA: ${esc(q.erro)}</span></p>`;
+// ---------- cartão da prova (26/11/2026: reorganizado para ler rápido) ----------
+// Cabeçalho (disciplina, prova, situação) → três números lado a lado (Órbita · questionário do AVA · quem colocou)
+// → UMA linha "O que fazer agora" com o botão certo → detalhes recolhidos (abertura, soma das notas, curso,
+// professores). Antes era um bloco de texto com avisos repetidos.
+function proximoPasso(p) {
+  const q = (p.ava && p.ava.quadro) || null;
   const esperado = p.qtdProva || p.total;
-  const avisos = [];
-  if (q.noQuestionario !== esperado) avisos.push(q.noQuestionario ? `o questionário tem ${q.noQuestionario} e a prova tem ${esperado}` : 'as questões ainda não foram colocadas no questionário');
-  if (q.noQuestionario && q.somaNotas !== q.notaMaxima) avisos.push(`a soma das notas (${fmt(q.somaNotas)}) é diferente da nota máxima (${fmt(q.notaMaxima)})`);
-  return `<div class="ea-quadro ${avisos.length ? 'ea-quadro-alerta' : 'ea-quadro-ok'}">
-    <p><b>No questionário do AVA:</b> ${q.noQuestionario} questão(ões) · nota máxima ${fmt(q.notaMaxima)} · soma das notas ${fmt(q.somaNotas)}${q.naPasta !== null && q.naPasta !== undefined ? ` · ${q.naPasta} na pasta do banco` : ''}</p>
-    ${q.abertura ? `<p class="ea-quadro-abre">${esc(q.abertura)}</p>` : ''}
-    ${avisos.length ? `<p class="ea-quadro-aviso">${ic('alerta')}<span>Atenção: ${avisos.join('; ')}.</span></p>` : ''}
-    <p class="ea-quadro-lido">Lido no AVA em ${dataHora(q.lidoEm)}</p>
-  </div>`;
+  if (q && !q.erro && q.direto > 0) {
+    return { tom: 'atencao', txt: q.direto === q.noQuestionario
+      ? `<b>Montada direto no AVA</b> (${q.direto} questões fora do Órbita). Traga para o Órbita para validar.`
+      : `<b>${q.direto} questão(ões) postas direto no AVA</b>, fora do Órbita. Traga para validar.`,
+      botao: p.status === 'finalizada' ? '' : `<button type="button" class="btn btn-primary av-btn" data-ea-trazer="${esc(p.id)}">${ic('importar')}Abrir e trazer do AVA</button>` };
+  }
+  if (['conferir', 'erro'].includes(p.situacao)) return { tom: 'erro', txt: `<b>O envio parou:</b> ${esc(p.ava.msg || (q && q.erro) || 'confira no AVA')}` };
+  if (q && q.erro) return { tom: 'erro', txt: `<b>Não achei no AVA:</b> ${esc(q.erro)}` };
+  if (p.situacao === 'pronta') return { tom: 'acao', txt: `<b>${p.prontas.length} questão(ões) prontas.</b> O envio automático leva sozinho; se estiver fora do ar, baixe e importe.` };
+  if (p.total && q && q.noQuestionario !== esperado) return { tom: 'atencao', txt: q.noQuestionario ? `<b>O questionário tem ${q.noQuestionario} e a prova tem ${esperado}.</b> Confira as questões dentro do questionário no AVA.` : '<b>As questões ainda não foram colocadas dentro do questionário</b> (estão só no banco).' };
+  if (q && q.noQuestionario && q.somaNotas !== q.notaMaxima) return { tom: 'atencao', txt: `<b>A soma das notas (${fmt(q.somaNotas)}) é diferente da nota máxima (${fmt(q.notaMaxima)}).</b> Ajuste no questionário do AVA.` };
+  if (p.situacao === 'aguardando') {
+    const faltam = p.professores.filter(x => x.aguardando || (x.meta && x.feitas < x.meta) || x.aCorrigir);
+    return { tom: 'espera', txt: `<b>Aguardando professor:</b> ${faltam.length ? faltam.map(x => esc(x.nome.split(' ')[0])).join(', ') : 'questões da prova'}.` };
+  }
+  if (p.situacao === 'no_ava') return { tom: 'ok', txt: '<b>Tudo certo:</b> as questões estão no AVA.' };
+  return { tom: 'espera', txt: 'Sem questões no Órbita ainda.' };
 }
-
 function provaHtml(p) {
   const s = SITUACAO[p.situacao] || SITUACAO.aguardando;
-  const total = p.total;
-  const onde = p.ava.quiz ? `<span class="ea-onde">${esc(p.ava.curso)} › ${esc(p.ava.quiz)}</span>` : '';
-  const msg = ['conferir', 'erro'].includes(p.situacao) && p.ava.msg ? `<p class="ea-msg">${ic('alerta')}<span>${esc(p.ava.msg)}${p.ava.em ? ` <small>(${dataHora(p.ava.em)})</small>` : ''}</span></p>` : '';
+  const q = (p.ava && p.ava.quadro) || null;
+  const passo = proximoPasso(p);
+  const numero = (rot, val, sub, cls = '') => `<div class="ea-n ${cls}"><span>${rot}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
   const acoes = p.prontas.length ? (confirmando === p.id
     ? `<div class="ea-confirma" role="group" aria-label="Confirmar registro">
          <span>Registrar as <b>${p.prontas.length}</b> questão(ões) prontas como <b>já importadas</b> no AVA? Confira antes no banco do questionário.</span>
          <button type="button" class="btn btn-primary av-btn" data-ea-marcar="${esc(p.id)}">Sim, já estão no AVA</button>
          <button type="button" class="btn btn-secondary av-btn" data-ea-cancelar>Cancelar</button></div>`
-    : `<div class="ea-acoes">
-         <button type="button" class="btn btn-secondary av-btn" data-ea-baixar="${esc(p.id)}">${ic('baixar')}Baixar arquivo (${p.prontas.length})</button>
-         <button type="button" class="btn btn-secondary av-btn" data-ea-confirmar="${esc(p.id)}">${ic('ok')}Já está no AVA</button></div>`) : '';
-  return `<li class="ea-prova">
+    : `<button type="button" class="btn btn-secondary av-btn" data-ea-baixar="${esc(p.id)}">${ic('baixar')}Baixar arquivo (${p.prontas.length})</button>
+       <button type="button" class="btn btn-secondary av-btn" data-ea-confirmar="${esc(p.id)}">${ic('ok')}Já está no AVA</button>`) : '';
+  const temOrigem = q && !q.erro && q.direto !== undefined && q.noQuestionario;
+  return `<li class="ea-prova ea-tom-${passo.tom}">
     <div class="ea-cab">
       <div><h3>${esc(p.disciplina)}</h3><p>${esc(p.prova)} · ${p.status === 'finalizada' ? 'prova finalizada' : 'prova em montagem'}</p></div>
       <span class="ea-sit ${s.cls}">${s.rotulo}</span>
     </div>
-    <div class="ea-numeros">
-      <span><b>${p.jaNoAva}</b> de ${total}${p.qtdProva && p.qtdProva !== total ? ` (prova de ${p.qtdProva})` : ''} no AVA</span>
-      ${p.prontas.length ? `<span class="ea-num-pronta"><b>${p.prontas.length}</b> pronta(s) para enviar</span>` : ''}
-      ${onde}
+    <div class="ea-ns">
+      ${numero('No Órbita', `${p.total}`, p.qtdProva && p.qtdProva !== p.total ? `prova de ${p.qtdProva}` : `${p.jaNoAva} já no AVA`)}
+      ${numero('No questionário do AVA', q && !q.erro ? `${q.noQuestionario}` : '–', q && !q.erro ? `nota máx. ${fmt(q.notaMaxima)}` : 'não lido')}
+      ${temOrigem ? numero('Quem colocou', `${q.pelaOrbita || 0} <i>Órbita</i> · ${q.direto} <i>direto</i>`, '', q.direto ? 'ea-n-alerta' : '') : ''}
     </div>
-    ${quadroHtml(p)}
-    ${msg}
-    <ul class="ea-profs">${p.professores.map(professorHtml).join('')}</ul>
-    ${acoes}
+    <div class="ea-passo"><p>${passo.txt}</p><div class="ea-passo-acoes">${passo.botao || ''}${acoes}</div></div>
+    <details class="ea-det"><summary>Ver detalhes</summary>
+      ${p.ava.quiz ? `<p><b>No AVA:</b> ${esc(p.ava.curso)} › ${esc(p.ava.quiz)}</p>` : ''}
+      ${q && !q.erro ? `<p>Soma das notas ${fmt(q.somaNotas)} · nota máxima ${fmt(q.notaMaxima)}${q.naPasta !== null && q.naPasta !== undefined ? ` · ${q.naPasta} na pasta do banco` : ''}</p>${q.abertura ? `<p>${esc(q.abertura)}</p>` : ''}<p class="ea-quadro-lido">Lido no AVA em ${dataHora(q.lidoEm)}</p>` : ''}
+      ${p.professores.length ? `<ul class="ea-profs">${p.professores.map(professorHtml).join('')}</ul>` : ''}
+    </details>
   </li>`;
 }
 
 function render() {
   const el = $('#bmf-view-envio-ava');
-  const provas = dados.provas.filter(p => p.situacao !== 'vazia');
+  // vazia no Órbita mas com questões no questionário do AVA (montada direto lá) também aparece — 26/11/2026
+  const provas = dados.provas.filter(p => p.situacao !== 'vazia' || temNoAva(p));
   const contar = (f) => provas.filter(f).length;
-  const f = FILTROS.find(x => x[0] === filtro) || FILTROS[4];
+  const f = FILTROS.find(x => x[0] === filtro) || FILTROS.find(x => x[0] === 'todas');
   const lista = provas.filter(f[2]);
   el.innerHTML = `
     <div class="ea">
@@ -178,11 +198,12 @@ export function iniciarEnvioAva(opcoes) {
   el.addEventListener('click', async (ev) => {
     const b = ev.target.closest('button');
     if (!b || b.disabled) return;
-    if (b.dataset.eaFiltro) { filtro = b.dataset.eaFiltro; confirmando = null; render(); return; }
+    if (b.dataset.eaFiltro) { filtro = b.dataset.eaFiltro; jaEscolheu = true; confirmando = null; render(); return; }
     if (b.hasAttribute('data-ea-recarregar')) { await carregar(); return; }
     if (b.hasAttribute('data-ea-cancelar')) { confirmando = null; render(); return; }
     if (b.dataset.eaConfirmar) { confirmando = b.dataset.eaConfirmar; render(); return; }
     if (b.dataset.eaBaixar) { await baixarArquivo(b.dataset.eaBaixar, b); return; }
+    if (b.dataset.eaTrazer) { await abrirProvaParaTrazer(b.dataset.eaTrazer); return; }
     if (b.hasAttribute('data-ea-agora')) {
       b.disabled = true;
       try { const r = await api(`${BASE}/agora`, { method: 'POST' }); toast(r.message); setTimeout(carregar, 20000); await carregar(); }

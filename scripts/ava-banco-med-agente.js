@@ -187,7 +187,9 @@ async function rodada(origem) {
     for (const s of lista) avs.set(s.id, (await db.collection(COL_AV).doc(s.id).get()).data());
     const fila = lista.filter(s => origem === 'pedido' || args['uma-vez'] || !['conferir', 'erro'].includes(s.ava.status) || (avs.get(s.id).avaBanco || {}).tentativa !== chaveTentativa(s.prontas));
     const resumo = { importada: 0, ja_estava: 0, conferir: 0, erro: 0, simulado: 0, questoes: 0, quadros: 0 };
-    const todas = (await situacaoDoSemestre(args.semestre || semestreAtual())).filter(s => s.total && (!args.so || s.id === args.so));
+    // 26/11/2026: também as provas vazias no Órbita — podem ter sido montadas direto no AVA (o quadro conta quem
+    // colocou cada questão: nome padrão do Órbita × posta direto), para a coordenação trazer e validar.
+    const todas = (await situacaoDoSemestre(args.semestre || semestreAtual())).filter(s => !args.so || s.id === args.so);
     const velho = (s) => { const q = s.ava && s.ava.quadro; return !q || !q.lidoEm || Date.now() - new Date(q.lidoEm).getTime() > QUADRO_MS; };
     const quadros = args['so-resultados'] ? [] : todas.filter(s => !fila.some(f => f.id === s.id) && (origem !== 'automatica' || velho(s)));
     const resultados = args.so ? [] : await resultadosAFazer(origem);

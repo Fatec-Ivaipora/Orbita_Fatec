@@ -1995,3 +1995,10 @@ export async function iniciarAvaliacoes(opcoes) {
   return meuPapel;
 }
 export function abrirAbaAvaliacoes() { if (!carregouGrade && !atual) carregarGrade(); }
+// aba Envio ao AVA → prova montada direto no AVA: abre a prova e já a janela de importação com o "Trazer do AVA" (26/11/2026)
+export async function abrirProvaParaTrazer(id) {
+  const aba = document.getElementById('bmf-tab-avaliacoes');
+  if (aba) aba.click();
+  await abrirAvaliacao(id);
+  if (atual && atual.avaliacao && atual.avaliacao.id === id && atual.avaliacao.status !== 'finalizada') abrirImportar();
+}

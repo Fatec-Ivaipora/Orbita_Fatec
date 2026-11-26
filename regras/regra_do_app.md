@@ -99,6 +99,24 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-26] Banco MED › Envio ao AVA: quem colocou as questões (Órbita × direto no AVA) e cartão mais fácil de ler
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/banco-med-origem-ava
+- Arquivos alterados:
+  - `src/utils/ava-sessao.js`: `lerResumoQuestionario` conta quem colocou cada questão do questionário (`pelaOrbita`, `direto`). O Órbita sempre dá o nome "[2ºB 1ªCH 07] Prof. …" ou "[EXAME 05] …"; o que tem outro nome foi posto direto no AVA.
+  - `scripts/ava-banco-med-agente.js`: o quadro do AVA passa a ser lido também nas provas vazias no Órbita, que podem ter sido montadas direto no AVA.
+  - `banco-med-fatec/envio-ava.js` (v=4):
+    - filtro **Direto no AVA**;
+    - as provas vazias no Órbita aparecem quando têm questões no questionário do AVA;
+    - cartão reorganizado: três números (No Órbita · No questionário do AVA · Quem colocou), uma linha "o que fazer agora" com o botão certo e "Ver detalhes" recolhido;
+    - a aba abre no primeiro filtro que tem prova (antes abria em "Prontas" vazio);
+    - botão **Abrir e trazer do AVA** abre a prova já com a janela de importação.
+  - `banco-med-fatec/avaliacoes.js` (v=51): `abrirProvaParaTrazer(id)`. `avaliacoes.css` (v=35), `app.js` e `index.html` (app.js v=84).
+- Tipo: Funcionalidade + visual
+- Motivo: a partir de 26/11 só o Órbita (com a coordenação e o agente) coloca questões no AVA. A Joyce precisa achar as provas que os professores montaram direto no AVA, para trazer e validar só essas, e a tela de envio estava difícil de ler.
+- Depois do merge, no droplet: `git pull` + `npm ci` em /opt/orbita-sync e `systemctl restart orbita-ava-banco-agente`. A contagem aparece na leitura seguinte de cada prova (até 1 hora, ou "Enviar agora").
+- Como reverter: reverter o commit.
+
 ### [2026-11-26] Banco MED: trazer do AVA a prova que o professor montou direto lá, para validar
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/banco-med-trazer-do-ava
