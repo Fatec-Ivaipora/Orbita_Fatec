@@ -490,7 +490,7 @@ router.get('/resultados', exigeImpressao, async (req, res) => {
             return { ...r, maior: notas.length ? Math.max(...notas) : null, menor: notas.length ? Math.min(...notas) : null, questoes: undefined };
         });
         const c = cfg.exists ? cfg.data() : {};
-        res.json({ semestre, resultados, agente: { vivoEm: c.agenteVivoEm || null, pedidoEm: c.pedidoEm || null, ultimaRodada: c.ultimaRodada || null } });
+        res.json({ semestre, resultados, agente: { vivoEm: c.agenteVivoEm || null, pedidoEm: c.pedidoEm || null, ultimaRodada: c.ultimaRodada || null, rodandoDesde: c.rodandoDesde || null } });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 router.get('/resultados/:id', exigeImpressao, async (req, res) => {
@@ -549,8 +549,11 @@ router.put('/resultados/:id/dispensado', exigeImpressao, async (req, res) => {
 });
 router.post('/resultados/agora', exigeImpressao, async (req, res) => {
     try {
-        await db.collection('config').doc('ava_banco_sync').set({ pedidoEm: new Date().toISOString(), pedidoPorNome: req.user.name || req.user.email || 'Coordenação' }, { merge: true });
-        res.json({ message: 'Pedido enviado: o agente lê os resultados no AVA em instantes.' });
+        // 26/11/2026: com { provaId } lê só aquela prova ("Ler de novo no AVA"); sem, todas as já aplicadas
+        const { pedirAoAgente } = require('../utils/ava-pedidos');
+        const provaId = req.body && req.body.provaId ? String(req.body.provaId) : null;
+        const p = await pedirAoAgente({ tipo: 'resultados', alvo: provaId, por: req.user.name || req.user.email || 'Coordenação' });
+        res.json({ ...p, message: provaId ? 'Pedido enviado: o Órbita lê esta prova no AVA em instantes.' : 'Pedido enviado: o Órbita lê no AVA todas as provas já aplicadas. Pode levar alguns minutos.' });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 // liga a prova a um questionário do AVA à mão (DP/adaptação, ou quando a busca automática não acha): cmid do questionário

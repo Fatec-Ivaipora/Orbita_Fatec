@@ -689,3 +689,10 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 .ea-det summary:focus-visible { outline: 2px solid #009FE3; outline-offset: 2px; }
 .ea-det p { margin: 0.3rem 0; }
 .ea-det .ea-profs { margin-top: 0.4rem; }
+/* fila de pedidos ao AVA por prova (26/11/2026) */
+.ea-pedido { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.84rem; font-weight: 700; color: #44536B; background: #F6F8FB; border: 1px dashed #B8D2EE; border-radius: 8px; padding: 0.45rem 0.7rem; }
+.ea-pedido-ativo { color: #004F9F; background: #E8F2FC; border-style: solid; }
+.ea-pedido .av-spin { width: 14px; height: 14px; }
+.ea-ponto-ativo { animation: ea-pulso 1.2s ease-in-out infinite; }
+@keyframes ea-pulso { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .ea-ponto-ativo { animation: none; } }

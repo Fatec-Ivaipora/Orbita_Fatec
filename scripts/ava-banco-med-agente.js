@@ -251,20 +251,104 @@ async function rodada(origem) {
     return { resumo, segundos };
 }
 
+// ---------- pedidos por prova (26/11/2026) ----------
+// Cada botão do Órbita grava um pedido em ava_pedidos ({ tipo, alvo, status: 'pendente' }) e acorda o agente. Ele
+// atende só aquilo: "Enviar esta prova" manda o que está pronto e relê o questionário daquela prova; "Ler de novo no
+// AVA" lê o resultado daquela prova; "Trazer"/"Levar" fazem só isso. "Conferir todas" (tipo 'tudo') é a rodada
+// completa. Antes todo botão refazia tudo e levava mais de 10 minutos.
+const COL_PED = 'ava_pedidos';
+async function lerAv(id) {
+    const s = await db.collection(COL_AV).doc(String(id || '')).get();
+    if (!s.exists) throw new Error('prova não encontrada no Órbita');
+    return { id: s.id, ...s.data() };
+}
+async function pedidoEnvio(imp, id) {
+    const av = await lerAv(id);
+    const sit = await situacaoDaAvaliacao(av);
+    const partes = [];
+    if (sit.prontas.length) {
+        let r;
+        for (let t = 0; t < 2; t++) {
+            try { r = await imp.enviar(sit, av, {}); break; }
+            catch (e) { if (e.tentarDeNovo && t === 0) { await espera(4000); continue; } r = { em: new Date().toISOString(), status: 'erro', msg: e.message }; }
+        }
+        await gravarResultado(sit, r);
+        partes.push(`${r.status}${r.msg ? `: ${r.msg}` : ''}`);
+    }
+    const q = await imp.resumoDaProva(sit);
+    await gravarQuadro(sit, q);
+    partes.push(q.erro ? `questionário: ${q.erro}` : `questionário com ${q.resumo.noQuestionario} questão(ões)`);
+    return partes.join(' · ');
+}
+async function pedidoResultados(imp, provaId) {
+    let provas;
+    if (provaId) {
+        const s = await db.collection('med_aplicacao_provas').doc(String(provaId)).get();
+        provas = s.exists ? [{ id: s.id, ...s.data() }] : [];
+    } else provas = await resultadosAFazer('pedido');
+    for (const p of provas) await db.collection(COL_RES).doc(p.id).set(await lerResultadoDaProva(imp, p));
+    return `${provas.length} prova(s) lida(s) no AVA`;
+}
+// → true se havia pedido por prova (e a rodada completa não precisa rodar)
+async function atenderPedidos() {
+    const snap = await db.collection(COL_PED).where('status', '==', 'pendente').get();
+    const pedidos = snap.docs.map(d => ({ ref: d.ref, ...d.data() })).sort((a, b) => String(a.em).localeCompare(String(b.em)));
+    const porProva = pedidos.filter(p => p.tipo !== 'tudo');
+    const tudo = pedidos.filter(p => p.tipo === 'tudo');
+    if (porProva.length) {
+        const sessao = new SessaoAva();
+        await sessao.entrar();
+        const imp = new ImportadorBancoAva(sessao);
+        for (const p of porProva) {
+            await p.ref.update({ status: 'rodando', inicio: new Date().toISOString() });
+            let ok = true, msg = '';
+            try {
+                if (p.tipo === 'envio') msg = await pedidoEnvio(imp, p.alvo);
+                else if (p.tipo === 'resultados') msg = await pedidoResultados(imp, p.alvo);
+                else if (p.tipo === 'trazer') msg = await trazerDoAva(imp, await lerAv(p.alvo), false);
+                else if (p.tipo === 'levar') msg = await levarParaAva(imp, await lerAv(p.alvo), false);
+                else throw new Error(`pedido desconhecido (${p.tipo})`);
+            } catch (e) { ok = false; msg = e.message; }
+            await p.ref.update({ status: ok ? 'feito' : 'erro', msg: String(msg || '').slice(0, 500), fim: new Date().toISOString() });
+            log(`  pedido ${p.tipo} ${p.alvo || ''} de ${p.por || 'alguém'} — ${ok ? '' : 'erro: '}${msg}`);
+        }
+    }
+    if (tudo.length) {
+        await Promise.all(tudo.map(p => p.ref.update({ status: 'rodando', inicio: new Date().toISOString() })));
+        let ok = true, msg = '';
+        try { const r = await rodada('pedido'); msg = `conferência completa em ${r.segundos}s`; } catch (e) { ok = false; msg = e.message; }
+        await Promise.all(tudo.map(p => p.ref.update({ status: ok ? 'feito' : 'erro', msg, fim: new Date().toISOString() })));
+    }
+    return pedidos.length > 0;
+}
+
 let rodando = false, pendente = null;
 async function rodar(origem) {
-    if (rodando) { pendente = origem; return; }
+    if (rodando) { if (origem === 'pedido' || !pendente) pendente = origem; return; }
     rodando = true;
     const em = new Date().toISOString();
+    await cfg.set({ rodandoDesde: em, rodandoOrigem: origem }, { merge: true }).catch(() => {});
     try {
-        const r = await rodada(origem);
-        await cfg.set({ ultimaRodada: { em, origem, ok: true, ...r } }, { merge: true });
+        if (origem === 'pedido') {
+            // pedido de um botão: atende os pedidos da fila; sem fila (Órbita antigo), faz a rodada completa
+            if (!(await atenderPedidos())) { const r = await rodada('pedido'); await cfg.set({ ultimaRodada: { em, origem, ok: true, ...r } }, { merge: true }); }
+            else await cfg.set({ ultimoPedido: { em, fim: new Date().toISOString() } }, { merge: true });
+        } else {
+            const r = await rodada(origem);
+            await cfg.set({ ultimaRodada: { em, origem, ok: true, ...r } }, { merge: true });
+        }
     } catch (e) {
         log(`ERRO: ${e.message}`);
         await cfg.set({ ultimaRodada: { em, origem, ok: false, erro: e.message } }, { merge: true }).catch(() => {});
     } finally {
         rodando = false;
+        await cfg.set({ rodandoDesde: null, rodandoOrigem: null }, { merge: true }).catch(() => {});
+        // pedido que chegou durante a rodada tem prioridade sobre a automática
         if (pendente) { const o = pendente; pendente = null; rodar(o); }
+        else {
+            const s = await db.collection(COL_PED).where('status', '==', 'pendente').limit(1).get().catch(() => null);
+            if (s && !s.empty) rodar('pedido');
+        }
     }
 }
 

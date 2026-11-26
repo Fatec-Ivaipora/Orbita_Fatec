@@ -292,7 +292,13 @@ export function criarResultados({ api, toast, BASE, dadosAtuais }) {
     }
     if (b.hasAttribute('data-ar-agora')) {
       b.disabled = true;
-      try { const r = await api(`${BASE}/resultados/agora`, { method: 'POST' }); toast(r.message); setTimeout(() => { if (aberta) recarregarAberta().then(desenhar).catch(() => {}); else carregar(); }, 60000); }
+      // 26/11/2026: dentro de uma prova, lê só ela (segundos); na lista, todas as já aplicadas
+      try {
+        const corpo = aberta ? JSON.stringify({ provaId: aberta.provaId || aberta.id }) : undefined;
+        const r = await api(`${BASE}/resultados/agora`, { method: 'POST', ...(corpo ? { body: corpo } : {}) });
+        toast(r.message);
+        setTimeout(() => { if (aberta) recarregarAberta().then(desenhar).catch(() => {}); else carregar(); }, aberta ? 20000 : 60000);
+      }
       catch (err) { toast(err.message, 'erro'); } finally { b.disabled = false; }
       return;
     }
