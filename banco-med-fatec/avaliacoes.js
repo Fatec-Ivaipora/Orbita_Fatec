@@ -10,6 +10,8 @@ const BASE = '/banco-med-fatec/avaliacoes';
 let api, baixar, esc;
 let semestre = '2026.2';
 let disciplinas = [], avaliacoes = [];
+let semProva = {}; // "Não vai ter" (27/11/2026): { '<chave>|b2c2' | '<chave>|exame': { por, em } }
+import { painel as painelMed, COR } from '../medicina/comum/painel.js?v=1';
 let atual = null;            // { avaliacao, questoes, plano, professores, analise }
 let filtroProfessor = '';
 let carregouGrade = false;
@@ -95,8 +97,8 @@ async function carregarGrade() {
   const view = $('#bmf-view-avaliacoes');
   $('#av-conteudo', view).innerHTML = '<div class="av-carregando"><span class="av-spin"></span>Buscando as disciplinas da Medicina no Edubox…</div>';
   try {
-    const [d, l] = await Promise.all([api(`${BASE}/disciplinas?semestre=${semestre}`), api(`${BASE}?semestre=${semestre}`)]);
-    disciplinas = d.disciplinas; avaliacoes = l;
+    const [d, l, sp] = await Promise.all([api(`${BASE}/disciplinas?semestre=${semestre}`), api(`${BASE}?semestre=${semestre}`), api(`${BASE}/sem-prova?semestre=${semestre}`).catch(() => ({}))]);
+    disciplinas = d.disciplinas; avaliacoes = l; semProva = sp || {};
     $('#av-fonte', view).textContent = d.fonte !== semestre ? `Professores e planos de ${d.fonte} (o Edubox ainda não tem os diários de ${semestre}).` : '';
     carregouGrade = true;
     renderGrade();
@@ -109,21 +111,75 @@ function slotHtml(disc, bim, ch, tipo) {
   const av = avaliacoes.find(a => a.chave === disc.chave && (tipo === 'exame' ? a.tipo === 'exame' : a.tipo !== 'exame' && a.bimestre === bim && a.chamada === ch));
   const rotulo = tipo === 'exame' ? 'Exame semestral' : `${ordinal(bim)} bimestre, ${ch}ª chamada`;
   const etiqueta = tipo === 'exame' ? 'Exame semestral' : `${ch}ª chamada`;
-  if (!av) return `<button type="button" class="av-slot av-slot-vazio av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-criar="${esc(disc.chave)}" data-bim="${bim}" data-ch="${ch}" ${tipo ? `data-tipo="${tipo}"` : ''} aria-label="Montar ${rotulo}">${ic('mais')}<span>Montar</span><em class="av-slot-ch">${etiqueta}</em></button>`;
+  // 2ª chamada e exame podem ser marcados como "Não vai ter" pela coordenação (não ficam pendentes) — também a prova já
+  // criada mas ainda VAZIA (0 questões, não finalizada); prova com questões não tem a opção
+  const slot = tipo === 'exame' ? 'exame' : ch === 2 ? `b${bim}c2` : '';
+  const chaveSlot = slot ? `${disc.chave}|${slot}` : '';
+  const vazia = !!(av && !(av.totalQuestoes > 0) && av.status !== 'finalizada');
+  if (av && vazia && slot && semProva[chaveSlot]) {
+    return `<div class="av-slot av-slot-nao av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : 'c2'}" title="Marcado por ${esc(semProva[chaveSlot].por || '')}"><span>Não vai ter</span><em class="av-slot-ch">${etiqueta}</em>${souEditor() ? `<button type="button" class="av-link av-slot-nao-desfazer" data-semprova="${esc(chaveSlot)}" data-semprova-valor="0">desfazer</button>` : ''}</div>`;
+  }
+  if (!av) {
+    if (slot && semProva[chaveSlot]) {
+      return `<div class="av-slot av-slot-nao av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : 'c2'}" title="Marcado por ${esc(semProva[chaveSlot].por || '')}"><span>Não vai ter</span><em class="av-slot-ch">${etiqueta}</em>${souEditor() ? `<button type="button" class="av-link av-slot-nao-desfazer" data-semprova="${esc(chaveSlot)}" data-semprova-valor="0">desfazer</button>` : ''}</div>`;
+    }
+    const montar = `<button type="button" class="av-slot av-slot-vazio av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-criar="${esc(disc.chave)}" data-bim="${bim}" data-ch="${ch}" ${tipo ? `data-tipo="${tipo}"` : ''} aria-label="Montar ${rotulo}">${ic('mais')}<span>Montar</span><em class="av-slot-ch">${etiqueta}</em></button>`;
+    return slot && souEditor()
+      ? `<div class="av-slot-grupo">${montar}<button type="button" class="av-link av-slot-nao-btn" data-semprova="${esc(chaveSlot)}" data-semprova-valor="1" aria-label="${esc(rotulo)}: esta disciplina não vai ter">Não vai ter</button></div>`
+      : montar;
+  }
   const fin = av.status === 'finalizada';
   const plan = Number(disc.qtdQuestoes) || 0;
+  const linkNao = vazia && slot && souEditor() ? `<button type="button" class="av-link av-slot-nao-btn" data-semprova="${esc(chaveSlot)}" data-semprova-valor="1" aria-label="${esc(rotulo)}: esta disciplina não vai ter">Não vai ter</button>` : '';
   const pct = plan ? Math.min(100, Math.round(100 * av.totalQuestoes / plan)) : 0;
-  return `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'} av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes}${plan ? ` de ${plan}` : ''} questões">
+  const botao = `<button type="button" class="av-slot ${fin ? 'av-slot-fin' : 'av-slot-rasc'} av-slot-uso av-uso-${tipo === 'exame' ? 'exame' : ch === 2 ? 'c2' : 'c1'}" data-abrir="${esc(av.id)}" aria-label="${rotulo}: ${fin ? 'finalizada' : 'em montagem'}, ${av.totalQuestoes}${plan ? ` de ${plan}` : ''} questões">
     ${fin ? ic('cadeado') : ic('editar')}<span><b>${av.totalQuestoes}</b>${plan ? ` de ${plan}` : ` ${av.totalQuestoes === 1 ? 'questão' : 'questões'}`}</span>${plan ? `<i class="av-slot-barra" aria-hidden="true"><i style="width:${pct}%"></i></i>` : ''}<small>${fin ? 'Finalizada' : 'Em montagem'}</small><em class="av-slot-ch">${etiqueta}</em></button>`;
+  return linkNao ? `<div class="av-slot-grupo">${botao}${linkNao}</div>` : botao;
 }
 
 let verFechados = false;
+// turma da prova (T1/T2/T3, ou ADP/DP): vem da lista de disciplinas (relação turma × período da Aplicação de Provas)
+function turmaDaProva(av) {
+  const d = disciplinas.find(x => x.chave === av.chave);
+  return d ? rotuloTurma(d.turma) : '';
+}
+const rotuloTurma = (t) => String(t || '').replace(/^T(\d+)$/, 'T.$1');
+
 function renderGrade() {
   const busca = P.norm($('#av-busca').value || '');
   const lista = disciplinas.filter(d => !busca || P.norm(`${d.nome} ${d.sigla} ${d.professores.join(' ')}`).includes(busca));
   const periodos = [...new Set(lista.map(d => d.periodo))].sort((a, b) => a - b);
   const montadas = avaliacoes.length, fin = avaliacoes.filter(a => a.status === 'finalizada').length;
   $('#av-resumo').textContent = `${disciplinas.length} disciplinas · ${montadas} avaliação(ões) em andamento ou prontas · ${fin} finalizada(s)`;
+  // Painel (27/11/2026, medicina/comum/painel.js): situação das provas do bimestre aberto, por chamada e exame
+  const bimAberto = [2, 1].find(b => !BIMESTRES_FECHADOS.includes(b)) || 2;
+  const situacao = (achar, slot) => {
+    const st = disciplinas.map(d => {
+      const a = avaliacoes.find(x => x.chave === d.chave && achar(x));
+      const marcado = slot && semProva[`${d.chave}|${slot}`];
+      if (a && !(marcado && !(a.totalQuestoes > 0) && a.status !== 'finalizada')) return a.status === 'finalizada' ? 'fin' : 'rasc';
+      return marcado ? 'sem' : 'nao';
+    });
+    return [
+      { nome: 'Finalizada', n: st.filter(s => s === 'fin').length, cor: COR.azul, dica: 'pronta, travada para edição' },
+      { nome: 'Em montagem', n: st.filter(s => s === 'rasc').length, cor: COR.ciano, dica: 'professores ainda lançando questões' },
+      { nome: 'Não criada', n: st.filter(s => s === 'nao').length, cor: COR.laranja, dica: 'pendente: ninguém abriu a prova ainda' },
+      { nome: 'Não vai ter', n: st.filter(s => s === 'sem').length, cor: COR.cinzaClaro, dica: 'a coordenação marcou que a disciplina não terá esta prova' }
+    ];
+  };
+  const c1 = situacao(x => x.tipo !== 'exame' && x.bimestre === bimAberto && x.chamada === 1);
+  const finC1 = c1[0].n;
+  const painelEl = $('#av-painel');
+  if (painelEl) painelEl.innerHTML = disciplinas.length ? painelMed({
+    destaque: `${finC1} de ${disciplinas.length}`,
+    frase: `provas da ${ordinal(bimAberto)} bimestre, 1ª chamada, estão finalizadas.`.replace('da 2º', 'do 2º').replace('da 1º', 'do 1º'),
+    sub: `${c1[1].n ? `${c1[1].n} em montagem` : 'nenhuma em montagem'}${c1[2].n ? ` · <span class="med-alerta">${c1[2].n} ainda não ${c1[2].n === 1 ? 'criada' : 'criadas'}</span>` : ''} · semestre ${esc(semestre)}`,
+    partes: c1,
+    extras: [
+      { rotulo: '2ª chamada', partes: situacao(x => x.tipo !== 'exame' && x.bimestre === bimAberto && x.chamada === 2, `b${bimAberto}c2`) },
+      { rotulo: 'Exame', partes: situacao(x => x.tipo === 'exame', 'exame') }
+    ]
+  }) : '';
   if (!lista.length) { $('#av-conteudo').innerHTML = '<div class="av-vazio">Nenhuma disciplina encontrada.</div>'; return; }
   $('#av-conteudo').innerHTML = `
     <div class="av-grade ${verFechados || !BIMESTRES_FECHADOS.includes(1) ? '' : 'av-grade-sem-b1'}" role="table" aria-label="Avaliações por disciplina">
@@ -134,11 +190,11 @@ function renderGrade() {
         <span role="columnheader" class="av-grade-bim">Exame semestral</span>
       </div>
       ${periodos.map(p => `
-        <div class="av-periodo" role="row"><span role="cell">${ordinal(p)} período</span></div>
+        <div class="av-periodo" role="row"><span role="cell">${ordinal(p)} período${(lista.find(d => d.periodo === p && !d.turmaEspecial && /^T/.test(d.turma || '')) || {}).turma ? ` · ${esc(rotuloTurma(lista.find(d => d.periodo === p && !d.turmaEspecial && /^T/.test(d.turma || '')).turma))}` : ''}</span></div>
         ${lista.filter(d => d.periodo === p).map(d => `
           <div class="av-disc" role="row">
             <div class="av-disc-info" role="cell">
-              <strong>${esc(d.nome)}</strong>
+              <strong>${esc(d.nome)}</strong>${d.turma ? ` <span class="av-turma-tag">${esc(rotuloTurma(d.turma))}</span>` : ''}
               <span class="av-disc-meta">${esc(d.sigla || '')} · ${souEditor() ? `<button type="button" class="av-link" data-criterios="${esc(d.chave)}">${d.criteriosDefinidos ? 'Critérios definidos' : 'Critérios: padrão'}</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button>` : souTitular(d.chave) ? `<span class="av-papel av-papel-tit">Você é o titular</span> · <button type="button" class="av-link" data-divisao="${esc(d.chave)}">Divisão das questões</button> · <button type="button" class="av-link" data-progresso="${esc(d.chave)}">Progresso</button>` : '<span class="av-papel">Você é adjunto(a): vê e edita só as suas questões</span>'}</span>
 
               <span class="av-disc-profs" aria-label="Professores: ${esc(d.professores.join(', '))}">${d.professores.map(n => avatar(n)).join('')}</span>
@@ -218,7 +274,7 @@ function renderEditor() {
       <button type="button" class="av-voltar" data-voltar>${ic('voltar')}Avaliações</button>
       <div class="av-ed-titulo">
         <h2>${esc(av.disciplina)}</h2>
-        <p>${esc(av.sigla || '')} · ${esc(av.semestre)} · <b>${rotuloAvaliacao(av)}</b>
+        <p>${turmaDaProva(av) ? `<span class="av-turma-tag">${esc(turmaDaProva(av))}</span> ` : ''}${av.periodo ? `${ordinal(av.periodo)} período · ` : ''}${esc(av.sigla || '')} · ${esc(av.semestre)} · <b>${rotuloAvaliacao(av)}</b>
           <span class="av-status ${fin ? 'av-status-fin' : 'av-status-rasc'}">${fin ? 'Finalizada' : 'Em montagem'}</span></p>
       </div>
       <div class="av-ed-acoes">
@@ -1957,6 +2013,7 @@ export async function iniciarAvaliacoes(opcoes) {
         <span id="av-resumo" class="av-resumo"></span>
       </div>
       <p id="av-fonte" class="av-nota"></p>
+      <div id="av-painel"></div>
       <div id="av-conteudo"></div>
     </div>
     <div id="av-editor" hidden></div>`;
@@ -1964,6 +2021,15 @@ export async function iniciarAvaliacoes(opcoes) {
   $('#av-busca').addEventListener('input', () => carregouGrade && renderGrade());
   view.addEventListener('click', (e) => {
     const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.semprova) {
+      const [chave, slot] = t.dataset.semprova.split('|');
+      const naoVaiTer = t.dataset.semprovaValor === '1';
+      t.disabled = true;
+      api(`${BASE}/sem-prova`, { method: 'PUT', body: JSON.stringify({ semestre, chave, slot, naoVaiTer }) })
+        .then(r => { if (naoVaiTer) semProva[t.dataset.semprova] = { por: 'você', em: new Date().toISOString() }; else delete semProva[t.dataset.semprova]; toast(r.message); renderGrade(); })
+        .catch(err => { toast(err.message, 'erro'); t.disabled = false; });
+      return;
+    }
     if (t.id === 'av-ver-fechados') { verFechados = !verFechados; t.setAttribute('aria-pressed', String(verFechados)); t.textContent = verFechados ? 'Esconder 1º bimestre' : 'Mostrar 1º bimestre'; return renderGrade(); }
     if (t.dataset.progresso) return abrirProgresso(t.dataset.progresso);
     if (t.dataset.divisao) return abrirDivisao(t.dataset.divisao);

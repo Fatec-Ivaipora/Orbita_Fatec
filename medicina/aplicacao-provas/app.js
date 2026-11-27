@@ -10,6 +10,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../.
 import { escapeHTML as esc } from "../../core/security.js";
 import { criarImpressao } from "./impressao.js?v=17";
 import { criarResultados } from "./resultados.js?v=5";
+import { painel as painelMed, COR } from "../comum/painel.js?v=1";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -79,6 +80,29 @@ function labsDe(txt) {
   const nums = t.match(/\b\d{1,3}\b/g);
   if (nums) return [...new Set(nums)];
   return t.split(/[\/,;]| e /).map(x => x.replace(/\blab(oratorio)?s?\.?\b/g, '').trim()).filter(Boolean);
+}
+
+// Painel (27/11/2026, medicina/comum/painel.js): quanto do calendário já foi aplicado e o que falta acertar
+function painelCalendario(provas) {
+  if (!provas.length) return '';
+  const hoje = new Date().toISOString().slice(0, 10);
+  const daqui7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const aplicadas = provas.filter(p => p.data && p.data < hoje).length;
+  const semana = provas.filter(p => p.data && p.data >= hoje && p.data <= daqui7).length;
+  const depois = provas.filter(p => p.data && p.data > daqui7).length;
+  const semData = provas.filter(p => !p.data).length;
+  const semAplicador = provas.filter(p => (!p.data || p.data >= hoje) && !(p.aplicadores || []).length).length;
+  return painelMed({
+    destaque: `${aplicadas} de ${provas.length}`,
+    frase: `provas ${el('ap-etapa').value ? 'desta etapa ' : 'do semestre '}já foram aplicadas.`,
+    sub: `${semana ? `${semana} nos próximos 7 dias` : 'nenhuma nos próximos 7 dias'}${semAplicador ? ` · <span class="med-alerta">${semAplicador} ainda sem professor aplicador</span>` : ' · todas as próximas com aplicador'}`,
+    partes: [
+      { nome: 'Aplicadas', n: aplicadas, cor: COR.azul, dica: 'veja as notas em Resultados do AVA' },
+      { nome: 'Próximos 7 dias', n: semana, cor: COR.ciano, dica: 'confira sala, aplicador e NAPA' },
+      { nome: 'Mais adiante', n: depois, cor: COR.cinzaClaro, dica: 'ainda vão acontecer' },
+      { nome: 'Sem data', n: semData, cor: COR.laranja, dica: 'defina a data no calendário' }
+    ]
+  });
 }
 
 function provasVisiveis() {
@@ -234,7 +258,7 @@ function render() {
   // Resultados do AVA (25/11/2026): quem fez, a nota e quem não fez (só coordenação e ADM, como a Impressão)
   if (aba === 'resultados') { resultados.render(el('ap-conteudo')); return; }
   resultados.sair();
-  el('ap-conteudo').innerHTML = aba === 'turmas' ? renderTurmas(provas)
+  el('ap-conteudo').innerHTML = aba === 'turmas' ? painelCalendario(provas) + renderTurmas(provas)
     : aba === 'aplicadores' ? renderAplicadores(provas, false)
     : aba === 'minhas' ? renderAplicadores(provas, true)
     : renderNapa(provas);

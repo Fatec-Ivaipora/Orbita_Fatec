@@ -699,3 +699,15 @@ textarea.av-input { resize: vertical; line-height: 1.45; }
 /* prova com questões postas por fora no AVA (26/11/2026) */
 .av-faixa-ava-fora { background: #FBE9E6; border: 1px solid #F1C4BD; color: #7D1F17; }
 .av-faixa-ava-fora b { color: #7D1F17; }
+
+/* Turma da prova (27/11/2026): T1/T2/T3 (ou ADP/DP) ao lado do período e no cabeçalho da prova */
+.av-turma-tag { display: inline-block; padding: 0.08rem 0.55rem; border-radius: 999px; background: #E8F2FC; color: #004F9F; border: 1px solid #B8D2EE; font-size: 0.74rem; font-weight: 800; vertical-align: 1px; }
+.av-ed-titulo .av-turma-tag { font-size: 0.8rem; }
+
+/* "Não vai ter" na 2ª chamada e no exame (27/11/2026) */
+.av-slot-grupo { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.av-slot-grupo > .av-slot { width: 100%; }
+.av-slot-nao-btn { font-size: 0.74rem; align-self: center; color: #64748B; text-decoration: underline; background: none; border: 0; cursor: pointer; padding: 0.1rem 0.2rem; }
+.av-slot-nao-btn:hover { color: #004F9F; }
+.av-slot-nao { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; background: #F1F5F9; border: 1px dashed #CBD5E1; color: #64748B; font-weight: 700; font-size: 0.8rem; cursor: default; }
+.av-slot-nao-desfazer { font-size: 0.72rem; }

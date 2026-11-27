@@ -88,9 +88,58 @@ function relatorioVisivel(r) {
   return true;
 }
 
+// ---------- Redesenho da lista (27/11/2026) ----------
+// Abre com o PAINEL das provas listadas: como estão as questões de todas juntas, nas cinco faixas de
+// discriminação da matriz (as mesmas cores do relatório), e quantas pedem revisão. Cada prova é uma linha com o
+// seu ESPECTRO de qualidade (barra proporcional às faixas) — dá para comparar as provas de relance.
+const FAIXAS_LISTA = ['Muito boa', 'Boa', 'Fraca', 'Muito fraca', 'Problemática'];
+const DICA_FAIXA = {
+  'Muito boa': 'separa muito bem quem estudou de quem não estudou',
+  'Boa': 'separa bem',
+  'Fraca': 'separa pouco',
+  'Muito fraca': 'quase não separa',
+  'Problemática': 'discriminação negativa: gabarito ou enunciado a conferir'
+};
+function contagensDe(r) {
+  const c = (r.resumo && r.resumo.contagens) || {};
+  // relatórios antigos: "Excelente" = Muito boa, "Razoável" = Fraca
+  return FAIXAS_LISTA.map(f => (c[f] || 0) + (f === 'Muito boa' ? c.Excelente || 0 : 0) + (f === 'Fraca' ? c['Razoável'] || 0 : 0));
+}
+function espectro(contagens, { grande = false } = {}) {
+  const total = contagens.reduce((s, n) => s + n, 0);
+  if (!total) return '<div class="rd-espectro rd-espectro-vazio"></div>';
+  return `<div class="rd-espectro${grande ? ' rd-espectro-grande' : ''}" role="img" aria-label="${FAIXAS_LISTA.map((f, i) => `${f}: ${contagens[i]}`).join(', ')}">${
+    FAIXAS_LISTA.map((f, i) => contagens[i] ? `<span style="flex:${contagens[i]};background:${CORES_HEX[f]}" title="${f}: ${contagens[i]} questão(ões) — ${DICA_FAIXA[f]}">${grande && contagens[i] / total >= 0.06 ? contagens[i] : ''}</span>` : '').join('')}</div>`;
+}
+function renderPainel(visiveis) {
+  const alvo = el('rd-painel');
+  if (!alvo) return;
+  if (!visiveis.length) { alvo.innerHTML = ''; return; }
+  const soma = FAIXAS_LISTA.map(() => 0);
+  let questoes = 0, revisar = 0, alunos = 0, doAva = 0;
+  visiveis.forEach(r => {
+    contagensDe(r).forEach((n, i) => { soma[i] += n; });
+    questoes += (r.resumo && r.resumo.total) || 0;
+    revisar += (r.resumo && r.resumo.paraRevisar) || 0;
+    alunos += r.nAlunos || 0;
+    if (r.origem === 'agente-ava') doAva++;
+  });
+  const boas = soma[0] + soma[1];
+  const pctBoas = questoes ? Math.round(boas / questoes * 100) : 0;
+  alvo.innerHTML = `
+    <div class="rd-painel-texto">
+      <p class="rd-painel-frase"><b>${pctBoas}%</b> das ${questoes} questões de ${visiveis.length} prova${visiveis.length === 1 ? '' : 's'} separam bem quem estudou de quem não estudou.</p>
+      <p class="rd-painel-sub">${revisar ? `<span class="rd-painel-revisar">${revisar} ${revisar === 1 ? 'questão' : 'questões'} para revisar</span>` : 'Nenhuma questão pedindo revisão.'}
+        ${alunos ? ` · ${alunos.toLocaleString('pt-BR')} provas feitas` : ''}${doAva ? ` · ${doAva} trazida${doAva === 1 ? '' : 's'} do AVA automaticamente` : ''}</p>
+    </div>
+    ${espectro(soma, { grande: true })}
+    <ul class="rd-legenda">${FAIXAS_LISTA.map((f, i) => `<li><i style="background:${CORES_HEX[f]}"></i><b>${f}</b> ${soma[i]}<small>${DICA_FAIXA[f]}</small></li>`).join('')}</ul>`;
+}
+
 function renderLista() {
   const alvo = el('rd-lista');
   const visiveis = relatorios.filter(relatorioVisivel);
+  renderPainel(visiveis);
 
   if (!visiveis.length) {
     const vazioPorFiltro = relatorios.length > 0;
@@ -100,7 +149,7 @@ function renderLista() {
         <h3>${vazioPorFiltro ? 'Nenhum relatório com esses filtros' : 'Nenhum relatório ainda'}</h3>
         <p>${vazioPorFiltro
           ? 'Ajuste a disciplina, o semestre ou a busca.'
-          : 'Exporte as Estatísticas do questionário no AVA e clique em “Novo Relatório”.'}</p>
+          : 'Os relatórios chegam sozinhos do AVA depois que a prova fecha. Para uma prova antiga, exporte as Estatísticas do questionário no AVA e clique em “Novo Relatório”.'}</p>
       </div>`;
     return;
   }
@@ -125,26 +174,25 @@ function renderLista() {
 function linhaRelatorio(r) {
   const resumo = r.resumo || {};
   const revisar = resumo.paraRevisar || 0;
-  const meta = [
-    r.disciplina || r.cursoTurma,
-    r.turma,
-    r.semestre,
-    dataCurta(r.aplicacao),
-    r.nAlunos ? `${r.nAlunos} alunos` : null,
-    podeVerAutoria() && r.criadoPorNome ? r.criadoPorNome : null
-  ].filter(Boolean).join(' · ');
+  const doAva = r.origem === 'agente-ava';
+  const quando = [dataCurta(r.aplicacao), r.nAlunos ? `${r.nAlunos} alunos` : null, r.notaMedia != null ? `média ${pct(r.notaMedia, 1)}` : null].filter(Boolean).join(', ');
+  const origem = doAva
+    ? '<span class="rd-origem rd-origem-ava" title="Trazido do AVA pelo agente depois que a prova fechou">Do AVA</span>'
+    : (podeVerAutoria() && r.criadoPorNome ? `<span class="rd-origem">enviado por ${esc(r.criadoPorNome)}</span>` : '');
+  const contagens = contagensDe(r);
 
   return `
-    <div class="rd-row" data-id="${esc(r.id)}">
-      <div class="rd-row-corpo">
-        <div class="rd-row-badges">
-          <span class="badge badge-neutro">${resumo.total || 0} questões</span>
-          <span class="badge" style="background:${CORES_HEX['Muito boa']}">disc. ${pct(resumo.discriminacaoMedia, 1)}</span>
-          ${revisar ? `<span class="badge badge-alerta">${revisar} para revisar</span>` : ''}
-        </div>
-        <div class="rd-row-titulo">${esc(r.titulo || 'Avaliação sem título')}</div>
-        <div class="rd-row-meta">${esc(meta)}</div>
+    <div class="rd-row rd-linha" data-id="${esc(r.id)}">
+      <div class="rd-linha-prova">
+        <div class="rd-row-titulo">${esc(r.disciplina || r.cursoTurma || 'Disciplina não informada')}</div>
+        <div class="rd-row-meta">${esc(r.titulo || 'Avaliação sem título')}${r.semestre ? ` · ${esc(r.semestre)}` : ''} ${origem}</div>
       </div>
+      <div class="rd-linha-quando">${esc(quando || '—')}</div>
+      <div class="rd-linha-espectro">
+        ${espectro(contagens)}
+        <small>${resumo.total || 0} questões · discriminação média ${pct(resumo.discriminacaoMedia, 1)}</small>
+      </div>
+      <div class="rd-linha-revisar">${revisar ? `<span class="rd-revisar-n">${revisar}</span><small>para revisar</small>` : '<span class="rd-revisar-ok">tudo certo</span>'}</div>
       <div class="rd-row-acoes">
         <button class="rd-icon-btn" data-acao="abrir" data-id="${esc(r.id)}" title="Abrir relatório">
           <svg class="rd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

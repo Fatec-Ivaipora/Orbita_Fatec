@@ -57,6 +57,28 @@ function trilha(itens) {
 }
 const seloConf = (c) => (!c ? '' : c.importantes ? `<span class="oc-selo oc-selo-imp">${c.importantes} ponto(s) importante(s)</span>` : c.sugestoes ? `<span class="oc-selo oc-selo-sug">${c.sugestoes} sugestão(ões)</span>` : '<span class="oc-selo oc-selo-ok">Sem pendências</span>');
 
+// Painel (27/11/2026, medicina/comum/painel.js): como estão as estações na conferência
+import { painel as painelMed, COR } from "../comum/painel.js?v=1";
+function painelOsce(d) {
+  const est = d.estacoes || [];
+  if (!est.length) return '';
+  const imp = est.filter(e => e.conf && e.conf.importantes).length;
+  const sug = est.filter(e => e.conf && !e.conf.importantes && e.conf.sugestoes).length;
+  const ok = est.filter(e => e.conf && !e.conf.importantes && !e.conf.sugestoes).length;
+  const sem = est.length - imp - sug - ok;
+  return `<section class="oc-painel">${painelMed({
+    destaque: `${ok} de ${est.length}`,
+    frase: `estações estão sem pendências na conferência.`,
+    sub: `${imp ? `<span class="med-alerta">${imp} com ponto importante a ajustar</span> · ` : ''}${(d.osces || []).length} OSCE${(d.osces || []).length === 1 ? '' : 's'} montada${(d.osces || []).length === 1 ? '' : 's'} no semestre`,
+    partes: [
+      { nome: 'Sem pendências', n: ok, cor: COR.azul, dica: 'pronta para entrar numa OSCE' },
+      { nome: 'Com sugestões', n: sug, cor: COR.ambar, dica: 'dá para melhorar, mas não impede' },
+      { nome: 'Ponto importante', n: imp, cor: COR.vermelho, dica: 'ajuste antes de aplicar' },
+      { nome: 'Não conferida', n: sem, cor: COR.cinzaClaro, dica: 'abra a estação para conferir' }
+    ]
+  })}</section>`;
+}
+
 // ============================================================ início
 async function carregar() {
   dados = await api(`${BASE}?semestre=${encodeURIComponent(el('oc-semestre').value)}`);
@@ -70,6 +92,7 @@ function render() {
   trilha([{ t: 'OSCE' }]);
   const d = dados;
   el('oc-conteudo').innerHTML = `
+    ${painelOsce(d)}
     <section class="oc-bloco">
       <header><h2>OSCEs do semestre</h2>${d.editor ? '<button type="button" class="oc-btn oc-btn-pri" data-a="nova-osce">+ Nova OSCE</button>' : ''}</header>
       ${d.osces.length ? `<div class="oc-cards">${d.osces.map(o => `<article class="oc-card">

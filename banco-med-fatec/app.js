@@ -9,8 +9,9 @@ import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
 import { escapeHTML as esc, sanitizeHTML } from "../core/security.js";
 import { getEffectiveLevel } from "../core/permissions.js";
-import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=52";
-import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=8";
+import { iniciarAvaliacoes, abrirAbaAvaliacoes, abrirEditorBanco, chipProfessorHtml, configurarAvaliacoes, prepararConferenciaProfessor } from "./avaliacoes.js?v=57";
+import { iniciarEnvioAva, abrirEnvioAva } from "./envio-ava.js?v=9";
+import { painel as painelMed, COR } from "../medicina/comum/painel.js?v=1";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -491,16 +492,35 @@ function filtroPadrao(lista) {
     return f === 'ok' ? p.ok : f === 'falta' ? !p.ok : f === 'caso' ? p.aplicacao : !p.aplicacao;
   });
 }
+// Painel das questões listadas (27/11/2026 — mesma linguagem de todos os módulos da Medicina, medicina/comum/painel.js).
+// Calculado SÓ com as questões já carregadas pelo filtro (nenhuma leitura a mais no Firestore).
 function placarPadrao(lista) {
-  const ok = lista.filter(q => padraoDe(q).ok).length, caso = lista.filter(q => padraoDe(q).aplicacao).length, n = lista.length || 1;
+  const ok = lista.filter(q => padraoDe(q).ok).length, caso = lista.filter(q => padraoDe(q).aplicacao).length;
   const cat = document.getElementById('bmf-filtro-categoria').value;
-  return `<div class="bmf-pd-placar" aria-label="${ok} de ${lista.length} no padrão">
-    <div class="bmf-pd-placar-tit">${cat ? esc(nomeCategoria(cat)) : 'Questões listadas'}</div>
-    <div class="bmf-pd-placar-itens">
-      <span><b>${ok}</b> no padrão</span><span><b>${lista.length - ok}</b> a padronizar</span><span><b>${caso}</b> de caso clínico (${Math.round(100 * caso / n)}%)</span>
-    </div>
-    <div class="bmf-pd-barra"><span style="width:${100 * ok / n}%"></span></div>
-  </div>`;
+  const n = lista.length;
+  const dif = (k) => lista.filter(q => q.dificuldade === k).length;
+  const onde = cat ? ` de ${esc(nomeCategoria(cat))}` : ' listadas';
+  return painelMed({
+    destaque: `${n ? Math.round(100 * ok / n) : 0}%`,
+    frase: `das ${n} questões${onde} estão no padrão do curso.`,
+    sub: n - ok ? `<span class="med-alerta">${n - ok} a padronizar</span> · ${caso} de caso clínico (${n ? Math.round(100 * caso / n) : 0}%)` : `<span class="med-ok">Todas no padrão</span> · ${caso} de caso clínico`,
+    partes: [
+      { nome: 'No padrão', n: ok, cor: COR.azul, dica: 'pronta para entrar em prova' },
+      { nome: 'A padronizar', n: n - ok, cor: COR.laranja, dica: 'falta caso clínico, alternativas, feedback ou referência' }
+    ],
+    extras: [
+      { rotulo: 'Tipo', partes: [{ nome: 'Caso clínico', n: caso, cor: COR.azul }, { nome: 'Conhecimento', n: n - caso, cor: COR.ciano }] },
+      { rotulo: 'Dificuldade', partes: [{ nome: 'Fácil', n: dif('facil'), cor: COR.ciano }, { nome: 'Média', n: dif('media'), cor: COR.azul }, { nome: 'Intermediária', n: dif('intermediaria'), cor: COR.ambar }, { nome: 'Difícil', n: dif('dificil'), cor: COR.laranja }] }
+    ]
+  });
+}
+
+// Antes de escolher um filtro (o banco só carrega depois, para economizar leituras): atalhos dos períodos
+function comecarPorPeriodo() {
+  const periodos = [...new Set(categorias.map(c => Number(c.periodo)).filter(Boolean))].sort((a, b) => a - b);
+  if (!periodos.length) return '';
+  return `<div class="med-comecar"><p>Escolha um período para ver as questões do banco, ou use os filtros acima.</p>
+    <div class="med-comecar-opcoes">${periodos.map(p => `<button type="button" data-comecar-periodo="${p}">${p}º período</button>`).join('')}</div></div>`;
 }
 
 function nomeCategoriaObj(id) {
@@ -527,10 +547,15 @@ function renderQuestoes() {
   const professorEscolhido = document.getElementById('bmf-filtro-professor').value;
   const buscaEscolhida = document.getElementById('bmf-filtro-busca').value.trim();
   if (!periodoEscolhido && !categoriaEscolhida && !areaEscolhida && !dificuldadeEscolhida && !professorEscolhido && buscaEscolhida.length < 2) {
-    grid.innerHTML = '';
+    grid.innerHTML = comecarPorPeriodo();
     contagemEl.classList.add('hidden');
     vazio.textContent = 'Selecione um período, uma disciplina, uma área ENAMED, uma dificuldade, um professor, ou busque por título acima.';
-    vazio.classList.remove('hidden');
+    vazio.classList.toggle('hidden', !!grid.innerHTML);
+    grid.querySelectorAll('[data-comecar-periodo]').forEach(b => b.addEventListener('click', () => {
+      const sel = document.getElementById('bmf-filtro-periodo');
+      sel.value = b.dataset.comecarPeriodo;
+      sel.dispatchEvent(new Event('change'));
+    }));
     renderBarraSelecao();
     return;
   }
@@ -561,7 +586,7 @@ function renderQuestoes() {
     const texto = professorEscolhido === 'me'
       ? `Você criou ${lista.length} questão(ões) com esses filtros.`
       : `${lista.length} questão(ões) encontrada(s).`;
-    contagemEl.innerHTML = `${placarPadrao(base)}<span>${texto}</span>`;
+    contagemEl.innerHTML = `${placarPadrao(base)}<span class="bmf-contagem-texto">${texto}</span>`;
   }
 
   lista.forEach(q => {

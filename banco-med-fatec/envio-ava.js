@@ -31,6 +31,7 @@ const SITUACAO = {
 const temNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0);
 const nosDoisLugares = (p) => !!(p.total > 0 && p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0 && p.ava.quadro.direto > 0);
 const diretoNoAva = (p) => !!(p.ava && p.ava.quadro && !p.ava.quadro.erro && p.ava.quadro.noQuestionario > 0 && p.ava.quadro.direto > 0);
+import { painel as painelMed, COR } from '../medicina/comum/painel.js?v=1';
 const FILTROS = [
   ['dois', 'Nos dois lugares', nosDoisLugares],
   ['direto', 'Direto no AVA', diretoNoAva],
@@ -210,11 +211,33 @@ function render() {
         </div>
       </header>
       ${estadoAgente(dados.agente)}
+      ${painelEnvio(provas)}
       <div class="ea-filtros" role="tablist" aria-label="Filtrar provas">
         ${FILTROS.map(([k, r, fn]) => `<button type="button" role="tab" aria-selected="${k === f[0]}" class="ea-filtro ${k === f[0] ? 'ativo' : ''}" data-ea-filtro="${k}">${r} <span>${contar(fn)}</span></button>`).join('')}
       </div>
       ${lista.length ? `<ul class="ea-lista">${lista.map(provaHtml).join('')}</ul>` : `<p class="av-vazio">Nenhuma prova em "${f[1]}".</p>`}
     </div>`;
+}
+
+// Painel (27/11/2026, medicina/comum/painel.js): quanto das provas do semestre já está no AVA
+function painelEnvio(provas) {
+  if (!provas.length) return '';
+  const n = (fn) => provas.filter(fn).length;
+  const noAva = n(p => p.situacao === 'no_ava'), pronta = n(p => p.situacao === 'pronta'), aguardando = n(p => p.situacao === 'aguardando');
+  const atencao = n(p => ['conferir', 'erro'].includes(p.situacao)), fora = n(p => nosDoisLugares(p) || diretoNoAva(p));
+  const outras = Math.max(0, provas.length - noAva - pronta - aguardando - atencao);
+  return painelMed({
+    destaque: `${noAva} de ${provas.length}`,
+    frase: `provas do semestre já estão com as questões no AVA.`,
+    sub: `${pronta ? `${pronta} pronta${pronta === 1 ? '' : 's'} para enviar` : 'nenhuma pronta esperando'}${atencao ? ` · <span class="med-alerta">${atencao} precisa${atencao === 1 ? '' : 'm'} de atenção</span>` : ''}${fora ? ` · ${fora} com questões postas direto no AVA` : ''}`,
+    partes: [
+      { nome: 'No AVA', n: noAva, cor: COR.azul, dica: 'as questões já estão no banco do questionário' },
+      { nome: 'Prontas', n: pronta, cor: COR.ciano, dica: 'o envio leva sozinho, ou clique em Enviar esta prova' },
+      { nome: 'Aguardando professor', n: aguardando, cor: COR.cinzaClaro, dica: 'falta o professor terminar a parte dele' },
+      { nome: 'Precisa de atenção', n: atencao, cor: COR.vermelho, dica: 'o envio parou: leia a faixa vermelha da prova' },
+      { nome: 'Outras', n: outras, cor: COR.cinza, dica: 'montadas só no AVA ou sem questões no Órbita' }
+    ]
+  });
 }
 
 async function baixarArquivo(id, btn) {
