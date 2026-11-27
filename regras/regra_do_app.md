@@ -99,6 +99,23 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-27] Automação AVA: situação "Atualizar"
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/ava-origem-atualizar
+- Arquivos alterados:
+  - `src/rotas/automacao-ava.js`:
+    - `ORIGENS` ganha `atualizar`;
+    - `comProfessor` (criar/atualizar) entra no link das UAs (`discCriarDoSemestre`);
+    - `copiaSala` (replicar/atualizar) busca a sala-modelo do Conduit.
+  - `ti/automacao-ava/app.js` (v=13):
+    - opção e pílula "Atualizar";
+    - professor, titulação/valor, pagamento e etapas também para "Atualizar";
+    - a sala sai no arquivo de replicação do Conduit;
+    - os números do topo contam "para criar ou atualizar".
+- Tipo: Melhoria
+- Motivo: em 2027.1, Psicologia, Saúde e Trabalho (3704) e Psicologia e Tecnologia (3706) não são criadas do zero. A sala existente é replicada e o prof. Leonardo dos Santos Silva (especialista, R$ 800,00) atualiza o conteúdo, com escolha das UAs pelo link.
+- Como reverter: reverter o commit (antes, trocar as disciplinas "atualizar" para outra situação, senão a tela antiga não reconhece).
+
 ### [2026-11-26] Nome social em TODO o Órbita (folhas do simulado saíram com o nome de registro)
 - Autor: Claude Code (a pedido do usuário)
 - Branch: fix/folhas-nome-social
