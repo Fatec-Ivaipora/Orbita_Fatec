@@ -109,6 +109,24 @@ async function lerResultadoDaProva(imp, p) {
     } catch (e) { return { ...base, ...ligado, status: e.semNota ? 'sem_nota' : 'erro', erro: e.message }; }
 }
 
+// ---------- estatísticas da prova → Relatório de Desempenho (27/11/2026) ----------
+// Depois de ler os Resultados de uma prova FECHADA, baixa do mesmo questionário o "relatório completo" das
+// Estatísticas (o mesmo CSV que se baixava à mão) e grava o Relatório de Desempenho (banco_med_relatorios/ava__<prova>).
+// Rodada automática: só a 1ª vez de cada prova. "Ler de novo no AVA" (pedido) e --estatisticas=<prova>: refaz.
+const RelDesempenho = require(path.join(__dirname, '..', 'src', 'utils', 'relatorio-desempenho-ava'));
+async function gravarEstatisticas(imp, p, r, { forcar = false, simular = false } = {}) {
+    if (!r || r.status !== 'ok' || !r.cmid) return '';
+    const ref = db.collection(RelDesempenho.COL).doc(`ava__${p.id}`);
+    if (!forcar && !simular && (await ref.get()).exists) return '';
+    const url = `/mod/quiz/report.php?id=${r.cmid}&mode=statistics&everything=1&download=csv`;
+    const { texto } = await imp.s.req(url);
+    const { id, doc, existia } = await RelDesempenho.montarDoAva(db, texto, p, r);
+    const msg = `estatísticas: ${doc.questoes.length} questões, ${doc.nAlunos ?? '?'} alunos, ${doc.resumo.paraRevisar} para revisar`;
+    if (simular) return `${msg} (simulação, não gravou)`;
+    await db.collection(RelDesempenho.COL).doc(id).set(doc);
+    return `${msg}${existia ? ' (atualizado)' : ' (novo relatório)'}`;
+}
+
 // ---------- trazer do AVA para validar (26/11/2026) ----------
 // Prova que o professor montou direto no AVA, sem passar pelo Órbita: o Banco MED pede (avaliacao.avaTrazer.status
 // = 'pedido'), o agente exporta o banco do questionário em Moodle-XML, guarda no Storage e lista o nome das questões
@@ -243,6 +261,8 @@ async function rodada(origem) {
             const r = await lerResultadoDaProva(imp, p);
             if (!simular) await db.collection(COL_RES).doc(p.id).set(r);
             resumo.resultados++;
+            try { const m = await gravarEstatisticas(imp, p, r, { simular }); if (m) log(`  desempenho ${p.data} ${p.turma} ${p.disciplina} — ${m}`); }
+            catch (e) { log(`  desempenho ${p.data} ${p.turma} ${p.disciplina} — erro: ${e.message}`); }
             if (simular || args['uma-vez']) log(`  resultado ${p.data} ${p.turma} ${p.disciplina} — ${r.status === 'ok' ? `${r.contagem.fizeram} fizeram, ${r.contagem.naoFizeram} não fizeram (nota sobre ${r.notaMax})` : r.erro || r.status}`);
         } catch (e) { log(`  resultado ${p.data} ${p.turma} ${p.disciplina} — erro: ${e.message}`); }
     }
@@ -297,7 +317,12 @@ async function pedidoResultados(imp, provaId) {
         const s = await db.collection('med_aplicacao_provas').doc(String(provaId)).get();
         provas = s.exists ? [{ id: s.id, ...s.data() }] : [];
     } else provas = await resultadosAFazer('pedido');
-    for (const p of provas) await db.collection(COL_RES).doc(p.id).set(await lerResultadoDaProva(imp, p));
+    for (const p of provas) {
+        const r = await lerResultadoDaProva(imp, p);
+        await db.collection(COL_RES).doc(p.id).set(r);
+        // "Ler de novo no AVA": refaz também o Relatório de Desempenho da prova
+        try { await gravarEstatisticas(imp, p, r, { forcar: true }); } catch (e) { log(`  desempenho ${p.id} — erro: ${e.message}`); }
+    }
     return `${provas.length} prova(s) lida(s) no AVA`;
 }
 // → true se havia pedido por prova (e a rodada completa não precisa rodar)
@@ -370,6 +395,19 @@ async function pulso() {
 }
 
 async function iniciar() {
+    // teste pelo servidor: node scripts/ava-banco-med-agente.js --estatisticas=<id da prova da Aplicação de Provas> [--simular]
+    if (args.estatisticas) {
+        try {
+            const sessao = new SessaoAva(); await sessao.entrar();
+            const imp = new ImportadorBancoAva(sessao);
+            const s = await db.collection('med_aplicacao_provas').doc(String(args.estatisticas)).get();
+            if (!s.exists) throw new Error('prova não encontrada na Aplicação de Provas');
+            const p = { id: s.id, ...s.data() };
+            const r = await lerResultadoDaProva(imp, p);
+            log(`estatisticas ${p.disciplina} ${p.turma} — resultado: ${r.status}${r.erro ? ` (${r.erro})` : ''} — ${await gravarEstatisticas(imp, p, r, { forcar: true, simular: !!args.simular }) || 'nada (prova não fechada ou sem resultado)'}`);
+        } catch (e) { log(`ERRO: ${e.message}`); process.exitCode = 1; }
+        process.exit();
+    }
     // teste pelo servidor: node scripts/ava-banco-med-agente.js --colocar=<id da avaliação> [--simular]
     if (args.colocar) {
         try {

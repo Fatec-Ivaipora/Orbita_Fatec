@@ -1,0 +1,127 @@
+/* ================================================================
+   ÓRBITA — MEDICINA · TEMA MED (27/11/2026)
+   Uma cara só para TODAS as telas do menu Medicina (Banco de Questões, Aplicação de Provas, OSCE, Portfólio,
+   Relatório de Desempenho), a mesma do Relatório de Desempenho redesenhado. Carregado POR ÚLTIMO em cada módulo:
+   só aparência — nenhum comportamento muda.
+   Antes conviviam três azuis (marinho do Órbita #12294D, MED #004F9F e "NAPED" #0052B8), raios de 4 a 16 px e
+   três modelos de aba. Aqui:
+     · cor principal = azul MED #004F9F (cabeçalho, botão principal, aba ativa, seleção); destaque = ciano #009FE3;
+     · raios: 8 px controles, 12 px blocos e cartões, pílula só em etiqueta;
+     · abas sublinhadas em azul MED; tabelas com o mesmo cabeçalho; blocos com borda e sem sombra.
+   Exceção ao DESIGN.md do Órbita (marinho): a Medicina usa a sub-marca MED FATEC.
+   ================================================================ */
+
+/* ---------- cores: as variáveis de marca de cada módulo apontam para o azul MED ---------- */
+:root, body, body.orb-v2, .ap-main {
+  --med-azul: #004F9F;
+  --med-azul-hover: #003E7D;
+  --med-ciano: #009FE3;
+  --med-suave: #E8F2FC;
+  --med-linha: #B8D2EE;
+  --med-tinta: #0F172A;
+  --med-tinta2: #475569;
+  --med-borda: #DCE3EC;
+  --med-fundo: #F4F7FB;
+
+  /* Órbita (Portfólio, OSCE, Aplicação de Provas, Desempenho) */
+  --orb-marca: #004F9F;
+  --orb-marca-hover: #003E7D;
+  --orb-marca-suave: #E8F2FC;
+  --orb-azul: #004F9F;
+  /* Banco de Questões ("NAPED") e Relatório */
+  --med-azul-escuro: #004F9F;
+  --med-azul-escuro-hover: #003E7D;
+  --med-azul-claro: #009FE3;
+  --np-royal: #004F9F;
+  --np-royal-escuro: #003E7D;
+  --np-ciano: #009FE3;
+  --np-ciano-tinta: #00659C;
+  /* Aplicação de Provas */
+  --med: #004F9F;
+  --med-hover: #003E7D;
+  --med-claro: #009FE3;
+}
+
+/* ---------- cabeçalho de cada módulo: azul MED com a linha ciano embaixo ---------- */
+.pf-cab, .oc-cab, .ap-cab, .np-faixa, .rd-toolbar {
+  background: var(--med-azul) !important;
+  border-radius: 12px;
+  border-bottom: 4px solid var(--med-ciano);
+}
+.pf-cab p, .ap-cab p, .oc-cab p, .pf-sem, .ap-sem { color: #D3E6F8; }
+.ap-modal > header, .av-modal-cab, .bmf-modal-titulo { border-bottom: 3px solid var(--med-ciano); }
+.ap-modal > header { background: var(--med-azul); }
+
+/* ---------- botões ---------- */
+.pf-btn, .oc-btn, .ap-btn, .ar-btn, .av-btn, .rd-icon-btn, .bmf-icon-btn, .av-icone-btn { border-radius: 8px; min-height: 40px; font-weight: 700; }
+.oc-btn-mini, .pf-btn-peq { min-height: 34px; }
+.pf-btn-pri, .oc-btn-pri, .ap-btn-pri, .ar-btn:not(.ar-btn-sec),
+body .btn-primary, body.orb-v2 .btn-primary, .bmf-btn-on-blue-primary, .rd-btn-on-blue-primary {
+  background: var(--med-azul); border-color: var(--med-azul); color: #fff;
+}
+.pf-btn-pri:hover, .oc-btn-pri:hover, .ap-btn-pri:hover, .ar-btn:not(.ar-btn-sec):hover,
+body .btn-primary:hover, body.orb-v2 .btn-primary:hover { background: var(--med-azul-hover); border-color: var(--med-azul-hover); }
+.pf-btn:not(.pf-btn-pri):not(.pf-btn-ok):not(.pf-btn-perigo):not(.pf-btn-ajuda),
+.oc-btn:not(.oc-btn-pri):not(.oc-btn-perigo):not(.oc-btn-aplicar),
+body .btn-secondary, body.orb-v2 .btn-secondary {
+  background: #fff; border: 1.5px solid var(--med-linha); color: var(--med-azul);
+}
+.pf-btn:not(.pf-btn-pri):not(.pf-btn-ok):not(.pf-btn-perigo):not(.pf-btn-ajuda):hover,
+.oc-btn:not(.oc-btn-pri):not(.oc-btn-perigo):not(.oc-btn-aplicar):hover,
+body .btn-secondary:hover, body.orb-v2 .btn-secondary:hover { background: var(--med-suave); }
+/* dentro do cabeçalho azul, o botão secundário fica contornado em branco */
+.pf-cab .pf-btn:not(.pf-btn-pri), .ap-cab .ap-btn:not(.ap-btn-pri), .oc-cab .oc-btn:not(.oc-btn-pri) {
+  background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.45);
+}
+.pf-cab .pf-btn:not(.pf-btn-pri):hover, .ap-cab .ap-btn:not(.ap-btn-pri):hover, .oc-cab .oc-btn:not(.oc-btn-pri):hover { background: rgba(255, 255, 255, 0.12); }
+.pf-link, .oc-trilha button, .av-link, .ar-link, .pf-trilha-link { color: var(--med-azul); }
+:where(.pf-btn, .oc-btn, .ap-btn, .ar-btn, .av-btn, .btn):focus-visible { outline: 3px solid var(--med-ciano); outline-offset: 2px; }
+
+/* ---------- abas: sublinhadas em azul MED (mesmo modelo nos 5 módulos) ---------- */
+.pf-abas:not(.pf-abas-peq) { background: transparent; border: 0; border-bottom: 1px solid var(--med-borda); border-radius: 0; padding: 0; gap: 1.2rem; }
+.pf-abas:not(.pf-abas-peq) .pf-aba { background: transparent; color: var(--med-tinta2); border-radius: 0; border-bottom: 3px solid transparent; padding: 0.55rem 0.1rem; font-weight: 600; }
+.pf-abas:not(.pf-abas-peq) .pf-aba.ativa { background: transparent; color: var(--med-azul); border-bottom-color: var(--med-azul); font-weight: 800; }
+.pf-abas-peq .pf-aba.ativa, .oc-global button[aria-pressed="true"], .av-fp.ativo { background: var(--med-azul); border-color: var(--med-azul); color: #fff; }
+.ap-aba.ativa, .ar-aba[aria-selected="true"], .av-rel-abas button[aria-selected="true"] { color: var(--med-azul); border-bottom-color: var(--med-azul); }
+.ea-filtro.ativo { border-color: var(--med-azul); color: var(--med-azul); background: var(--med-suave); }
+
+/* ---------- tabelas: um cabeçalho só ---------- */
+.pf-tab th, .oc-tab th, .ap-tab th, .ar-tab th, .ar-tabela th, .av-mc-tab th, .av-pg-tabela th, .av-rel-tab th, .bmf-relatorio-tabela th, .rd-tabela th {
+  background: #F8FAFC; color: var(--med-tinta2); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--med-borda);
+}
+.pf-tab tbody tr:hover, .oc-tab tbody tr:hover, .ap-tab tbody tr:hover, .ar-tab tbody tr:hover, .bmf-relatorio-tabela tbody tr:hover, .rd-tabela tbody tr:hover { background: #F6F9FD; }
+
+/* ---------- blocos, cartões e listas: borda, sem sombra, raio 12 ---------- */
+.oc-bloco, .oc-card, .pf-turma, .pf-ativ-cab, .pf-crit, .ap-turma, .ap-napa-card, .ar-caixa, .bmf-lista, .rd-lista, .rd-painel, .med-painel, .ea-prova, .av-disc, .pf-tab-wrap, .oc-wrap {
+  border-radius: 12px;
+  box-shadow: none;
+}
+.oc-bloco, .oc-card, .pf-turma, .ap-napa-card, .ar-caixa, .bmf-lista, .rd-lista, .med-painel { border: 1px solid var(--med-borda); background: #fff; }
+.av-periodo, .rd-grupo-turma { color: var(--med-azul); }
+
+/* ---------- etiquetas e selos: sempre pílula ---------- */
+.pf-av, .oc-selo, .ap-chip, .ap-et-c1, .ap-et-sub, .ap-et-exame, .bmf-badge, .badge, .av-tag, .av-selo, .ar-pill, .ea-sit, .pf-st { border-radius: 999px; }
+.oc-selo-ok, .av-selo-ok, .ar-pill-ok, .pf-st-finalizada { background: #E2F2EA; color: #0F7A4B; }
+.oc-selo-imp, .av-selo-erro, .ar-pill-anul, .pf-av-crit { background: #FBE9E6; color: #9B2A21; }
+.oc-selo-sug, .ar-pill-alerta, .pf-av-alerta, .pf-st-rascunho { background: #FDF0DD; color: #8A5300; }
+
+/* ---------- campos de formulário ---------- */
+.pf-form input, .pf-form select, .pf-form textarea, .oc-campo input, .oc-campo select, .oc-campo textarea,
+.ap-campo input, .ap-campo select, .ap-campo textarea, .av-input, .av-campo select, .campo input, .campo select, .form-control {
+  border-radius: 8px;
+}
+:where(.pf-form, .oc-campo, .ap-campo, .av-campo, .campo, .form-group) :is(input, select, textarea):focus,
+.av-input:focus, .form-control:focus { outline: none; border-color: var(--med-ciano); box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.18); }
+
+/* ---------- janelas ---------- */
+.ap-modal, .av-modal, .pf-dialogo, .modal-box { border-radius: 12px; }
+
+/* ---------- vazio e avisos ---------- */
+.pf-vazio, .oc-vazio, .ap-vazio, .av-vazio, .bmf-empty, .rd-vazio {
+  border: 1px dashed var(--med-linha); border-radius: 12px; background: #FBFDFF; color: var(--med-tinta2);
+}
+
+/* Cores das TURMAS (T1, T2, T3…) ficam como estão: identificam a turma nas artes do calendário que os alunos recebem. */
+
+::selection { background: var(--med-ciano); color: #fff; }

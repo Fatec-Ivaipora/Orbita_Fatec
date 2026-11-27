@@ -723,3 +723,10 @@
   .bmf-q-row, .bmf-prova-row { flex-wrap: wrap; }
   .bmf-q-row-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Painel do banco (27/11/2026, medicina/comum/painel.css) */
+#bmf-questoes-contagem .med-painel { margin-bottom: 0.6rem; }
+.bmf-contagem-texto { display: block; font-size: 0.82rem; color: #64748B; margin: 0 0 0.4rem 0.2rem; }
+.bmf-q-row { border-left: 4px solid transparent; }
+.bmf-q-row:has(.av-selo-erro) { border-left-color: #EC7A45; }
+.bmf-q-row:has(.av-selo-ok) { border-left-color: #004F9F; }

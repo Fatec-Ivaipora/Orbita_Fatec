@@ -140,7 +140,11 @@ const SUFIXO_TURMA_ESPECIAL = /\s*·\s*(ADAPTAÇÃO|DEPENDÊNCIA)$/i;
 const nomeBaseDisciplina = (nome) => String(nome || '').replace(SUFIXO_TURMA_ESPECIAL, '');
 async function listaDisciplinas(semestre, { comTurmasEspeciais = false } = {}) {
     const fonte = await semestreComDados(semestre);
-    const [diarios, cats] = await Promise.all([diariosMed(fonte), categorias()]);
+    // Turma de cada período (27/11/2026): a mesma relação da Aplicação de Provas (med_aplicacao_config/<semestre>.turmas,
+    // ex.: 2026.2 → T1 = 5º, T2 = 4º, T3 = 2º) — o Banco mostra "2º período · Turma T3" e a turma na prova aberta
+    const [diarios, cats, turmasSem] = await Promise.all([diariosMed(fonte), categorias(),
+        emCache(`turmas:${semestre}`, 15 * 60000, async () => { const s = await db.collection('med_aplicacao_config').doc(semestre).get(); return s.exists ? (s.data().turmas || []) : []; }).catch(() => [])]);
+    const turmaDoPeriodo = new Map(turmasSem.filter(t => t && t.id && t.periodo).map(t => [Number(t.periodo), String(t.id)]));
     const comRegular = new Set(diarios.filter(d => !turmaEspecialDo(d.turma)).map(d => normNome(d.disciplina)));
     const porNome = new Map();
     diarios.forEach(d => {
@@ -156,6 +160,9 @@ async function listaDisciplinas(semestre, { comTurmasEspeciais = false } = {}) {
             });
         }
         const x = porNome.get(k);
+        // disciplina que só tem diário de ADP/DP no semestre (ex.: Habilidades Clínicas I): a turma é ADP/DP
+        if (turmaEspecialDo(d.turma)) (x.especiais = x.especiais || new Set()).add(turmaEspecialDo(d.turma).toUpperCase());
+        else x.temRegular = true;
         x.professores.add(titulo(d.nome).replace(/\s+/g, ' '));
         // professor TITULAR da disciplina no Edubox (tac_professor.tippro, relay v4 — 16/11/2026); os demais são adjuntos
         if (d.vinculo && /titular/i.test(String(d.vinculo.tippro || ''))) x.titulares.add(titulo(d.nome).replace(/\s+/g, ' '));
@@ -171,7 +178,9 @@ async function listaDisciplinas(semestre, { comTurmasEspeciais = false } = {}) {
     });
     return {
         fonte,
-        disciplinas: [...porNome.values()].map(x => ({ ...x, professores: [...x.professores].sort(), titulares: [...x.titulares].sort(), coddtus: [...x.coddtus] }))
+        disciplinas: [...porNome.values()].map(({ especiais, temRegular, ...x }) => ({ ...x,
+            turma: x.turmaEspecial ? x.turmaEspecial.toUpperCase() : (!temRegular && especiais ? [...especiais].join('/') : (turmaDoPeriodo.get(Number(x.periodo)) || '')),
+            professores: [...x.professores].sort(), titulares: [...x.titulares].sort(), coddtus: [...x.coddtus] }))
             .sort((a, b) => (a.periodo - b.periodo) || a.nome.localeCompare(b.nome))
     };
 }
@@ -620,6 +629,33 @@ router.post('/envio-ava/:id/marcar', async (req, res) => {
         });
         await FilaAva.publicarNoBanco(ids, quem(req));
         res.json({ message: `${ids.length} questão(ões) registrada(s) como já no AVA.` });
+    } catch (e) { erro(res, e); }
+});
+
+// "Não vai ter" (27/11/2026): a coordenação marca que a disciplina NÃO terá 2ª chamada ou exame no semestre, para o
+// espaço não ficar como pendente ("Montar") na grade e no painel. banco_med_config/sem_prova_<semestre>.itens =
+// { "<chave>|b2c2": { por, em }, "<chave>|exame": {…} }
+const SLOT_SEM_PROVA = /^(b[12]c2|exame)$/;
+const refSemProva = (semestre) => db.collection('banco_med_config').doc(`sem_prova_${semestre}`);
+router.get('/sem-prova', async (req, res) => {
+    try {
+        const semestre = String(req.query.semestre || '');
+        if (!SEMESTRE.test(semestre)) return res.status(400).json({ error: 'Informe o semestre.' });
+        const s = await refSemProva(semestre).get();
+        res.json((s.exists && s.data().itens) || {});
+    } catch (e) { erro(res, e); }
+});
+router.put('/sem-prova', async (req, res) => {
+    try {
+        exigeEditorAv(req, 'marcam que a disciplina não vai ter a prova');
+        const b = req.body || {};
+        const semestre = String(b.semestre || ''), chave = String(b.chave || '').slice(0, 90), slot = String(b.slot || '');
+        if (!SEMESTRE.test(semestre) || !chave || !SLOT_SEM_PROVA.test(slot)) return res.status(400).json({ error: 'Só a 2ª chamada e o exame podem ser marcados como "não vai ter".' });
+        const k = `${chave}|${slot}`;
+        const ref = refSemProva(semestre);
+        if (b.naoVaiTer) await ref.set({ itens: { [k]: { por: quem(req), em: agora() } } }, { merge: true });
+        else await ref.set({ itens: { [k]: admin.firestore.FieldValue.delete() } }, { merge: true });
+        res.json({ ok: true, message: b.naoVaiTer ? 'Marcado: esta disciplina não vai ter essa prova.' : 'Desfeito: a prova volta a aparecer para montar.' });
     } catch (e) { erro(res, e); }
 });
 

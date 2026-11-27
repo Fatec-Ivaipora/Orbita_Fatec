@@ -8,6 +8,7 @@ import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
 import { tutorialHtml } from "./tutorial.js?v=1";
+import { painel as painelMed, COR } from "../comum/painel.js?v=1";
 
 const M = window.PortfolioMatriz;
 const fbApp = initializeApp(firebaseConfig);
@@ -285,18 +286,41 @@ function contagem() {
 }
 const comAlerta = (id) => !!(simil && simil.pares.some(p => p.a === id || p.b === id));
 
+// Painel da atividade (27/11/2026, medicina/comum/painel.js): correções e a distribuição das notas de corte
+function painelAtividade(c) {
+  if (!c.total) return '';
+  const refs = ativ.entregas.map(e => e.referencia).filter(Boolean);
+  const semTexto = refs.filter(r => r.semTexto || r.nota == null).length;
+  const notas = refs.filter(r => !r.semTexto && r.nota != null).map(r => Number(r.nota));
+  const faixa = (min, max) => notas.filter(n => n >= min && n < max).length;
+  const diverge = ativ.entregas.filter(e => e.divergeDaReferencia && e.status === 'finalizada').length;
+  const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
+  return painelMed({
+    destaque: `${c.finalizada} de ${c.total}`,
+    frase: `portfólios corrigidos e finalizados.`,
+    sub: `${c.rascunho} em correção · ${c.pendente} ${c.pendente === 1 ? 'pendente' : 'pendentes'}${media != null ? ` · nota de corte média ${fmt(media)}` : ''}${diverge ? ` · <span class="med-alerta">${diverge} longe da nota de corte</span>` : ''}`,
+    partes: [
+      { nome: 'Finalizados', n: c.finalizada, cor: COR.azul, dica: 'prontos para ir ao AVA' },
+      { nome: 'Em correção', n: c.rascunho, cor: COR.ciano, dica: 'rascunho salvo pelo professor' },
+      { nome: 'Pendentes', n: c.pendente, cor: COR.cinzaClaro, dica: 'ninguém abriu ainda' }
+    ],
+    extras: notas.length || semTexto ? [{ rotulo: 'Nota de corte', partes: [
+      { nome: '8 a 10', n: faixa(8, 10.01), cor: COR.azul }, { nome: '6 a 7,9', n: faixa(6, 8), cor: COR.ciano },
+      { nome: '4 a 5,9', n: faixa(4, 6), cor: COR.ambar }, { nome: 'abaixo de 4', n: faixa(-1, 4), cor: COR.laranja },
+      { nome: 'sem texto', n: semTexto, cor: COR.cinza }
+    ] }] : []
+  });
+}
+
 function renderAtividade() {
   const { atividade, turma, entregas } = ativ;
   trilha([{ t: 'Turmas', ir: 'turmas' }, { t: `${turma.turma} · ${atividade.titulo}` }]);
   const c = contagem();
-  const pct = c.total ? Math.round(c.finalizada / c.total * 100) : 0;
   el('pf-conteudo').innerHTML = `
     <section class="pf-ativ-cab">
       <div>
         <h2>${esc(atividade.titulo)} <small>${esc(turmaRotulo(turma))}</small></h2>
-        <p class="pf-meta">${c.total} entregas · ${c.finalizada} finalizadas · ${c.rascunho} em correção · ${c.pendente} pendentes</p>
         ${atividade.ava ? `<p class="pf-meta">AVA: Tarefa <b>${esc(atividade.ava.tarefaNome)}</b> · ${esc(atividade.ava.cursoNome)}${ativ.editor ? ' · <button type="button" class="pf-link" data-acao="ava-ligar">trocar</button>' : ''}</p>` : ''}
-        <div class="pf-progresso" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
       </div>
       <div class="pf-acoes">
         ${ativ.editor && atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-buscar">Buscar entregas do AVA</button>' : ''}
@@ -306,6 +330,7 @@ function renderAtividade() {
         ${ativ.editor ? '<button type="button" class="pf-btn pf-btn-perigo" data-acao="excluir-ativ">Excluir atividade</button>' : ''}
       </div>
     </section>
+    ${painelAtividade(c)}
     <div id="pf-import" class="pf-import" hidden></div>
     <nav class="pf-abas" role="tablist">
       ${[['entregas', 'Entregas'], ['similaridade', 'Similaridade'], ['resumo', 'Quadro-resumo e AVA']].map(([k, t]) =>

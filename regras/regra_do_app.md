@@ -99,6 +99,49 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-27] Relatório de Desempenho do AVA pelo agente + visual novo em todos os módulos da Medicina
+- Autor: Claude Code (a pedido do usuário)
+- Branch: feat/agente-estatisticas-ava
+- Arquivos alterados:
+  - `src/utils/relatorio-desempenho-ava.js` (novo):
+    - `montarResumo`, que a rota passa a usar;
+    - `montarDoAva`: monta o relatório a partir do CSV de "Estatísticas do questionário" (relatório completo), no mesmo formato da rota.
+  - `scripts/ava-banco-med-agente.js`:
+    - depois de ler os Resultados de uma prova fechada, baixa `/mod/quiz/report.php?id=<cmid>&mode=statistics&everything=1&download=csv` e grava `banco_med_relatorios/ava__<prova>`;
+    - na rodada automática só na 1ª vez; "Ler de novo no AVA" refaz;
+    - teste: `--estatisticas=<prova> [--simular]`.
+  - `src/rotas/relatorio-desempenho.js`:
+    - a lista recebe `origem`, `provaId` e `etapa`;
+    - a correção de cabeçalho marca `cabecalhoEditadoEm`, e a releitura do agente não a apaga.
+  - `medicina/relatorio-desempenho/` (app.js e css v=9, index.html):
+    - painel das provas listadas: frase com a % de questões que separam bem, número para revisar e espectro grande das 5 faixas com legenda;
+    - cada prova numa linha com o seu espectro, a data, os alunos e a média, o "N para revisar" e a origem ("Do AVA" ou quem enviou);
+    - funciona no celular.
+  - **Todos os módulos do menu Medicina** com a mesma linguagem: `medicina/comum/painel.js` + `painel.css` (painel de abertura com uma frase, espectro grande e legenda). Os painéis são calculados só com o que a tela já carregou, sem leitura a mais.
+    - Banco de Questões, aba Banco: % no padrão, espectros de padrão, tipo e dificuldade; atalhos de período antes de filtrar; faixa de cor na lateral de cada questão.
+    - Aba Avaliações: provas do bimestre aberto finalizadas, em montagem ou não criadas (1ª chamada; 2ª chamada e exame menores).
+    - Aba Envio ao AVA: provas no AVA, prontas, aguardando professor e com atenção.
+    - Portfólio: corrigidos, em correção e pendentes, e a distribuição das notas de corte.
+    - OSCE: estações sem pendência, com sugestão, com ponto importante e não conferidas.
+    - Aplicação de Provas: aplicadas, próximos 7 dias e mais adiante, com alerta de prova sem aplicador.
+  - **Tema MED** (`medicina/comum/tema.css`, carregado por último nos 5 módulos):
+    - cor principal azul MED `#004F9F` (cabeçalhos, botão principal, aba ativa, janelas) e ciano `#009FE3` de destaque;
+    - acaba a mistura com o marinho do Órbita e o azul "NAPED" do Banco;
+    - cantos de 8 px nos controles e 12 px nos blocos; abas sublinhadas; tabelas com o mesmo cabeçalho; etiquetas em pílula; blocos com borda e sem sombra;
+    - as cores das turmas (T1, T2, T3) continuam, porque identificam a turma nas artes dos alunos.
+  - **Turma no Banco** (`listaDisciplinas` devolve `turma`, pela relação turma × período de `med_aplicacao_config/<semestre>`):
+    - a grade das Avaliações mostra "2º período · Turma T3";
+    - a prova aberta mostra turma e período no cabeçalho;
+    - ADP/DP nas disciplinas de Adaptação e Dependência.
+  - **"Não vai ter"** na 2ª chamada e no exame:
+    - `GET/PUT /sem-prova`, só a coordenação grava, em `banco_med_config/sem_prova_<semestre>.itens`;
+    - na grade, o espaço vazio ganha o link "Não vai ter"; marcado, fica cinza com "desfazer";
+    - no painel conta como "Não vai ter" e não como pendente ("Não criada").
+- Tipo: Melhoria
+- Motivo: as estatísticas eram exportadas e subidas à mão, prova por prova, e a página estava "muito pobre".
+- Depois do merge: no droplet, `git pull` + `npm ci` + restart do agente; testar com `--estatisticas=<prova> --simular`.
+- Como reverter: reverter o commit.
+
 ### [2026-11-27] Automação AVA: situação "Atualizar"
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/ava-origem-atualizar

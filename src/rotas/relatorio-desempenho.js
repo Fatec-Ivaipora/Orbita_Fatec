@@ -44,27 +44,17 @@ const CAMPOS_EDITAVEIS = [
     'disciplina', 'disciplinaId', 'periodo', 'semestre', 'turma'
 ];
 
-// O resumo é o que a listagem mostra — guardado pronto no documento pra
-// listar sem precisar ler as 45 questões de cada relatório.
-function montarResumo(analise) {
-    return {
-        total: analise.resumo.total,
-        contagens: analise.resumo.contagens,
-        discriminacaoMedia: analise.resumo.discriminacaoMedia,
-        facilidadeMedia: analise.resumo.facilidadeMedia,
-        boasOuExcelentes: analise.resumo.boasOuExcelentes,
-        paraRevisar: analise.resumo.paraRevisar,
-        comAlternativas: analise.resumo.comAlternativas,
-        porSituacao: analise.resumo.porSituacao,
-        faceis: analise.resumo.faceis
-    };
-}
+// O resumo é o que a listagem mostra — guardado pronto no documento pra listar sem ler as questões.
+// 27/11/2026: mora em src/utils/relatorio-desempenho-ava.js (o agente do AVA grava no mesmo formato).
+const { montarResumo } = require('../utils/relatorio-desempenho-ava');
 
 const CAMPOS_LISTA = [
     'titulo', 'cursoTurma', 'disciplina', 'disciplinaId', 'periodo', 'semestre',
     'turma', 'professor', 'aplicacao', 'encerramento', 'nAlunos', 'notaMedia',
     'desvioPadrao', 'consistenciaInterna', 'resumo', 'nomeArquivo',
-    'criadoPor', 'criadoPorNome', 'createdAt', 'updatedAt'
+    'criadoPor', 'criadoPorNome', 'createdAt', 'updatedAt',
+    // 27/11/2026: relatório trazido pelo agente do AVA (a lista mostra "Do AVA")
+    'origem', 'provaId', 'etapa', 'lidoDoAvaEm'
 ];
 
 // Base64 do corpo → Buffer; responde o erro e devolve null se não der.
@@ -249,7 +239,8 @@ router.put('/:id', verifyToken, checkPermission, async (req, res) => {
             return res.status(403).json({ error: 'Este relatório é de outro professor.' });
         }
 
-        const dados = { updatedAt: new Date().toISOString() };
+        // cabecalhoEditadoEm: a releitura do agente do AVA (27/11/2026) não apaga o que foi corrigido aqui
+        const dados = { updatedAt: new Date().toISOString(), cabecalhoEditadoEm: new Date().toISOString() };
         for (const campo of CAMPOS_EDITAVEIS) {
             if (req.body[campo] !== undefined) dados[campo] = req.body[campo];
         }
