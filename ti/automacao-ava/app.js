@@ -22,10 +22,14 @@ const NIVEL_PADRAO = { adm_l2: 3, ti: 3, coordenador: 3, ead: 3 };
 
 const ORIGEM = {
   criar: { rotulo: 'Criar do zero', curto: 'Criar' },
+  // 27/11/2026: a sala já existe (replica) e o professor atualiza o conteúdo — tem professor, UAs, etapas e pagamento
+  atualizar: { rotulo: 'Atualizar (professor atualiza a sala)', curto: 'Atualizar' },
   replicar: { rotulo: 'Replicar do semestre anterior', curto: 'Replicar' },
   'replicar-outro': { rotulo: 'Replicar de outro curso', curto: 'Replicar de outro curso' },
   'ja-existe': { rotulo: 'Já pronta no AVA', curto: 'Já pronta' }
 };
+const comProfessor = (o) => o === 'criar' || o === 'atualizar';
+const copiaSala = (o) => /^replicar/.test(o) || o === 'atualizar';
 const PAPEL_ROTULO = { adm: 'ADM', ti: 'TI', coordenador: 'Coordenador do curso', ead: 'Coordenação EAD', leitura: 'Consulta' };
 
 const $ = (id) => document.getElementById(id);
@@ -98,7 +102,7 @@ function renderCriacao() {
   const doCurso = dados.disciplinas.filter(d => !filtroCurso || d.cursoId === filtroCurso);
   const conta = (o) => doCurso.filter(d => d.origem === o).length;
   const lista = doCurso.filter(d => filtroOrigem === 'todas' || d.origem === filtroOrigem);
-  const criar = doCurso.filter(d => d.origem === 'criar');
+  const criar = doCurso.filter(d => comProfessor(d.origem));
   const anda = criar.map(andamento);
   const totalPagar = criar.reduce((s, d) => s + (Number(d.valor) || 0), 0);
   const pago = criar.filter(d => d.pagamento && d.pagamento.pago).reduce((s, d) => s + (Number(d.valor) || 0), 0);
@@ -106,8 +110,8 @@ function renderCriacao() {
   tela().innerHTML = `
     <section class="av-resumo">
       <div class="av-num"><b>${doCurso.length}</b><span>disciplinas EAD</span></div>
-      <div class="av-num"><b>${criar.length}</b><span>para criar do zero</span></div>
-      <div class="av-num"><b>${anda.filter(a => a.situacao.id === 'concluida').length}</b><span>criações concluídas</span></div>
+      <div class="av-num"><b>${criar.length}</b><span>para criar ou atualizar</span></div>
+      <div class="av-num"><b>${anda.filter(a => a.situacao.id === 'concluida').length}</b><span>concluídas</span></div>
       <div class="av-num"><b>${brl(totalPagar)}</b><span>a pagar aos professores</span></div>
       <div class="av-num"><b>${brl(pago)}</b><span>já pago</span></div>
     </section>
@@ -116,13 +120,13 @@ function renderCriacao() {
         <select class="select-filter" data-av-curso><option value="">Todos os cursos</option>${cursos.map(([id, nome]) => `<option value="${esc(id)}" ${filtroCurso === id ? 'selected' : ''}>${esc(nomeCurso(nome))}</option>`).join('')}</select>
       </label>
       <div class="av-pilulas">
-        ${['criar', 'replicar', 'replicar-outro', 'ja-existe'].map(o => `<button type="button" class="av-pilula${filtroOrigem === o ? ' ativo' : ''}" data-av-origem="${o}">${ORIGEM[o].rotulo} <span>${conta(o)}</span></button>`).join('')}
+        ${['criar', 'atualizar', 'replicar', 'replicar-outro', 'ja-existe'].map(o => `<button type="button" class="av-pilula${filtroOrigem === o ? ' ativo' : ''}" data-av-origem="${o}">${ORIGEM[o].rotulo} <span>${conta(o)}</span></button>`).join('')}
         <button type="button" class="av-pilula${filtroOrigem === 'todas' ? ' ativo' : ''}" data-av-origem="todas">Todas <span>${doCurso.length}</span></button>
       </div>
     </div>
     <section class="av-card av-card-tabela">
       ${lista.length ? `<div class="av-tabela-wrap"><table class="av-tabela">
-        <thead><tr><th>Disciplina</th><th>Situação no AVA</th>${filtroOrigem === 'criar' || filtroOrigem === 'todas' ? '<th>Professor que cria</th><th>Andamento</th>' : '<th>Copiar de</th>'}</tr></thead>
+        <thead><tr><th>Disciplina</th><th>Situação no AVA</th>${comProfessor(filtroOrigem) || filtroOrigem === 'todas' ? '<th>Professor que cria ou atualiza</th><th>Andamento</th>' : '<th>Copiar de</th>'}</tr></thead>
         <tbody>${lista.map(linha).join('')}</tbody></table></div>`
       : `<p class="av-vazio">${dados.disciplinas.length ? 'Nenhuma disciplina neste filtro.' : 'Nenhuma disciplina EAD lançada no Edubox para este semestre.'}</p>`}
     </section>
@@ -145,7 +149,7 @@ function linha(d) {
   const origem = `<span class="av-origem av-origem-${d.origem}">${ORIGEM[d.origem].curto}</span>`;
   const de = d.sugestao && d.sugestao.de ? `${esc(d.sugestao.de.nome)}<span class="av-sub">${esc(nomeCurso(d.sugestao.de.cursoNome))} · ${esc(d.sugestao.de.semestre)}${d.sugestao.de.ava ? ' · sala no AVA' : ''}</span>` : '<span class="av-sub">—</span>';
   let resto;
-  if (d.origem === 'criar') {
+  if (comProfessor(d.origem)) {
     const a = andamento(d);
     resto = `<td>${d.professor ? `${esc(d.professor)}<span class="av-sub">${d.titulacao ? `${esc(dados.titulacoes[d.titulacao].rotulo)} · ${brl(d.valor)}` : 'titulação não definida'}${a.pago ? ' · <b class="av-ok">pago</b>' : ''}</span>` : '<span class="av-sub av-alerta">definir professor</span>'}</td>
       <td><div class="av-passos">${dados.etapas.map((e, i) => `<span class="av-passo${a.etapas[i] ? ' feito' : ''}" title="${esc(e.rotulo)}">${i + 1}</span>`).join('')}</div>
@@ -179,9 +183,9 @@ function abrirFicha(id) {
         <select id="av-f-origem" class="select-filter" ${ehTi ? '' : 'disabled'}>${Object.entries(ORIGEM).map(([k, o]) => `<option value="${k}" ${d.origem === k ? 'selected' : ''}>${o.rotulo}</option>`).join('')}</select>
         ${d.sugestao && d.sugestao.de ? `<p class="av-sub">Sugestão do Órbita: ${esc(ORIGEM[d.sugestao.origem].rotulo.toLowerCase())} — ${esc(d.sugestao.de.nome)} (${esc(nomeCurso(d.sugestao.de.cursoNome))} · ${esc(d.sugestao.de.semestre)}${d.sugestao.de.ava ? ' · sala que já existe no AVA' : ''})</p>` : '<p class="av-sub">Sugestão do Órbita: não achei no Edubox nem no AVA — criar do zero.</p>'}
       </section>
-      ${d.origem === 'criar' ? `
+      ${comProfessor(d.origem) ? `
       <section>
-        <h3>Professor que cria</h3>
+        <h3>${d.origem === 'atualizar' ? 'Professor que atualiza' : 'Professor que cria'}</h3>
         <input type="text" id="av-f-prof" list="av-professores" maxlength="120" value="${esc(d.professor || '')}" placeholder="Nome do professor" ${ehTi ? '' : 'disabled'}>
         <p class="av-sub" id="av-f-tit-edubox"></p>
         <div class="av-linha-campos">
@@ -191,9 +195,9 @@ function abrirFicha(id) {
         <label class="av-check-linha"><input type="checkbox" id="av-f-pago" ${a.pago ? 'checked' : ''} ${ehTi ? '' : 'disabled'}> Pago ao professor ${a.pago ? `<span class="av-quem">${esc(d.pagamento.por)} · ${quando(d.pagamento.em)}</span>` : ''}</label>
       </section>` : ''}
     </div>
-    ${d.origem === 'criar' ? `
+    ${comProfessor(d.origem) ? `
     <section>
-      <h3>Etapas da criação</h3>
+      <h3>Etapas da ${d.origem === 'atualizar' ? 'atualização' : 'criação'}</h3>
       <ol class="av-etapas">${dados.etapas.map(e => { const m = (d.etapas || {})[e.id]; return `
         <li class="${m ? 'feito' : ''}">${caixa(!!m, `data-av-etapa="${e.id}"`, pode(e.quem))}
           <div><span>${esc(e.rotulo)}</span><span class="av-sub">marca: ${QUEM[e.quem]}</span>${marcaTxt(m)}</div></li>`; }).join('')}</ol>
@@ -276,7 +280,7 @@ async function carregarProfessores() {
 //  ABA: RELATÓRIO (padrão FATEC)
 // ================================================================
 function renderRelatorio() {
-  const criar = dados.disciplinas.filter(d => d.origem === 'criar' && (!filtroCurso || d.cursoId === filtroCurso));
+  const criar = dados.disciplinas.filter(d => comProfessor(d.origem) && (!filtroCurso || d.cursoId === filtroCurso));
   const cursos = [...new Map(dados.disciplinas.map(d => [d.cursoId, d.cursoNome])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   tela().innerHTML = `
     <div class="av-filtros">
@@ -401,15 +405,15 @@ async function renderConduit() {
   }
   const cursos = [...new Map(conduit.linhas.map(l => [l.cursoId, l.cursoNome])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   const novas = conduit.linhas.filter(l => l.origem !== 'ja-existe' && (!filtroCurso || l.cursoId === filtroCurso));
-  const repl = novas.filter(l => /^replicar/.test(l.origem));
+  const repl = novas.filter(l => copiaSala(l.origem));
   const semModelo = repl.filter(l => !(l.modelo && l.modelo.shortname));
-  const pronta = (l) => /^replicar/.test(l.origem) && l.modelo && l.modelo.shortname;
+  const pronta = (l) => copiaSala(l.origem) && l.modelo && l.modelo.shortname;
   const r1 = novas.filter(l => pronta(l) && l.rodada === 1), r2 = novas.filter(l => pronta(l) && l.rodada === 2);
   const porCurso = cursos.filter(([id]) => !filtroCurso || id === filtroCurso).map(([id, nome]) => ({ id, nome, linhas: novas.filter(l => l.cursoId === id) })).filter(c => c.linhas.length);
-  const rot = { criar: 'Criar do zero', replicar: 'Replicar', 'replicar-outro': 'Replicar de outro curso' };
+  const rot = { criar: 'Criar do zero', atualizar: 'Atualizar (replica e o professor atualiza)', replicar: 'Replicar', 'replicar-outro': 'Replicar de outro curso' };
   const modeloTxt = (l) => {
     const mae = l.mae ? `<span class="av-tag">sala-mãe de ${l.grupo} salas${l.comum ? ' — disciplina comum a todos os cursos' : ''}</span>` : '';
-    if (!/^replicar/.test(l.origem)) return `${mae}<span class="av-sub">sala nova — o professor monta as unidades (etapas da criação)</span>`;
+    if (!copiaSala(l.origem)) return `${mae}<span class="av-sub">sala nova — o professor monta as unidades (etapas da criação)</span>`;
     if (l.mae && l.modelo) return `${mae}${l.modelo.shortname ? `<code>${esc(l.modelo.shortname)}</code>` : '<span class="av-sub av-alerta">falta ler o shortname no AVA</span>'}<span class="av-sub"><b>1ª rodada</b> — ${esc(l.modelo.nome)}; depois a TI atualiza</span>`;
     if (!l.modelo) return '<span class="av-sub av-alerta">nenhuma sala EAD modelo achada no AVA — conferir</span>';
     if (l.modelo.mae) return `<code>${esc(l.modelo.shortname)}</code><span class="av-sub"><b>2ª rodada</b> — sala-mãe deste semestre, depois de atualizada</span>`;
@@ -476,7 +480,7 @@ function gerarCsv(b) {
     baixarCsv('course.csv', ['action', 'shortname', 'idnumber', 'category', 'fullname', 'visible'], L.map(l => ['create', l.shortname, l.idnumber, l.category, l.fullname, 1]));
   } else {
     const rodada = Number(b.dataset.avRodada);
-    const L = novas.filter(l => /^replicar/.test(l.origem) && l.modelo && l.modelo.shortname && l.rodada === rodada && (!filtroCurso || l.cursoId === filtroCurso));
+    const L = novas.filter(l => copiaSala(l.origem) && l.modelo && l.modelo.shortname && l.rodada === rodada && (!filtroCurso || l.cursoId === filtroCurso));
     baixarCsv(`carregar-cursos-${dados.semestre}-rodada${rodada}.csv`, ['shortname', 'templatecourse'], L.map(l => [l.shortname, l.modelo.shortname]));
   }
 }

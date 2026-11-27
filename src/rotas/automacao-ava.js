@@ -53,7 +53,12 @@ const AVALIACOES = [
     { id: 'simulado', rotulo: 'Questões do simulado' }
 ];
 const DESTINOS = ['coordenador', 'ead'];
-const ORIGENS = ['criar', 'replicar', 'replicar-outro', 'ja-existe'];
+const ORIGENS = ['criar', 'atualizar', 'replicar', 'replicar-outro', 'ja-existe'];
+// "Atualizar" (27/11/2026): a sala JÁ EXISTE (o Conduit replica a do semestre anterior, como "replicar") e um PROFESSOR
+// atualiza o conteúdo e é pago — então segue o fluxo do "criar": professor, titulação/valor, etapas, link das UAs.
+const COM_PROFESSOR = ['criar', 'atualizar'];
+const comProfessor = (o) => COM_PROFESSOR.includes(o);
+const copiaSala = (o) => /^replicar/.test(o) || o === 'atualizar';
 
 // Só os cursos da FATEC (o banco do Edubox é compartilhado com outras instituições).
 // Cursos que compartilham conteúdo: disciplina com o mesmo nome na matriz é a mesma sala e pode ser copiada
@@ -485,7 +490,7 @@ router.get('/conduit', verifyToken, checkPermission, async (req, res) => {
             const origem = (salvos.get(id) || {}).origem || x.sugestao.origem;
             const sigla = String(s.noadis || '').replace(/[\r\n,]/g, ' ');
             const per = TECNOLOGOS.includes(codcur) ? '' : ` - ${s.periodo}${codcur === 'CI.CONT' ? 'º' : '°'} PER`;
-            const modelo = /^replicar/.test(origem) ? modeloNoAva(salasAva, x) : null;
+            const modelo = copiaSala(origem) ? modeloNoAva(salasAva, x) : null;
             linhas.push({
                 id, cursoId, codcur, cursoNome: x.cursoNome, periodo: s.periodo, turma: s.turma, coddtu: s.coddtu, disciplina: texto(s.disciplina, 200), origem,
                 semSigla: !sigla.trim(),
@@ -593,7 +598,7 @@ function discPublica(id, d) {
 
 async function discCriarDoSemestre(semestre) {
     const snap = await db.collection(COL).where('semestre', '==', semestre).get();
-    return snap.docs.map(s => ({ id: s.id, d: s.data() })).filter(x => origemDe(x.d) === 'criar' && texto(x.d.professor));
+    return snap.docs.map(s => ({ id: s.id, d: s.data() })).filter(x => comProfessor(origemDe(x.d)) && texto(x.d.professor));
 }
 async function linksDoSemestre(semestre) {
     const snap = await db.collection(COL_LINKS_UA).where('semestre', '==', semestre).get();
