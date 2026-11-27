@@ -138,6 +138,7 @@ app.use('/api/relatorio-desempenho', rotasRelatorioDesempenho);
 app.use('/api/aplicacao-provas-med', rotasAplicacaoProvasMed);
 app.use('/api/osce-med', rotasOsceMed);
 app.use('/api/portfolio-med', rotasPortfolioMed);
+app.use('/api/portfolio-publico', require('../src/rotas/portfolio-med-publico')); // link do professor, sem login (27/11/2026)
 app.use('/api/banco-provas', rotasBancoProvas);
 app.use('/api/formularios', rotasFormularios);
 app.use('/api/confirmacao-evento', rotasConfirmacaoEvento);

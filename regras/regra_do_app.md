@@ -99,6 +99,66 @@ O sistema segue uma identidade visual institucional "Light Theme" moderna:
 ## 7. Regras de alteração
 Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo o modelo abaixo:
 
+### [2026-11-27] Portfólio MED: link do professor para corrigir sem login (como as UAs do EAD)
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/portfolio-nota-3
+- **Por quê.** Para não liberar o módulo inteiro aos professores, cada professor corretor recebe UM link por semestre. Não precisa de login: o token é a autorização, igual aos links das UAs do EAD. O link traz todos os portfólios distribuídos para ele, de todas as turmas. Ele corrige pela mesma matriz, salva o rascunho e envia um de cada vez.
+- **Correção enviada.** Fica travada para o professor (só a coordenação reabre no Órbita). Sai com o nome dele: `corrigidoPor`, `corrigidoVia: 'link'`.
+- **Servidor.**
+  - `src/rotas/portfolio-med-publico.js`, montado em `/api/portfolio-publico` no `api/index.js`. Rotas:
+    - `GET /:token`: os portfólios dele;
+    - `GET /:token/entregas/:id`: texto, matriz, o que é cobrado e a nota de corte;
+    - `GET /:token/entregas/:id/arquivo`: o arquivo original do AVA;
+    - `PUT /:token/entregas/:id`: salvar ou enviar.
+  - Só abre o que tem `corretorUid` = professor do link e é do mesmo semestre.
+  - Em `portfolio-med.js`, a gravação da correção virou a função `gravarCorrecao`, usada pelo módulo e pelo link. Rotas `GET/POST /links` (só coordenação). Coleção `med_portfolio_links/{token}`.
+- **Telas.**
+  - Página nova `medicina/portfolio-professor/` (`?t=<token>`).
+  - No módulo, o botão "Links dos professores" (na tela de turmas e na atividade) mostra cada professor com o andamento. Dá para gerar, copiar o link e a mensagem pronta para o WhatsApp, abrir, ou gerar um link novo (o antigo é desativado).
+- **Testado.** O link fictício viu a lista vazia; foi barrado num portfólio de outro professor (GET e PUT); o token inválido foi recusado. O link de teste foi apagado e nenhuma entrega foi alterada. A tela foi testada com dados simulados.
+- Tipo: Funcionalidade
+- Motivo: "para não liberar o módulo inteiro para o professor que vai ler, vamos fazer igual aos links das UAs do EAD… o professor pode ir fazendo e enviando".
+- Como reverter: reverter o commit. Para cortar o acesso de um professor, use "Gerar novo" (desativa o link antigo).
+
+### [2026-11-27] Portfólio MED: o que cobrar, análise do professor, devolutiva em PDF e acesso do prof. João Felipe
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/portfolio-nota-3
+- **O que cobrar.**
+  - O botão "O que cobrar" fica na atividade e é só da coordenação. Ele grava `med_portfolio_atividades.matrizCobrar = { criterios, objetivos, por, em }`.
+  - A coordenação escolhe quais critérios (C1–C4) e quais objetivos do C3 são cobrados.
+  - O que for desmarcado sai da conta, e o valor vai para os demais na proporção de cada um. A conta fica em `matriz.js`: `calcular(av, total, cobrar)`, `normCobrar` e `notaDaReferencia`. A nota continua de 0 a 10.
+  - Com tudo marcado, nada muda. Conferido nas 24 notas de corte da T2.
+- **Recálculo da nota de corte.**
+  - A nota de corte gravada não é alterada: o servidor a recalcula ao abrir a atividade (`referenciaCobrada`), e a original fica em `notaMatrizCheia`.
+  - Quando a escolha é salva, as correções já salvas são recalculadas (`resultado` e `divergeDaReferencia`).
+- **Análise do professor.** É o campo novo `avaliacao.feedback.analise`. Passa a ser obrigatória para finalizar quando a nota fica diferente da nota de corte. É INTERNA: a nota de corte não pode aparecer para o aluno, então a análise não vai para o feedback do AVA nem para a devolutiva em PDF; aparece só na "Análise da nota", que tem a marca de uso interno.
+- **Devolutiva em PDF** (`medicina/portfolio/devolutiva.js`, com jsPDF; o `index.html` carrega o jsPDF pela CDN):
+  - formato padronizado: cada critério cobrado com nível, descritor oficial da matriz e evidência; no C3, cada objetivo cobrado aparece como atingido ou não atingido;
+  - o texto livre do professor fica separado;
+  - sai em "Devolutiva (PDF)" na correção finalizada e em "Devolutivas em PDF (ZIP)" no Quadro-resumo.
+- **Acesso.**
+  - `podeEditar` passou a aceitar `users.permissoes['portfolio-med'] >= 3`, o nível individual da Gerência de Acessos.
+  - O prof. João Felipe Marques (professor_medicina) recebeu esse nível em 27/11 (backup em `CLAUDE\Backups\usuario_joao_felipe_permissoes_antes_2026-11-27.json`).
+  - A Joyce (coord_medicina) e a prof. Ana Beatriz (avaliacoesMed) já tinham acesso.
+- Tipo: Funcionalidade
+- Motivo: o prof. João quer escolher o que cobrar; "se ele desmarcar, a nota precisa ser distribuída para os demais tópicos". O feedback ao aluno deve ser padronizado, sem comentário vago. A nota de corte vem primeiro e o professor finaliza.
+- "Análise da nota" refeita como relatório A4 oficial, com a logo MED FATEC (`img/medfatec-logo.png`). Mostra a identificação, nota de corte × nota do professor e a diferença, a comparação por critério (nível, descritor da matriz e evidência), os objetivos do C3, a devolutiva e os campos de assinatura.
+- Como reverter: reverter o commit. Para tirar a escolha de uma atividade, marque tudo em "O que cobrar".
+
+### [2026-11-27] Portfólio MED: a nota aparece na escala de 3,0
+- Autor: Claude Code (a pedido do usuário)
+- Branch: fix/portfolio-nota-3
+- Arquivos alterados: `medicina/portfolio/app.js`. A nota principal passa a aparecer na escala do portfólio (valor na disciplina, 3,0), com a nota da matriz (0 a 10) menor ao lado:
+  - colunas Corte e Nota das Entregas;
+  - nota grande da correção e faixa da nota de corte;
+  - Resumo (a coluna "Nota (3,0)" vem primeiro) e impressão;
+  - feedback que vai para o AVA ("2,4 / 3,0");
+  - média do painel.
+- Dados (27/11): `med_portfolio_atividades.ava.notaMax` das 3 Tarefas (T1, T2, T3) passou de 100 para 3, com backup em `CLAUDE\Backups\portfolio_notamax_antes_2026-11-27.json`. O lançamento no AVA manda nota × 3 ÷ 10. Falta mudar a nota máxima da Tarefa no próprio AVA para 3.
+- Tipo: Correção
+- Motivo: "a nota do portfólio continua aparecendo 100 / 10": o portfólio vale 3,0.
+- Como reverter: reverter o commit.
+
 ### [2026-11-27] Relatório de Desempenho do AVA pelo agente + visual novo em todos os módulos da Medicina
 - Autor: Claude Code (a pedido do usuário)
 - Branch: feat/agente-estatisticas-ava

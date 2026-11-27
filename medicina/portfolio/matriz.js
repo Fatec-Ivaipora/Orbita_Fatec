@@ -93,11 +93,24 @@
     return { nivel: manual, manual: true, nota: NOTA_C2 };
   }
 
-  // C3: proporção de objetivos da turma mencionados, discutidos e atingidos
-  function nivelC3(c3, totalObjetivos) {
-    const marc = Array.isArray(c3 && c3.objetivos) ? c3.objetivos.slice(0, totalObjetivos) : [];
+  // O QUE COBRAR (27/11/2026, pedido do prof. João Felipe): a coordenação escolhe, por atividade, quais critérios e quais
+  // objetivos do C3 são cobrados. cobrar = { criterios: ['c1',…], objetivos: [índices] } (ausente = tudo). Critério não
+  // cobrado sai da conta e o valor dele é distribuído entre os demais, na proporção do máximo de cada um (a nota continua
+  // de 0 a 10); objetivo não cobrado sai do C3 (a proporção conta só os cobrados). Com tudo marcado, nada muda.
+  function normCobrar(cobrar, totalObjetivos) {
+    const ids = CRITERIOS.map(c => c.id);
+    const crit = cobrar && Array.isArray(cobrar.criterios) && cobrar.criterios.some(id => ids.includes(id)) ? ids.filter(id => cobrar.criterios.includes(id)) : ids;
+    const obj = cobrar && Array.isArray(cobrar.objetivos)
+      ? [...new Set(cobrar.objetivos.map(Number).filter(i => Number.isInteger(i) && i >= 0 && i < (totalObjetivos || 0)))].sort((a, b) => a - b) : null;
+    return { criterios: crit, objetivos: obj && obj.length && obj.length < (totalObjetivos || 0) ? obj : null };
+  }
+
+  // C3: proporção de objetivos da turma mencionados, discutidos e atingidos (só os cobrados, se a coordenação escolheu)
+  function nivelC3(c3, totalObjetivos, objCobrados) {
+    const todos = Array.isArray(c3 && c3.objetivos) ? c3.objetivos.slice(0, totalObjetivos) : [];
+    const marc = objCobrados ? objCobrados.map(i => !!todos[i]) : todos;
     const n = marc.filter(Boolean).length;
-    const total = totalObjetivos || 0;
+    const total = objCobrados ? objCobrados.length : (totalObjetivos || 0);
     if (!total) return { nivel: null, n, total, pct: 0 };
     const pct = n / total;
     if (n === 0) return { nivel: 'I', n, total, pct };
@@ -108,21 +121,26 @@
   }
 
   const arred2 = (x) => Math.round(x * 100) / 100;
+  const NOTA_MAX_ = 10;
 
   // Calcula tudo a partir do que o professor marcou. Não decide nada sozinho.
-  function calcular(av, totalObjetivos) {
+  function calcular(av, totalObjetivos, cobrar) {
     av = av || {};
-    const r = { criterios: {}, completo: true, faltando: [] };
+    const cob = normCobrar(cobrar, totalObjetivos);
+    const maxCobrado = CRITERIOS.filter(c => cob.criterios.includes(c.id)).reduce((a, c) => a + c.max, 0);
+    const k = maxCobrado ? NOTA_MAX_ / maxCobrado : 1; // redistribui o valor dos critérios não cobrados
+    const r = { criterios: {}, completo: true, faltando: [], cobrar: cob, redistribuido: k !== 1 };
     let soma = 0;
     CRITERIOS.forEach(c => {
       const dado = av[c.id] || {};
+      if (!cob.criterios.includes(c.id)) { r.criterios[c.id] = { nivel: null, pts: 0, max: 0, naoCobrado: true, justificativa: '' }; return; }
       let info;
       if (c.id === 'c2') info = nivelC2(dado);
-      else if (c.id === 'c3') info = nivelC3(dado, totalObjetivos);
+      else if (c.id === 'c3') info = nivelC3(dado, totalObjetivos, cob.objetivos);
       else info = { nivel: NIVEIS.includes(dado.nivel) ? dado.nivel : null };
-      const pts = info.nivel ? c.niveis[info.nivel].pts : 0;
+      const pts = info.nivel ? arred2(c.niveis[info.nivel].pts * k) : 0;
       const just = String(dado.justificativa || '').trim();
-      r.criterios[c.id] = { ...info, pts, max: c.max, justificativa: just };
+      r.criterios[c.id] = { ...info, pts, max: arred2(c.max * k), justificativa: just };
       if (!info.nivel) { r.completo = false; r.faltando.push(`Critério ${c.num}: nível não definido`); }
       if (!just) { r.completo = false; r.faltando.push(`Critério ${c.num}: falta a evidência/justificativa`); }
       soma += pts;
@@ -137,7 +155,18 @@
 
   const fmt = (x) => (x == null ? '—' : Number(x).toFixed(1).replace('.', ','));
 
-  const M = { VERSAO, NIVEIS, NOME_NIVEL, CRITERIOS, POR_ID, ITENS_CAPA, PENALIDADES, NOTA_C2, NOTA_C3_FAIXA, nivelC2, nivelC3, calcular, fmt, NOTA_MAX: 10 };
+  // nota de corte já gravada, recalculada com o que a coordenação escolheu cobrar (níveis e objetivos guardados nela)
+  function notaDaReferencia(ref, totalObjetivos, cobrar) {
+    if (!ref || ref.semTexto || ref.nota == null || !ref.niveis) return null;
+    const av = {
+      c1: { nivel: ref.niveis.c1, justificativa: '-' },
+      c2: { analise: 'consistente', necessidades: false, acoes: false, nivelManual: ref.niveis.c2, justificativa: '-' }, // usa o nível já decidido
+      c3: { objetivos: (ref.c3 && ref.c3.objetivos) || [], justificativa: '-' },
+      c4: { nivel: ref.niveis.c4, justificativa: '-' }
+    };
+    return calcular(av, totalObjetivos, cobrar);
+  }
+  const M = { VERSAO, NIVEIS, NOME_NIVEL, CRITERIOS, POR_ID, ITENS_CAPA, PENALIDADES, NOTA_C2, NOTA_C3_FAIXA, nivelC2, nivelC3, calcular, normCobrar, notaDaReferencia, fmt, NOTA_MAX: 10 };
   if (typeof module !== 'undefined' && module.exports) module.exports = M;
   else raiz.PortfolioMatriz = M;
 })(typeof window !== 'undefined' ? window : this);

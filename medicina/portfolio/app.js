@@ -9,6 +9,7 @@ import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../.
 import { escapeHTML as esc } from "../../core/security.js";
 import { tutorialHtml } from "./tutorial.js?v=1";
 import { painel as painelMed, COR } from "../comum/painel.js?v=1";
+import { pdfDevolutiva, nomeDevolutiva, nomeZip } from "./devolutiva.js?v=2";
 
 const M = window.PortfolioMatriz;
 const fbApp = initializeApp(firebaseConfig);
@@ -126,7 +127,8 @@ function renderTurmas() {
   }
   el('pf-conteudo').innerHTML = `
     ${editor ? `<div class="pf-barra"><span class="pf-dica">Você vê todas as turmas (coordenação). Professores veem só as turmas em que estão como corretores.</span>
-      <button type="button" class="pf-btn" data-acao="nova-turma">+ Turma</button></div>` : ''}
+      <span class="pf-acoes"><button type="button" class="pf-btn pf-btn-pri" data-acao="links">Links dos professores</button>
+      <button type="button" class="pf-btn" data-acao="nova-turma">+ Turma</button></span></div>` : ''}
     <div class="pf-turmas">${turmas.map(t => {
       const ats = atividades.filter(a => a.turmaId === t.id);
       return `<article class="pf-turma">
@@ -155,6 +157,136 @@ function dialogo(html, aoAbrir) {
   d.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => d.close()));
   if (aoAbrir) aoAbrir(d);
   return d;
+}
+
+// O que cobrar (27/11/2026, pedido do prof. João Felipe): a coordenação escolhe os critérios (C1–C4) e os objetivos do
+// C3 cobrados nesta atividade. O que for desmarcado sai da conta e o valor é distribuído entre os demais (matriz.js).
+// Com tudo marcado, a nota é a de sempre. A nota de corte é recalculada pelo servidor ao abrir a atividade.
+function dlgCobrar() {
+  const objs = ativ.turma.objetivos || [];
+  const atual = cobrar();
+  const critMarc = (id) => !atual || atual.criterios.includes(id);
+  const objMarc = (k) => !atual || !atual.criterios.includes('c3') || atual.objetivos.includes(k);
+  const d = dialogo(`<form method="dialog" class="pf-form pf-cobrar">
+    <h2>O que cobrar em "${esc(ativ.atividade.titulo)}"</h2>
+    <p class="pf-dica">Desmarque o que <b>não</b> vai ser cobrado. O valor do que sair é distribuído entre o que ficou, na proporção de cada critério (a nota continua de 0 a 10 e depois vai para ${fmt(valorDisc())} na disciplina).
+      Tudo marcado = matriz completa, nota de sempre. A nota de corte de cada aluno é recalculada e as correções já salvas também.</p>
+    <fieldset class="pf-crit"><legend>Critérios da matriz</legend>
+      ${M.CRITERIOS.map(c => `<label class="pf-chk pf-cob-crit"><input type="checkbox" name="crit" value="${c.id}" ${critMarc(c.id) ? 'checked' : ''}> <b>C${c.num}</b> ${esc(c.nome)} <span class="pf-cob-max" data-max="${c.id}"></span></label>`).join('')}
+    </fieldset>
+    <fieldset class="pf-crit" id="pf-cob-objs"><legend>Objetivos do Critério 3 <button type="button" class="pf-link" data-todos-obj>marcar todos</button></legend>
+      ${objs.map((o, k) => `<label class="pf-chk pf-obj"><input type="checkbox" name="obj" value="${k}" ${objMarc(k) ? 'checked' : ''}><span><b>${k + 1}.</b> ${esc(o)}</span></label>`).join('')}
+    </fieldset>
+    <p class="pf-cob-resumo" id="pf-cob-resumo" role="status"></p>
+    <div class="pf-dlg-acoes"><button type="button" class="pf-btn" data-fechar>Cancelar</button><button class="pf-btn pf-btn-pri">Salvar e recalcular</button></div></form>`);
+  const f = d.querySelector('form');
+  const ler = () => ({ criterios: [...f.querySelectorAll('input[name="crit"]:checked')].map(x => x.value), objetivos: [...f.querySelectorAll('input[name="obj"]:checked')].map(x => +x.value) });
+  const mostrar = () => {
+    const c = ler();
+    const tot = M.CRITERIOS.filter(x => c.criterios.includes(x.id)).reduce((a, x) => a + x.max, 0);
+    M.CRITERIOS.forEach(x => {
+      const s = f.querySelector(`[data-max="${x.id}"]`);
+      s.textContent = c.criterios.includes(x.id) ? `vale ${fmt(tot ? x.max * 10 / tot : 0)}${Math.abs(tot - 10) > 0.001 ? ` (era ${fmt(x.max)})` : ''}` : 'não cobrado';
+    });
+    f.querySelector('#pf-cob-objs').disabled = !c.criterios.includes('c3');
+    const nObj = c.objetivos.length;
+    f.querySelector('#pf-cob-resumo').textContent = !c.criterios.length ? 'Cobre pelo menos um critério.'
+      : `${c.criterios.length} de 4 critérios${c.criterios.includes('c3') ? ` · ${nObj} de ${objs.length} objetivos no C3` : ''}${c.criterios.length === 4 && nObj === objs.length ? ' · matriz completa (nada muda)' : ''}.`;
+  };
+  mostrar();
+  f.addEventListener('change', mostrar);
+  f.querySelector('[data-todos-obj]').addEventListener('click', () => { f.querySelectorAll('input[name="obj"]').forEach(x => { x.checked = true; }); mostrar(); });
+  f.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const c = ler();
+    if (!c.criterios.includes('c3')) c.objetivos = objs.map((_, k) => k);
+    try {
+      const r = await post(`${BASE}/atividades/${encodeURIComponent(ativ.atividade.id)}/cobrar`, c, 'PUT');
+      toast(r.message); d.close();
+      await abrirAtividade(ativ.atividade.id); // traz a nota de corte e as correções recalculadas
+    } catch (e) { toast(e.message, 'erro'); }
+  });
+}
+
+// Links dos professores (27/11/2026): em vez de liberar o módulo, cada professor corretor recebe UM link por semestre
+// (sem login, igual às UAs do EAD) com todos os portfólios distribuídos para ele; corrige e envia um de cada vez.
+const urlLink = (token) => `${location.origin}/medicina/portfolio-professor/?t=${token}`;
+async function dlgLinks() {
+  const semestre = el('pf-semestre').value;
+  const d = dialogo(`<div class="pf-form pf-links"><h2>Links dos professores · ${esc(semestre)}</h2>
+    <p class="pf-dica">Cada professor recebe <b>um link só</b> com todos os portfólios distribuídos para ele (de todas as turmas). Não precisa de login nem de acesso ao Órbita:
+      ele corrige pela mesma matriz, salva e envia um de cada vez. A correção enviada sai com o nome dele e fica travada (a coordenação reabre aqui).
+      Primeiro distribua os portfólios na atividade.</p>
+    <div id="pf-links-lista"><p class="pf-dica">Carregando…</p></div>
+    <div class="pf-dlg-acoes"><button type="button" class="pf-btn" data-fechar>Fechar</button></div></div>`);
+  const box = d.querySelector('#pf-links-lista');
+  let dadosL;
+  const desenhar = () => {
+    box.innerHTML = !dadosL.professores.length ? '<p class="pf-vazio">Nenhum portfólio distribuído neste semestre ainda. Use "Distribuir para os professores" na atividade.</p>'
+      : `<ul class="pf-links-ul">${dadosL.professores.map(p => `<li class="pf-link-prof">
+        <div class="pf-link-cab"><b>${esc(p.nome)}</b>
+          <span class="pf-meta">${p.total} portfólio(s) · <b>${p.enviadas}</b> enviado(s)${p.rascunho ? ` · ${p.rascunho} em rascunho` : ''}</span>
+          <span class="pf-link-barra" aria-hidden="true"><i style="width:${p.total ? Math.round(p.enviadas / p.total * 100) : 0}%"></i></span></div>
+        ${p.token ? `<div class="pf-link-url"><input readonly value="${esc(urlLink(p.token))}" aria-label="Link de ${esc(p.nome)}" onclick="this.select()">
+            <button type="button" class="pf-btn pf-btn-peq pf-btn-pri" data-copiar="${esc(p.uid)}">Copiar link</button>
+            <button type="button" class="pf-btn pf-btn-peq" data-msg="${esc(p.uid)}">Copiar mensagem</button>
+            <a class="pf-btn pf-btn-peq" href="${esc(urlLink(p.token))}" target="_blank" rel="noopener">Abrir</a>
+            <button type="button" class="pf-btn pf-btn-peq pf-btn-perigo" data-novo="${esc(p.uid)}" title="Desativa o link atual e gera outro">Gerar novo</button></div>`
+        : `<button type="button" class="pf-btn pf-btn-peq pf-btn-pri" data-gerar="${esc(p.uid)}">Gerar link</button>`}
+      </li>`).join('')}</ul>`;
+  };
+  try { dadosL = await api(`${BASE}/links?semestre=${encodeURIComponent(semestre)}`); desenhar(); }
+  catch (e) { box.innerHTML = `<p class="pf-vazio pf-erro">${esc(e.message)}</p>`; return; }
+  const copiar = async (texto, ok) => {
+    try { await navigator.clipboard.writeText(texto); toast(ok); }
+    catch (e) { window.prompt('Copie o texto:', texto); }
+  };
+  box.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const uid = b.dataset.gerar || b.dataset.novo || b.dataset.copiar || b.dataset.msg;
+    const p = dadosL.professores.find(x => x.uid === uid); if (!p) return;
+    if (b.dataset.copiar) return copiar(urlLink(p.token), `Link de ${p.nome} copiado.`);
+    if (b.dataset.msg) {
+      return copiar(`Olá, ${p.nome}! Seguem os portfólios do SCIC distribuídos para você corrigir (${p.total}). `
+        + `Abra pelo link abaixo (não precisa de login), corrija pela matriz no seu ritmo e envie cada um quando terminar. O link é pessoal.\n${urlLink(p.token)}`,
+      `Mensagem para ${p.nome} copiada: cole no WhatsApp.`);
+    }
+    if (b.dataset.novo && !confirm(`Gerar um link novo para ${p.nome}? O link atual para de funcionar.`)) return;
+    b.disabled = true;
+    try {
+      const r = await post(`${BASE}/links`, { semestre, uid, novo: !!b.dataset.novo });
+      p.token = r.token; desenhar(); toast(b.dataset.novo ? 'Link novo gerado; o antigo foi desativado.' : `Link de ${p.nome} gerado.`);
+    } catch (e) { toast(e.message, 'erro'); b.disabled = false; }
+  });
+}
+
+// Devolutiva padronizada em PDF (27/11/2026) — só de correção finalizada (medicina/portfolio/devolutiva.js)
+function geradorPdfOk() {
+  if (window.jspdf && window.jspdf.jsPDF) return true;
+  toast('Não foi possível carregar o gerador de PDF. Verifique a conexão e recarregue a página.', 'erro');
+  return false;
+}
+const ctxPdf = () => ({ M, turma: ativ.turma, atividade: ativ.atividade, valor: valorDisc() });
+function baixarDevolutiva(e) {
+  if (!e || e.status !== 'finalizada' || !e.resultado) { toast('A devolutiva sai depois que a correção é finalizada.', 'erro'); return; }
+  if (!geradorPdfOk()) return;
+  pdfDevolutiva(e, ctxPdf()).save(nomeDevolutiva(e));
+}
+async function baixarDevolutivas(b) {
+  if (!geradorPdfOk()) return;
+  if (!window.JSZip) { toast('Não foi possível carregar o compactador (ZIP). Recarregue a página.', 'erro'); return; }
+  const fin = ativ.entregas.filter(e => e.status === 'finalizada' && e.resultado);
+  if (!fin.length) { toast('Nenhuma correção finalizada ainda.', 'erro'); return; }
+  b.disabled = true; const antes = b.textContent; b.textContent = 'Gerando…';
+  try {
+    const zip = new window.JSZip();
+    fin.forEach(e => zip.file(nomeDevolutiva(e), pdfDevolutiva(e, ctxPdf()).output('arraybuffer')));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    baixar(blob, nomeZip(ativ.turma, ativ.atividade), 'application/zip');
+    const falta = ativ.entregas.length - fin.length;
+    toast(`${fin.length} devolutiva(s) no ZIP.${falta ? ` ${falta} ainda não finalizada(s) ficaram de fora.` : ''}`, falta ? 'alerta' : 'ok');
+  } catch (err) { toast(err.message, 'erro'); }
+  finally { b.disabled = false; b.textContent = antes; }
 }
 
 // Distribuir os portfólios entre os professores corretores da turma (26/11/2026)
@@ -298,7 +430,7 @@ function painelAtividade(c) {
   return painelMed({
     destaque: `${c.finalizada} de ${c.total}`,
     frase: `portfólios corrigidos e finalizados.`,
-    sub: `${c.rascunho} em correção · ${c.pendente} ${c.pendente === 1 ? 'pendente' : 'pendentes'}${media != null ? ` · nota de corte média ${fmt(media)}` : ''}${diverge ? ` · <span class="med-alerta">${diverge} longe da nota de corte</span>` : ''}`,
+    sub: `${c.rascunho} em correção · ${c.pendente} ${c.pendente === 1 ? 'pendente' : 'pendentes'}${media != null ? ` · nota de corte média ${fmt(naDisciplina(media))} de ${fmt(valorDisc())}` : ''}${diverge ? ` · <span class="med-alerta">${diverge} longe da nota de corte</span>` : ''}`,
     partes: [
       { nome: 'Finalizados', n: c.finalizada, cor: COR.azul, dica: 'prontos para ir ao AVA' },
       { nome: 'Em correção', n: c.rascunho, cor: COR.ciano, dica: 'rascunho salvo pelo professor' },
@@ -320,12 +452,15 @@ function renderAtividade() {
     <section class="pf-ativ-cab">
       <div>
         <h2>${esc(atividade.titulo)} <small>${esc(turmaRotulo(turma))}</small></h2>
+        ${atividade.matrizCobrar ? `<p class="pf-meta pf-cobrar-meta">Cobrança escolhida: ${atividade.matrizCobrar.criterios.map(id => id.toUpperCase()).join(', ')}${atividade.matrizCobrar.criterios.includes('c3') ? ` · ${atividade.matrizCobrar.objetivos.length} de ${(ativ.turma.objetivos || []).length} objetivos` : ''} — o valor do que não é cobrado foi distribuído entre os demais${atividade.matrizCobrar.por ? ` (${esc(atividade.matrizCobrar.por)})` : ''}.</p>` : ''}
         ${atividade.ava ? `<p class="pf-meta">AVA: Tarefa <b>${esc(atividade.ava.tarefaNome)}</b> · ${esc(atividade.ava.cursoNome)}${ativ.editor ? ' · <button type="button" class="pf-link" data-acao="ava-ligar">trocar</button>' : ''}</p>` : ''}
       </div>
       <div class="pf-acoes">
         ${ativ.editor && atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-buscar">Buscar entregas do AVA</button>' : ''}
         ${ativ.editor && !atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-ligar">Ligar à Tarefa do AVA</button>' : ''}
         ${ativ.editor ? '<button type="button" class="pf-btn" data-acao="importar">Importar ZIP do AVA</button>' : ''}
+        ${ativ.editor ? '<button type="button" class="pf-btn" data-acao="cobrar">O que cobrar</button>' : ''}
+        ${ativ.editor ? '<button type="button" class="pf-btn" data-acao="links">Links dos professores</button>' : ''}
         ${ativ.editor && entregas.length ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="distribuir">Distribuir para os professores</button>' : ''}
         ${ativ.editor ? '<button type="button" class="pf-btn pf-btn-perigo" data-acao="excluir-ativ">Excluir atividade</button>' : ''}
       </div>
@@ -361,7 +496,7 @@ function renderAba() {
   if (abaAtiv === 'resumo') return renderResumo();
   const { entregas } = ativ;
   el('pf-aba').innerHTML = `<div class="pf-tab-wrap"><table class="pf-tab">
-    <thead><tr><th>Estudante</th>${ativ.editor ? '<th>Professor</th>' : ''}<th>Arquivo</th><th>Situação</th><th class="num" title="Nota de corte: a mesma para o trabalho, seja quem for o professor">Corte</th><th class="num">Nota</th><th>Avisos</th></tr></thead>
+    <thead><tr><th>Estudante</th>${ativ.editor ? '<th>Professor</th>' : ''}<th>Arquivo</th><th>Situação</th><th class="num" title="Nota de corte na escala do portfólio: a mesma para o trabalho, seja quem for o professor">Corte (${fmt(valorDisc())})</th><th class="num">Nota (${fmt(valorDisc())})</th><th>Avisos</th></tr></thead>
     <tbody>${entregas.map(e => {
       const avisos = [];
       if (e.semTexto) avisos.push('<span class="pf-av pf-av-crit">sem texto (escaneado ou foto?)</span>');
@@ -374,8 +509,8 @@ function renderAba() {
         ${ativ.editor ? `<td>${e.corretorNome ? esc(e.corretorNome) : '<span class="pf-av pf-av-alerta">sem professor</span>'}</td>` : ''}
         <td><small>${esc((e.arquivos || []).join(', ') || '—')}</small>${pdfs.has(chavePdf(e)) ? '' : ''}</td>
         <td><span class="pf-st pf-st-${esc(e.status)}">${STATUS[e.status] || e.status}</span></td>
-        <td class="num">${e.referencia && !e.referencia.semTexto ? fmt(e.referencia.nota) : '—'}</td>
-        <td class="num">${e.resultado ? fmt(e.resultado.nota) : '—'}${e.divergeDaReferencia && e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="2 pontos ou mais longe da nota de corte">diverge</span>' : ''}</td>
+        <td class="num">${e.referencia && !e.referencia.semTexto ? fmt(naDisciplina(e.referencia.nota)) : '—'}</td>
+        <td class="num">${e.resultado ? `<b>${fmt(naDisciplina(e.resultado.nota))}</b>` : '—'}${e.divergeDaReferencia && e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="2 pontos ou mais longe da nota de corte">diverge</span>' : ''}</td>
         <td>${avisos.join(' ')}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
@@ -728,7 +863,7 @@ async function abrirCorrecao(id) {
     c2: { analise: null, necessidades: false, acoes: false, nivelManual: null, justificativa: '', ...(base.c2 || {}) },
     c3: { justificativa: '', ...(base.c3 || {}), objetivos: Array.from({ length: totalObj }, (_, i) => !!(base.c3 && base.c3.objetivos && base.c3.objetivos[i])) },
     c4: { nivel: null, justificativa: '', ...(base.c4 || {}) },
-    feedback: { fortes: '', desenvolver: '', recomendacao: '', ...(base.feedback || {}) },
+    feedback: { fortes: '', desenvolver: '', recomendacao: '', analise: '', ...(base.feedback || {}) },
     conformidade: { capa: '', capaFaltando: [], formatacao: '', foraAva: false, obs: '', ...(base.conformidade || {}) },
     penalidade: base.penalidade || 'nenhuma'
   };
@@ -774,22 +909,26 @@ const NOME_NIVEL_CURTO = { O: 'Ótimo', B: 'Bom', DM: 'Deve melhorar', I: 'Insuf
 // nota da matriz × valor ÷ 10, com 1 casa e meio pra cima (8,0 → 2,4; 7,5 → 2,3 — 2,25 sobe).
 const VALOR_PADRAO = 3;
 const valorDisc = () => Number(ativ.atividade.valorDisciplina) || VALOR_PADRAO;
+// o que a coordenação escolheu cobrar nesta atividade (27/11/2026) — null = matriz completa
+const cobrar = () => (ativ && ativ.atividade.matrizCobrar) || null;
+const totalObjs = () => (ativ.turma.objetivos || []).length;
+const calc = (av) => M.calcular(av, totalObjs(), cobrar());
 const naDisciplina = (nota) => (nota == null ? null : Math.round(Number(nota) * valorDisc() / 10 * 10 + 1e-9) / 10);
 const noAva = (nota) => (nota == null ? '' : ` <small style="display:inline">(= ${fmt(naDisciplina(nota))} de ${fmt(valorDisc())} na disciplina)</small>`);
 function faixaReferencia() {
   const ref = corr.entrega.referencia;
   if (!ref) return '';
-  const atual = M.calcular(corr.av, (ativ.turma.objetivos || []).length);
+  const atual = calc(corr.av);
   const lim = ativ.divergencia || 2;
   const dif = Math.abs(atual.soma - ref.nota);
   const diverge = !ref.semTexto && atual.completo && dif >= lim;
   return `<div class="pf-ref ${diverge ? 'pf-ref-diverge' : ''}" role="status">
-    <div><b>Nota de corte ${ref.origem === 'claude' ? '(leitura do Claude)' : 'do Órbita'}: ${fmt(ref.nota)}</b>${noAva(ref.nota)}
+    <div><b>Nota de corte ${ref.origem === 'claude' ? '(leitura do Claude)' : 'do Órbita'}: ${ref.nota == null ? '—' : `${fmt(naDisciplina(ref.nota))} de ${fmt(valorDisc())}`}</b>${ref.nota == null ? '' : ` <small style="display:inline">(${fmt(ref.nota)} na matriz de 10)</small>`}
       ${ref.origem === 'claude' && ref.observacao ? `<small>${esc(ref.observacao)}</small>` : ''}
       <small>${M.CRITERIOS.map(c => `C${c.num} ${ref.niveis[c.id] ? NOME_NIVEL_CURTO[ref.niveis[c.id]] : '—'}`).join(' · ')}</small>
       <small>Calculada pelas mesmas regras para todos os professores, a partir do texto. ${ref.semTexto ? 'Sem texto legível: a referência não vale para este trabalho.' : `Se a sua nota ficar ${String(lim).replace('.', ',')} pontos ou mais longe dela, a correção é marcada para a coordenação.`}</small>
       ${corr.sugerida ? '<small class="pf-ref-sug"><b>As marcações abaixo são a sugestão automática.</b> Confira cada critério no texto e ajuste o que precisar antes de finalizar.</small>' : ''}
-      ${diverge ? `<small class="pf-ref-alerta">A sua nota (${fmt(atual.soma)}) está ${fmt(dif)} pontos longe da nota de corte: deixe a justificativa clara em cada critério.</small>` : ''}</div>
+      ${diverge ? `<small class="pf-ref-alerta">A sua nota (${fmt(naDisciplina(atual.soma))} de ${fmt(valorDisc())}; ${fmt(atual.soma)} na matriz) está ${fmt(dif)} pontos da matriz longe da nota de corte: deixe a justificativa clara em cada critério.</small>` : ''}</div>
     <div class="pf-acoes">
       <button type="button" class="pf-btn pf-btn-peq" data-acao="sugerir" ${corr.texto || ref.origem === 'claude' ? '' : 'disabled'}>${ref.origem === 'claude' ? 'Voltar às marcações da nota de corte' : 'Refazer sugestão pelo texto'}</button>
       <button type="button" class="pf-btn pf-btn-peq" data-acao="analise-nota" title="Para quando o aluno questionar a nota: referência × correção, critério a critério">Análise da nota</button>
@@ -797,32 +936,130 @@ function faixaReferencia() {
 }
 // "Análise da nota" (recurso do aluno): referência do Órbita × correção do professor, critério a critério, para imprimir
 function analiseDaNota() {
+  // Relatório "Análise da nota" (27/11/2026: refeito como relatório oficial, com a logo MED FATEC) — para quando o aluno
+  // questionar a nota: nota de corte (igual para todos) × correção do professor, critério a critério, para imprimir.
   const { entrega, av } = corr;
   const ref = entrega.referencia;
-  const total = (ativ.turma.objetivos || []).length;
-  const r = M.calcular(av, total);
+  const { turma, atividade } = ativ;
+  const objs = turma.objetivos || [];
+  const r = M.calcular(av, objs.length, cobrar());
+  const f2 = (x) => (x == null ? '—' : String(Math.round(Number(x) * 100) / 100).replace('.', ','));
+  const valor = valorDisc();
+  const notaRef = ref && !ref.semTexto && ref.nota != null ? ref.nota : null;
+  const dif = notaRef == null ? null : Math.round((r.nota - notaRef) * 100) / 100;
+  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const dataBr = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—');
+  const nivelTag = (n) => (n ? `<span class="nv nv-${n.toLowerCase()}">${esc(M.NOME_NIVEL[n])}</span>` : '<span class="nv">—</span>');
+  const objCob = r.cobrar.objetivos || objs.map((_, k) => k);
   const linhas = M.CRITERIOS.map(c => {
-    const rn = ref && ref.niveis[c.id], pn = r.criterios[c.id].nivel;
-    const rp = ref ? ref.pts[c.id] : null, pp = r.criterios[c.id].pts;
-    return `<tr class="${rp !== null && rp !== pp ? 'dif' : ''}"><td><b>C${c.num}</b> ${esc(c.nome)}<br><small>máx. ${fmt(c.max)}</small></td>
-      <td>${rn ? `${NOME_NIVEL_CURTO[rn]} — ${fmt(rp)}` : '—'}<p>${esc(ref ? ref.evidencias[c.id] || '' : '')}</p></td>
-      <td>${pn ? `${NOME_NIVEL_CURTO[pn]} — ${fmt(pp)}` : '—'}<p>${esc(av[c.id].justificativa || '')}</p></td></tr>`;
+    const x = r.criterios[c.id];
+    if (x.naoCobrado) return `<tr class="nc"><td><b>C${c.num}.</b> ${esc(c.nome)}</td><td colspan="4">Não cobrado nesta atividade (o valor foi distribuído entre os demais critérios).</td></tr>`;
+    const rn = ref && ref.niveis ? ref.niveis[c.id] : null, rp = ref && ref.pts ? ref.pts[c.id] : null;
+    const d = rp == null || !x.nivel ? null : Math.round((x.pts - rp) * 100) / 100;
+    return `<tr class="${d ? 'dif' : ''}">
+      <td><b>C${c.num}.</b> ${esc(c.nome)}<small>máx. ${f2(x.max)}</small></td>
+      <td>${nivelTag(rn)} <b class="pt">${f2(rp)}</b>${rn ? `<em>${esc(c.niveis[rn].descritor)}</em>` : ''}<p>${esc(ref && ref.evidencias ? ref.evidencias[c.id] || '' : '')}</p></td>
+      <td>${nivelTag(x.nivel)} <b class="pt">${x.nivel ? f2(x.pts) : '—'}</b>${x.nivel ? `<em>${esc(c.niveis[x.nivel].descritor)}</em>` : ''}<p>${esc(av[c.id].justificativa || '')}</p></td>
+      <td class="num">${d == null ? '—' : d === 0 ? '<span class="ig">igual</span>' : `<b class="${d > 0 ? 'mais' : 'menos'}">${d > 0 ? '+' : ''}${f2(d)}</b>`}</td></tr>`;
   }).join('');
+  const refObj = (ref && ref.c3 && ref.c3.objetivos) || [];
+  const c3Cobrado = !r.criterios.c3.naoCobrado;
+  const marca = (v) => (v ? '<span class="ok">Atingido</span>' : '<span class="no">Não atingido</span>');
+  const tabObj = c3Cobrado ? `<h2>Objetivos do Critério 3</h2>
+    <table class="obj"><thead><tr><th>Objetivo da ${esc(turma.turma)}</th><th>Nota de corte</th><th>Professor</th></tr></thead><tbody>
+    ${objCob.map(k => `<tr class="${!!refObj[k] !== !!av.c3.objetivos[k] ? 'dif' : ''}"><td><b>${k + 1}.</b> ${esc(objs[k])}</td><td>${ref ? marca(refObj[k]) : '—'}</td><td>${marca(av.c3.objetivos[k])}</td></tr>`).join('')}
+    </tbody></table>` : '';
+  const fb = av.feedback || {};
+  const blocoFb = [['Pontos fortes', fb.fortes], ['Pontos a desenvolver', fb.desenvolver], ['Recomendação prática', fb.recomendacao], ['Análise do professor (interna)', fb.analise]]
+    .filter(([, v]) => String(v || '').trim()).map(([t, v]) => `<div class="fb"><h3>${t}</h3><p>${esc(v)}</p></div>`).join('') || '<p class="vazio">Sem devolutiva escrita ainda.</p>';
   const w = window.open('', '_blank');
   if (!w) { toast('O navegador bloqueou a janela. Libere pop-ups para este site.', 'erro'); return; }
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Análise da nota — ${esc(entrega.nome)}</title>
-    <style>body{font-family:Segoe UI,Arial,sans-serif;color:#0D1B33;margin:24px;font-size:12px}h1{font-size:18px;margin:0 0 4px}p.meta{color:#44536B;margin:0 0 14px}
-    table{width:100%;border-collapse:collapse}th,td{border:1px solid #C9D3E0;padding:7px;vertical-align:top;text-align:left}th{background:#004F9F;color:#fff}
-    td p{margin:5px 0 0;color:#44536B;white-space:pre-wrap}tr.dif td{background:#FFF6E5}.tot td{font-weight:700;background:#EEF2F7}
-    .nota{margin-top:12px;font-size:11px;color:#44536B}@media print{button{display:none}}</style></head><body>
-    <button onclick="print()">Imprimir</button>
-    <h1>Análise da nota — Portfólio</h1>
-    <p class="meta">${esc(entrega.nome)} · ${esc(ativ.turma.turma)} · ${esc(ativ.atividade.titulo)} · corrigido por ${esc(entrega.corrigidoPor || '—')}</p>
-    <table><thead><tr><th style="width:22%">Critério</th><th>Nota de corte (${ref && ref.origem === 'claude' ? 'leitura do Claude pela matriz' : 'regra fixa do Órbita'}, igual para todos)</th><th>Correção do professor</th></tr></thead>
-    <tbody>${linhas}
-    <tr class="tot"><td>Soma dos critérios</td><td>${ref ? fmt(ref.nota) : '—'}</td><td>${fmt(r.soma)}${r.penalidade !== 'nenhuma' ? ` → nota ${fmt(r.nota)} (${esc(M.PENALIDADES[r.penalidade].rotulo)})` : ''}</td></tr></tbody></table>
-    <p class="nota">Linhas em destaque: critério em que a correção do professor difere da referência. A referência é calculada pelas mesmas regras para todos os trabalhos, a partir do texto do portfólio (versão ${esc(ref ? ref.versao : '—')}); a nota final é do professor, com a evidência registrada em cada critério.</p>
-    </body></html>`);
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1E293B; margin: 0; background: #E9EEF5; font-size: 11.5px; line-height: 1.45; }
+  .folha { max-width: 210mm; margin: 16px auto; background: #fff; padding: 14mm; box-shadow: 0 2px 14px rgba(0, 40, 90, .12); }
+  .barra { position: sticky; top: 0; background: #004F9F; padding: 8px 16px; display: flex; justify-content: center; gap: 8px; }
+  .barra button { font: inherit; font-weight: 700; border: 0; border-radius: 6px; padding: 8px 18px; cursor: pointer; background: #fff; color: #004F9F; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 3px solid #004F9F; position: relative; }
+  header::after { content: ""; position: absolute; left: 0; bottom: -6px; width: 90px; height: 3px; background: #009FE3; }
+  header img { height: 42px; }
+  header .tit { text-align: right; }
+  header .tit b { display: block; font-size: 16px; color: #004F9F; letter-spacing: .2px; }
+  header .tit span { color: #64748B; font-size: 10.5px; }
+  header .tit .interno { display: inline-block; margin-top: 4px; font-style: normal; font-weight: 700; font-size: 9.5px; color: #B91C1C; border: 1px solid #FCA5A5; background: #FEF2F2; border-radius: 4px; padding: 1px 7px; }
+  .id { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 18px; margin: 16px 0 14px; padding: 10px 12px; background: #F4F8FC; border-left: 4px solid #009FE3; }
+  .id div small { display: block; color: #64748B; font-size: 9.5px; }
+  .id div b { font-size: 11.5px; }
+  .id .larga { grid-column: span 3; }
+  .notas { display: grid; grid-template-columns: 1fr 1fr 0.8fr; gap: 10px; margin: 4px 0 6px; }
+  .cx { border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px 12px; }
+  .cx small { color: #64748B; display: block; font-size: 10px; }
+  .cx b { font-size: 24px; color: #004F9F; line-height: 1.1; }
+  .cx span { color: #64748B; font-size: 10.5px; }
+  .cx.prof { border-color: #004F9F; background: #F4F8FC; }
+  .cx.dif b { color: #334155; }
+  .aviso { font-size: 10px; color: #64748B; margin: 4px 0 0; }
+  h2 { font-size: 12.5px; color: #004F9F; margin: 18px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #CBD5E1; }
+  table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th { background: #004F9F; color: #fff; font-size: 10.5px; text-align: left; padding: 6px 7px; font-weight: 600; }
+  td { border-bottom: 1px solid #E2E8F0; padding: 7px; vertical-align: top; }
+  td small { display: block; color: #64748B; font-size: 9.5px; margin-top: 2px; }
+  td em { display: block; font-style: italic; color: #475569; font-size: 10px; margin-top: 3px; }
+  td p { margin: 4px 0 0; color: #475569; font-size: 10.5px; white-space: pre-wrap; }
+  td.num { text-align: center; white-space: nowrap; }
+  tr.dif td { background: #FFF8EB; }
+  tr.nc td { color: #94A3B8; font-style: italic; }
+  .nv { display: inline-block; font-size: 9.5px; font-weight: 700; border-radius: 10px; padding: 1px 8px; background: #E2E8F0; color: #334155; }
+  .nv-o { background: #DCFCE7; color: #166534; } .nv-b { background: #E0F2FE; color: #075985; }
+  .nv-dm { background: #FEF3C7; color: #92400E; } .nv-i { background: #FEE2E2; color: #991B1B; }
+  .pt { margin-left: 4px; }
+  .mais { color: #166534; } .menos { color: #B91C1C; } .ig { color: #64748B; }
+  tfoot td { font-weight: 700; background: #F1F5F9; border-top: 2px solid #004F9F; }
+  .obj td:nth-child(2), .obj td:nth-child(3) { width: 18%; white-space: nowrap; }
+  .ok { color: #166534; font-weight: 700; } .no { color: #B91C1C; font-weight: 700; }
+  .fb { margin: 0 0 8px; } .fb h3 { font-size: 11px; margin: 0 0 2px; } .fb p { margin: 0; white-space: pre-wrap; }
+  .vazio { color: #94A3B8; font-style: italic; }
+  .leg { font-size: 9.8px; color: #64748B; margin-top: 6px; }
+  .ass { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 46px; }
+  .ass div { border-top: 1px solid #334155; padding-top: 4px; text-align: center; font-size: 10.5px; }
+  .ass small { display: block; color: #64748B; }
+  footer { margin-top: 18px; padding-top: 6px; border-top: 1px solid #E2E8F0; color: #94A3B8; font-size: 9.5px; display: flex; justify-content: space-between; }
+  @media print { body { background: #fff; } .barra { display: none; } .folha { margin: 0; padding: 0; box-shadow: none; max-width: none; } }
+</style></head><body>
+<div class="barra"><button onclick="print()">Imprimir / salvar em PDF</button></div>
+<div class="folha">
+  <header><img src="${location.origin}/img/medfatec-logo.png" alt="MED FATEC">
+    <div class="tit"><b>Relatório de Análise da Nota</b><span>Portfólio Reflexivo · ${esc(turma.componente || 'SCIC')}</span><i class="interno">Uso interno da coordenação — não entregar ao aluno</i></div></header>
+  <section class="id">
+    <div class="larga"><small>Estudante</small><b>${esc(entrega.nome)}</b></div>
+    <div><small>Turma</small><b>${esc(turma.turma)}${turma.periodo ? ` · ${turma.periodo}º período` : ''}</b></div>
+    <div><small>Semestre</small><b>${esc(turma.semestre || '')}</b></div>
+    <div><small>Atividade</small><b>${esc(atividade.titulo)}</b></div>
+    <div><small>Professor corretor</small><b>${esc(entrega.corrigidoPor || '—')}</b></div>
+    <div><small>Situação</small><b>${esc(STATUS[entrega.status] || '—')}${entrega.corrigidoEm ? ` em ${dataBr(entrega.corrigidoEm)}` : ''}</b></div>
+    <div><small>Emitido em</small><b>${hoje}</b></div>
+  </section>
+  <div class="notas">
+    <div class="cx"><small>Nota de corte (igual para todos)</small><b>${notaRef == null ? '—' : f2(naDisciplina(notaRef))}</b> <span>de ${f2(valor)}${notaRef == null ? '' : ` · ${f2(notaRef)} na matriz`}</span></div>
+    <div class="cx prof"><small>Nota do professor</small><b>${f2(naDisciplina(r.nota))}</b> <span>de ${f2(valor)} · ${f2(r.nota)} na matriz</span></div>
+    <div class="cx dif"><small>Diferença (matriz)</small><b>${dif == null ? '—' : `${dif > 0 ? '+' : ''}${f2(dif)}`}</b> <span>${dif == null ? '' : dif === 0 ? 'mesma nota' : Math.abs(dif) >= (ativ.divergencia || 2) ? 'acima do limite: revisar' : 'dentro do limite'}</span></div>
+  </div>
+  <p class="aviso">A nota de corte é calculada pelas mesmas regras para todos os trabalhos (${ref && ref.origem === 'claude' ? 'leitura pela matriz da coordenação' : 'regra fixa do Órbita'}); a nota final é do professor, com a evidência registrada em cada critério.${r.redistribuido || r.cobrar.objetivos ? ' Nesta atividade a coordenação escolheu o que cobrar: o valor do que não é cobrado foi distribuído entre os demais.' : ''}${r.penalidade !== 'nenhuma' ? ` Condição especial: ${esc(M.PENALIDADES[r.penalidade].rotulo)}.` : ''}</p>
+
+  <h2>Comparação por critério</h2>
+  <table><thead><tr><th style="width:21%">Critério</th><th style="width:34%">Nota de corte</th><th style="width:34%">Correção do professor</th><th style="width:11%">Diferença</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr><td>Soma</td><td>${f2(notaRef)}</td><td>${f2(r.soma)}${r.penalidade !== 'nenhuma' ? ` → ${f2(r.nota)}` : ''}</td><td class="num">${dif == null ? '—' : `${dif > 0 ? '+' : ''}${f2(dif)}`}</td></tr></tfoot></table>
+  <p class="leg">Em destaque: onde a correção do professor difere da nota de corte. Em itálico, o descritor oficial da matriz para o nível marcado.</p>
+  ${tabObj}
+  <h2>Devolutiva do professor</h2>
+  ${blocoFb}
+  <div class="ass"><div>${esc(entrega.corrigidoPor || 'Professor corretor')}<small>Professor corretor</small></div><div>Coordenação do curso de Medicina<small>Ciente</small></div></div>
+  <footer><span>Faculdade de Tecnologia do Vale do Ivaí · Medicina · documento interno (contém a nota de corte)</span><span>Matriz ${esc(entrega.matrizVersao || M.VERSAO)} · Órbita Fatec</span></footer>
+</div></body></html>`);
   w.document.close();
 }
 
@@ -844,6 +1081,8 @@ function renderCorrecao() {
   const i = entregas.findIndex(e => e.id === entrega.id);
   trilha([{ t: 'Turmas', ir: 'turmas' }, { t: `${turma.turma} · ${ativ.atividade.titulo}`, ir: 'atividade' }, { t: entrega.nome }]);
   const [c1, c2, c3, c4] = M.CRITERIOS;
+  const rc = calc(av);
+  const objCob = rc.cobrar.objetivos; // null = todos
   el('pf-conteudo').innerHTML = `
   <div class="pf-corr-cab">
     <div><h2>${esc(entrega.nome)}</h2><p class="pf-meta">${esc((entrega.arquivos || []).join(', '))} · ${entrega.paginas || 0} pág. · ${entrega.palavras || 0} palavras
@@ -866,13 +1105,15 @@ function renderCorrecao() {
         <p class="pf-dica">Regra geral: nunca presuma — se o critério não puder ser verificado no texto, é Insuficiente, com "não evidenciado no texto".</p>
       </details>
 
-      <fieldset class="pf-crit"><legend><span>1</span>${esc(c1.nome)} <em>máx. ${fmt(c1.max)}</em></legend>
+      <fieldset class="pf-crit ${rc.criterios.c1.naoCobrado ? 'pf-nao-cobrado' : ''}" ${rc.criterios.c1.naoCobrado ? 'disabled' : ''}><legend><span>1</span>${esc(c1.nome)} <em>${rc.criterios.c1.naoCobrado ? 'não cobrado nesta atividade' : `máx. ${fmt(rc.criterios.c1.max)}${rc.redistribuido ? ` (era ${fmt(c1.max)})` : ''}`}</em></legend>
+        ${rc.criterios.c1.naoCobrado ? '<p class="pf-aviso">A coordenação não está cobrando este critério: o valor dele foi distribuído entre os demais.</p>' : ''}
         <p class="pf-avalia">${esc(c1.avalia)}</p>
         ${nivelRadios(c1, av.c1.nivel, 'c1.nivel')}
         ${just('c1', av.c1.justificativa, 'Cite o trecho entre aspas ou indique a página (ex.: p. 3, "…").')}
       </fieldset>
 
-      <fieldset class="pf-crit"><legend><span>2</span>${esc(c2.nome)} <em>máx. ${fmt(c2.max)}</em></legend>
+      <fieldset class="pf-crit ${rc.criterios.c2.naoCobrado ? 'pf-nao-cobrado' : ''}" ${rc.criterios.c2.naoCobrado ? 'disabled' : ''}><legend><span>2</span>${esc(c2.nome)} <em>${rc.criterios.c2.naoCobrado ? 'não cobrado nesta atividade' : `máx. ${fmt(rc.criterios.c2.max)}${rc.redistribuido ? ` (era ${fmt(c2.max)})` : ''}`}</em></legend>
+        ${rc.criterios.c2.naoCobrado ? '<p class="pf-aviso">A coordenação não está cobrando este critério: o valor dele foi distribuído entre os demais.</p>' : ''}
         <p class="pf-avalia">${esc(c2.avalia)}</p>
         <div class="pf-elem">
           <p><b>(a) Análise crítica</b></p>
@@ -886,15 +1127,19 @@ function renderCorrecao() {
         ${just('c2', av.c2.justificativa, 'Evidência dos 3 elementos: análise crítica + necessidades + propostas de ação.')}
       </fieldset>
 
-      <fieldset class="pf-crit"><legend><span>3</span>${esc(c3.nome)} <em>máx. ${fmt(c3.max)}</em></legend>
+      <fieldset class="pf-crit ${rc.criterios.c3.naoCobrado ? 'pf-nao-cobrado' : ''}" ${rc.criterios.c3.naoCobrado ? 'disabled' : ''}><legend><span>3</span>${esc(c3.nome)} <em>${rc.criterios.c3.naoCobrado ? 'não cobrado nesta atividade' : `máx. ${fmt(rc.criterios.c3.max)}${rc.redistribuido ? ` (era ${fmt(c3.max)})` : ''}`}</em></legend>
+        ${rc.criterios.c3.naoCobrado ? '<p class="pf-aviso">A coordenação não está cobrando este critério: o valor dele foi distribuído entre os demais.</p>' : ''}
         <p class="pf-avalia">Marque os objetivos da ${esc(turma.turma)} que o portfólio <b>menciona, discute e atinge</b>. O nível sai da proporção.</p>
         <div class="pf-objs">${(turma.objetivos || []).map((o, k) =>
-          `<label class="pf-chk pf-obj"><input type="checkbox" name="c3.obj" data-k="${k}" ${av.c3.objetivos[k] ? 'checked' : ''}><span><b>${k + 1}.</b> ${esc(o)}</span></label>`).join('')}</div>
+          (objCob && !objCob.includes(k)
+            ? `<label class="pf-chk pf-obj pf-obj-nao"><input type="checkbox" disabled><span><b>${k + 1}.</b> ${esc(o)} <em>(não cobrado nesta atividade)</em></span></label>`
+            : `<label class="pf-chk pf-obj"><input type="checkbox" name="c3.obj" data-k="${k}" ${av.c3.objetivos[k] ? 'checked' : ''}><span><b>${k + 1}.</b> ${esc(o)}</span></label>`)).join('')}</div>
         <div id="pf-c3-res" class="pf-res-crit"></div>
         ${just('c3', av.c3.justificativa, 'Onde cada objetivo atingido aparece no texto (página/trecho).')}
       </fieldset>
 
-      <fieldset class="pf-crit"><legend><span>4</span>${esc(c4.nome)} <em>máx. ${fmt(c4.max)}</em></legend>
+      <fieldset class="pf-crit ${rc.criterios.c4.naoCobrado ? 'pf-nao-cobrado' : ''}" ${rc.criterios.c4.naoCobrado ? 'disabled' : ''}><legend><span>4</span>${esc(c4.nome)} <em>${rc.criterios.c4.naoCobrado ? 'não cobrado nesta atividade' : `máx. ${fmt(rc.criterios.c4.max)}${rc.redistribuido ? ` (era ${fmt(c4.max)})` : ''}`}</em></legend>
+        ${rc.criterios.c4.naoCobrado ? '<p class="pf-aviso">A coordenação não está cobrando este critério: o valor dele foi distribuído entre os demais.</p>' : ''}
         <p class="pf-avalia">${esc(c4.avalia)} <br><small>Verifique: ${esc(c4.verificar)}</small></p>
         ${nivelRadios(c4, av.c4.nivel, 'c4.nivel')}
         ${just('c4', av.c4.justificativa, 'Coesão, coerência, estrutura e desvios gramaticais encontrados (com exemplos).')}
@@ -904,7 +1149,10 @@ function renderCorrecao() {
         <label>Pontos fortes<textarea data-campo="feedback.fortes" rows="2">${esc(av.feedback.fortes)}</textarea></label>
         <label>Pontos a desenvolver<textarea data-campo="feedback.desenvolver" rows="2">${esc(av.feedback.desenvolver)}</textarea></label>
         <label>Recomendação prática<textarea data-campo="feedback.recomendacao" rows="2">${esc(av.feedback.recomendacao)}</textarea></label>
-        <p class="pf-dica">Não reescreva o portfólio pelo aluno: aponte o que está bom, o que falta e como melhorar.</p>
+        <label>Análise do professor — <b>interna, não vai para o aluno</b> <span class="pf-obrig">obrigatória se a nota ficar diferente da nota de corte</span>
+          <textarea data-campo="feedback.analise" rows="3" placeholder="Para a coordenação: o que você viu no portfólio que a nota de corte não considerou (critério, página, trecho). Aparece só na Análise da nota.">${esc(av.feedback.analise || '')}</textarea></label>
+        <p class="pf-dica">Não reescreva o portfólio pelo aluno: aponte o que está bom, o que falta e como melhorar. Evite frases genéricas ("bom trabalho", "faltou aprofundar"): diga qual critério, qual objetivo, qual página.
+          A devolutiva em PDF já traz, de forma padronizada, o nível e o descritor da matriz de cada critério. A nota de corte nunca aparece para o aluno.</p>
       </fieldset>
 
       <fieldset class="pf-crit"><legend>Observações de conformidade <em>não alteram a nota</em></legend>
@@ -1069,7 +1317,7 @@ function lerForm() {
 
 function atualizarResultado() {
   const total = (ativ.turma.objetivos || []).length;
-  const r = M.calcular(corr.av, total);
+  const r = M.calcular(corr.av, total, cobrar());
   const c2 = r.criterios.c2, c3 = r.criterios.c3;
   const tag = (crit) => crit.nivel ? `<span class="pf-tag-nivel pf-n-${crit.nivel.toLowerCase()}">${M.NOME_NIVEL[crit.nivel]} · ${fmt(crit.pts)} pt</span>` : '<span class="pf-tag-nivel">nível ainda não definido</span>';
   const r2 = el('pf-c2-res');
@@ -1083,13 +1331,14 @@ function atualizarResultado() {
   if (r3) r3.innerHTML = `${c3.n} de ${c3.total} objetivos (${Math.round((c3.pct || 0) * 1000) / 10}%) → ${tag(c3)}${c3.nota ? `<p class="pf-aviso">${esc(c3.nota)}</p>` : ''}`;
   const pen = r.penalidade !== 'nenhuma';
   el('pf-total').innerHTML = `
-    <div class="pf-total-crits">${M.CRITERIOS.map(c => `<span title="${esc(c.nome)}">C${c.num} <b>${r.criterios[c.id].nivel ? fmt(r.criterios[c.id].pts) : '—'}</b>/${fmt(c.max)}</span>`).join('')}
+    <div class="pf-total-crits">${M.CRITERIOS.map(c => `<span title="${esc(c.nome)}">C${c.num} ${r.criterios[c.id].naoCobrado ? '<b>não cobrado</b>' : `<b>${r.criterios[c.id].nivel ? fmt(r.criterios[c.id].pts) : '—'}</b>/${fmt(r.criterios[c.id].max)}`}</span>`).join('')}
       <span>Soma <b>${fmt(r.soma)}</b></span>${pen ? `<span>× ${String(r.fator).replace('.', ',')}</span>` : ''}</div>
-    <div class="pf-total-nota"><small>Nota</small><b>${fmt(r.nota)}</b><small>/ 10,0</small></div>
+    <div class="pf-total-nota"><small>Nota</small><b>${fmt(naDisciplina(r.nota))}</b><small>/ ${fmt(valorDisc())} · ${fmt(r.nota)} na matriz de 10</small></div>
     <div class="pf-total-acoes">
       ${r.completo ? '' : `<small class="pf-falta">${r.faltando.length} item(ns) pendente(s) para finalizar</small>`}
       <button type="button" class="pf-btn" data-acao="salvar">Salvar rascunho</button>
       <button type="button" class="pf-btn pf-btn-ok" data-acao="finalizar">Finalizar</button>
+      ${corr.entrega.status === 'finalizada' && corr.entrega.resultado ? '<button type="button" class="pf-btn" data-acao="devolutiva" title="PDF padronizado para o aluno (pela última correção finalizada)">Devolutiva (PDF)</button>' : ''}
     </div>`;
 }
 
@@ -1107,7 +1356,7 @@ async function salvarCorrecao(finalizar) {
     Object.assign(corr.entrega, { avaliacao: JSON.parse(JSON.stringify(corr.av)), resultado: r.resultado, status: r.status, corrigidoPor: dados.eu.nome, alteradoAposCorrecao: false,
       referencia: r.referencia || corr.entrega.referencia, divergeDaReferencia: !!r.divergeDaReferencia });
     corr.sujo = false; corr.sugerida = false;
-    toast(finalizar ? `Finalizada: nota ${fmt(r.resultado.nota)}.${r.divergeDaReferencia ? ` Ficou longe da referência (${fmt(r.referencia.nota)}): a coordenação vai ver no Resumo.` : ''}` : 'Rascunho salvo.');
+    toast(finalizar ? `Finalizada: nota ${fmt(naDisciplina(r.resultado.nota))} de ${fmt(valorDisc())}.${r.divergeDaReferencia ? ` Ficou longe da referência (${fmt(r.referencia.nota)}): a coordenação vai ver no Resumo.` : ''}` : 'Rascunho salvo.');
     return true;
   } catch (e) {
     if (e.corpo && e.corpo.faltando) {
@@ -1162,6 +1411,7 @@ async function renderResumo() {
         O portfólio vale <b>${fmt(valorDisc())}</b> na disciplina${ativ.editor ? ' · <button type="button" class="pf-link" data-acao="valor-disc">mudar</button>' : ''}.</span>
       <div class="pf-acoes">
         <button type="button" class="pf-btn pf-btn-pri" data-acao="edubox" title="Nome;Nota com a nota já convertida para o valor do portfólio na disciplina">Arquivo para o Edubox</button>
+        <button type="button" class="pf-btn pf-btn-pri" data-acao="devolutivas" ${fin ? '' : 'disabled title="Nenhuma correção finalizada ainda"'}>Devolutivas em PDF (ZIP)</button>
         <button type="button" class="pf-btn" data-acao="imprimir">Imprimir relatório da turma</button>
         <button type="button" class="pf-btn" data-acao="csv">Baixar planilha (Excel)</button>
         ${ativ.editor && ativ.atividade.ava ? '<button type="button" class="pf-btn pf-btn-pri" data-acao="ava-notas">Lançar notas no AVA</button>' : ''}
@@ -1174,12 +1424,12 @@ async function renderResumo() {
       <li>No AVA → <b>Ação de avaliação</b> → <b>Enviar planilha de avaliação</b>, envie o arquivo preenchido e confira a prévia antes de confirmar.</li>
     </ol></details>
     <div class="pf-tab-wrap"><table class="pf-tab">
-      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num">Nota (0 a 10)</th><th class="num" title="Nota da matriz × valor do portfólio ÷ 10, com 1 casa">Na disciplina (${fmt(valorDisc())})</th><th class="num" title="Nota de corte: a mesma para o trabalho, seja quem for o professor">Corte</th><th>Similaridade</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Estudante</th><th class="num">C1 (3,0)</th><th class="num">C2 (3,0)</th><th class="num">C3 (2,0)</th><th class="num">C4 (2,0)</th><th class="num" title="Nota da matriz × valor do portfólio ÷ 10, com 1 casa">Nota (${fmt(valorDisc())})</th><th class="num">Matriz (0 a 10)</th><th class="num" title="Nota de corte: a mesma para o trabalho, seja quem for o professor">Corte</th><th>Similaridade</th><th>Situação</th></tr></thead>
       <tbody>${linhas.map(l => `<tr data-acao="corrigir" data-id="${esc(l.e.id)}" tabindex="0"><td>${esc(l.e.nome)}</td>
         <td class="num">${fmt(l.c1)}</td><td class="num">${fmt(l.c2)}</td><td class="num">${fmt(l.c3)}</td><td class="num">${fmt(l.c4)}</td>
-        <td class="num"><b>${l.r ? fmt(l.r.nota) : '—'}</b>${l.r && l.r.penalidade !== 'nenhuma' ? ` <small>(× ${String(l.r.fator).replace('.', ',')})</small>` : ''}</td>
-        <td class="num">${l.r && l.e.status === 'finalizada' ? `<b>${fmt(naDisciplina(l.r.nota))}</b>` : '—'}</td>
-        <td class="num">${l.e.referencia ? fmt(l.e.referencia.nota) : '—'}${l.e.divergeDaReferencia && l.e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="A nota do professor ficou 2 pontos ou mais longe da referência">diverge</span>' : ''}</td>
+        <td class="num"><b>${l.r ? fmt(naDisciplina(l.r.nota)) : '—'}</b>${l.r && l.r.penalidade !== 'nenhuma' ? ` <small>(× ${String(l.r.fator).replace('.', ',')})</small>` : ''}</td>
+        <td class="num">${l.r ? fmt(l.r.nota) : '—'}</td>
+        <td class="num">${l.e.referencia && l.e.referencia.nota != null ? fmt(naDisciplina(l.e.referencia.nota)) : '—'}${l.e.divergeDaReferencia && l.e.status === 'finalizada' ? ' <span class="pf-av pf-av-alerta" title="A nota do professor ficou 2 pontos ou mais longe da referência">diverge</span>' : ''}</td>
         <td>${l.alerta ? '<span class="pf-av pf-av-crit">Sim</span>' : 'Não'}</td>
         <td><span class="pf-st pf-st-${esc(l.e.status)}">${STATUS[l.e.status]}</span></td></tr>`).join('')}</tbody>
     </table></div>`;
@@ -1241,8 +1491,8 @@ function lerCsv(texto) {
 }
 function feedbackHtml(e) {
   const r = e.resultado, av = e.avaliacao;
-  const nl = M.CRITERIOS.map(c => `${c.nome}: ${M.NOME_NIVEL[r.criterios[c.id].nivel]} (${fmt(r.criterios[c.id].pts)}/${fmt(c.max)})`);
-  const partes = [`<b>Portfólio — ${fmt(r.nota)} / 10,0</b>`, ...nl];
+  const nl = M.CRITERIOS.filter(c => !r.criterios[c.id].naoCobrado).map(c => `${c.nome}: ${M.NOME_NIVEL[r.criterios[c.id].nivel]} (${fmt(r.criterios[c.id].pts)}/${fmt(r.criterios[c.id].max)})`);
+  const partes = [`<b>Portfólio — ${fmt(naDisciplina(r.nota))} / ${fmt(valorDisc())}</b> (${fmt(r.nota)} na matriz de 10)`, ...nl];
   if (r.penalidade !== 'nenhuma') partes.push(`${M.PENALIDADES[r.penalidade].rotulo} (soma ${fmt(r.soma)})`);
   partes.push(`<b>Pontos fortes:</b> ${esc(av.feedback.fortes)}`, `<b>Pontos a desenvolver:</b> ${esc(av.feedback.desenvolver)}`, `<b>Recomendação:</b> ${esc(av.feedback.recomendacao)}`);
   return `<p>${partes.join('<br>')}</p>`;
@@ -1290,9 +1540,9 @@ async function imprimirRelatorio() {
     return `<section class="pi-aluno">
       <h3>${esc(e.nome)} <small>Arquivo: ${esc((e.arquivos || []).join(', '))} · Turma: ${esc(turma.turma)} · ${STATUS[e.status]}</small></h3>
       <table><thead><tr><th>Critério</th><th>Máx.</th><th>Nível</th><th>Nota</th><th>Evidência / justificativa</th></tr></thead><tbody>
-      ${M.CRITERIOS.map(c => { const x = r.criterios[c.id]; return `<tr><td>${c.num}. ${esc(c.nome)}</td><td>${fmt(c.max)}</td><td>${x.nivel ? M.NOME_NIVEL[x.nivel] : '—'}</td><td>${x.nivel ? fmt(x.pts) : '—'}</td>
+      ${M.CRITERIOS.filter(c => !r.criterios[c.id].naoCobrado).map(c => { const x = r.criterios[c.id]; return `<tr><td>${c.num}. ${esc(c.nome)}</td><td>${fmt(x.max)}</td><td>${x.nivel ? M.NOME_NIVEL[x.nivel] : '—'}</td><td>${x.nivel ? fmt(x.pts) : '—'}</td>
         <td>${c.id === 'c3' ? `${c3.n}/${c3.total} objetivos (${Math.round(c3.pct * 1000) / 10}%): ${av.c3.objetivos.map((v, k) => (v ? k + 1 : null)).filter(Boolean).join(', ') || 'nenhum'}.<br>` : ''}${x.nota ? `<i>${esc(x.nota)}</i><br>` : ''}${paragrafos(x.justificativa)}</td></tr>`; }).join('')}
-      <tr><td colspan="3"><b>Nota final</b>${r.penalidade !== 'nenhuma' ? ` — ${esc(M.PENALIDADES[r.penalidade].rotulo)}: ${fmt(r.soma)} × ${String(r.fator).replace('.', ',')}` : ''}</td><td><b>${fmt(r.nota)}</b></td><td>Soma estrita dos 4 critérios.</td></tr>
+      <tr><td colspan="3"><b>Nota final</b>${r.penalidade !== 'nenhuma' ? ` — ${esc(M.PENALIDADES[r.penalidade].rotulo)}: ${fmt(r.soma)} × ${String(r.fator).replace('.', ',')}` : ''}</td><td><b>${fmt(r.nota)}</b> <small>= ${fmt(naDisciplina(r.nota))} / ${fmt(valorDisc())}</small></td><td>Soma estrita dos 4 critérios.</td></tr>
       </tbody></table>
       <p><b>Pontos fortes:</b> ${paragrafos(av.feedback.fortes)}<br><b>Pontos a desenvolver:</b> ${paragrafos(av.feedback.desenvolver)}<br><b>Recomendação prática:</b> ${paragrafos(av.feedback.recomendacao)}</p>
       <p class="pi-conf"><b>Conformidade</b> (não altera a nota): capa ${esc(av.conformidade.capa || 'não registrada')}${av.conformidade.capaFaltando.length ? ` — faltando: ${esc(av.conformidade.capaFaltando.join(', '))}` : ''}${av.conformidade.formatacao ? ` · formatação: ${esc(av.conformidade.formatacao)}` : ''}${av.conformidade.foraAva ? ' · houve entrega por outro canal' : ''}${av.conformidade.obs ? ` · ${esc(av.conformidade.obs)}` : ''}</p>
@@ -1304,7 +1554,7 @@ async function imprimirRelatorio() {
     <p>${esc(turma.componente || 'SCIC')} · ${esc(turma.turma)} — ${esc(turma.periodo ? `${turma.periodo}º período` : '')} — ${esc(turma.semestre)} · Tema: ${esc(turma.tema || '')}</p>
     <h2>Quadro-resumo da turma</h2>
     <table><thead><tr><th>Estudante</th><th>C1 (3,0)</th><th>C2 (3,0)</th><th>C3 (2,0)</th><th>C4 (2,0)</th><th>Nota</th><th>Alerta de similaridade</th><th>Situação</th></tr></thead><tbody>
-    ${linhas.map(l => `<tr><td>${esc(l.e.nome)}</td><td>${fmt(l.c1)}</td><td>${fmt(l.c2)}</td><td>${fmt(l.c3)}</td><td>${fmt(l.c4)}</td><td><b>${l.r ? fmt(l.r.nota) : '—'}</b></td><td>${l.alerta ? 'Sim' : 'Não'}</td><td>${STATUS[l.e.status]}</td></tr>`).join('')}
+    ${linhas.map(l => `<tr><td>${esc(l.e.nome)}</td><td>${fmt(l.c1)}</td><td>${fmt(l.c2)}</td><td>${fmt(l.c3)}</td><td>${fmt(l.c4)}</td><td><b>${l.r ? `${fmt(naDisciplina(l.r.nota))} / ${fmt(valorDisc())}` : '—'}</b></td><td>${l.alerta ? 'Sim' : 'Não'}</td><td>${STATUS[l.e.status]}</td></tr>`).join('')}
     </tbody></table>
     <h2>Relatório de similaridade</h2>
     ${!simil ? '<p>Não calculado.</p>' : !simil.pares.length ? '<p>Nenhuma similaridade indevida detectada entre as produções da turma.</p>'
@@ -1376,6 +1626,10 @@ function ligarEventos() {
       }
     }
     else if (a === 'distribuir') dlgDistribuir();
+    else if (a === 'cobrar') dlgCobrar();
+    else if (a === 'links') dlgLinks();
+    else if (a === 'devolutivas') baixarDevolutivas(b);
+    else if (a === 'devolutiva') baixarDevolutiva(corr.entrega);
     else if (a === 'sugerir') {
       if (corr.entrega.avaliacao && !window.confirm('Trocar as marcações atuais pela sugestão automática do texto? Nada é salvo até você clicar em Salvar.')) return;
       aplicarSugestao();
