@@ -276,3 +276,23 @@
 .pf-slide-barra button:disabled { opacity: 0.35; cursor: default; }
 .pf-slide-barra [data-s=num] { min-width: 9rem; text-align: center; }
 .pf-slide-barra [data-s=sair] { margin-left: 1rem; }
+
+/* O que cobrar (27/11/2026) */
+.pf-nao-cobrado { opacity: 0.55; background: var(--orb-sup2); }
+.pf-obj-nao { opacity: 0.55; }
+.pf-obj-nao em { font-size: 0.78rem; }
+.pf-cobrar { max-width: 760px; }
+.pf-cob-crit { display: flex; align-items: baseline; gap: 0.4rem; }
+.pf-cob-max { margin-left: auto; font-size: 0.8rem; font-weight: 700; color: #004F9F; white-space: nowrap; }
+.pf-cob-resumo { font-weight: 700; color: #004F9F; margin: 0.4rem 0; }
+.pf-cobrar-meta { color: #004F9F; font-weight: 600; }
+
+/* Links dos professores (27/11/2026) */
+.pf-links { max-width: 860px; }
+.pf-links-ul { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.pf-link-prof { border: 1px solid var(--orb-linha); border-radius: var(--orb-raio-ctrl); padding: 0.7rem 0.85rem; background: var(--orb-sup); display: flex; flex-direction: column; gap: 0.5rem; }
+.pf-link-cab { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.75rem; align-items: center; }
+.pf-link-barra { grid-column: 1 / -1; height: 6px; background: var(--orb-sup2); border-radius: 3px; overflow: hidden; }
+.pf-link-barra i { display: block; height: 100%; background: #009FE3; }
+.pf-link-url { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.pf-link-url input { flex: 1 1 260px; min-height: 34px; font: inherit; font-size: 0.8rem; border: 1px solid var(--orb-linha); border-radius: 6px; padding: 0 0.5rem; color: var(--orb-tinta2); background: var(--orb-sup2); }
